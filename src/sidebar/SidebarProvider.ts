@@ -1,21 +1,50 @@
 import * as vscode from "vscode";
+import { generateContent, resetClient } from "../ai/gemini"; // Import Gemini functions
+import { getNonce } from "../utilities/nonce";
 
 // Define a key for storing the API key in SecretStorage
-const GEMINI_API_KEY_SECRET_KEY = "geminiApiKey"; // Store multiple keys later
+const GEMINI_API_KEY_SECRET_KEY = "geminiApiKey";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
 
 	private _view?: vscode.WebviewView;
 	private readonly _extensionUri: vscode.Uri;
-	private readonly _secretStorage: vscode.SecretStorage; // Add secret storage instance
+	private readonly _secretStorage: vscode.SecretStorage;
+	private _currentApiKey: string | undefined; // Cache the current key
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri,
 		context: vscode.ExtensionContext // Pass the full context
 	) {
 		this._extensionUri = _extensionUri_in;
-		this._secretStorage = context.secrets; // Initialize secret storage
+		this._secretStorage = context.secrets;
+		// Listen for changes in secret storage (e.g., key deleted externally)
+		context.secrets.onDidChange((e) => {
+			if (e.key === GEMINI_API_KEY_SECRET_KEY) {
+				this._updateApiKeyCache(); // Update cache if our key changed
+			}
+		});
+		this._updateApiKeyCache(); // Load initial key status
+	}
+
+	// Helper to load/update the cached API key
+	private async _updateApiKeyCache() {
+		this._currentApiKey = await this._secretStorage.get(
+			GEMINI_API_KEY_SECRET_KEY
+		);
+		if (!this._currentApiKey) {
+			resetClient(); // Ensure Gemini client is reset if key is removed
+			console.log("API Key removed or not set.");
+		} else {
+			console.log("API Key loaded into cache.");
+			// Optional: Could attempt pre-initialization here, but maybe better on demand
+		}
+		// Notify webview about the current key status
+		this.postMessageToWebview({
+			type: "apiKeyStatus",
+			value: this._currentApiKey ? "API Key is set." : "API Key not set.",
+		});
 	}
 
 	public resolveWebviewView(
@@ -37,20 +66,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		// Handle messages from the webview
 		webviewView.webview.onDidReceiveMessage(async (data) => {
-			// Make handler async
 			switch (data.type) {
 				case "apiKeyUpdate": {
 					if (typeof data.value === "string" && data.value.trim() !== "") {
+						const newKey = data.value.trim();
 						try {
-							// Store the API key securely
 							await this._secretStorage.store(
 								GEMINI_API_KEY_SECRET_KEY,
-								data.value.trim()
+								newKey
 							);
+							this._currentApiKey = newKey; // Update cache immediately
+							resetClient(); // Reset client to use new key on next call
 							vscode.window.showInformationMessage(
 								"Gemini API Key stored successfully!"
-							); // Dev feedback
-							// Send success message back to webview
+							);
 							this.postMessageToWebview({
 								type: "apiKeyStatus",
 								value: "API Key saved successfully.",
@@ -58,14 +87,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						} catch (error) {
 							console.error("Failed to store API key:", error);
 							vscode.window.showErrorMessage("Failed to store API key.");
-							// Send failure message back to webview
 							this.postMessageToWebview({
 								type: "apiKeyStatus",
 								value: "Error: Could not save API Key.",
 							});
 						}
 					} else {
-						// Send invalid input message back to webview
 						this.postMessageToWebview({
 							type: "apiKeyStatus",
 							value: "Error: Invalid API Key provided.",
@@ -74,15 +101,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					break;
 				}
 				case "chatMessage": {
-					// Handle incoming chat message from webview (placeholder for now)
 					const userMessage = data.value;
 					console.log(`Chat message received: ${userMessage}`);
-					// TODO: Get API key from storage, call Gemini, handle response
-					// For now, just echo back
-					const apiKey = await this._secretStorage.get(
-						GEMINI_API_KEY_SECRET_KEY
-					);
-					if (!apiKey) {
+
+					if (!this._currentApiKey) {
 						this.postMessageToWebview({
 							type: "aiResponse",
 							value:
@@ -90,31 +112,44 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						});
 						return; // Stop processing if no key
 					}
+
+					// Show loading indicator in webview (optional)
 					this.postMessageToWebview({
 						type: "aiResponse",
-						value: `(Using key ending in ${apiKey.slice(
-							-4
-						)}): You said: ${userMessage}`,
+						value: "Gemini is thinking...",
 					});
+
+					try {
+						// Call the Gemini API
+						const aiResponse = await generateContent(
+							this._currentApiKey,
+							userMessage /*, chatHistory */
+						);
+
+						// Send the actual response back
+						this.postMessageToWebview({
+							type: "aiResponse",
+							value: aiResponse,
+						});
+					} catch (error) {
+						// Error handling is mostly within generateContent, but catch unexpected issues
+						console.error("Unhandled error during chat generation:", error);
+						const errorMessage =
+							error instanceof Error ? error.message : String(error);
+						this.postMessageToWebview({
+							type: "aiResponse",
+							value: `Error: ${errorMessage}`,
+						});
+					}
 					break;
 				}
 				case "webviewReady": {
-					// Webview is ready, maybe send initial state if needed (e.g., if key is set)
 					console.log("Webview reported ready.");
-					const apiKey = await this._secretStorage.get(
-						GEMINI_API_KEY_SECRET_KEY
-					);
-					if (apiKey) {
-						this.postMessageToWebview({
-							type: "apiKeyStatus",
-							value: "API Key is set.",
-						});
-					} else {
-						this.postMessageToWebview({
-							type: "apiKeyStatus",
-							value: "API Key not set.",
-						});
-					}
+					// Send the current key status from cache
+					this.postMessageToWebview({
+						type: "apiKeyStatus",
+						value: this._currentApiKey ? "API Key is set." : "API Key not set.",
+					});
 					break;
 				}
 			}
@@ -125,50 +160,95 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public postMessageToWebview(message: any) {
 		if (this._view) {
 			this._view.webview.postMessage(message);
+		} else {
+			console.warn("Sidebar view not available to post message:", message);
 		}
 	}
 
 	// _getHtmlForWebview method remains the same...
-	// ... (keep the existing HTML generation code here) ...
 	private _getHtmlForWebview(webview: vscode.Webview): string {
 		// Get the local path to the bundled script
 		const scriptUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(this._extensionUri, "dist", "webview.js")
 		);
 
-		// Get the local path to the CSS styles
-		const stylesUri = webview.asWebviewUri(
-			vscode.Uri.joinPath(this._extensionUri, "dist", "styles.css")
-		);
-
 		// Use a nonce to only allow specific scripts to be run
 		const nonce = getNonce();
 
-		// TODO: We need to bundle styles.css or move it to dist manually for now.
-		// For simplicity now, let's assume styles.css is copied to dist or use inline styles.
-
+		// Use VS Code theme variables for colors and styles
 		return `<!DOCTYPE html>
                 <html lang="en">
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} https:; script-src 'nonce-${nonce}';">
-                     <!--<link href="${stylesUri}" rel="stylesheet">-->
+                    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} https: data:; script-src 'nonce-${nonce}';">
                      <title>Minovative Mind Chat</title>
                      <style>
-                        /* Basic styles - move to styles.css later */
-                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; padding: 0 10px 10px 10px; color: var(--vscode-editor-foreground); background-color: var(--vscode-sideBar-background); }
-                        h1, h2 { color: var(--vscode-textLink-foreground); border-bottom: 1px solid var(--vscode-editorWidget-border); padding-bottom: 5px;}
-                        #chat-container { margin-bottom: 10px; max-height: 40vh; height: 40vh; overflow-y: auto; border: 1px solid var(--vscode-input-border); padding: 5px; background-color: var(--vscode-editor-background); }
-                        #chat-container p { margin: 3px 0;}
+                        /* Same styles as before, using VS Code theme variables */
+                        body {
+                            font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif);
+                            padding: 0 10px 10px 10px;
+                            color: var(--vscode-editor-foreground);
+                            background-color: var(--vscode-sideBar-background);
+                        }
+                        h1, h2 {
+                            color: var(--vscode-sideBar-titleForeground); /* Changed for better sidebar contrast */
+                            border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder));
+                            padding-bottom: 5px;
+                            font-weight: normal; /* Less imposing */
+                        }
+                        #chat-container {
+                            margin-bottom: 10px;
+                            max-height: calc(100vh - 250px); /* Adjust based on other elements */
+                            height: 55vh; /* Adjust height as needed */
+                            overflow-y: auto;
+                            border: 1px solid var(--vscode-input-border, var(--vscode-contrastBorder));
+                            padding: 5px;
+                            background-color: var(--vscode-editor-background);
+                        }
+                        #chat-container p {
+                            margin: 3px 0;
+                            word-wrap: break-word; /* Wrap long words/code */
+                        }
+                         #chat-container p.user-message strong { color: var(--vscode-terminal-ansiBrightBlue); } /* User message color */
+                         #chat-container p.ai-message strong { color: var(--vscode-terminal-ansiBrightGreen); } /* AI message color */
+                         #chat-container p.system-message strong { color: var(--vscode-descriptionForeground); } /* System message color */
+                         #chat-container p.error-message { color: var(--vscode-errorForeground); } /* Error message color */
+                         #chat-container p.loading-message { color: var(--vscode-descriptionForeground); font-style: italic; } /* Loading message color */
+
                         #input-container { display: flex; margin-bottom: 15px; }
-                        #chat-input { flex-grow: 1; margin-right: 5px; background-color: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); color: var(--vscode-input-foreground); padding: 4px; }
-                        button { cursor: pointer; background-color: var(--vscode-button-background); color: var(--vscode-button-foreground); border: 1px solid var(--vscode-button-border); padding: 4px 10px; }
+                        #chat-input {
+                            flex-grow: 1;
+                            margin-right: 5px;
+                            background-color: var(--vscode-input-background);
+                            border: 1px solid var(--vscode-input-border);
+                            color: var(--vscode-input-foreground);
+                            padding: 6px;
+                            font-family: var(--vscode-editor-font-family, monospace); /* Use editor font for input */
+                            font-size: var(--vscode-editor-font-size);
+                        }
+                        button {
+                            cursor: pointer;
+                            background-color: var(--vscode-button-background);
+                            color: var(--vscode-button-foreground);
+                            border: 1px solid var(--vscode-button-border, transparent);
+                            padding: 6px 12px;
+                            font-size: var(--vscode-font-size);
+                        }
                         button:hover { background-color: var(--vscode-button-hoverBackground); }
-                        .api-key-section { margin-top: 15px; border-top: 1px solid var(--vscode-editorWidget-border); padding-top: 10px; }
+                        button:disabled { opacity: 0.7; cursor: default; }
+
+                        .api-key-section { margin-top: 15px; border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder)); padding-top: 10px; }
                         .api-key-section label { display: block; margin-bottom: 4px; }
-                        #api-key-input { width: calc(100% - 12px); margin-bottom: 5px; background-color: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); color: var(--vscode-input-foreground); padding: 4px; }
-                        #api-key-status { font-size: 0.9em; margin-top: 5px; color: var(--vscode-descriptionForeground); }
+                        #api-key-input {
+                            width: calc(100% - 14px); /* Adjust for padding/border */
+                            margin-bottom: 5px;
+                            background-color: var(--vscode-input-background);
+                            border: 1px solid var(--vscode-input-border);
+                            color: var(--vscode-input-foreground);
+                            padding: 6px;
+                        }
+                        #api-key-status { font-size: 0.9em; margin-top: 5px; color: var(--vscode-descriptionForeground); min-height: 1.2em; /* Prevent layout shift */ }
                      </style>
                 </head>
                 <body>
@@ -176,7 +256,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
                     <div id="chat-container">
                         <!-- Chat messages will appear here -->
-                        <p>Welcome! Ask a question or describe the code you want to generate.</p>
                     </div>
 
                     <div id="input-container">
@@ -187,28 +266,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     <div class="api-key-section">
                         <h2>API Key Management</h2>
                         <label for="api-key-input">Gemini API Key:</label>
-                        <input type="password" id="api-key-input" placeholder="Enter key">
+                        <input type="password" id="api-key-input" placeholder="Enter or update key">
                         <button id="save-key-button">Save Key</button>
-                        <div id="api-key-status">Status: Unknown</div> <!-- Added status display -->
-                        <!-- Add buttons for rotate/delete later -->
-                        <p><small>API keys are stored securely.</small></p>
+                        <div id="api-key-status">Status: Initializing...</div>
+                        <p><small>API keys are stored securely using VS Code SecretStorage.</small></p>
                     </div>
 
-                    <!-- Include the bundled webview script -->
-                     <!-- Use type="module" if webpack libraryTarget is 'module' -->
                     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
                  </body>
                 </html>`;
 	}
-} // End of class
-
-// Function to generate a nonce (security measure) - Keep this function
-function getNonce() {
-	let text = "";
-	const possible =
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-	for (let i = 0; i < 32; i++) {
-		text += possible.charAt(Math.floor(Math.random() * possible.length));
-	}
-	return text;
 }
