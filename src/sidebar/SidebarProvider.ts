@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { getNonce } from "../utilities/nonce";
 import { generateContent, resetClient } from "../ai/gemini";
 import { scanWorkspace } from "../context/workspaceScanner";
+import { buildContextString } from "../context/contextBuilder";
 
 // Secret storage keys
 const GEMINI_API_KEYS_LIST_SECRET_KEY = "geminiApiKeysList"; // Stores array of key strings
@@ -382,34 +383,77 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						return;
 					}
 
-					// --->>> Integrate Scanner Call <<<---
-					try {
-						console.log("Scanning workspace for context...");
-						// Scan with default options for now
-						const relevantFiles = await scanWorkspace({
-							respectGitIgnore: true,
-						});
-						console.log(`Found ${relevantFiles.length} relevant files:`);
-						relevantFiles.forEach((file) => console.log(`  - ${file.fsPath}`));
-						// TODO: Build actual context string from relevantFiles
-						// const projectContext = await buildContextFromFiles(relevantFiles);
-					} catch (scanError) {
-						console.error("Error during workspace scan:", scanError);
-						vscode.window.showErrorMessage(
-							"Failed to scan workspace for context."
-						);
-						// Decide if you want to proceed without context or show an error in chat
-						// For now, let's proceed but log the error
+					let projectContext = "";
+					const workspaceFolders = vscode.workspace.workspaceFolders;
+
+					if (workspaceFolders && workspaceFolders.length > 0) {
+						const rootFolder = workspaceFolders[0];
+						try {
+							console.log("Scanning workspace for context...");
+							const relevantFiles = await scanWorkspace({
+								respectGitIgnore: true,
+							});
+
+							if (relevantFiles.length > 0) {
+								console.log("Building context string...");
+								projectContext = await buildContextString(
+									relevantFiles,
+									rootFolder.uri
+								);
+								console.log(`Context built (${projectContext.length} chars).`);
+							} else {
+								console.log("No relevant files found for context.");
+								projectContext = "[No relevant files found in workspace]";
+							}
+						} catch (scanOrBuildError) {
+							console.error(
+								"Error during workspace scan or context build:",
+								scanOrBuildError
+							);
+							vscode.window.showErrorMessage(
+								"Failed to prepare project context."
+							);
+							projectContext = "[Error building project context]";
+						}
+					} else {
+						console.log("No workspace open, skipping context building.");
+						projectContext = "[No workspace open]";
 					}
-					// --->>> End Scanner Call <<<---
 
 					this.postMessageToWebview({
 						type: "aiResponse",
 						value: "Gemini is thinking...",
-					});
+					}); // Show thinking message immediately
+
 					try {
-						// TODO: Pass projectContext to generateContent later
-						const aiResponse = await generateContent(activeKey, userMessage);
+						// --->>> New Prompt Structure <<<---
+						const finalPrompt = `
+						You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query. Dont use Markdown formatting. Keep things concise but informative.
+						
+						*** Project Context (Reference Only) ***
+						${projectContext}
+						*** End Project Context ***
+						
+						--- User Query ---
+						${userMessage}
+						--- End User Query ---
+						
+						Assistant Response:
+						`; // Added "Assistant Response:" to guide the start
+
+						// --- DIAGNOSTIC LOG ---
+						console.log("--- Sending Final Prompt to Gemini ---");
+						// Limit logged prompt length to avoid flooding console
+						console.log(
+							finalPrompt.length > 1000
+								? finalPrompt.substring(0, 1000) +
+										"... (prompt truncated in log)"
+								: finalPrompt
+						);
+						console.log("--- End Final Prompt ---");
+
+						const aiResponse = await generateContent(activeKey, finalPrompt); // Pass the structured prompt
+
 						this.postMessageToWebview({
 							type: "aiResponse",
 							value: aiResponse,
@@ -418,20 +462,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						console.error("Unhandled error during chat generation:", error);
 						const errorMessage =
 							error instanceof Error ? error.message : String(error);
+						// Ensure thinking message is cleared on error too
 						this.postMessageToWebview({
-							type: "aiResponse",
+							type: "aiResponse", // Keep same type to overwrite thinking message
 							value: `Error: ${errorMessage}`,
 						});
 					}
 					break;
 				}
+
 				case "webviewReady": {
 					console.log("Webview reported ready.");
 					this._updateWebviewKeyList(); // Send initial key list
 					break;
 				}
-				// apiKeyStatus is now primarily sent FROM provider TO webview
-				// case 'apiKeyStatus': ...
 			}
 		});
 	}

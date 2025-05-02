@@ -8,7 +8,7 @@ import {
 
 // Define the model name you want to use
 // See https://ai.google.dev/models/gemini for available models
-const MODEL_NAME = "gemini-2.0-flash"; // Or "gemini-pro", etc.
+const MODEL_NAME = "gemini-2.5-flash-preview-04-17"; // Or "gemini-2.0-flash" || "gemini-2.5-flash-preview-04-17", etc.
 
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;

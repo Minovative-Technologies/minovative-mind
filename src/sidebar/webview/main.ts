@@ -144,7 +144,13 @@ if (
 		} // Prevent sending multiple messages while waiting
 
 		const message = chatInput?.value.trim();
-		if (message && chatInput) {
+
+		if (chatInput) {
+			chatInput.value = "";
+		} // Clear input immediately after getting value
+
+		if (message) {
+			// Check if message had content *before* clearing
 			if (!isApiKeySet) {
 				appendMessage(
 					"System",
@@ -155,8 +161,11 @@ if (
 			}
 			appendMessage("You", message, "user-message"); // Add user message to chat
 			vscode.postMessage({ type: "chatMessage", value: message });
-			chatInput.value = ""; // Clear input
+			// chatInput.value = ""; // <--- REMOVE FROM HERE ---
 			setLoadingState(true); // Show loading indicator
+		} else {
+			// If message was empty after trim, do nothing (or maybe give feedback)
+			console.log("Empty message submitted.");
 		}
 	}
 

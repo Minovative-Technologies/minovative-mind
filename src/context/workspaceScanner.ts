@@ -11,8 +11,10 @@ const DEFAULT_IGNORE_PATTERNS: string[] = [
 	"dist",
 	"out",
 	"build",
-	// Common binary/non-source file extensions
+
+	// --- Media Files ---
 	"*.vsix",
+	// Images
 	"*.png",
 	"*.jpg",
 	"*.jpeg",
@@ -20,15 +22,35 @@ const DEFAULT_IGNORE_PATTERNS: string[] = [
 	"*.bmp",
 	"*.tiff",
 	"*.ico",
-	"*.mp3",
-	"*.wav",
-	"*.ogg",
+	"*.webp",
+	// Scalable Vector Graphics
+	"*.svg",
+	// Video
 	"*.mp4",
 	"*.webm",
 	"*.avi",
 	"*.mov",
 	"*.wmv",
 	"*.flv",
+	"*.mkv",
+	// Audio
+	"*.mp3",
+	"*.wav",
+	"*.ogg",
+	"*.aac",
+	// Fonts
+	"*.woff",
+	"*.woff2",
+	"*.ttf",
+	"*.otf",
+	"*.eot",
+	// Archives
+	"*.zip",
+	"*.rar",
+	"*.7z",
+	"*.tar",
+	"*.gz",
+	// Documents (often not needed for code context)
 	"*.pdf",
 	"*.doc",
 	"*.docx",
@@ -36,14 +58,6 @@ const DEFAULT_IGNORE_PATTERNS: string[] = [
 	"*.pptx",
 	"*.xls",
 	"*.xlsx",
-	"*.zip",
-	"*.rar",
-	"*.7z",
-	"*.tar",
-	"*.gz",
-	"*.log",
-	"*.lock",
-	"*.DS_Store",
 ];
 
 // Interface for scan options (can be expanded later for settings)
