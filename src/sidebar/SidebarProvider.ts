@@ -276,17 +276,25 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this._view = webviewView;
 
 		webviewView.webview.options = {
+			// Allow scripts in the webview
 			enableScripts: true,
+
+			// Restrict the webview to only loading resources from the 'dist', 'media', and 'src/sidebar/webview' directories
 			localResourceRoots: [
 				vscode.Uri.joinPath(this._extensionUri, "dist"),
 				vscode.Uri.joinPath(this._extensionUri, "media"),
+				vscode.Uri.joinPath(this._extensionUri, "src", "sidebar", "webview"),
+				// Alternatively, allow the whole 'src' dir, but being specific is slightly more secure:
+				// vscode.Uri.joinPath(this._extensionUri, "src"),
 			],
 		};
 
+		// Set the HTML content (this line remains the same)
 		webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-		// Handle messages from the webview
+		// Handle messages from the webview (this part remains the same)
 		webviewView.webview.onDidReceiveMessage(async (data) => {
+			// ... (message handling logic remains the same)
 			switch (data.type) {
 				case "addApiKey": // Renamed from apiKeyUpdate
 					if (typeof data.value === "string") {
@@ -490,47 +498,45 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	// --- HTML Generation ---
 	private _getHtmlForWebview(webview: vscode.Webview): string {
+		// --- Get URIs for resources ---
 		const scriptUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(this._extensionUri, "dist", "webview.js")
 		);
+		// Get URI for the CSS file
+		const stylesUri = webview.asWebviewUri(
+			vscode.Uri.joinPath(
+				this._extensionUri,
+				"src",
+				"sidebar",
+				"webview",
+				"style.css"
+			)
+		);
+
 		const nonce = getNonce();
 
-		// Updated HTML with new key management controls
 		return `<!DOCTYPE html>
                 <html lang="en">
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} https: data:; script-src 'nonce-${nonce}';">
+                    
+                    <!-- 
+                      Use a content security policy to only allow loading specific resources in the webview
+                    -->
+                    <meta http-equiv="Content-Security-Policy" content="
+                        default-src 'none'; 
+                        style-src ${webview.cspSource}; 
+                        img-src ${webview.cspSource} https: data:; 
+                        script-src 'nonce-${nonce}';
+                        font-src ${webview.cspSource}; 
+                        connect-src 'none';
+                    ">
+                    
+                    <!-- Link the external CSS file -->
+                    <link href="${stylesUri}" rel="stylesheet">
+
                      <title>Minovative Mind Chat</title>
-                     <style>
-                        /* Basic styles using theme variables (keep previous styles) */
-                        body { font-family: var(--vscode-font-family, sans-serif); padding: 0 10px 10px 10px; color: var(--vscode-editor-foreground); background-color: var(--vscode-sideBar-background); }
-                        h1, h2 { color: var(--vscode-sideBar-titleForeground); border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder)); padding-bottom: 5px; font-weight: normal; margin-top: 15px; margin-bottom: 10px; }
-                        h1:first-of-type { margin-top: 0; }
-                        #chat-container { margin-bottom: 10px; max-height: calc(100vh - 300px); /* Adjust dynamically maybe? */ height: 45vh; overflow-y: auto; border: 1px solid var(--vscode-input-border, var(--vscode-contrastBorder)); padding: 5px; background-color: var(--vscode-editor-background); }
-                        #chat-container p { margin: 3px 0; word-wrap: break-word; }
-                        #chat-container p.user-message strong { color: var(--vscode-terminal-ansiBrightBlue); }
-                        #chat-container p.ai-message strong { color: var(--vscode-terminal-ansiBrightGreen); }
-                        #chat-container p.system-message strong { color: var(--vscode-descriptionForeground); }
-                        #chat-container p.error-message { color: var(--vscode-errorForeground); }
-                        #chat-container p.loading-message { color: var(--vscode-descriptionForeground); font-style: italic; }
-
-                        #input-container { display: flex; margin-bottom: 15px; }
-                        #chat-input { flex-grow: 1; margin-right: 5px; background-color: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); color: var(--vscode-input-foreground); padding: 6px; font-family: var(--vscode-editor-font-family, monospace); font-size: var(--vscode-editor-font-size); }
-                        button { cursor: pointer; background-color: var(--vscode-button-background); color: var(--vscode-button-foreground); border: 1px solid var(--vscode-button-border, transparent); padding: 6px 12px; font-size: var(--vscode-font-size); }
-                        button:hover { background-color: var(--vscode-button-hoverBackground); }
-                        button:disabled { opacity: 0.6; cursor: not-allowed; }
-
-                        .section { margin-top: 15px; border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-contrastBorder)); padding-top: 10px; }
-                        .key-management-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; }
-                        .key-management-controls button { padding: 4px 8px; font-size: 0.9em; }
-                        .key-management-controls span { font-size: 0.9em; color: var(--vscode-descriptionForeground); margin: 0 5px; text-align: center; flex-grow: 1; }
-                        .add-key-container { display: flex; margin-top: 8px; }
-                        #add-key-input { flex-grow: 1; margin-right: 5px; background-color: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); color: var(--vscode-input-foreground); padding: 6px; }
-                        #add-key-button { padding: 6px 10px; } /* Match chat send button */
-                        #api-key-status { font-size: 0.9em; margin-top: 5px; color: var(--vscode-descriptionForeground); min-height: 1.2em; text-align: center; }
-                     </style>
                 </head>
                 <body>
                     <h1>Chat</h1>
@@ -562,5 +568,5 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
                  </body>
                 </html>`;
-	}
-} // End of class
+	} // End of _getHtmlForWebview
+}
