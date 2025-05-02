@@ -56,6 +56,7 @@
 		"test": "node ./out/test/runTest.js"
 	},
 	"devDependencies": {
+		"@types/bluebird": "^3.5.42",
 		"@types/glob": "^8.1.0",
 		"@types/mocha": "^10.0.6",
 		"@types/vscode": "^1.80.0",
@@ -71,6 +72,8 @@
 		"webpack-cli": "^5.1.4"
 	},
 	"dependencies": {
-		"@google/generative-ai": "^0.24.1"
+		"@google/generative-ai": "^0.24.1",
+		"bluebird": "^3.7.2",
+		"ignore": "^7.0.4"
 	}
 }

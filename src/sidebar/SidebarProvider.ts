@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { getNonce } from "../utilities/nonce";
 import { generateContent, resetClient } from "../ai/gemini";
+import { scanWorkspace } from "../context/workspaceScanner";
 
 // Secret storage keys
 const GEMINI_API_KEYS_LIST_SECRET_KEY = "geminiApiKeysList"; // Stores array of key strings
@@ -370,7 +371,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				case "chatMessage": {
 					const userMessage = data.value;
 					console.log(`Chat message received: ${userMessage}`);
-					const activeKey = this._getActiveApiKey(); // Use helper
+					const activeKey = this._getActiveApiKey();
 
 					if (!activeKey) {
 						this.postMessageToWebview({
@@ -381,11 +382,33 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						return;
 					}
 
+					// --->>> Integrate Scanner Call <<<---
+					try {
+						console.log("Scanning workspace for context...");
+						// Scan with default options for now
+						const relevantFiles = await scanWorkspace({
+							respectGitIgnore: true,
+						});
+						console.log(`Found ${relevantFiles.length} relevant files:`);
+						relevantFiles.forEach((file) => console.log(`  - ${file.fsPath}`));
+						// TODO: Build actual context string from relevantFiles
+						// const projectContext = await buildContextFromFiles(relevantFiles);
+					} catch (scanError) {
+						console.error("Error during workspace scan:", scanError);
+						vscode.window.showErrorMessage(
+							"Failed to scan workspace for context."
+						);
+						// Decide if you want to proceed without context or show an error in chat
+						// For now, let's proceed but log the error
+					}
+					// --->>> End Scanner Call <<<---
+
 					this.postMessageToWebview({
 						type: "aiResponse",
 						value: "Gemini is thinking...",
-					}); // Loading indicator
+					});
 					try {
+						// TODO: Pass projectContext to generateContent later
 						const aiResponse = await generateContent(activeKey, userMessage);
 						this.postMessageToWebview({
 							type: "aiResponse",

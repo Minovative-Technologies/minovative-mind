@@ -84,9 +84,9 @@ export async function generateContent(
 		const result = await chat.sendMessage(prompt);
 
 		// Check for safety ratings if needed (optional)
-		if (result.response.promptFeedback?.blockReason) {
-			return `Blocked due to: ${result.response.promptFeedback.blockReason}`;
-		}
+		// if (result.response.promptFeedback?.blockReason) {
+		// 	return `Blocked due to: ${result.response.promptFeedback.blockReason}`;
+		// }
 
 		const response = result.response;
 		const text = response.text();
