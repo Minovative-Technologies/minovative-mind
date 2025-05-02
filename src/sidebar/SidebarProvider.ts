@@ -148,28 +148,59 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	/** Deletes the currently active API key */
 	private async _deleteActiveApiKey() {
+		// --- DIAGNOSTIC LOG ---
+		console.log(
+			`[Minovative Mind] Attempting delete. Current active index: ${this._activeKeyIndex}, Key list length: ${this._apiKeyList.length}`
+		);
+
 		if (
 			this._activeKeyIndex === -1 ||
 			this._activeKeyIndex >= this._apiKeyList.length
 		) {
+			// --- DIAGNOSTIC LOG ---
+			console.log(
+				"[Minovative Mind] Delete blocked: Invalid active key index."
+			);
+			// --- Refined Error Message ---
 			this.postMessageToWebview({
 				type: "apiKeyStatus",
-				value: "Error: No active key selected or key list is empty.",
+				// Provide more context in the error message
+				value:
+					this._apiKeyList.length === 0
+						? "Error: Cannot delete, key list is empty."
+						: "Error: No active key selected to delete.",
 			});
-			return;
+			return; // Exit if no valid active key
 		}
+
+		// --- DIAGNOSTIC LOG ---
+		console.log(
+			`[Minovative Mind] Proceeding to delete key at index ${
+				this._activeKeyIndex
+			}: ...${this._apiKeyList[this._activeKeyIndex].slice(-4)}`
+		);
 
 		// Get the key string *before* splicing
 		const deletedKey = this._apiKeyList[this._activeKeyIndex];
 		// Remove from list
 		this._apiKeyList.splice(this._activeKeyIndex, 1);
 
-		// Adjust active index logic (remains the same)
+		// Adjust active index logic
+		const oldIndex = this._activeKeyIndex; // Keep track for logging
 		if (this._apiKeyList.length === 0) {
 			this._activeKeyIndex = -1;
 		} else if (this._activeKeyIndex >= this._apiKeyList.length) {
-			this._activeKeyIndex = this._apiKeyList.length - 1;
+			// If we deleted the last item
+			this._activeKeyIndex = this._apiKeyList.length - 1; // Adjust to the new last item
 		}
+		// Note: If we deleted an item *before* the end, the _activeKeyIndex
+		// might now point to the item that shifted into the deleted slot,
+		// which is acceptable behavior for this adjustment logic.
+
+		// --- DIAGNOSTIC LOG ---
+		console.log(
+			`[Minovative Mind] Key deleted. Old index: ${oldIndex}, New active index: ${this._activeKeyIndex}`
+		);
 
 		// Save changes, which will trigger _updateWebviewKeyList
 		await this._saveKeysToStorage();
@@ -260,9 +291,76 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						await this._addApiKey(data.value.trim());
 					}
 					break;
-				case "deleteActiveApiKey":
+				case "deleteActiveApiKey": // This case might become redundant now, but leave it for now
+					console.warn(
+						"[Provider] Received direct 'deleteActiveApiKey' message. This might be deprecated. Use 'requestDeleteConfirmation'."
+					);
+					// You could still call the confirmation logic here as a fallback if needed
+					// Or just call _deleteActiveApiKey if you want to bypass confirmation from old messages
 					await this._deleteActiveApiKey();
 					break;
+
+				case "requestDeleteConfirmation": {
+					console.log(
+						"[Provider] Received 'requestDeleteConfirmation'. Showing confirmation dialog."
+					);
+					// Get the key details *before* showing the dialog, in case it gets deleted while waiting
+					const keyToDeleteIndex = this._activeKeyIndex;
+					let keyIdentifier = "the active key";
+					if (
+						keyToDeleteIndex >= 0 &&
+						keyToDeleteIndex < this._apiKeyList.length
+					) {
+						keyIdentifier = `key ...${this._apiKeyList[keyToDeleteIndex].slice(
+							-4
+						)}`;
+					} else {
+						// If somehow no key is active, prevent deletion attempt
+						console.log(
+							"[Provider] Delete confirmation requested, but no valid key is active."
+						);
+						this.postMessageToWebview({
+							type: "apiKeyStatus",
+							value: "Error: Cannot request deletion, no active key selected.",
+						});
+						return; // Exit early
+					}
+
+					const confirmation = await vscode.window.showWarningMessage(
+						`Are you sure you want to delete ${keyIdentifier}?`,
+						{ modal: true }, // Makes the dialog block interaction until closed
+						"Delete Key" // Action button text
+						// Add "Cancel" button text here if you want it explicitly,
+						// otherwise dismissing the dialog counts as cancel.
+					);
+
+					if (confirmation === "Delete Key") {
+						console.log(
+							"[Provider] User confirmed deletion. Calling _deleteActiveApiKey."
+						);
+						// Double-check the index hasn't changed unexpectedly (unlikely with modal)
+						if (this._activeKeyIndex === keyToDeleteIndex) {
+							await this._deleteActiveApiKey();
+						} else {
+							console.warn(
+								"[Provider] Active key index changed between confirmation request and execution. Aborting delete."
+							);
+							this.postMessageToWebview({
+								type: "apiKeyStatus",
+								value: "Info: Active key changed, deletion aborted.",
+							});
+						}
+					} else {
+						console.log("[Provider] User cancelled deletion.");
+						this.postMessageToWebview({
+							type: "apiKeyStatus",
+							value: "Key deletion cancelled.", // Notify webview
+						});
+					}
+					break;
+				}
+				// --- END NEW CASE ---
+
 				case "switchToNextKey":
 					await this._switchToNextApiKey();
 					break;

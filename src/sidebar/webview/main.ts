@@ -91,9 +91,6 @@ if (
 		if (apiKey) {
 			vscode.postMessage({ type: "addApiKey", value: apiKey });
 			addKeyInput.value = "";
-			// We can remove the temporary message here, as the provider
-			// will send back a status message ('Info: ... stored' or 'Error: ...')
-			// updateApiKeyStatus('Attempting to add key...'); // REMOVE this line
 		} else {
 			// Keep this error message for immediate feedback
 			updateApiKeyStatus("Error: Please enter an API key to add.");
@@ -109,19 +106,24 @@ if (
 
 	prevKeyButton.addEventListener("click", () => {
 		vscode.postMessage({ type: "switchToPrevKey" });
-		// updateApiKeyStatus('Switching key...'); // REMOVE this line
+		updateApiKeyStatus("Switching key...");
 	});
 
 	nextKeyButton.addEventListener("click", () => {
 		vscode.postMessage({ type: "switchToNextKey" });
-		// updateApiKeyStatus('Switching key...'); // REMOVE this line
+		updateApiKeyStatus("Switching key...");
 	});
 
 	deleteKeyButton.addEventListener("click", () => {
-		if (confirm("Are you sure you want to delete the current API key?")) {
-			vscode.postMessage({ type: "deleteActiveApiKey" });
-			// updateApiKeyStatus('Deleting key...'); // REMOVE this line
-		}
+		// --- DIAGNOSTIC LOG (Webview) ---
+		console.log(
+			"[Webview] Delete button clicked. Sending 'requestDeleteConfirmation' message."
+		);
+		// REMOVE the confirm() call entirely
+		// Just send a request to the provider to show the confirmation
+		vscode.postMessage({ type: "requestDeleteConfirmation" });
+		// Optional: Give some immediate feedback, though the modal dialog is better
+		// updateApiKeyStatus('Waiting for confirmation...');
 	});
 
 	saveKeyButton?.addEventListener("click", () => {
