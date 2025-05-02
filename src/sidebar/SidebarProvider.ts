@@ -256,7 +256,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	/** Gets the currently active API key string */
-	private _getActiveApiKey(): string | undefined {
+	public getActiveApiKey(): string | undefined {
+		// Renamed slightly for convention
 		if (
 			this._activeKeyIndex >= 0 &&
 			this._activeKeyIndex < this._apiKeyList.length
@@ -380,7 +381,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				case "chatMessage": {
 					const userMessage = data.value;
 					console.log(`Chat message received: ${userMessage}`);
-					const activeKey = this._getActiveApiKey();
+					const activeKey = this.getActiveApiKey();
 
 					if (!activeKey) {
 						this.postMessageToWebview({

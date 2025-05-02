@@ -41,8 +41,22 @@
 				}
 			]
 		},
-		"commands": [],
-		"menus": {}
+		"commands": [
+			{
+				"command": "minovative-mind.modifySelection",
+				"title": "Minovative Mind: Modify Selected Code",
+				"category": "Minovative Mind"
+			}
+		],
+		"menus": {
+			"editor/context": [
+				{
+					"when": "editorHasSelection",
+					"command": "minovative-mind.modifySelection",
+					"group": "9_minovativemind@1"
+				}
+			]
+		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run package",
