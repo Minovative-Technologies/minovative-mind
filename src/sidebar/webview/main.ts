@@ -9,7 +9,7 @@ interface VsCodeApi {
 declare const acquireVsCodeApi: () => VsCodeApi;
 const vscode = acquireVsCodeApi();
 
-// DOM Elements
+// --- DOM Elements ---
 const sendButton = document.getElementById(
 	"send-button"
 ) as HTMLButtonElement | null;
@@ -19,19 +19,39 @@ const chatInput = document.getElementById(
 const chatContainer = document.getElementById(
 	"chat-container"
 ) as HTMLDivElement | null;
+// Key Management Elements
+const addKeyInput = document.getElementById(
+	"add-key-input"
+) as HTMLInputElement | null;
+const addKeyButton = document.getElementById(
+	"add-key-button"
+) as HTMLButtonElement | null;
+const prevKeyButton = document.getElementById(
+	"prev-key-button"
+) as HTMLButtonElement | null;
+const nextKeyButton = document.getElementById(
+	"next-key-button"
+) as HTMLButtonElement | null;
+const deleteKeyButton = document.getElementById(
+	"delete-key-button"
+) as HTMLButtonElement | null;
+const currentKeyDisplay = document.getElementById(
+	"current-key-display"
+) as HTMLSpanElement | null;
+const apiKeyStatusDiv = document.getElementById(
+	"api-key-status"
+) as HTMLDivElement | null;
 const saveKeyButton = document.getElementById(
 	"save-key-button"
 ) as HTMLButtonElement | null;
 const apiKeyInput = document.getElementById(
 	"api-key-input"
 ) as HTMLInputElement | null;
-const apiKeyStatusDiv = document.getElementById(
-	"api-key-status"
-) as HTMLDivElement | null;
 
 // State
-let isApiKeySet = false; // Track if API key is confirmed set
-let isLoading = false; // Track if AI is processing
+let isApiKeySet = false; // True if at least one key exists and is active
+let isLoading = false;
+let totalKeys = 0; // Cache total number of keys
 
 console.log("Webview script loaded.");
 
@@ -40,8 +60,12 @@ if (
 	!sendButton ||
 	!chatInput ||
 	!chatContainer ||
-	!saveKeyButton ||
-	!apiKeyInput ||
+	!addKeyInput ||
+	!addKeyButton ||
+	!prevKeyButton ||
+	!nextKeyButton ||
+	!deleteKeyButton ||
+	!currentKeyDisplay ||
 	!apiKeyStatusDiv
 ) {
 	console.error("Required DOM elements not found!");
@@ -61,9 +85,48 @@ if (
 		}
 	});
 
-	saveKeyButton.addEventListener("click", () => {
-		const apiKey = apiKeyInput.value.trim();
+	// Key Management Listeners
+	addKeyButton.addEventListener("click", () => {
+		const apiKey = addKeyInput.value.trim();
 		if (apiKey) {
+			vscode.postMessage({ type: "addApiKey", value: apiKey });
+			addKeyInput.value = "";
+			// We can remove the temporary message here, as the provider
+			// will send back a status message ('Info: ... stored' or 'Error: ...')
+			// updateApiKeyStatus('Attempting to add key...'); // REMOVE this line
+		} else {
+			// Keep this error message for immediate feedback
+			updateApiKeyStatus("Error: Please enter an API key to add.");
+		}
+	});
+
+	addKeyInput.addEventListener("keydown", (e) => {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			addKeyButton.click(); // Trigger button click on Enter
+		}
+	});
+
+	prevKeyButton.addEventListener("click", () => {
+		vscode.postMessage({ type: "switchToPrevKey" });
+		// updateApiKeyStatus('Switching key...'); // REMOVE this line
+	});
+
+	nextKeyButton.addEventListener("click", () => {
+		vscode.postMessage({ type: "switchToNextKey" });
+		// updateApiKeyStatus('Switching key...'); // REMOVE this line
+	});
+
+	deleteKeyButton.addEventListener("click", () => {
+		if (confirm("Are you sure you want to delete the current API key?")) {
+			vscode.postMessage({ type: "deleteActiveApiKey" });
+			// updateApiKeyStatus('Deleting key...'); // REMOVE this line
+		}
+	});
+
+	saveKeyButton?.addEventListener("click", () => {
+		const apiKey = apiKeyInput?.value.trim();
+		if (apiKey && apiKeyInput) {
 			vscode.postMessage({ type: "apiKeyUpdate", value: apiKey });
 			apiKeyInput.value = "";
 			updateApiKeyStatus("Attempting to save key...");
@@ -132,12 +195,49 @@ if (
 				break;
 			}
 			case "apiKeyStatus": {
+				// General status updates
 				if (typeof message.value === "string") {
+					// ALWAYS update the status div with the message from the provider
 					updateApiKeyStatus(message.value);
-					// Update internal state based on status message
-					isApiKeySet =
-						message.value.toLowerCase().includes("api key is set") ||
-						message.value.toLowerCase().includes("saved successfully");
+				}
+				break;
+			}
+			case "updateKeyList": {
+				// Handle the detailed key list update
+				if (message.value && Array.isArray(message.value.keys)) {
+					const updateData = message.value as {
+						keys: any[];
+						activeIndex: number;
+						totalKeys: number;
+					};
+					totalKeys = updateData.totalKeys;
+					isApiKeySet = updateData.activeIndex !== -1; // API is set if there's an active key
+
+					if (
+						updateData.activeIndex !== -1 &&
+						updateData.keys[updateData.activeIndex]
+					) {
+						currentKeyDisplay.textContent =
+							updateData.keys[updateData.activeIndex].maskedKey;
+						apiKeyStatusDiv.textContent = `Using key ${
+							updateData.activeIndex + 1
+						} of ${totalKeys}.`;
+						apiKeyStatusDiv.style.color = "var(--vscode-descriptionForeground)"; // Reset color
+					} else {
+						currentKeyDisplay.textContent = "No active key";
+						apiKeyStatusDiv.textContent = "Please add an API key.";
+						apiKeyStatusDiv.style.color = "var(--vscode-errorForeground)";
+					}
+
+					// Enable/disable buttons based on state
+					prevKeyButton.disabled = totalKeys <= 1;
+					nextKeyButton.disabled = totalKeys <= 1;
+					deleteKeyButton.disabled = updateData.activeIndex === -1; // Disable if no key active
+					// Enable chat input only if a key is set and active
+					chatInput.disabled = !isApiKeySet || isLoading;
+					sendButton.disabled = !isApiKeySet || isLoading;
+				} else {
+					console.error("Invalid 'updateKeyList' message received:", message);
 				}
 				break;
 			}
@@ -178,31 +278,56 @@ if (
 	}
 
 	function updateApiKeyStatus(text: string) {
+		// This function now *always* displays the text received
+		// in the apiKeyStatus div. Styling is applied based on content.
 		if (apiKeyStatusDiv) {
 			const sanitizedText = text.replace(/</g, "<").replace(/>/g, ">");
-			apiKeyStatusDiv.innerHTML = `Status: ${sanitizedText}`;
+			apiKeyStatusDiv.textContent = sanitizedText; // Set the text directly
 
-			if (text.toLowerCase().includes("error")) {
+			// Apply color based on common prefixes/keywords
+			const lowerText = text.toLowerCase();
+			if (lowerText.startsWith("error:")) {
 				apiKeyStatusDiv.style.color = "var(--vscode-errorForeground)";
 			} else if (
-				text.toLowerCase().includes("success") ||
-				text.toLowerCase().includes("api key is set")
+				lowerText.startsWith("info:") ||
+				lowerText.includes("success") ||
+				lowerText.includes(" key added") ||
+				lowerText.includes(" deleted")
 			) {
-				apiKeyStatusDiv.style.color = "var(--vscode-editorInfo-foreground)";
+				apiKeyStatusDiv.style.color = "var(--vscode-editorInfo-foreground)"; // Use info color for success/info
 			} else {
-				apiKeyStatusDiv.style.color = "var(--vscode-descriptionForeground)";
+				apiKeyStatusDiv.style.color = "var(--vscode-descriptionForeground)"; // Default color
 			}
 		}
 	}
 
 	// --- Initialization ---
-	appendMessage(
-		"System",
-		"Welcome! Enter your Gemini API key below and start chatting.",
-		"system-message"
-	);
-	vscode.postMessage({ type: "webviewReady" }); // Inform extension host
-	console.log("Webview sent ready message.");
-	updateApiKeyStatus("Checking key status..."); // Initial status check request
-	chatInput.focus(); // Focus input field on load
+	function initializeWebview() {
+		appendMessage(
+			"System",
+			"Welcome! Manage Gemini API keys below and start chatting.",
+			"system-message"
+		);
+		vscode.postMessage({ type: "webviewReady" }); // Inform extension host
+		console.log("Webview sent ready message.");
+		updateApiKeyStatus("Initializing key status..."); // Initial status check request
+		chatInput?.focus(); // Focus input field on load
+
+		// Initial button state
+		if (
+			prevKeyButton &&
+			nextKeyButton &&
+			deleteKeyButton &&
+			chatInput &&
+			sendButton
+		) {
+			prevKeyButton.disabled = true;
+			nextKeyButton.disabled = true;
+			deleteKeyButton.disabled = true;
+			chatInput.disabled = true;
+			sendButton.disabled = true;
+		}
+	}
+
+	initializeWebview();
 } // Close the 'else' block for element checks
