@@ -1,47 +1,74 @@
 {
-  "name": "minovative-mind-vscode",
-  "displayName": "minovative-mind-vscode",
-  "description": "Integrates Google Gemini into VS Code with project context awareness",
-  "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.99.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [],
-  "main": "./dist/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "minovative-mind-vscode.helloWorld",
-        "title": "Hello World"
-      }
-    ]
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "webpack",
-    "watch": "webpack --watch",
-    "package": "webpack --mode production --devtool hidden-source-map",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.99.0",
-    "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
-    "@typescript-eslint/eslint-plugin": "^8.31.1",
-    "@typescript-eslint/parser": "^8.31.1",
-    "eslint": "^9.25.1",
-    "typescript": "^5.8.3",
-    "ts-loader": "^9.5.2",
-    "webpack": "^5.99.7",
-    "webpack-cli": "^6.0.1",
-    "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.5.2"
-  }
+	"name": "minovative-mind-vscode",
+	"displayName": "Minovative Mind",
+	"description": "Integrates Google Gemini into VS Code with project context awareness.",
+	"version": "0.0.1",
+	"publisher": "YourPublisherName",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Quarantiine/minovative-mind-vscode.git"
+	},
+	"engines": {
+		"vscode": "^1.80.0"
+	},
+	"categories": [
+		"Other",
+		"Machine Learning",
+		"Programming Languages",
+		"AI",
+		"Chat"
+	],
+	"activationEvents": [],
+	"main": "./dist/extension.js",
+	"contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "minovative-mind",
+					"title": "Minovative Mind",
+					"icon": "media/minovative-logo-192x192.png"
+				}
+			]
+		},
+		"views": {
+			"minovative-mind": [
+				{
+					"id": "minovativeMindSidebarView",
+					"name": "Chat",
+					"type": "webview",
+					"contextualTitle": "Minovative Mind",
+					"icon": "media/minovative-logo-192x192.png"
+				}
+			]
+		},
+		"commands": [],
+		"menus": {}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run package",
+		"compile": "webpack",
+		"watch": "webpack --watch",
+		"package": "webpack --mode production --devtool hidden-source-map",
+		"compile-tests": "tsc -p . --outDir out",
+		"watch-tests": "tsc -p . -w --outDir out",
+		"pretest": "npm run compile-tests && npm run compile && npm run lint",
+		"lint": "eslint src --ext ts",
+		"test": "node ./out/test/runTest.js"
+	},
+	"devDependencies": {
+		"@types/vscode": "^1.80.0",
+		"@types/glob": "^8.1.0",
+		"@typescript-eslint/eslint-plugin": "^7.7.1",
+		"@typescript-eslint/parser": "^7.7.1",
+		"eslint": "^8.57.0",
+		"glob": "^10.3.10",
+		"ts-loader": "^9.5.1",
+		"typescript": "^5.4.5",
+		"webpack": "^5.91.0",
+		"webpack-cli": "^5.1.4",
+		"@types/mocha": "^10.0.6",
+		"mocha": "^10.4.0",
+		"@vscode/test-electron": "^2.3.9"
+	},
+	"dependencies": {}
 }
