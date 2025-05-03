@@ -33,7 +33,7 @@ body {
 	flex-direction: column;
 	height: 100vh; /* Ensure body takes full height */
 	box-sizing: border-box;
-	overflow: hidden; /* Prevent body scrolling */
+	overflow: scroll; /* Prevent body scrolling */
 }
 
 /* --- Headers --- */
@@ -110,9 +110,12 @@ h2 {
 	overflow-y: auto; /* Enable vertical scrolling */
 	padding: var(--element-spacing) 0;
 	margin: var(--element-spacing) 0;
-	min-height: 100px;
+	min-height: 300px;
 	display: flex; /* Use flexbox to push messages to bottom */
 	flex-direction: column; /* Stack messages vertically */
+	background-color: var(--vscode-editorWidget-background);
+	border-radius: 10px;
+	padding: 10px;
 }
 
 /* --- Chat Messages --- */
@@ -209,7 +212,7 @@ h2 {
 	color: var(--vscode-descriptionForeground);
 	min-height: 1.5em; /* Ensure space even when empty */
 	text-align: center;
-	padding: 4px 0 6px 0;
+	padding: 10px 0px 0px 0px;
 	flex-shrink: 0;
 }
 
@@ -259,7 +262,7 @@ h2 {
 	display: inline-flex; /* Center icon */
 	align-items: center;
 	justify-content: center;
-	font-size: 1.2em; /* Make send icon slightly bigger */
+	font-size: 1em; /* Make send icon slightly bigger */
 }
 #input-container button#send-button:hover {
 	background-color: var(--vscode-button-hoverBackground);
@@ -274,10 +277,9 @@ h2 {
 /* --- API Key Section --- */
 .section {
 	margin-top: var(--element-spacing);
-	border-top: 1px solid
-		var(--vscode-sideBar-border, var(--vscode-contrastBorder));
 	padding-top: var(--element-spacing);
 	flex-shrink: 0;
+	width: 100%;
 }
 .key-management-controls {
 	display: flex;
@@ -442,4 +444,90 @@ h2 {
 }
 ::-webkit-scrollbar-thumb:active {
 	background: var(--vscode-scrollbarSlider-activeBackground);
+}
+
+/* --- Add these styles --- */
+
+/* Model Selection Section */
+.model-selection-section {
+	/* Similar spacing to API key section */
+	margin-top: var(--element-spacing);
+	padding-top: var(--element-spacing);
+	flex-shrink: 0;
+}
+
+.model-select-container {
+	display: flex;
+	flex-direction: column;
+	align-items: start;
+	gap: var(--element-spacing); /* Space between label and select */
+	width: 100%;
+}
+
+.model-select-container label {
+	flex-shrink: 0; /* Prevent label from shrinking */
+	font-size: 0.95em;
+	color: var(--vscode-foreground);
+}
+
+#model-select {
+	flex-grow: 1; /* Allow select to take remaining space */
+	background-color: var(--vscode-dropdown-background);
+	color: var(--vscode-dropdown-foreground);
+	border: 1px solid var(--vscode-dropdown-border);
+	padding: 6px 8px;
+	border-radius: var(--border-radius);
+	font-family: var(--vscode-font-family, sans-serif);
+	font-size: var(--vscode-font-size);
+	width: 100%;
+}
+
+#model-select:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+#model-select:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+	background-color: var(--vscode-input-background); /* Match disabled input */
+}
+
+/* API Key Section */
+.api-key-section {
+	/* Renamed from just .section to be specific */
+	margin-top: var(--element-spacing);
+	padding-top: var(--element-spacing);
+	flex-shrink: 0;
+}
+
+/* Specific styling for Save, Load, Clear buttons */
+#save-chat-button,
+#load-chat-button,
+#clear-chat-button {
+	padding: 4px 10px; /* Adjust padding as needed */
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Use secondary button style */
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-button-border, transparent);
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	margin-left: 4px; /* Keep spacing */
+	transition: background-color 0.1s ease-in-out; /* Add smooth hover */
+}
+
+#save-chat-button:hover,
+#load-chat-button:hover,
+#clear-chat-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+#save-chat-button:disabled,
+#load-chat-button:disabled,
+#clear-chat-button:disabled {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	opacity: 0.6; /* Make disabled state clearer */
+	cursor: not-allowed;
 }

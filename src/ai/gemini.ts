@@ -6,119 +6,156 @@ import {
 	Content,
 } from "@google/generative-ai";
 
-// Define the model name you want to use
-// See https://ai.google.dev/models/gemini for available models
-const MODEL_NAME = "gemini-2.5-flash-preview-04-17"; // Or "gemini-2.0-flash" || "gemini-2.5-flash-preview-04-17", etc.
+// REMOVED: const MODEL_NAME = ...
 
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
+let currentApiKey: string | null = null; // Store the key used for initialization
+let currentModelName: string | null = null; // Store the model name used
 
 /**
- * Initializes the GoogleGenerativeAI client and the GenerativeModel.
- * Should be called with a valid API key.
+ * Initializes the GoogleGenerativeAI client and the GenerativeModel if needed.
+ * Re-initializes if the API key or model name changes.
  *
  * @param apiKey The Google Gemini API key.
- * @returns True if initialization was successful, false otherwise.
+ * @param modelName The specific Gemini model name to use (e.g., "gemini-1.5-flash-latest").
+ * @returns True if initialization was successful or already initialized correctly, false otherwise.
  */
-function initializeGenerativeAI(apiKey: string): boolean {
+function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
 	try {
 		if (!apiKey) {
 			console.error("Gemini API Key is missing.");
+			if (model) {
+				// Reset if key becomes invalid
+				resetClient();
+			}
 			return false;
 		}
-		// Only create new instances if they don't exist or if the key changes (optional)
-		if (!generativeAI || !model) {
+		if (!modelName) {
+			console.error("Gemini Model Name is missing.");
+			if (model) {
+				// Reset if model name becomes invalid
+				resetClient();
+			}
+			return false;
+		}
+
+		// Re-initialize if API key or model name has changed, or if not initialized yet
+		if (
+			!generativeAI ||
+			!model ||
+			apiKey !== currentApiKey ||
+			modelName !== currentModelName
+		) {
+			console.log(
+				`Initializing/Re-initializing Gemini. Key changed: ${
+					apiKey !== currentApiKey
+				}, Model changed: ${modelName !== currentModelName}`
+			);
 			generativeAI = new GoogleGenerativeAI(apiKey);
-			model = generativeAI.getGenerativeModel({ model: MODEL_NAME });
-			console.log("GoogleGenerativeAI initialized with model:", MODEL_NAME);
+			model = generativeAI.getGenerativeModel({ model: modelName });
+			currentApiKey = apiKey; // Store current key
+			currentModelName = modelName; // Store current model name
+			console.log("GoogleGenerativeAI initialized with model:", modelName);
 		}
 		return true;
 	} catch (error) {
 		console.error("Error initializing GoogleGenerativeAI:", error);
 		vscode.window.showErrorMessage(
-			`Failed to initialize Gemini AI: ${
+			`Failed to initialize Gemini AI (${modelName}): ${
 				error instanceof Error ? error.message : String(error)
 			}`
 		);
-		generativeAI = null; // Reset on error
-		model = null;
+		resetClient(); // Reset on error
 		return false;
 	}
 }
 
 /**
  * Generates content using the initialized Gemini model.
- * Assumes initializeGenerativeAI has been called successfully.
  *
- * @param apiKey The API key (needed to re-initialize if necessary).
+ * @param apiKey The API key.
+ * @param modelName The specific Gemini model name to use.
  * @param prompt The user's text prompt.
  * @param history Optional chat history for context.
  * @returns The generated text content or an error message string.
  */
 export async function generateContent(
 	apiKey: string,
+	modelName: string, // <-- Added modelName parameter
 	prompt: string,
 	history?: Content[]
 ): Promise<string> {
-	// Ensure initialization with the correct key
-	if (!initializeGenerativeAI(apiKey)) {
-		return "Error: Gemini AI client not initialized. Please check your API key.";
+	// Ensure initialization with the correct key AND model
+	if (!initializeGenerativeAI(apiKey, modelName)) {
+		return `Error: Gemini AI client not initialized. Please check your API key and selected model (${modelName}).`;
 	}
 
 	// Defensive check, should be initialized by the call above
 	if (!model) {
-		return "Error: Gemini model is not available.";
+		// This case should ideally be covered by initializeGenerativeAI, but good practice
+		return `Error: Gemini model (${modelName}) is not available after initialization attempt.`;
 	}
 
 	try {
-		// For simplicity, starting a new chat each time for basic Q&A.
-		// For conversational context, you'd manage the history array.
+		// Start a new chat session with the current model instance
 		const chat = model.startChat({
 			history: history || [],
-			// generationConfig: { // Optional: configure temp, topP, etc.
-			//   maxOutputTokens: 200,
-			// },
+			// generationConfig: { ... } // Optional configuration
 		});
 
-		console.log("Sending prompt to Gemini:", prompt);
+		console.log(
+			`Sending prompt to Gemini (${modelName}):`,
+			prompt.substring(0, 100) + "..."
+		);
 		const result = await chat.sendMessage(prompt);
 
-		// Check for safety ratings if needed (optional)
-		// if (result.response.promptFeedback?.blockReason) {
-		// 	return `Blocked due to: ${result.response.promptFeedback.blockReason}`;
-		// }
+		// Optional: Check for safety ratings
+		// if (result.response.promptFeedback?.blockReason) { ... }
 
 		const response = result.response;
 		const text = response.text();
-		console.log("Received response from Gemini:", text);
+		console.log(
+			`Received response from Gemini (${modelName}):`,
+			text.substring(0, 100) + "..."
+		);
 		return text;
 	} catch (error) {
-		console.error("Error generating content with Gemini:", error);
+		console.error(
+			`Error generating content with Gemini (${modelName}):`,
+			error
+		);
 		// Provide a more user-friendly error message
-		let errorMessage =
-			"An error occurred while communicating with the Gemini API.";
+		let errorMessage = `An error occurred while communicating with the Gemini API (${modelName}).`;
 		if (error instanceof Error) {
-			// Check for common API key or quota issues (example)
+			// Specific error checks
 			if (error.message.includes("API key not valid")) {
 				errorMessage =
 					"Error: Invalid API Key. Please check your key in the settings.";
+				resetClient(); // Reset client state on invalid key
 			} else if (error.message.includes("quota")) {
-				errorMessage =
-					"Error: API quota exceeded. Please check your usage or try again later.";
+				errorMessage = `Error: API quota exceeded for model ${modelName}. Please check your usage or try again later.`;
+			} else if (error.message.includes("invalid model")) {
+				errorMessage = `Error: The selected model '${modelName}' is not valid or not accessible with your API key.`;
+				resetClient(); // Reset client state on invalid model
 			} else {
-				errorMessage = `Error: ${error.message}`;
+				errorMessage = `Error (${modelName}): ${error.message}`;
 			}
 		} else {
-			errorMessage = `Error: ${String(error)}`;
+			errorMessage = `Error (${modelName}): ${String(error)}`;
 		}
-		vscode.window.showErrorMessage(errorMessage); // Show detailed error in VS Code
-		return errorMessage; // Return error message to be displayed in chat
+		vscode.window.showErrorMessage(errorMessage);
+		return errorMessage; // Return error message for display
 	}
 }
 
-// Optional: Function to clear the model if the API key changes or is removed
+/**
+ * Resets the client state, clearing the model, API key, and model name.
+ */
 export function resetClient() {
 	generativeAI = null;
 	model = null;
-	console.log("Gemini AI client has been reset.");
+	currentApiKey = null;
+	currentModelName = null;
+	console.log("Gemini AI client state has been reset.");
 }

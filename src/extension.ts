@@ -2,8 +2,8 @@
 import * as vscode from "vscode";
 import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { generateContent } from "./ai/gemini";
-import { scanWorkspace } from "./context/workspaceScanner"; // Assuming you might use these later if modifying context building
-import { buildContextString } from "./context/contextBuilder"; // Assuming you might use these later
+import { scanWorkspace } from "./context/workspaceScanner";
+import { buildContextString } from "./context/contextBuilder";
 
 // Helper function type definition for AI action results
 type ActionResult =
@@ -12,7 +12,7 @@ type ActionResult =
 
 // --- Helper Function for Predefined Actions ---
 async function executePredefinedAction(
-	actionType: "explain" | "generateDocs" | "findBugs",
+	actionType: "explain", // Currently only 'explain' uses this specific helper format
 	sidebarProvider: SidebarProvider // Pass the provider instance
 ): Promise<ActionResult> {
 	const editor = vscode.window.activeTextEditor;
@@ -29,22 +29,34 @@ async function executePredefinedAction(
 	const languageId = editor.document.languageId;
 	const fileName = editor.document.fileName;
 
+	// --- Get Active Key and Selected Model ---
 	const activeApiKey = sidebarProvider.getActiveApiKey();
+	const selectedModel = sidebarProvider.getSelectedModelName(); // Get selected model
+
 	if (!activeApiKey) {
 		return {
 			success: false,
 			error: "No active API Key set. Please configure it in the sidebar.",
 		};
 	}
+	if (!selectedModel) {
+		// This case should technically not happen if initialization is correct
+		return {
+			success: false,
+			error: "No AI model selected. Please check the sidebar.",
+		};
+	}
 
 	let userInstruction = "";
-	let systemPrompt = `You are an expert AI programmer assisting within VS Code. Analyze the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
+	let systemPrompt = `You are an expert AI programmer assisting within VS Code using the ${selectedModel} model. Analyze the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
 
 	switch (actionType) {
 		case "explain":
 			userInstruction =
-				"Explain the following code selection concisely. Focus on its purpose, functionality, and key components. Explain it in a concise way. Provide the explanation without using Markdown formatting at ALL";
+				"Explain the following code selection concisely. Focus on its purpose, functionality, and key components. Provide the explanation without using Markdown formatting at ALL.";
 			break;
+		// Add cases for other predefined actions if needed (e.g., generateDocs, findBugs)
+		// Ensure they also use `selectedModel` when constructing prompts or calling AI.
 	}
 
 	// Construct the prompt for the AI
@@ -70,26 +82,31 @@ ${userInstruction}
 Assistant Response:
 `;
 
-	console.log(`--- Sending ${actionType} Action Prompt ---`);
-	// Consider logging a truncated prompt if it's very long
+	console.log(
+		`--- Sending ${actionType} Action Prompt (Model: ${selectedModel}) ---`
+	);
 	// console.log(prompt.length > 1000 ? prompt.substring(0, 1000) + '...' : prompt);
 	console.log(`--- End ${actionType} Action Prompt ---`);
 
 	try {
-		// Call the Gemini API
-		const result = await generateContent(activeApiKey, prompt);
+		// Call the Gemini API with the selected model
+		const result = await generateContent(activeApiKey, selectedModel, prompt); // <-- Pass selectedModel
 
 		// Validate and clean the result
 		if (!result || result.toLowerCase().startsWith("error:")) {
-			throw new Error(result || "Empty response from AI.");
+			throw new Error(result || `Empty response from AI (${selectedModel}).`);
 		}
+		// Basic cleaning (remove potential markdown fences if AI adds them despite instructions)
 		const cleanedResult = result
 			.replace(/^```.*\n?/, "")
 			.replace(/\n?```$/, "")
 			.trim();
 		return { success: true, content: cleanedResult };
 	} catch (error) {
-		console.error(`Error during ${actionType} action:`, error);
+		console.error(
+			`Error during ${actionType} action (${selectedModel}):`,
+			error
+		);
 		const message = error instanceof Error ? error.message : String(error);
 		return {
 			success: false,
@@ -101,7 +118,6 @@ Assistant Response:
 
 // --- Activate Function ---
 export async function activate(context: vscode.ExtensionContext) {
-	// <--- Make activate async
 	console.log(
 		'Congratulations, your extension "minovative-mind-vscode" is now active!'
 	);
@@ -109,10 +125,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	// --- Sidebar Setup ---
 	const sidebarProvider = new SidebarProvider(context.extensionUri, context);
 
-	// --- Initialize Provider (Await Key Loading) ---
-	await sidebarProvider.initialize(); // <--- Await the initialization
+	// --- Initialize Provider (Await Key & Settings Loading) ---
+	await sidebarProvider.initialize(); // Ensure keys and settings are loaded before registering commands
 
-	// Register the WebviewViewProvider AFTER initialization (still good practice)
+	// Register the WebviewViewProvider AFTER initialization
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(
 			SidebarProvider.viewType,
@@ -126,8 +142,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	let modifySelectionDisposable = vscode.commands.registerCommand(
 		"minovative-mind.modifySelection",
 		async () => {
-			// ... (Keep the existing implementation of the command handler)
-			// It should now reliably get the key via sidebarProvider.getActiveApiKey()
 			const editor = vscode.window.activeTextEditor;
 			if (!editor) {
 				vscode.window.showWarningMessage("No active editor found.");
@@ -145,15 +159,23 @@ export async function activate(context: vscode.ExtensionContext) {
 			const languageId = editor.document.languageId;
 			const documentUri = editor.document.uri;
 
+			// --- Get Active Key and Selected Model ---
 			const activeApiKey = sidebarProvider.getActiveApiKey();
+			const selectedModel = sidebarProvider.getSelectedModelName(); // Get selected model
+
 			if (!activeApiKey) {
-				// This message should now only appear if keys were truly not loaded or none exist
 				vscode.window.showErrorMessage(
 					"Minovative Mind: No active API Key set. Please add one via the sidebar."
 				);
 				return;
 			}
-			// ... rest of the command logic ...
+			if (!selectedModel) {
+				vscode.window.showErrorMessage(
+					"Minovative Mind: No AI model selected. Please check the sidebar."
+				);
+				return;
+			}
+
 			// Get user instructions OR shortcut
 			const instructionsInput = await vscode.window.showInputBox({
 				prompt: "Enter modification instructions, or use /fix or /docs:",
@@ -166,21 +188,20 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			const instruction = instructionsInput.trim(); // Use trimmed instruction
+			const instruction = instructionsInput.trim();
 
 			await vscode.window.withProgress(
 				{
 					location: vscode.ProgressLocation.Notification,
-					title: "Minovative Mind: Processing selection...", // Generic title
+					title: `Minovative Mind: Processing (${selectedModel})...`, // Show model in title
 					cancellable: false,
 				},
 				async (progress) => {
 					let modificationPrompt = "";
-					let actionTitle = "Modifying code"; // Default progress title part
+					let actionTitle = "Modifying code";
 
 					// --- Check for Shortcuts ---
 					if (instruction.toLowerCase() === "/fix") {
-						// ... /fix logic ...
 						actionTitle = "Attempting to fix code";
 						progress.report({
 							increment: 10,
@@ -211,7 +232,7 @@ export async function activate(context: vscode.ExtensionContext) {
 										d.range.start.line + 1
 									}: ${d.message} (Selected text: "${editor.document.getText(
 										d.range
-									)}")` // Added selected text for context
+									)}")`
 							)
 							.join("\n");
 
@@ -222,7 +243,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 						// ***** MODIFIED PROMPT for /fix *****
 						modificationPrompt = `
-						You are an expert AI programmer specializing in fixing code errors based on diagnostics. Your task is to rewrite the ENTIRE file content, correcting the issues reported within the original selection area.
+						You are an expert AI programmer specializing in fixing code errors based on diagnostics using the ${selectedModel} model. Your task is to rewrite the ENTIRE file content, correcting the issues reported within the original selection area.
 
 						Language: ${languageId}
 						File Context: ${editor.document.fileName}
@@ -254,14 +275,14 @@ export async function activate(context: vscode.ExtensionContext) {
 						`;
 						// ***** END MODIFIED PROMPT for /fix *****
 					} else if (instruction.toLowerCase() === "/docs") {
-						// ... /docs logic ...
 						actionTitle = "Generating documentation";
 						progress.report({
 							increment: 30,
 							message: "Building docs prompt...",
 						});
+						// ***** MODIFIED PROMPT for /docs *****
 						modificationPrompt = `
-						You are an expert AI programmer tasked with generating documentation.
+						You are an expert AI programmer tasked with generating documentation using the ${selectedModel} model.
 						Language: ${languageId}
 						File Context: ${editor.document.fileName}
 						--- Full File Content (for context) ---
@@ -278,10 +299,11 @@ export async function activate(context: vscode.ExtensionContext) {
 						1. Generate appropriate documentation (e.g., JSDoc, Python docstrings, comments based on language ${languageId}) for the provided code selection.
 						2. Provide ONLY the documentation block followed immediately by the original code selection block on the next lines.
 						3. Do not add any extra explanations, comments about the code, or markdown formatting around the result. The output should be suitable for directly replacing the original selection.
+
 						Documentation Block + Original Code:
 						`;
+						// ***** END MODIFIED PROMPT for /docs *****
 					} else {
-						// ... custom modification logic ...
 						actionTitle = "Applying custom modification";
 						progress.report({ increment: 10, message: "Building context..." });
 						let projectContext = "[Context building skipped or failed]";
@@ -289,6 +311,7 @@ export async function activate(context: vscode.ExtensionContext) {
 							const workspaceFolders = vscode.workspace.workspaceFolders;
 							if (workspaceFolders && workspaceFolders.length > 0) {
 								const rootFolder = workspaceFolders[0];
+								// Pass options if needed, e.g., respectGitIgnore: true
 								const relevantFiles = await scanWorkspace({
 									respectGitIgnore: true,
 								});
@@ -301,45 +324,59 @@ export async function activate(context: vscode.ExtensionContext) {
 							}
 						} catch (err) {
 							console.error("Failed to build context for modification:", err);
+							// Don't block modification, just proceed without context
+							projectContext = "[Error building context]";
 						}
+
 						progress.report({
 							increment: 20,
 							message: "Building modification prompt...",
 						});
+						// ***** MODIFIED PROMPT for custom modification *****
 						modificationPrompt = `
-						You are an expert AI programmer assisting within VS Code. Your task is to modify a specific code selection based on user instructions.
+						You are an expert AI programmer assisting within VS Code using the ${selectedModel} model. Your task is to modify a specific code selection based on user instructions.
 						Provide ONLY the modified code block, without any explanations, commentary, or surrounding text like backticks. If appropriate, add comments to the changed code sections briefly explaining the 'why'.
 						Ensure the output is valid ${languageId} code.
+
 						*** Project Context (Reference Only) ***
 						${projectContext}
 						*** End Project Context ***
+
 						--- Full File Content (${editor.document.fileName}) ---
 						\`\`\`${languageId}
 						${fullText}
 						\`\`\`
 						--- End Full File Content ---
+
 						--- Code Selection to Modify ---
 						\`\`\`${languageId}
 						${selectedText}
 						\`\`\`
 						--- End Code Selection to Modify ---
+
 						--- User Instruction ---
 						${instruction}
 						--- End User Instruction ---
+
 						Modified Code Block (only the modified selection):
 						`;
+						// ***** END MODIFIED PROMPT for custom modification *****
 					}
 
 					// --- Execute AI Call and Apply Edit (Common Logic - WITH MODIFICATION FOR /fix) ---
 					progress.report({ increment: 40, message: `${actionTitle}...` });
-					console.log(`--- Sending ${actionTitle} Prompt ---`);
-					// console.log(modificationPrompt.substring(0, 1000) + "...");
+					console.log(
+						`--- Sending ${actionTitle} Prompt (Model: ${selectedModel}) ---`
+					);
+					// console.log(modificationPrompt.substring(0, 1000) + "..."); // Optional: Log truncated prompt
 					console.log("--- End Prompt ---");
 
 					let responseContent = ""; // Use a different name to avoid confusion
 					try {
+						// Call generateContent with the selected model
 						responseContent = await generateContent(
 							activeApiKey,
+							selectedModel, // <-- Pass selectedModel
 							modificationPrompt
 						);
 
@@ -347,7 +384,9 @@ export async function activate(context: vscode.ExtensionContext) {
 							!responseContent ||
 							responseContent.toLowerCase().startsWith("error:")
 						) {
-							throw new Error(responseContent || "Empty response from AI.");
+							throw new Error(
+								responseContent || `Empty response from AI (${selectedModel}).`
+							);
 						}
 
 						// Clean potential markdown fences from the response
@@ -356,23 +395,27 @@ export async function activate(context: vscode.ExtensionContext) {
 							.replace(/\n?```$/, "")
 							.trim();
 
-						// Special handling for /docs (keep existing)
-						if (
-							instruction.toLowerCase() === "/docs" &&
-							!responseContent.includes(
-								selectedText.substring(0, Math.min(selectedText.length, 30))
-							)
-						) {
-							console.warn(
-								"AI might have only returned docs for /docs. Appending original code."
-							);
-							if (!responseContent.endsWith("\n")) {
-								responseContent += "\n";
+						// Special handling for /docs (append original code if AI only returned docs)
+						if (instruction.toLowerCase() === "/docs") {
+							// Heuristic: check if the original code start is missing from the response
+							const originalStart = selectedText
+								.substring(0, Math.min(selectedText.length, 30))
+								.trim();
+							if (originalStart && !responseContent.includes(originalStart)) {
+								console.warn(
+									"AI might have only returned docs for /docs. Appending original code."
+								);
+								if (!responseContent.endsWith("\n")) {
+									responseContent += "\n"; // Ensure newline separation
+								}
+								responseContent += selectedText; // Append original selection
 							}
-							responseContent += selectedText;
 						}
 					} catch (error) {
-						console.error(`Error during ${actionTitle}:`, error);
+						console.error(
+							`Error during ${actionTitle} (${selectedModel}):`,
+							error
+						);
 						vscode.window.showErrorMessage(
 							`Minovative Mind: Failed to get modification - ${
 								error instanceof Error ? error.message : String(error)
@@ -389,9 +432,12 @@ export async function activate(context: vscode.ExtensionContext) {
 					// ***** MODIFIED EDIT LOGIC *****
 					if (instruction.toLowerCase() === "/fix") {
 						// For /fix, replace the ENTIRE document content
+						const document = await vscode.workspace.openTextDocument(
+							documentUri
+						); // Ensure we have the latest doc state
 						const wholeDocumentRange = new vscode.Range(
-							editor.document.positionAt(0),
-							editor.document.positionAt(fullText.length)
+							document.positionAt(0),
+							document.positionAt(document.getText().length)
 						);
 						edit.replace(documentUri, wholeDocumentRange, responseContent);
 						console.log("Applying full document replacement for /fix.");
@@ -418,14 +464,13 @@ export async function activate(context: vscode.ExtensionContext) {
 						);
 						// Optional: Format the document after applying the full change for /fix
 						if (instruction.toLowerCase() === "/fix") {
-							// Attempt to format, handle potential errors gracefully
 							try {
 								await vscode.commands.executeCommand(
 									"editor.action.formatDocument"
 								);
 							} catch (formatError) {
 								console.warn(
-									"Could not format document after fix:",
+									"Could not auto-format document after fix:",
 									formatError
 								);
 							}
@@ -453,19 +498,28 @@ export async function activate(context: vscode.ExtensionContext) {
 	const explainDisposable = vscode.commands.registerCommand(
 		"minovative-mind.explainSelection",
 		async () => {
-			// ... (Keep the existing implementation)
+			// --- Get Selected Model ---
+			const selectedModel = sidebarProvider.getSelectedModelName();
+			if (!selectedModel) {
+				vscode.window.showErrorMessage(
+					"Minovative Mind: No AI model selected. Please check the sidebar."
+				);
+				return;
+			}
+			// --- End Get Selected Model ---
+
 			await vscode.window.withProgress(
 				{
 					location: vscode.ProgressLocation.Notification,
-					title: "Minovative Mind: Explaining code...",
+					title: `Minovative Mind: Explaining (${selectedModel})...`, // Show model
 					cancellable: false,
 				},
 				async (progress) => {
 					progress.report({ increment: 20, message: "Preparing..." });
-					// Call the helper which now requests Markdown
+					// Call the helper, which now uses the selected model internally
 					const result = await executePredefinedAction(
 						"explain",
-						sidebarProvider // Pass the provider instance
+						sidebarProvider // Pass provider instance
 					);
 					progress.report({
 						increment: 80,
@@ -475,17 +529,18 @@ export async function activate(context: vscode.ExtensionContext) {
 					});
 
 					if (result.success) {
-						// Display the Markdown-formatted result in the detail section of a modal popup
+						// Display the result (without assuming Markdown, as per the prompt)
 						vscode.window.showInformationMessage(
-							"Minovative Mind: Code Explanation", // Main title
+							"Minovative Mind: Code Explanation",
 							{
 								modal: true,
-								detail: result.content, // The AI's Markdown response goes here
+								detail: result.content, // Display the plain text explanation
 							}
 						);
 					} else {
 						vscode.window.showErrorMessage(`Minovative Mind: ${result.error}`);
 					}
+					progress.report({ increment: 100, message: "Done." });
 				}
 			);
 		}

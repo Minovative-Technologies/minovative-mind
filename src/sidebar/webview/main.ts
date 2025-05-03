@@ -18,6 +18,10 @@ const chatInput = document.getElementById(
 const chatContainer = document.getElementById(
 	"chat-container"
 ) as HTMLDivElement | null;
+// Model Selection Element
+const modelSelect = document.getElementById(
+	"model-select"
+) as HTMLSelectElement | null; // <-- Add model select element
 // Key Management Elements
 const addKeyInput = document.getElementById(
 	"add-key-input"
@@ -55,22 +59,22 @@ const statusArea = document.getElementById(
 	"status-area"
 ) as HTMLDivElement | null;
 
-// FIX: Declare planConfirmationContainer - it will be created dynamically later
 let planConfirmationContainer: HTMLDivElement | null = null;
 
 // State
 let isApiKeySet = false;
 let isLoading = false;
 let totalKeys = 0;
-let pendingPlanData: any = null; // Store the pending plan data
+let pendingPlanData: any = null;
 
 console.log("Webview script loaded.");
 
-// Check for essential elements (REMOVED planConfirmationContainer check here)
+// Check for essential elements (including modelSelect)
 if (
 	!sendButton ||
 	!chatInput ||
 	!chatContainer ||
+	!modelSelect || // <-- Check model select
 	!addKeyInput ||
 	!addKeyButton ||
 	!prevKeyButton ||
@@ -91,7 +95,7 @@ if (
 	}
 } else {
 	// --- Helper Functions ---
-	// Moved helpers up as they are used by listeners and message handler
+	// (appendMessage, updateApiKeyStatus, updateStatus - keep existing)
 
 	function appendMessage(sender: string, text: string, className: string = "") {
 		if (chatContainer) {
@@ -117,8 +121,7 @@ if (
 			messageElement.appendChild(senderElement);
 
 			const textElement = document.createElement("span");
-			// Basic sanitization (no changes needed here for now)
-			const sanitizedText = text;
+			const sanitizedText = text; // Keep basic sanitization for now
 
 			// Simple Markdown-like rendering (keep existing logic)
 			let htmlContent = sanitizedText
@@ -127,7 +130,6 @@ if (
 				.replace(
 					/```(json|typescript|javascript|python|html|css|plaintext|\w*)?\n([\s\S]*?)\n```/g, // Allow more languages or none
 					(match, lang, code) =>
-						// Use template literal for easier reading and ensure code is escaped again inside pre
 						`<pre><code class="language-${lang || "plaintext"}">${code
 							.trim()
 							.replace(/</g, "&lt;")
@@ -162,12 +164,10 @@ if (
 
 	function updateApiKeyStatus(text: string) {
 		if (apiKeyStatusDiv) {
-			// Basic sanitization
 			const sanitizedText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 			apiKeyStatusDiv.textContent = sanitizedText;
 
 			const lowerText = text.toLowerCase();
-			// Set color based on message content
 			if (lowerText.startsWith("error:")) {
 				apiKeyStatusDiv.style.color = "var(--vscode-errorForeground)";
 			} else if (
@@ -177,14 +177,13 @@ if (
 				lowerText.includes("key deleted") ||
 				lowerText.includes("using key") ||
 				lowerText.includes("switched to key") ||
-				lowerText.startsWith("adding") || // For immediate feedback
+				lowerText.startsWith("adding") ||
 				lowerText.startsWith("switching") ||
-				lowerText.startsWith("waiting") || // For delete confirmation
-				lowerText.endsWith("cancelled.") // For delete cancellation
+				lowerText.startsWith("waiting") ||
+				lowerText.endsWith("cancelled.")
 			) {
-				apiKeyStatusDiv.style.color = "var(--vscode-editorInfo-foreground)"; // Use info color for these statuses
+				apiKeyStatusDiv.style.color = "var(--vscode-editorInfo-foreground)";
 			} else {
-				// Default color for general status like 'Please add API key'
 				apiKeyStatusDiv.style.color = "var(--vscode-descriptionForeground)";
 			}
 		}
@@ -197,27 +196,24 @@ if (
 			statusArea.style.color = isError
 				? "var(--vscode-errorForeground)"
 				: "var(--vscode-descriptionForeground)";
-			// Optional: fade out the message after a few seconds
 			setTimeout(() => {
 				if (statusArea.textContent === sanitizedText) {
-					// Avoid clearing if a new message arrived
 					statusArea.textContent = "";
 				}
-			}, 5000); // Clear after 5 seconds
+			}, 5000);
 		}
 	}
 
-	// FIX: Define only ONCE
 	function sendMessage() {
 		if (isLoading || !chatInput || !sendButton) {
 			return;
 		}
 		const fullMessage = chatInput.value.trim();
-		chatInput.value = ""; // Clear input *after* getting value
+		chatInput.value = "";
 
 		if (!fullMessage) {
 			console.log("Empty message submitted.");
-			return; // Don't send empty messages
+			return;
 		}
 
 		if (!isApiKeySet) {
@@ -229,9 +225,8 @@ if (
 			return;
 		}
 
-		// Check for the @plan prefix
 		if (fullMessage.toLowerCase().startsWith("@plan ")) {
-			const planRequest = fullMessage.substring(6).trim(); // Extract the actual request
+			const planRequest = fullMessage.substring(6).trim();
 			if (!planRequest) {
 				appendMessage(
 					"System",
@@ -240,11 +235,10 @@ if (
 				);
 				return;
 			}
-			appendMessage("You", fullMessage, "user-message"); // Echo the full @plan command
+			appendMessage("You", fullMessage, "user-message");
 			vscode.postMessage({ type: "planRequest", value: planRequest });
-			setLoadingState(true); // Set loading while plan is generated
+			setLoadingState(true);
 		} else {
-			// Regular chat message
 			appendMessage("You", fullMessage, "user-message");
 			vscode.postMessage({ type: "chatMessage", value: fullMessage });
 			setLoadingState(true);
@@ -253,11 +247,14 @@ if (
 
 	function setLoadingState(loading: boolean) {
 		isLoading = loading;
-		if (sendButton && chatInput) {
-			sendButton.disabled = loading || !isApiKeySet; // Disable if loading OR no API key
-			chatInput.disabled = loading || !isApiKeySet; // Disable if loading OR no API key
+		if (sendButton && chatInput && modelSelect) {
+			// <-- Include modelSelect in check
+			const enableControls = !loading && isApiKeySet; // Controls enabled if not loading AND key is set
+			sendButton.disabled = !enableControls;
+			chatInput.disabled = !enableControls;
+			modelSelect.disabled = !enableControls; // <-- Disable model select too
+
 			if (loading) {
-				// Ensure we don't add multiple "Thinking..." messages
 				const lastMessage = chatContainer?.lastElementChild;
 				if (
 					!lastMessage ||
@@ -266,26 +263,23 @@ if (
 					appendMessage("Model", "Thinking...", "loading-message");
 				}
 			} else {
-				// Remove "Thinking..." message if it's the last one
 				const lastMessage = chatContainer?.lastElementChild;
 				if (lastMessage && lastMessage.classList.contains("loading-message")) {
 					lastMessage.remove();
 				}
 			}
 		}
-		// Ensure confirmation buttons are hidden when loading starts
 		if (loading && planConfirmationContainer) {
 			planConfirmationContainer.style.display = "none";
-			pendingPlanData = null; // Clear pending plan if a new request starts loading
+			pendingPlanData = null;
 		}
 	}
 
-	// --- Function to Create Plan Confirmation UI ---
 	function createPlanConfirmationUI() {
 		if (!planConfirmationContainer) {
 			planConfirmationContainer = document.createElement("div");
 			planConfirmationContainer.id = "plan-confirmation-container";
-			planConfirmationContainer.style.display = "none"; // Initially hidden
+			planConfirmationContainer.style.display = "none";
 
 			const textElement = document.createElement("p");
 			textElement.textContent = "Execute the generated plan?";
@@ -302,45 +296,42 @@ if (
 			planConfirmationContainer.appendChild(confirmButton);
 			planConfirmationContainer.appendChild(cancelButton);
 
-			// Append it after the chat container but before the status area
 			chatContainer?.insertAdjacentElement(
 				"afterend",
 				planConfirmationContainer
 			);
 
-			// FIX: Add event listener AFTER creating the container
-			// Use event delegation on the container
 			planConfirmationContainer.addEventListener(
 				"click",
 				(event: MouseEvent) => {
-					// FIX: Added MouseEvent type
 					const target = event.target as HTMLElement;
 					if (target.id === "confirm-plan-button") {
 						if (pendingPlanData) {
 							vscode.postMessage({
 								type: "confirmPlanExecution",
-								value: pendingPlanData, // Send stored plan data
+								value: pendingPlanData,
 							});
 							updateStatus("Executing plan...");
-							planConfirmationContainer!.style.display = "none"; // Hide after click (use ! assertion as we know it exists here)
-							pendingPlanData = null; // Clear stored plan
-							// Provider will re-enable input after execution attempt via aiResponse or statusUpdate
+							planConfirmationContainer!.style.display = "none";
+							pendingPlanData = null;
+							// setLoadingState(true); // No need, provider handles state
 						} else {
 							updateStatus(
 								"Error: Could not retrieve plan data for execution.",
 								true
 							);
-							planConfirmationContainer!.style.display = "none"; // Hide anyway
+							planConfirmationContainer!.style.display = "none";
 						}
 					} else if (target.id === "cancel-plan-button") {
 						vscode.postMessage({ type: "cancelPlanExecution" });
 						updateStatus("Plan execution cancelled.");
-						planConfirmationContainer!.style.display = "none"; // Hide after click
-						pendingPlanData = null; // Clear stored plan
+						planConfirmationContainer!.style.display = "none";
+						pendingPlanData = null;
 						// Re-enable input if API key is set
-						if (chatInput && sendButton) {
+						if (chatInput && sendButton && modelSelect) {
 							chatInput.disabled = !isApiKeySet;
 							sendButton.disabled = !isApiKeySet;
+							modelSelect.disabled = !isApiKeySet;
 						}
 					}
 				}
@@ -349,7 +340,6 @@ if (
 	}
 
 	// --- Event Listeners ---
-	// Keep standard listeners
 	sendButton.addEventListener("click", sendMessage);
 	chatInput.addEventListener("keydown", (e) => {
 		if (e.key === "Enter" && !e.shiftKey) {
@@ -358,8 +348,16 @@ if (
 		}
 	});
 
+	// Model selection listener
+	modelSelect.addEventListener("change", () => {
+		const selectedModel = modelSelect.value;
+		vscode.postMessage({ type: "selectModel", value: selectedModel });
+		updateStatus(`Requesting switch to model: ${selectedModel}...`);
+	});
+
+	// Key management listeners (keep existing)
 	addKeyButton.addEventListener("click", () => {
-		const apiKey = addKeyInput!.value.trim(); // Use ! assertion as elements are checked
+		const apiKey = addKeyInput!.value.trim();
 		if (apiKey) {
 			vscode.postMessage({ type: "addApiKey", value: apiKey });
 			addKeyInput!.value = "";
@@ -371,7 +369,7 @@ if (
 	addKeyInput.addEventListener("keydown", (e) => {
 		if (e.key === "Enter") {
 			e.preventDefault();
-			addKeyButton!.click(); // Use ! assertion
+			addKeyButton!.click();
 		}
 	});
 	prevKeyButton.addEventListener("click", () => {
@@ -389,6 +387,8 @@ if (
 		vscode.postMessage({ type: "requestDeleteConfirmation" });
 		updateApiKeyStatus("Waiting for delete confirmation...");
 	});
+
+	// Chat action listeners (keep existing)
 	clearChatButton.addEventListener("click", () => {
 		vscode.postMessage({ type: "clearChatRequest" });
 	});
@@ -410,47 +410,48 @@ if (
 			case "aiResponse": {
 				setLoadingState(false); // Always turn off loading for any response
 
-				// Display the AI text response
 				appendMessage(
 					"Model",
 					message.value,
 					message.isError ? "error-message" : "ai-message"
 				);
 
-				// If this response requires confirmation (it's a plan)
 				if (message.requiresConfirmation && message.planData) {
-					createPlanConfirmationUI(); // Ensure the UI exists
+					createPlanConfirmationUI();
 					if (planConfirmationContainer) {
-						// Check if creation was successful
 						pendingPlanData = message.planData;
-						planConfirmationContainer.style.display = "block"; // Show the buttons
+						planConfirmationContainer.style.display = "block";
 						updateStatus(
 							"Plan generated. Please review and confirm execution."
 						);
-						// Disable chat input while confirmation is pending
 						if (chatInput) {
 							chatInput.disabled = true;
 						}
 						if (sendButton) {
 							sendButton.disabled = true;
 						}
+						if (modelSelect) {
+							modelSelect.disabled = true;
+						} // Disable model select during confirmation
 					} else {
 						console.error("Plan confirmation container failed to create!");
 						updateStatus(
 							"Error: UI elements for plan confirmation missing.",
 							true
 						);
-						// Re-enable input since confirmation cannot be shown
 						if (chatInput) {
 							chatInput.disabled = !isApiKeySet;
 						}
 						if (sendButton) {
 							sendButton.disabled = !isApiKeySet;
 						}
+						if (modelSelect) {
+							modelSelect.disabled = !isApiKeySet;
+						}
 					}
 				} else {
-					// If it's a normal response or an error, ensure input is re-enabled (if API key exists)
-					setLoadingState(false); // This correctly handles enabling based on isApiKeySet
+					// Re-enable based on API key state if it was a regular response or error
+					setLoadingState(false); // Handles enabling based on isApiKeySet
 				}
 				break;
 			}
@@ -482,11 +483,9 @@ if (
 					) {
 						currentKeyDisplay!.textContent =
 							updateData.keys[updateData.activeIndex].maskedKey;
-						// Don't overwrite specific API key status here, let apiKeyStatus handle it
-						// updateApiKeyStatus(`Using key ${updateData.activeIndex + 1} of ${totalKeys}.`);
 					} else {
 						currentKeyDisplay!.textContent = "No active key";
-						updateApiKeyStatus("Please add an API key."); // Set initial status if no key
+						updateApiKeyStatus("Please add an API key.");
 					}
 
 					prevKeyButton!.disabled = totalKeys <= 1;
@@ -497,43 +496,71 @@ if (
 					if (!isLoading) {
 						chatInput!.disabled = !isApiKeySet;
 						sendButton!.disabled = !isApiKeySet;
+						modelSelect!.disabled = !isApiKeySet; // <-- Enable/disable model select based on key
 					}
-
-					// Enable/disable chat action buttons based on history (done in appendMessage/restoreHistory/chatCleared)
 				} else {
 					console.error("Invalid 'updateKeyList' message received:", message);
 				}
 				break;
 			}
+			case "updateModelList": {
+				// <-- Handle model list update
+				if (
+					message.value &&
+					Array.isArray(message.value.availableModels) &&
+					typeof message.value.selectedModel === "string"
+				) {
+					const { availableModels, selectedModel } = message.value;
+
+					// Clear existing options
+					modelSelect!.innerHTML = "";
+
+					// Populate with new options
+					availableModels.forEach((modelName: string) => {
+						const option = document.createElement("option");
+						option.value = modelName;
+						option.textContent = modelName;
+						if (modelName === selectedModel) {
+							option.selected = true;
+						}
+						modelSelect!.appendChild(option);
+					});
+
+					// Ensure dropdown reflects the actual selected model
+					modelSelect!.value = selectedModel;
+					console.log(
+						"Model list updated in webview. Selected:",
+						selectedModel
+					);
+				} else {
+					console.error("Invalid 'updateModelList' message received:", message);
+				}
+				break;
+			}
 			case "chatCleared": {
 				if (chatContainer) {
-					chatContainer.innerHTML = ""; // Clear the display
+					chatContainer.innerHTML = "";
 				}
-				// System message is added by the provider now
-				// Update button states after clearing
 				clearChatButton!.disabled = true;
 				saveChatButton!.disabled = true;
-				// Don't re-enable input here automatically, let provider or setLoadingState handle it
 				break;
 			}
 			case "restoreHistory": {
 				if (chatContainer && Array.isArray(message.value)) {
-					chatContainer.innerHTML = ""; // Clear existing messages first
+					chatContainer.innerHTML = "";
 					message.value.forEach((msg: any) => {
 						if (msg && msg.sender && msg.text) {
 							appendMessage(msg.sender, msg.text, msg.className || "");
 						}
 					});
 					updateStatus("Chat history restored.");
-					// Update button states after loading
 					const hasMessages = chatContainer.childElementCount > 0;
 					clearChatButton!.disabled = !hasMessages;
 					saveChatButton!.disabled = !hasMessages;
 				} else {
 					updateStatus("Error: Failed to restore chat history format.", true);
 				}
-				// Re-enable input after restoring history (if API key exists)
-				setLoadingState(false); // This handles enabling based on isApiKeySet
+				setLoadingState(false); // Re-enable input after restoring
 				break;
 			}
 			case "reenableInput": {
@@ -541,6 +568,11 @@ if (
 				setLoadingState(false); // Explicitly re-enable based on isApiKeySet state
 				break;
 			}
+			default:
+				console.warn(
+					"Received unknown message type from extension:",
+					message.type
+				);
 		}
 	});
 
@@ -548,7 +580,6 @@ if (
 	function initializeWebview() {
 		vscode.postMessage({ type: "webviewReady" });
 		console.log("Webview sent ready message.");
-		// updateApiKeyStatus("Initializing..."); // Request initial status
 		chatInput?.focus();
 
 		// Initial button states (use ! assertions as elements checked at top)
@@ -557,11 +588,11 @@ if (
 		deleteKeyButton!.disabled = true;
 		chatInput!.disabled = true;
 		sendButton!.disabled = true;
-		clearChatButton!.disabled = true; // Disabled until history loads/checked
-		saveChatButton!.disabled = true; // Disabled until history loads/checked
-		loadChatButton!.disabled = false; // Load is always possible
+		modelSelect!.disabled = true; // <-- Disable model select initially
+		clearChatButton!.disabled = true;
+		saveChatButton!.disabled = true;
+		loadChatButton!.disabled = false;
 
-		// Create the confirmation container placeholder during initialization
 		createPlanConfirmationUI();
 	}
 
