@@ -35,6 +35,9 @@ const AVAILABLE_GEMINI_MODELS = [
 // Default model to use if no selection is stored or the stored model is invalid
 const DEFAULT_MODEL = AVAILABLE_GEMINI_MODELS[0];
 
+// Workspace state key for welcome page tracking (session-based)
+const WELCOME_PAGE_SHOWN_SESSION_KEY = "minovativeMindWelcomeShownSession";
+
 // Type for the data sent to the webview regarding keys
 interface ApiKeyInfo {
 	maskedKey: string;
@@ -80,6 +83,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this._extensionUri = _extensionUri_in;
 		this._secretStorage = context.secrets;
 		this._workspaceState = context.workspaceState; // Assign workspaceState
+
+		// --- Reset welcome page flag on activation for session tracking ---
+		// We do this here to ensure it resets *every time* VS Code activates the extension,
+		// effectively making it session-based for the workspace.
+		this._workspaceState.update(WELCOME_PAGE_SHOWN_SESSION_KEY, false);
+		console.log("Welcome page session flag reset.");
 
 		// Keep the onDidChange listener for secrets
 		context.secrets.onDidChange((e) => {
@@ -594,10 +603,37 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				vscode.Uri.joinPath(this._extensionUri, "dist"),
 				vscode.Uri.joinPath(this._extensionUri, "media"),
 				vscode.Uri.joinPath(this._extensionUri, "src", "sidebar", "webview"),
+				vscode.Uri.joinPath(this._extensionUri, "src", "resources"),
 			],
 		};
 
 		webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+
+		// --- Trigger Welcome Page Logic ---
+		const welcomeShown = this._workspaceState.get<boolean>(
+			WELCOME_PAGE_SHOWN_SESSION_KEY
+		);
+
+		if (!welcomeShown) {
+			console.log(
+				"First time sidebar viewed this session. Triggering welcome page."
+			);
+			// Use executeCommand to avoid race conditions if the command isn't registered yet
+			vscode.commands.executeCommand("minovative-mind.showWelcomePage").then(
+				() => {
+					// Set the flag *after* successfully triggering the command
+					this._workspaceState.update(WELCOME_PAGE_SHOWN_SESSION_KEY, true);
+					console.log("Welcome page shown flag set for this session.");
+				},
+				(err) => {
+					console.error("Failed to execute showWelcomePage command:", err);
+					// Optionally, don't set the flag if the command fails, so it tries again next time
+				}
+			);
+		} else {
+			console.log("Welcome page already shown this session.");
+		}
+		// --- End Trigger Welcome Page Logic ---
 
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			console.log(`[Provider] Message received: ${data.type}`);

@@ -18,7 +18,7 @@ let currentModelName: string | null = null; // Store the model name used
  * Re-initializes if the API key or model name changes.
  *
  * @param apiKey The Google Gemini API key.
- * @param modelName The specific Gemini model name to use (e.g., "gemini-1.5-flash-latest").
+ * @param modelName The specific Gemini model name to use (e.g., "gemini-2.0-flash").
  * @returns True if initialization was successful or already initialized correctly, false otherwise.
  */
 function initializeGenerativeAI(apiKey: string, modelName: string): boolean {

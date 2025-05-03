@@ -116,6 +116,139 @@ Assistant Response:
 }
 // --- End Helper Function ---
 
+// --- Simple Markdown to HTML Converter ---
+// Basic conversion, consider a library like 'markdown-it' for more complex needs
+// --- Enhanced Markdown to HTML Converter ---
+function markdownToHtml(md: string): string {
+	let html = md;
+
+	// Block elements first (order matters)
+
+	// Code blocks (```lang\n...\n```) - Escape HTML inside
+	html = html.replace(/```(\w+)?\n([\s\S]*?)\n```/g, (match, lang, code) => {
+		const escapedCode = code
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;");
+		return `<pre><code class="language-${
+			lang || "plaintext"
+		}">${escapedCode.trim()}</code></pre>`;
+	});
+
+	// Blockquotes (>)
+	html = html.replace(/^> (.*$)/gim, "<blockquote>$1</blockquote>");
+	// Collapse consecutive blockquotes
+	html = html.replace(
+		/<\/blockquote>\s*<blockquote>/g,
+		"<br>" // Or just "" if you want them merged tightly
+	);
+
+	// Headings (H1-H3)
+	html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
+	html = html.replace(/^## (.*$)/gim, "<h2>$1</h2>");
+	html = html.replace(/^# (.*$)/gim, "<h1>$1</h1>");
+
+	// Horizontal Rules (---, ***, ___)
+	html = html.replace(/^\s*(?:---|\*\*\*|___)\s*$/gm, "<hr>");
+
+	// Lists (Unordered and Ordered)
+	// Unordered list items (*, -, +)
+	html = html.replace(/^[ \t]*[\*\-\+] +(.*$)/gim, "<li>$1</li>");
+	// Ordered list items (1., 2.)
+	html = html.replace(/^[ \t]*\d+\. +(.*$)/gim, "<li>$1</li>"); // Use <li> for both, wrap later
+
+	// Wrap consecutive <li> elements in <ul> or <ol> - This is tricky with regex, doing a simpler wrap
+	// Find blocks of <li> tags possibly separated by whitespace/newlines
+	html = html.replace(/(?:<li>.*<\/li>\s*)+/g, (match) => {
+		// Basic check: if the *first* list item in the match started with a number, assume <ol>
+		// This isn't perfect but works for simple lists.
+		if (/^\s*<li.*?>\d+\./.test(match.replace(/<.*?>/g, ""))) {
+			// Simple check on original text structure if possible, otherwise default to ul
+			// A better parser would track the original line format.
+			// For controlled welcome.md, might be okay, but fragile. Let's default to <ul> for simplicity here.
+			// return `<ol>${match.replace(/^\s+/, '').replace(/\s+$/, '')}</ol>`; // More robust would need lookbehind/state
+			return `<ul>${match.trim()}</ul>`; // Defaulting to UL for simplicity/safety with regex
+		} else {
+			return `<ul>${match.trim()}</ul>`;
+		}
+	});
+	// A more robust approach might involve splitting lines and processing statefully.
+
+	// Inline elements
+
+	// Links ([text](url))
+	html = html.replace(
+		/\[([^\]]+)\]\(([^)]+)\)/g,
+		'<a href="$2" title="$1">$1</a>'
+	);
+
+	// Images (![alt](url)) - Basic, no resizing etc.
+	// Ensure CSP allows images if used: `img-src ${webview.cspSource} https: data:;`
+	// html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+
+	// Bold (**text**)
+	html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+	// Italic (*text* or _text_)
+	html = html.replace(
+		/([^*]|^)\*(?!\s)(.*?)(?<!\s)\*([^*]|$)/g,
+		"$1<em>$2</em>$3"
+	); // Avoid ** and spaces
+	html = html.replace(
+		/(^|[^_])_(?!\s)(.*?)(?<!\s)_([^_]|$)/g,
+		"$1<em>$2</em>$3"
+	); // Avoid __ and spaces
+
+	// Inline code (`text`) - Escape HTML inside
+	html = html.replace(/`([^`]+)`/g, (match, code) => {
+		const escapedCode = code
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;");
+		return `<code>${escapedCode}</code>`;
+	});
+
+	// Paragraphs (handle line breaks - needs refinement for true paragraphs)
+	// Wrap remaining lines (not part of other blocks) in <p> tags
+	// This is complex with regex alone. A simple approach: wrap blocks separated by double newlines.
+	// Remove leading/trailing whitespace from the whole string first
+	html = html.trim();
+	// Split into paragraphs based on double newlines, then wrap non-block elements
+	html = html
+		.split(/\n\s*\n/) // Split by one or more empty lines
+		.map((paragraph) => {
+			// Trim each paragraph
+			const trimmedParagraph = paragraph.trim();
+			// Check if it's already a block element (heuristic)
+			if (
+				trimmedParagraph.startsWith("<h") ||
+				trimmedParagraph.startsWith("<ul") ||
+				trimmedParagraph.startsWith("<ol") ||
+				trimmedParagraph.startsWith("<li") || // Should be wrapped already, but check
+				trimmedParagraph.startsWith("<block") ||
+				trimmedParagraph.startsWith("<p") || // Avoid double wrapping
+				trimmedParagraph.startsWith("<hr") ||
+				trimmedParagraph.startsWith("<pre")
+			) {
+				return trimmedParagraph; // Return as is
+			} else if (trimmedParagraph) {
+				// If it's not empty and not a known block, wrap in <p> and handle single newlines as <br>
+				return `<p>${trimmedParagraph.replace(/\n/g, "<br>")}</p>`;
+			}
+			return ""; // Remove empty paragraphs
+		})
+		.join("\n\n"); // Re-join paragraphs (browser collapses whitespace)
+
+	// Final cleanup: Remove potentially introduced <br> inside <p> tags right before block elements if list wrapping was imperfect
+	html = html.replace(/<br>\s*(<\/?(ul|ol|li|h\d|blockquote|hr|pre))/gi, "$1");
+	// Remove <br> at the very end of a <p> tag
+	html = html.replace(/<br>\s*<\/p>/gi, "</p>");
+
+	return html;
+}
+
+// Reference to the welcome panel to prevent duplicates (optional)
+let welcomePanel: vscode.WebviewPanel | undefined = undefined;
+
 // --- Activate Function ---
 export async function activate(context: vscode.ExtensionContext) {
 	console.log(
@@ -137,6 +270,92 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	// --- Register Commands AFTER initialization ---
+
+	// --- Welcome Page Command ---
+	const showWelcomeDisposable = vscode.commands.registerCommand(
+		"minovative-mind.showWelcomePage",
+		async () => {
+			const columnToShowIn = vscode.window.activeTextEditor
+				? vscode.window.activeTextEditor.viewColumn
+				: undefined;
+
+			if (welcomePanel) {
+				welcomePanel.reveal(columnToShowIn);
+				return;
+			}
+
+			welcomePanel = vscode.window.createWebviewPanel(
+				"minovativeMindWelcome",
+				"Welcome to Minovative Mind",
+				columnToShowIn || vscode.ViewColumn.One,
+				{
+					enableScripts: false,
+					localResourceRoots: [
+						vscode.Uri.joinPath(context.extensionUri, "resources"),
+						vscode.Uri.joinPath(context.extensionUri, "media"),
+					],
+				}
+			);
+
+			welcomePanel.onDidDispose(
+				() => {
+					welcomePanel = undefined;
+				},
+				null,
+				context.subscriptions
+			);
+
+			const welcomeFilePath = vscode.Uri.joinPath(
+				context.extensionUri,
+				"src",
+				"resources",
+				"welcome.md"
+			);
+
+			let htmlContent = "<p>Error loading welcome content.</p>";
+			try {
+				const markdownContent = await vscode.workspace.fs.readFile(
+					welcomeFilePath
+				);
+				const mdString = Buffer.from(markdownContent).toString("utf-8");
+				const bodyHtml = markdownToHtml(mdString); // Use the enhanced function
+				const stylesUri = welcomePanel.webview.asWebviewUri(
+					vscode.Uri.joinPath(context.extensionUri, "resources", "welcome.css")
+				);
+				const logoUri = welcomePanel.webview.asWebviewUri(
+					vscode.Uri.joinPath(
+						context.extensionUri,
+						"media",
+						"minovative-logo-192x192.png"
+					)
+				);
+
+				htmlContent = `<!DOCTYPE html>
+							<html lang="en">
+							<head>
+									<meta charset="UTF-8">
+									<meta name="viewport" content="width=device-width, initial-scale=1.0">
+									<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${welcomePanel.webview.cspSource}; img-src ${welcomePanel.webview.cspSource} https: data:;">
+									<link rel="stylesheet" type="text/css" href="${stylesUri}">
+									<title>Welcome to Minovative Mind</title>
+							</head>
+							<body>
+									<img src="${logoUri}" alt="Minovative Mind Logo" width="64" style="float: right; margin: 10px;">
+									${bodyHtml}
+							</body>
+							</html>`;
+			} catch (err) {
+				console.error("Error reading or processing welcome file:", err);
+				vscode.window.showErrorMessage(
+					"Minovative Mind: Could not load welcome guide."
+				);
+			}
+
+			welcomePanel.webview.html = htmlContent;
+		}
+	);
+	context.subscriptions.push(showWelcomeDisposable);
+	// --- END: Welcome Page Command ---
 
 	// Modify Selection Command
 	let modifySelectionDisposable = vscode.commands.registerCommand(

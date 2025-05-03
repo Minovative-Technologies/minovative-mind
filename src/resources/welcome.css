@@ -1,0 +1,81 @@
+/* resources/welcome.css */
+body {
+	padding: 20px;
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	color: var(--vscode-editor-foreground);
+	background-color: var(--vscode-editor-background);
+	line-height: 1.6;
+}
+
+h1,
+h2,
+h3 {
+	color: var(--vscode-textLink-foreground);
+	border-bottom: 1px solid var(--vscode-editorWidget-border);
+	padding-bottom: 5px;
+	margin-top: 1.5em;
+	margin-bottom: 0.8em;
+}
+
+h1 {
+	font-size: 1.8em;
+	border-bottom-width: 2px;
+}
+
+h2 {
+	font-size: 1.4em;
+}
+
+h3 {
+	font-size: 1.1em;
+}
+
+ul {
+	padding-left: 20px;
+	margin-bottom: 1em;
+}
+
+li {
+	margin-bottom: 0.5em;
+}
+
+code {
+	font-family: var(--vscode-editor-font-family);
+	background-color: var(--vscode-textCodeBlock-background);
+	padding: 0.2em 0.4em;
+	border-radius: 3px;
+	font-size: 0.95em;
+}
+
+pre {
+	background-color: var(--vscode-textCodeBlock-background);
+	padding: 15px;
+	border-radius: 5px;
+	overflow-x: auto;
+	border: 1px solid var(--vscode-editorWidget-border);
+	margin-bottom: 1em;
+}
+
+pre code {
+	padding: 0;
+	background: none;
+	border: none;
+}
+
+strong {
+	font-weight: 600;
+}
+
+em {
+	font-style: italic;
+}
+
+a {
+	color: var(--vscode-textLink-foreground);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
