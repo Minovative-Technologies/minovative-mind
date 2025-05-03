@@ -704,77 +704,65 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			)
 		);
 
-		// Get URIs for Codicons
-		const codiconsUri = webview.asWebviewUri(
-			vscode.Uri.joinPath(
-				this._extensionUri,
-				"node_modules",
-				"@vscode/codicons",
-				"dist",
-				"codicon.css"
-			)
-		);
-
 		const nonce = getNonce();
 
 		return `<!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <meta http-equiv="Content-Security-Policy" content="
-                        default-src 'none';
-                        style-src ${webview.cspSource} 'unsafe-inline'; 
-                        font-src ${webview.cspSource};
-                        img-src ${webview.cspSource} https: data:;
-                        script-src 'nonce-${nonce}';
-                        connect-src 'none';
-                    ">
-                    <link href="${stylesUri}" rel="stylesheet">
-                    <link href="${codiconsUri}" rel="stylesheet" /> 
-                    <title>Minovative Mind Chat</title>
-                </head>
-                <body>
-                    <!-- Chat Area -->
-                    <div class="chat-controls">
-                       <h1>Chat</h1>
-                        <div>
-                            <button id="save-chat-button" title="Save Chat"><i class="codicon codicon-save"></i></button>
-                            <button id="load-chat-button" title="Load Chat"><i class="codicon codicon-folder-opened"></i></button>
-                            <button id="clear-chat-button" title="Clear Chat"><i class="codicon codicon-clear-all"></i></button>
-                        </div>
-                    </div>
-                    <div id="chat-container">
-                        <!-- Chat messages will appear here -->
-                    </div>
-                    <div id="input-container">
-                        <textarea id="chat-input" rows="3" placeholder="Enter your message..."></textarea>
-                        <button id="send-button" title="Send Message"><i class="codicon codicon-send"></i></button>
-                    </div>
+		<html lang="en">
+		<head>
+				<meta charset="UTF-8">
+				<meta name="viewport" content="width=device-width, initial-scale=1.0">
+				<meta http-equiv="Content-Security-Policy" content="
+						default-src 'none';
+						style-src ${webview.cspSource} 'unsafe-inline';
+						/* font-src ${webview.cspSource}; */ /* Comment out if not using icons */
+						img-src ${webview.cspSource} https: data:;
+						script-src 'nonce-${nonce}';
+						connect-src 'none';
+				">
+				<link href="${stylesUri}" rel="stylesheet">
+				<title>Minovative Mind Chat</title>
+		</head>
+		<body>
+				<!-- Chat Area -->
+				<div class="chat-controls">
+					 <h1>Chat</h1>
+						<div>
+								<button id="save-chat-button" title="Save Chat">Save</button>
+								<button id="load-chat-button" title="Load Chat">Load</button>
+								<button id="clear-chat-button" title="Clear Chat">Clear</button>
+						</div>
+				</div>
+				<div id="chat-container">
+						<!-- Chat messages will appear here -->
+				</div>
+				<div id="input-container">
+						<textarea id="chat-input" rows="3" placeholder="Enter your message..."></textarea>
+						<button id="send-button" title="Send Message">Send</button>
+				</div>
 
-                     <!-- Status Area -->
-                     <div id="status-area"></div> 
+				 <!-- Status Area -->
+				 <div id="status-area"></div>
 
-                    <!-- API Key Management -->
-                    <div class="section">
-                        <h2>API Key Management</h2>
-                        <div class="key-management-controls">
-                             <button id="prev-key-button" title="Previous Key" disabled><i class="codicon codicon-chevron-left"></i></button>
-                             <span id="current-key-display">No keys stored</span>
-                            <button id="next-key-button" title="Next Key" disabled><i class="codicon codicon-chevron-right"></i></button>
-                            <button id="delete-key-button" title="Delete Current Key" disabled><i class="codicon codicon-trash"></i></button>
-                        </div>
-                         <div id="api-key-status">Please add an API key.</div> 
+				<!-- API Key Management -->
+				<div class="section">
+						<h2>API Key Management</h2>
+						<div class="key-management-controls">
+								 <button id="prev-key-button" title="Previous Key" disabled>&lt;</button>
+								 <span id="current-key-display">No keys stored</span>
+								<button id="next-key-button" title="Next Key" disabled>&gt;</button>
+								<button id="delete-key-button" title="Delete Current Key" disabled>Del</button>
+						</div>
+						 <div id="api-key-status">Please add an API key.</div>
 
-                        <div class="add-key-container">
-                            <input type="password" id="add-key-input" placeholder="Add new Gemini API Key">
-                            <button id="add-key-button" title="Add API Key"><i class="codicon codicon-add"></i></button>
-                        </div>
-                        <p><small>Keys are stored securely using VS Code SecretStorage.</small></p>
-                    </div>
+						<div class="add-key-container">
+								<input type="password" id="add-key-input" placeholder="Add new Gemini API Key">
+								<button id="add-key-button" title="Add API Key">Add</button>
+						</div>
+						<p><small>Keys are stored securely using VS Code SecretStorage.</small></p>
+				</div>
 
-                    <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
-                 </body>
-                </html>`;
-	} // End of _getHtmlForWebview
+				<script type="module" nonce="${nonce}" src="${scriptUri}"></script>
+		 </body>
+		</html>`;
+	}
 }
