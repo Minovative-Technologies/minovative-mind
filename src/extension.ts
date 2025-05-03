@@ -297,13 +297,9 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 			);
 
-			welcomePanel.onDidDispose(
-				() => {
-					welcomePanel = undefined;
-				},
-				null,
-				context.subscriptions
-			);
+			welcomePanel.onDidDispose(() => {
+				welcomePanel = undefined;
+			}, null);
 
 			const welcomeFilePath = vscode.Uri.joinPath(
 				context.extensionUri,
