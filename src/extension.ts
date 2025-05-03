@@ -322,13 +322,6 @@ export async function activate(context: vscode.ExtensionContext) {
 				const stylesUri = welcomePanel.webview.asWebviewUri(
 					vscode.Uri.joinPath(context.extensionUri, "resources", "welcome.css")
 				);
-				const logoUri = welcomePanel.webview.asWebviewUri(
-					vscode.Uri.joinPath(
-						context.extensionUri,
-						"media",
-						"minovative-logo-192x192.png"
-					)
-				);
 
 				htmlContent = `<!DOCTYPE html>
 							<html lang="en">
@@ -340,7 +333,6 @@ export async function activate(context: vscode.ExtensionContext) {
 									<title>Welcome to Minovative Mind</title>
 							</head>
 							<body>
-									<img src="${logoUri}" alt="Minovative Mind Logo" width="64" style="float: right; margin: 10px;">
 									${bodyHtml}
 							</body>
 							</html>`;
