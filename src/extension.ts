@@ -101,7 +101,7 @@ export function activate(context: vscode.ExtensionContext) {
 					// 2. Construct Prompt
 					const modificationPrompt = `
 					You are an expert AI programmer assisting within VS Code. Your task is to modify a specific code selection based on user instructions.
-					Provide ONLY the modified code block, without any explanations, commentary, or surrounding text like backticks.
+					Provide ONLY the modified code block, without any explanations, commentary, or surrounding text like backticks. Also to add comments to the changed code to show the user why it was changed.
 					Ensure the output is valid ${languageId} code.
 
 					*** Project Context (Reference Only) ***
