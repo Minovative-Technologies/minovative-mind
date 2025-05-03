@@ -15,7 +15,6 @@ import {
 	isRunCommandStep, // <-- Import the new type guard
 	parseAndValidatePlan,
 } from "../ai/workflowPlanner";
-import * as path from "path";
 
 // Secret storage keys
 const GEMINI_API_KEYS_LIST_SECRET_KEY = "geminiApiKeysList";
@@ -35,7 +34,7 @@ interface KeyUpdateData {
 
 // Define the structure for saving/loading chat history
 interface ChatMessage {
-	sender: "User" | "Gemini" | "System";
+	sender: "User" | "Model" | "System";
 	text: string;
 	className: string;
 }
@@ -328,7 +327,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			try {
 				const saveableHistory: ChatMessage[] = this._chatHistory.map(
 					(entry) => ({
-						sender: entry.role === "user" ? "User" : "Gemini",
+						sender: entry.role === "user" ? "User" : "Model",
 						text: entry.parts[0].text,
 						className: entry.role === "user" ? "user-message" : "ai-message",
 					})
@@ -571,7 +570,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	private _restoreChatHistoryToWebview() {
 		const historyForWebview: ChatMessage[] = this._chatHistory.map((entry) => ({
-			sender: entry.role === "user" ? "User" : "Gemini",
+			sender: entry.role === "user" ? "User" : "Model",
 			text: entry.parts[0].text,
 			className: entry.role === "user" ? "user-message" : "ai-message",
 		}));

@@ -10,7 +10,6 @@ export enum PlanStepAction {
 	CreateFile = "create_file",
 	ModifyFile = "modify_file",
 	RunCommand = "run_command", // <-- Add new action
-	// Removed: InstallDependencies
 }
 
 /**
