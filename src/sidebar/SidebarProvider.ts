@@ -63,16 +63,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this._extensionUri = _extensionUri_in;
 		this._secretStorage = context.secrets;
 
+		// Keep the onDidChange listener
 		context.secrets.onDidChange((e) => {
 			if (
 				e.key === GEMINI_API_KEYS_LIST_SECRET_KEY ||
 				e.key === GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY
 			) {
 				console.log(`Secret key changed: ${e.key}. Reloading keys.`);
-				this._loadKeysFromStorage();
+				// Use the new initialize method for reloads too, ensuring consistency
+				this.initialize().catch((err) => {
+					console.error("Error reloading keys on secret change:", err);
+					// Handle potential errors during reload if necessary
+				});
 			}
 		});
-		this._loadKeysFromStorage();
+		// REMOVE this._loadKeysFromStorage(); from here
+	}
+
+	/**
+	 * Asynchronously initializes the provider by loading keys from storage.
+	 * Should be called after construction and awaited in extension.ts.
+	 */
+	public async initialize(): Promise<void> {
+		console.log("SidebarProvider initializing: Loading keys...");
+		await this._loadKeysFromStorage();
+		console.log("SidebarProvider initialization complete.");
 	}
 
 	// --- Key Management Logic ---
@@ -89,25 +104,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 			let potentialIndex = activeIndexStr ? parseInt(activeIndexStr, 10) : -1;
 
+			// Validate and correct the index
 			if (potentialIndex < 0 || potentialIndex >= this._apiKeyList.length) {
 				potentialIndex = this._apiKeyList.length > 0 ? 0 : -1;
-				if (
-					potentialIndex !== -1 &&
-					potentialIndex !==
-						(activeIndexStr ? parseInt(activeIndexStr, 10) : -2)
-				) {
-					await this._secretStorage.store(
-						GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY,
-						String(potentialIndex)
-					);
-					console.log(`Corrected active index to ${potentialIndex}`);
-				} else if (potentialIndex === -1 && activeIndexStr !== null) {
-					await this._secretStorage.delete(
-						GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY
-					);
-					console.log(
-						`Cleared active index from storage as key list is empty.`
-					);
+				// Update storage only if correction was needed or list is empty
+				const storedIndex = activeIndexStr ? parseInt(activeIndexStr, 10) : -2; // Use -2 to differentiate from valid -1
+				if (potentialIndex !== storedIndex) {
+					if (potentialIndex !== -1) {
+						await this._secretStorage.store(
+							GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY,
+							String(potentialIndex)
+						);
+						console.log(`Corrected active index to ${potentialIndex}`);
+					} else {
+						// If list is empty, ensure stored index is deleted
+						await this._secretStorage.delete(
+							GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY
+						);
+						console.log(
+							`Cleared active index from storage as key list is empty.`
+						);
+					}
 				}
 			}
 			this._activeKeyIndex = potentialIndex;
@@ -115,13 +132,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			console.log(
 				`Loaded ${this._apiKeyList.length} keys. Active index: ${this._activeKeyIndex}`
 			);
+			// It's okay to reset the client here, initialization will happen on first use
 			resetClient();
+			// Update webview *if* it's already resolved.
+			// If called during initial activation, _view will be undefined, which is fine.
 			this._updateWebviewKeyList();
 		} catch (error) {
 			console.error("Error loading API keys from storage:", error);
 			this._apiKeyList = [];
 			this._activeKeyIndex = -1;
 			vscode.window.showErrorMessage("Failed to load API keys.");
+			// Ensure webview is updated even on error
 			this._updateWebviewKeyList();
 		}
 	}
