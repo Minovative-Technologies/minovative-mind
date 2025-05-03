@@ -41,19 +41,49 @@
 				}
 			]
 		},
+		"submenus": [
+			{
+				"id": "minovativeMindSubmenu",
+				"label": "Minovative Mind"
+			}
+		],
 		"commands": [
 			{
 				"command": "minovative-mind.modifySelection",
-				"title": "Minovative Mind: Modify Selected Code",
+				"title": "Custom Modifications",
+				"category": "Minovative Mind"
+			},
+			{
+				"command": "minovative-mind.explainSelection",
+				"title": "Generate Explanation",
 				"category": "Minovative Mind"
 			}
 		],
 		"menus": {
 			"editor/context": [
 				{
+					"submenu": "minovativeMindSubmenu",
+					"title": "Minovative Mind",
 					"when": "editorHasSelection",
-					"command": "minovative-mind.modifySelection",
 					"group": "9_minovativemind@1"
+				}
+			],
+			"minovativeMindSubmenu": [
+				{
+					"command": "minovative-mind.modifySelection",
+					"group": "1_modification@1"
+				},
+				{
+					"command": "minovative-mind.explainSelection",
+					"group": "2_analysis@1"
+				},
+				{
+					"command": "minovative-mind.generateDocs",
+					"group": "2_analysis@2"
+				},
+				{
+					"command": "minovative-mind.findBugs",
+					"group": "2_analysis@3"
 				}
 			]
 		},

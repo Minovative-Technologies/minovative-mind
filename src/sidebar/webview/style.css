@@ -1,26 +1,44 @@
 /* src/sidebar/webview/style.css */
 
+:root {
+	/* Define some common spacings */
+	--container-padding: 10px;
+	--element-spacing: 8px;
+	--message-padding: 8px 10px;
+	--border-radius: 3px;
+}
+
 body {
 	font-family: var(--vscode-font-family, sans-serif);
-	padding: 0 10px 10px 10px; /* No top padding, rely on controls */
+	font-size: var(--vscode-font-size);
+	padding: 0 var(--container-padding) var(--container-padding)
+		var(--container-padding); /* Add bottom padding */
 	color: var(--vscode-editor-foreground);
 	background-color: var(--vscode-sideBar-background);
-	display: flex; /* Use flexbox for layout */
+	display: flex;
 	flex-direction: column;
-	height: 100vh; /* Make body take full viewport height */
+	height: 100vh;
 	box-sizing: border-box;
-	overflow: hidden; /* Prevent body scrollbar, rely on chat container scroll */
+	overflow: hidden;
 }
 
 h1,
 h2 {
 	color: var(--vscode-sideBar-titleForeground);
 	border-bottom: 1px solid
-		var(--vscode-editorWidget-border, var(--vscode-contrastBorder));
+		var(--vscode-sideBar-border, var(--vscode-contrastBorder));
 	padding-bottom: 5px;
-	font-weight: normal;
-	margin-top: 15px; /* Margin for sections */
-	margin-bottom: 10px;
+	font-weight: 600; /* Slightly bolder */
+	margin: 0; /* Reset margin for headers within containers */
+	font-size: 1.1em;
+}
+
+h2 {
+	font-size: 1em;
+	margin-top: calc(
+		var(--container-padding) * 1.5
+	); /* More space before sections */
+	margin-bottom: var(--element-spacing);
 }
 
 /* Chat Header/Controls */
@@ -28,115 +46,192 @@ h2 {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	padding: 5px 0; /* Vertical padding */
-	border-bottom: 1px solid var(--vscode-input-border);
-	flex-shrink: 0; /* Prevent shrinking */
+	padding: var(--element-spacing) 0; /* Consistent vertical padding */
+	border-bottom: 1px solid
+		var(--vscode-sideBar-border, var(--vscode-contrastBorder));
+	flex-shrink: 0;
 }
 .chat-controls h1 {
-	margin: 0; /* Remove default margins */
 	border-bottom: none;
-	flex-grow: 1; /* Allow title to take space */
-	font-size: 1.1em; /* Slightly larger title */
+	flex-grow: 1;
 }
 .chat-controls div button {
-	margin-left: 4px; /* Space between control buttons */
+	margin-left: 4px;
+	padding: 4px 8px; /* Slightly smaller action buttons */
+	background-color: transparent; /* Make them less prominent */
+	border-color: transparent;
+	color: var(--vscode-icon-foreground); /* Use icon color for subtlety */
+}
+.chat-controls div button:hover {
+	background-color: var(--vscode-toolbar-hoverBackground);
+	color: var(--vscode-toolbar-hoverOutline); /* Or foreground */
+}
+.chat-controls div button:disabled {
+	background-color: transparent;
+	opacity: 0.5;
 }
 
 /* Chat Message Container */
 #chat-container {
-	flex-grow: 1; /* Allow chat to take remaining vertical space */
-	overflow-y: auto; /* Enable vertical scroll */
-	border: 1px solid var(--vscode-input-border, var(--vscode-contrastBorder));
-	padding: 8px;
-	background-color: var(--vscode-editor-background);
-	margin-top: 5px; /* Space below chat controls */
-	margin-bottom: 10px; /* Space above input */
-	min-height: 50px; /* Ensure it doesn't collapse completely */
+	flex-grow: 1;
+	overflow-y: auto;
+	/* Removed border - let messages define background */
+	padding: var(--element-spacing) 0; /* Padding top/bottom */
+	margin-top: var(--element-spacing);
+	margin-bottom: var(--element-spacing);
+	min-height: 100px; /* Increased min height */
 }
 
 /* Individual Messages */
 .message {
-	margin-bottom: 8px;
-	padding: 6px 8px;
-	border-radius: 4px;
+	margin-bottom: var(--element-spacing);
+	padding: var(--message-padding);
+	border-radius: var(--border-radius);
 	word-wrap: break-word;
-	line-height: 1.4;
+	line-height: 1.5; /* Improved readability */
+	position: relative; /* For potential future absolute elements like copy buttons */
 }
 .message strong {
-	margin-right: 5px;
+	/* Sender label */
+	display: block; /* Put sender on its own line */
+	margin-bottom: 4px;
+	font-weight: 600;
+	font-size: 0.9em;
+	opacity: 0.8; /* Make sender slightly less prominent */
 }
 .user-message {
 	background-color: var(--vscode-list-activeSelectionBackground);
 	color: var(--vscode-list-activeSelectionForeground);
 }
-.ai-message {
-	background-color: var(
-		--vscode-textBlockQuote-background,
-		var(--vscode-editorWidget-background)
-	);
+.user-message strong {
+	color: var(
+		--vscode-list-activeSelectionForeground
+	); /* Ensure sender matches */
 }
+.ai-message {
+	background-color: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-editorWidget-border, transparent);
+}
+
+/* System/Loading/Error Messages */
 .system-message,
 .loading-message {
 	color: var(--vscode-descriptionForeground);
 	font-style: italic;
 	text-align: center;
 	background: none;
-	padding: 2px;
-	margin-top: 10px;
-	margin-bottom: 10px;
+	padding: 4px;
+	margin-top: var(--element-spacing);
+	margin-bottom: var(--element-spacing);
 }
 .error-message {
-	background-color: rgba(255, 100, 100, 0.1);
+	background-color: rgba(255, 100, 100, 0.1); /* Keep subtle background */
 	color: var(--vscode-errorForeground);
-	border-left: 3px solid var(--vscode-errorForeground);
+	border: 1px solid var(--vscode-inputValidation-errorBorder);
+	padding-left: calc(var(--message-padding) * 1.5); /* Indent slightly */
+	border-left-width: 4px; /* Make left border more prominent */
+}
+.error-message strong {
+	color: var(--vscode-errorForeground);
+}
+
+/* Code Blocks within Messages */
+.message pre {
+	background-color: var(--vscode-textCodeBlock-background);
+	padding: 10px;
+	border-radius: var(--border-radius);
+	overflow-x: auto; /* Allow horizontal scroll for long code */
+	margin-top: 8px;
+	margin-bottom: 4px;
+	border: 1px solid var(--vscode-editorWidget-border, transparent);
+}
+.message code {
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 0.95em; /* Slightly smaller than main text */
+}
+.message pre code {
+	/* Styles specific to code within pre blocks */
+	padding: 0; /* Remove padding from inline code style */
+	background: none; /* Inherit pre background */
+	color: var(--vscode-editor-foreground); /* Standard editor text */
+	border-radius: 0;
+}
+/* Inline code */
+.message :not(pre) > code {
+	background-color: var(--vscode-textCodeBlock-background);
+	padding: 0.2em 0.4em;
+	border-radius: var(--border-radius);
+	font-size: 0.9em;
 }
 
 /* Input Area */
 #input-container {
 	display: flex;
-	align-items: stretch; /* Align items vertically */
-	margin-bottom: 10px;
-	flex-shrink: 0; /* Prevent shrinking */
+	align-items: stretch;
+	margin-bottom: var(--element-spacing);
+	flex-shrink: 0;
+	border: 1px solid var(--vscode-focusBorder); /* Add focus border around container */
+	border-radius: var(--border-radius);
+	background-color: var(--vscode-input-background); /* Container background */
 }
 #chat-input {
 	flex-grow: 1;
-	margin-right: 5px;
-	background-color: var(--vscode-input-background);
-	border: 1px solid var(--vscode-input-border);
+	background-color: transparent; /* Inherit container background */
+	border: none; /* Remove individual border */
 	color: var(--vscode-input-foreground);
-	padding: 6px 8px;
+	padding: 8px 10px; /* Slightly more padding */
 	font-family: var(--vscode-editor-font-family, monospace);
-	font-size: var(--vscode-editor-font-size);
-	border-radius: 2px;
-	resize: none; /* Disable manual resize */
+	font-size: var(--vscode-font-size);
+	border-radius: 0; /* No radius inside */
+	resize: none;
+	outline: none; /* Remove default outline */
+}
+#chat-input:focus {
+	/* No specific focus style needed as container has border */
 }
 #input-container button#send-button {
-	flex-shrink: 0; /* Prevent send button from shrinking */
+	flex-shrink: 0;
+	margin: 4px; /* Margin around the button */
+	/* Use standard button styles */
+	padding: 4px 12px;
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: 1px solid var(--vscode-button-border, var(--vscode-button-background));
+	border-radius: var(--border-radius);
+}
+#input-container button#send-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+#input-container button#send-button:disabled {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	opacity: 0.7;
+	cursor: not-allowed;
 }
 
 /* General Status Area */
 #status-area {
 	font-size: 0.9em;
 	color: var(--vscode-descriptionForeground);
-	min-height: 1.2em; /* Reserve space even when empty */
+	min-height: 1.2em;
 	text-align: center;
 	padding: 2px 0 5px 0;
-	flex-shrink: 0; /* Prevent shrinking */
+	flex-shrink: 0;
 }
 
 /* API Key Section */
 .section {
-	margin-top: 10px;
+	margin-top: var(--element-spacing);
 	border-top: 1px solid
-		var(--vscode-editorWidget-border, var(--vscode-contrastBorder));
-	padding-top: 10px;
-	flex-shrink: 0; /* Prevent shrinking */
+		var(--vscode-sideBar-border, var(--vscode-contrastBorder));
+	padding-top: var(--element-spacing);
+	flex-shrink: 0;
 }
 .key-management-controls {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: 8px;
+	margin-bottom: var(--element-spacing);
 	flex-wrap: nowrap;
 }
 .key-management-controls span#current-key-display {
@@ -148,10 +243,30 @@ h2 {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	padding: 4px;
+	background-color: var(--vscode-input-background);
+	border-radius: var(--border-radius);
+	border: 1px solid var(--vscode-input-border, transparent);
 }
+.key-management-controls button {
+	padding: 4px 8px; /* Small icon-like buttons */
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Use secondary style */
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-button-border, transparent);
+}
+.key-management-controls button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+.key-management-controls button:disabled {
+	background-color: var(--vscode-button-secondaryBackground);
+	opacity: 0.6;
+}
+
 .add-key-container {
 	display: flex;
-	margin-top: 8px;
+	margin-top: var(--element-spacing);
 	align-items: stretch;
 }
 #add-key-input {
@@ -161,8 +276,24 @@ h2 {
 	border: 1px solid var(--vscode-input-border);
 	color: var(--vscode-input-foreground);
 	padding: 6px 8px;
-	border-radius: 2px;
+	border-radius: var(--border-radius);
 }
+#add-key-button {
+	padding: 6px 10px;
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: 1px solid var(--vscode-button-border, transparent);
+	border-radius: var(--border-radius);
+}
+#add-key-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+#add-key-button:disabled {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	opacity: 0.7;
+}
+
 #api-key-status {
 	font-size: 0.9em;
 	margin-top: 5px;
@@ -173,120 +304,30 @@ h2 {
 .section p small {
 	font-size: 0.85em;
 	color: var(--vscode-descriptionForeground);
-}
-
-/* --- Generic Button Styling (Text Buttons) --- */
-button {
-	/* Apply basic styles to all buttons first */
-	padding: 6px 10px;
-	background-color: var(--vscode-button-background);
-	color: var(--vscode-button-foreground);
-	border: 1px solid var(--vscode-button-border, var(--vscode-button-background)); /* Use background as fallback border */
-	border-radius: 2px;
-	cursor: pointer;
-	font-size: var(--vscode-font-size);
+	display: block;
 	text-align: center;
-	min-width: 30px; /* Ensure some minimum width */
-	flex-shrink: 0; /* Prevent buttons from shrinking unexpectedly */
+	margin-top: var(--element-spacing);
 }
 
-button:hover {
-	background-color: var(--vscode-button-hoverBackground);
-}
-
-button:disabled {
-	opacity: 0.6;
-	cursor: not-allowed;
-	background-color: var(
-		--vscode-button-secondaryBackground,
-		var(--vscode-disabledForeground)
-	); /* Fallback for disabled */
-	color: var(
-		--vscode-button-secondaryForeground,
-		var(--vscode-descriptionForeground)
-	);
-	border-color: var(--vscode-button-secondaryBackground, transparent);
-}
-
-/* --- Specific Button Group Adjustments --- */
-
-/* Chat controls (Save/Load/Clear) might be smaller */
-.chat-controls button {
-	padding: 4px 8px; /* Slightly smaller padding */
-	/* Use secondary style potentially for less emphasis? Optional. */
-	/* background-color: var(--vscode-button-secondaryBackground); */
-	/* color: var(--vscode-button-secondaryForeground); */
-}
-.chat-controls button:hover {
-	background-color: var(
-		--vscode-button-hoverBackground
-	); /* Keep standard hover */
-}
-
-/* Key controls (<, >, Del) might be smaller */
-.key-management-controls button {
-	padding: 4px 8px; /* Slightly smaller padding */
-}
-
-/* General Button Styling */
-.chat-controls button,
-.key-management-controls button,
-#input-container button,
-#add-key-button {
-	padding: 6px 10px; /* More standard padding for text */
-	background-color: var(--vscode-button-background);
-	color: var(--vscode-button-foreground);
-	border: 1px solid var(--vscode-button-border, transparent); /* Use button border */
-	border-radius: 2px; /* Slight rounding */
-	cursor: pointer;
-	font-size: var(--vscode-font-size); /* Use standard font size */
-	text-align: center;
-	min-width: 40px; /* Ensure some minimum width */
-}
-
-/* Hover styles */
-.chat-controls button:hover,
-.key-management-controls button:hover,
-#input-container button:hover,
-#add-key-button:hover {
-	background-color: var(--vscode-button-hoverBackground);
-}
-
-/* Disabled state */
-.chat-controls button:disabled,
-.key-management-controls button:disabled,
-#input-container button:disabled,
-#add-key-button:disabled {
-	opacity: 0.6;
-	cursor: not-allowed;
-	background-color: var(
-		--vscode-button-secondaryBackground
-	); /* Use secondary style for disabled */
-	color: var(--vscode-button-secondaryForeground);
-}
-
-/* Style for the dynamically added plan confirmation container */
+/* Plan Confirmation Container */
 #plan-confirmation-container {
 	border: 1px solid var(--vscode-inputOption-activeBorder);
 	background-color: var(--vscode-inputOption-activeBackground);
-	padding: 10px;
-	margin-top: 10px; /* Add margin below chat */
-	margin-bottom: 10px; /* Add margin above input */
+	padding: var(--container-padding);
+	margin-top: var(--element-spacing);
+	margin-bottom: var(--element-spacing);
 	text-align: center;
-	border-radius: 4px;
-	flex-shrink: 0; /* Prevent shrinking */
-	/* display: none; is handled by JS */
+	border-radius: var(--border-radius);
+	flex-shrink: 0;
 }
-
 #plan-confirmation-container p {
 	margin-top: 0;
-	margin-bottom: 8px;
+	margin-bottom: var(--element-spacing);
 	color: var(--vscode-inputOption-activeForeground);
 }
-
 #plan-confirmation-container button {
 	margin: 0 5px;
-	padding: 4px 8px; /* Smaller buttons */
+	padding: 4px 12px;
 	background-color: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
 	border: 1px solid var(--vscode-button-border, transparent);
@@ -294,6 +335,29 @@ button:disabled {
 #plan-confirmation-container button:hover {
 	background-color: var(--vscode-button-hoverBackground);
 }
+/* Make cancel button potentially secondary */
+#plan-confirmation-container button#cancel-plan-button {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+}
+#plan-confirmation-container button#cancel-plan-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
 
-/* Ensure chat container doesn't push input off-screen when confirmation is shown */
-/* No specific changes needed if flexbox handles shrinking correctly */
+/* Scrollbar styling */
+::-webkit-scrollbar {
+	width: 8px;
+}
+::-webkit-scrollbar-track {
+	background: var(--vscode-scrollbarSlider-background);
+}
+::-webkit-scrollbar-thumb {
+	background: var(--vscode-scrollbarSlider-background);
+	border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+::-webkit-scrollbar-thumb:active {
+	background: var(--vscode-scrollbarSlider-activeBackground);
+}
