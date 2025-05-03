@@ -1,5 +1,33 @@
 // src/sidebar/webview/main.ts
 
+// --- Font Awesome Imports ---
+import { library, dom, icon } from "@fortawesome/fontawesome-svg-core";
+import {
+	faPaperPlane,
+	faFloppyDisk,
+	faFolderOpen,
+	faTrashCan,
+	faChevronLeft,
+	faChevronRight,
+	faPlus,
+	faCheck,
+	faTimes,
+} from "@fortawesome/free-solid-svg-icons";
+
+// Add icons to the library
+library.add(
+	faPaperPlane,
+	faFloppyDisk,
+	faFolderOpen,
+	faTrashCan,
+	faChevronLeft,
+	faChevronRight,
+	faPlus,
+	faCheck,
+	faTimes
+);
+// --- End Font Awesome Imports ---
+
 interface VsCodeApi {
 	postMessage(message: any): void;
 	getState(): any;
@@ -18,10 +46,9 @@ const chatInput = document.getElementById(
 const chatContainer = document.getElementById(
 	"chat-container"
 ) as HTMLDivElement | null;
-// Model Selection Element
 const modelSelect = document.getElementById(
 	"model-select"
-) as HTMLSelectElement | null; // <-- Add model select element
+) as HTMLSelectElement | null;
 // Key Management Elements
 const addKeyInput = document.getElementById(
 	"add-key-input"
@@ -60,6 +87,8 @@ const statusArea = document.getElementById(
 ) as HTMLDivElement | null;
 
 let planConfirmationContainer: HTMLDivElement | null = null;
+let confirmPlanButton: HTMLButtonElement | null = null; // Specific button for icon
+let cancelPlanButton: HTMLButtonElement | null = null; // Specific button for icon
 
 // State
 let isApiKeySet = false;
@@ -69,12 +98,12 @@ let pendingPlanData: any = null;
 
 console.log("Webview script loaded.");
 
-// Check for essential elements (including modelSelect)
+// Check for essential elements
 if (
 	!sendButton ||
 	!chatInput ||
 	!chatContainer ||
-	!modelSelect || // <-- Check model select
+	!modelSelect ||
 	!addKeyInput ||
 	!addKeyButton ||
 	!prevKeyButton ||
@@ -95,18 +124,15 @@ if (
 	}
 } else {
 	// --- Helper Functions ---
-	// (appendMessage, updateApiKeyStatus, updateStatus - keep existing)
 
 	function appendMessage(sender: string, text: string, className: string = "") {
 		if (chatContainer) {
-			// Remove previous loading message *only* if this isn't another loading msg
 			if (className !== "loading-message") {
 				const lastMessage = chatContainer.lastElementChild;
 				if (lastMessage && lastMessage.classList.contains("loading-message")) {
 					lastMessage.remove();
 				}
 			} else if (chatContainer.querySelector(".loading-message")) {
-				// If a loading message already exists, don't add another one
 				return;
 			}
 
@@ -121,31 +147,29 @@ if (
 			messageElement.appendChild(senderElement);
 
 			const textElement = document.createElement("span");
-			const sanitizedText = text; // Keep basic sanitization for now
+			const sanitizedText = text;
 
-			// Simple Markdown-like rendering (keep existing logic)
 			let htmlContent = sanitizedText
-				.replace(/</g, "&lt;") // Basic HTML entity escaping first
+				.replace(/</g, "&lt;")
 				.replace(/>/g, "&gt;")
 				.replace(
-					/```(json|typescript|javascript|python|html|css|plaintext|\w*)?\n([\s\S]*?)\n```/g, // Allow more languages or none
+					/```(json|typescript|javascript|python|html|css|plaintext|\w*)?\n([\s\S]*?)\n```/g,
 					(match, lang, code) =>
 						`<pre><code class="language-${lang || "plaintext"}">${code
 							.trim()
 							.replace(/</g, "&lt;")
 							.replace(/>/g, "&gt;")}</code></pre>`
-				) // Handle fenced code blocks
-				.replace(/`([^`]+)`/g, "<code>$1</code>") // Handle inline code
-				.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") // Handle bold
-				.replace(/\*(.*?)\*/g, "<em>$1</em>") // Handle italics (Ensure it doesn't conflict with bold)
-				.replace(/(\r\n|\r|\n)/g, "<br>"); // Handle all newline types
+				)
+				.replace(/`([^`]+)`/g, "<code>$1</code>")
+				.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+				.replace(/\*(.*?)\*/g, "<em>$1</em>")
+				.replace(/(\r\n|\r|\n)/g, "<br>");
 
 			textElement.innerHTML = htmlContent;
 			messageElement.appendChild(textElement);
 
 			chatContainer.appendChild(messageElement);
 
-			// Scroll logic (keep existing)
 			const isScrolledToBottom =
 				chatContainer.scrollHeight - chatContainer.clientHeight <=
 				chatContainer.scrollTop + 50;
@@ -153,7 +177,6 @@ if (
 				chatContainer.scrollTop = chatContainer.scrollHeight;
 			}
 
-			// Update button states (keep existing)
 			const hasMessages = chatContainer.childElementCount > 0;
 			if (clearChatButton && saveChatButton) {
 				clearChatButton.disabled = !hasMessages;
@@ -248,11 +271,10 @@ if (
 	function setLoadingState(loading: boolean) {
 		isLoading = loading;
 		if (sendButton && chatInput && modelSelect) {
-			// <-- Include modelSelect in check
-			const enableControls = !loading && isApiKeySet; // Controls enabled if not loading AND key is set
+			const enableControls = !loading && isApiKeySet;
 			sendButton.disabled = !enableControls;
 			chatInput.disabled = !enableControls;
-			modelSelect.disabled = !enableControls; // <-- Disable model select too
+			modelSelect.disabled = !enableControls;
 
 			if (loading) {
 				const lastMessage = chatContainer?.lastElementChild;
@@ -284,28 +306,36 @@ if (
 			const textElement = document.createElement("p");
 			textElement.textContent = "Execute the generated plan?";
 
-			const confirmButton = document.createElement("button");
-			confirmButton.id = "confirm-plan-button";
-			confirmButton.textContent = "Confirm";
+			confirmPlanButton = document.createElement("button"); // Use the variable
+			confirmPlanButton.id = "confirm-plan-button";
+			confirmPlanButton.textContent = "Confirm"; // Text is temporary, icon replaces it
 
-			const cancelButton = document.createElement("button");
-			cancelButton.id = "cancel-plan-button";
-			cancelButton.textContent = "Cancel";
+			cancelPlanButton = document.createElement("button"); // Use the variable
+			cancelPlanButton.id = "cancel-plan-button";
+			cancelPlanButton.textContent = "Cancel"; // Text is temporary, icon replaces it
 
 			planConfirmationContainer.appendChild(textElement);
-			planConfirmationContainer.appendChild(confirmButton);
-			planConfirmationContainer.appendChild(cancelButton);
+			planConfirmationContainer.appendChild(confirmPlanButton);
+			planConfirmationContainer.appendChild(cancelPlanButton);
 
 			chatContainer?.insertAdjacentElement(
 				"afterend",
 				planConfirmationContainer
 			);
 
+			// Add icons to the plan confirmation buttons
+			setIconForButton(confirmPlanButton, faCheck);
+			setIconForButton(cancelPlanButton, faTimes);
+
 			planConfirmationContainer.addEventListener(
 				"click",
 				(event: MouseEvent) => {
 					const target = event.target as HTMLElement;
-					if (target.id === "confirm-plan-button") {
+					// Check button itself or if the click was on the icon inside the button
+					if (
+						target.id === "confirm-plan-button" ||
+						target.closest("#confirm-plan-button")
+					) {
 						if (pendingPlanData) {
 							vscode.postMessage({
 								type: "confirmPlanExecution",
@@ -314,7 +344,6 @@ if (
 							updateStatus("Executing plan...");
 							planConfirmationContainer!.style.display = "none";
 							pendingPlanData = null;
-							// setLoadingState(true); // No need, provider handles state
 						} else {
 							updateStatus(
 								"Error: Could not retrieve plan data for execution.",
@@ -322,12 +351,14 @@ if (
 							);
 							planConfirmationContainer!.style.display = "none";
 						}
-					} else if (target.id === "cancel-plan-button") {
+					} else if (
+						target.id === "cancel-plan-button" ||
+						target.closest("#cancel-plan-button")
+					) {
 						vscode.postMessage({ type: "cancelPlanExecution" });
 						updateStatus("Plan execution cancelled.");
 						planConfirmationContainer!.style.display = "none";
 						pendingPlanData = null;
-						// Re-enable input if API key is set
 						if (chatInput && sendButton && modelSelect) {
 							chatInput.disabled = !isApiKeySet;
 							sendButton.disabled = !isApiKeySet;
@@ -336,6 +367,31 @@ if (
 					}
 				}
 			);
+		}
+	}
+
+	// --- Font Awesome Icon Helper ---
+	function setIconForButton(
+		button: HTMLButtonElement | null,
+		iconDefinition: any
+	) {
+		if (button) {
+			// Generate the SVG string using the icon function
+			const iconHTML = icon(iconDefinition, {
+				// Optional: Add classes or styles here if needed
+				classes: ["fa-icon"], // Add the class for styling
+			}).html[0]; // Get the first element of the HTML array (the SVG string)
+
+			if (iconHTML) {
+				button.innerHTML = iconHTML; // Set the button's innerHTML to the SVG string
+			} else {
+				// Fallback if icon generation fails (shouldn't normally happen)
+				button.innerHTML = "?"; // Or some placeholder text
+				console.error(
+					"Failed to generate Font Awesome icon:",
+					iconDefinition.iconName
+				);
+			}
 		}
 	}
 
@@ -348,14 +404,12 @@ if (
 		}
 	});
 
-	// Model selection listener
 	modelSelect.addEventListener("change", () => {
 		const selectedModel = modelSelect.value;
 		vscode.postMessage({ type: "selectModel", value: selectedModel });
 		updateStatus(`Requesting switch to model: ${selectedModel}...`);
 	});
 
-	// Key management listeners (keep existing)
 	addKeyButton.addEventListener("click", () => {
 		const apiKey = addKeyInput!.value.trim();
 		if (apiKey) {
@@ -388,7 +442,6 @@ if (
 		updateApiKeyStatus("Waiting for delete confirmation...");
 	});
 
-	// Chat action listeners (keep existing)
 	clearChatButton.addEventListener("click", () => {
 		vscode.postMessage({ type: "clearChatRequest" });
 	});
@@ -404,7 +457,7 @@ if (
 	// --- Message Handling from Extension Host ---
 	window.addEventListener("message", (event: MessageEvent) => {
 		const message = event.data;
-		console.log("Message received from extension:", message.type);
+		console.log("[Webview] Message received from extension:", message.type);
 
 		switch (message.type) {
 			case "aiResponse": {
@@ -417,10 +470,10 @@ if (
 				);
 
 				if (message.requiresConfirmation && message.planData) {
-					createPlanConfirmationUI();
+					createPlanConfirmationUI(); // Ensure UI exists
 					if (planConfirmationContainer) {
 						pendingPlanData = message.planData;
-						planConfirmationContainer.style.display = "block";
+						planConfirmationContainer.style.display = "flex"; // Use flex for centering
 						updateStatus(
 							"Plan generated. Please review and confirm execution."
 						);
@@ -432,7 +485,7 @@ if (
 						}
 						if (modelSelect) {
 							modelSelect.disabled = true;
-						} // Disable model select during confirmation
+						}
 					} else {
 						console.error("Plan confirmation container failed to create!");
 						updateStatus(
@@ -450,7 +503,6 @@ if (
 						}
 					}
 				} else {
-					// Re-enable based on API key state if it was a regular response or error
 					setLoadingState(false); // Handles enabling based on isApiKeySet
 				}
 				break;
@@ -484,7 +536,7 @@ if (
 						currentKeyDisplay!.textContent =
 							updateData.keys[updateData.activeIndex].maskedKey;
 					} else {
-						currentKeyDisplay!.textContent = "No active key";
+						currentKeyDisplay!.textContent = "No Active Key"; // Clearer text
 						updateApiKeyStatus("Please add an API key.");
 					}
 
@@ -492,11 +544,10 @@ if (
 					nextKeyButton!.disabled = totalKeys <= 1;
 					deleteKeyButton!.disabled = updateData.activeIndex === -1;
 
-					// Re-evaluate input state based on API key AND loading state
 					if (!isLoading) {
 						chatInput!.disabled = !isApiKeySet;
 						sendButton!.disabled = !isApiKeySet;
-						modelSelect!.disabled = !isApiKeySet; // <-- Enable/disable model select based on key
+						modelSelect!.disabled = !isApiKeySet;
 					}
 				} else {
 					console.error("Invalid 'updateKeyList' message received:", message);
@@ -504,18 +555,13 @@ if (
 				break;
 			}
 			case "updateModelList": {
-				// <-- Handle model list update
 				if (
 					message.value &&
 					Array.isArray(message.value.availableModels) &&
 					typeof message.value.selectedModel === "string"
 				) {
 					const { availableModels, selectedModel } = message.value;
-
-					// Clear existing options
-					modelSelect!.innerHTML = "";
-
-					// Populate with new options
+					modelSelect!.innerHTML = ""; // Clear existing
 					availableModels.forEach((modelName: string) => {
 						const option = document.createElement("option");
 						option.value = modelName;
@@ -525,8 +571,6 @@ if (
 						}
 						modelSelect!.appendChild(option);
 					});
-
-					// Ensure dropdown reflects the actual selected model
 					modelSelect!.value = selectedModel;
 					console.log(
 						"Model list updated in webview. Selected:",
@@ -560,40 +604,50 @@ if (
 				} else {
 					updateStatus("Error: Failed to restore chat history format.", true);
 				}
-				setLoadingState(false); // Re-enable input after restoring
+				setLoadingState(false);
 				break;
 			}
 			case "reenableInput": {
 				console.log("Received reenableInput request from provider.");
-				setLoadingState(false); // Explicitly re-enable based on isApiKeySet state
+				setLoadingState(false);
 				break;
 			}
 			default:
 				console.warn(
-					"Received unknown message type from extension:",
+					"[Webview] Received unknown message type from extension:",
 					message.type
 				);
 		}
 	});
 
-	// --- Initialization ---
 	function initializeWebview() {
 		vscode.postMessage({ type: "webviewReady" });
 		console.log("Webview sent ready message.");
 		chatInput?.focus();
 
-		// Initial button states (use ! assertions as elements checked at top)
+		// Initial button states
 		prevKeyButton!.disabled = true;
 		nextKeyButton!.disabled = true;
 		deleteKeyButton!.disabled = true;
 		chatInput!.disabled = true;
 		sendButton!.disabled = true;
-		modelSelect!.disabled = true; // <-- Disable model select initially
+		modelSelect!.disabled = true;
 		clearChatButton!.disabled = true;
 		saveChatButton!.disabled = true;
 		loadChatButton!.disabled = false;
 
-		createPlanConfirmationUI();
+		// Set icons for buttons using the corrected helper
+		setIconForButton(sendButton, faPaperPlane);
+		setIconForButton(saveChatButton, faFloppyDisk);
+		setIconForButton(loadChatButton, faFolderOpen);
+		setIconForButton(clearChatButton, faTrashCan);
+		setIconForButton(prevKeyButton, faChevronLeft);
+		setIconForButton(nextKeyButton, faChevronRight);
+		setIconForButton(deleteKeyButton, faTrashCan);
+		setIconForButton(addKeyButton, faPlus);
+
+		createPlanConfirmationUI(); // Create but hide the plan buttons
+		// Note: setIconForButton will be called again inside createPlanConfirmationUI for those buttons
 	}
 
 	initializeWebview();

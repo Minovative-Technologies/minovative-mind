@@ -117,6 +117,8 @@
 		"webpack-cli": "^5.1.4"
 	},
 	"dependencies": {
+		"@fortawesome/fontawesome-svg-core": "^6.7.2",
+		"@fortawesome/free-solid-svg-icons": "^6.7.2",
 		"@google/generative-ai": "^0.24.1",
 		"bluebird": "^3.7.2",
 		"ignore": "^7.0.4"
