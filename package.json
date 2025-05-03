@@ -56,7 +56,15 @@
 					"group": "9_minovativemind@1"
 				}
 			]
-		}
+		},
+		"keybindings": [
+			{
+				"command": "minovative-mind.modifySelection",
+				"key": "ctrl+m",
+				"mac": "cmd+m",
+				"when": "editorHasSelection && editorTextFocus"
+			}
+		]
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run package",
