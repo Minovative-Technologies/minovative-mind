@@ -1,203 +1,265 @@
 /* src/sidebar/webview/style.css */
 
 :root {
-	/* Define some common spacings */
+	/* Define common spacings based on VS Code variables if possible, or sensible defaults */
 	--container-padding: 10px;
 	--element-spacing: 8px;
-	--message-padding: 8px 10px;
-	--border-radius: 3px;
+	--message-padding: 10px 12px; /* Slightly more vertical padding */
+	--border-radius: 3px; /* Standard VS Code radius */
+	--input-height: 26px; /* Approximate height of standard VS Code inputs */
 }
 
+/* --- Base Styles --- */
 body {
-	font-family: var(--vscode-font-family, sans-serif);
+	font-family: var(
+		--vscode-font-family,
+		-apple-system,
+		BlinkMacSystemFont,
+		"Segoe UI",
+		Roboto,
+		Helvetica,
+		Arial,
+		sans-serif,
+		"Apple Color Emoji",
+		"Segoe UI Emoji",
+		"Segoe UI Symbol"
+	);
 	font-size: var(--vscode-font-size);
 	padding: 0 var(--container-padding) var(--container-padding)
-		var(--container-padding); /* Add bottom padding */
+		var(--container-padding);
 	color: var(--vscode-editor-foreground);
 	background-color: var(--vscode-sideBar-background);
 	display: flex;
 	flex-direction: column;
-	height: 100vh;
+	height: 100vh; /* Ensure body takes full height */
 	box-sizing: border-box;
-	overflow: hidden;
+	overflow: hidden; /* Prevent body scrolling */
 }
 
+/* --- Headers --- */
 h1,
 h2 {
 	color: var(--vscode-sideBar-titleForeground);
+	font-weight: 600;
+	margin: 0;
+	padding-bottom: 5px;
 	border-bottom: 1px solid
 		var(--vscode-sideBar-border, var(--vscode-contrastBorder));
-	padding-bottom: 5px;
-	font-weight: 600; /* Slightly bolder */
-	margin: 0; /* Reset margin for headers within containers */
-	font-size: 1.1em;
+}
+
+h1 {
+	font-size: 1.15em; /* Slightly larger main title */
+	display: flex; /* Align icon and text */
+	align-items: center;
+	gap: 6px; /* Space between icon and text */
 }
 
 h2 {
 	font-size: 1em;
-	margin-top: calc(
-		var(--container-padding) * 1.5
-	); /* More space before sections */
+	margin-top: calc(var(--container-padding) * 1.5);
 	margin-bottom: var(--element-spacing);
+	display: flex; /* Align icon and text */
+	align-items: center;
+	gap: 6px;
 }
 
-/* Chat Header/Controls */
+/* --- Chat Controls (Top Bar) --- */
 .chat-controls {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	padding: var(--element-spacing) 0; /* Consistent vertical padding */
+	padding: var(--element-spacing) 0; /* Use 0 horizontal padding as body provides it */
 	border-bottom: 1px solid
 		var(--vscode-sideBar-border, var(--vscode-contrastBorder));
-	flex-shrink: 0;
+	flex-shrink: 0; /* Prevent shrinking */
+	min-height: 30px; /* Ensure consistent height */
 }
 .chat-controls h1 {
-	border-bottom: none;
-	flex-grow: 1;
+	border-bottom: none; /* Remove double border */
+	flex-grow: 1; /* Allow title to take space */
+	padding: 0; /* Remove padding from h1 itself */
 }
-.chat-controls div button {
+.chat-controls .button-group button {
 	margin-left: 4px;
-	padding: 4px 8px; /* Slightly smaller action buttons */
-	background-color: transparent; /* Make them less prominent */
-	border-color: transparent;
-	color: var(--vscode-icon-foreground); /* Use icon color for subtlety */
+	padding: 4px; /* Square-ish buttons for icons */
+	width: var(--input-height); /* Match input height */
+	height: var(--input-height);
+	background-color: transparent;
+	border: 1px solid transparent; /* Add border for hover effect */
+	color: var(--vscode-icon-foreground);
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out;
+	display: inline-flex; /* Center icon */
+	align-items: center;
+	justify-content: center;
+	font-size: 1.1em; /* Slightly larger icon */
 }
-.chat-controls div button:hover {
+.chat-controls .button-group button:hover {
 	background-color: var(--vscode-toolbar-hoverBackground);
-	color: var(--vscode-toolbar-hoverOutline); /* Or foreground */
 }
-.chat-controls div button:disabled {
+.chat-controls .button-group button:disabled {
 	background-color: transparent;
 	opacity: 0.5;
+	cursor: not-allowed;
 }
 
-/* Chat Message Container */
+/* --- Chat Container --- */
 #chat-container {
-	flex-grow: 1;
-	overflow-y: auto;
-	/* Removed border - let messages define background */
-	padding: var(--element-spacing) 0; /* Padding top/bottom */
-	margin-top: var(--element-spacing);
-	margin-bottom: var(--element-spacing);
-	min-height: 100px; /* Increased min height */
+	flex-grow: 1; /* Take remaining space */
+	overflow-y: auto; /* Enable vertical scrolling */
+	padding: var(--element-spacing) 0;
+	margin: var(--element-spacing) 0;
+	min-height: 100px;
+	display: flex; /* Use flexbox to push messages to bottom */
+	flex-direction: column; /* Stack messages vertically */
 }
 
-/* Individual Messages */
+/* --- Chat Messages --- */
 .message {
 	margin-bottom: var(--element-spacing);
 	padding: var(--message-padding);
 	border-radius: var(--border-radius);
 	word-wrap: break-word;
-	line-height: 1.5; /* Improved readability */
-	position: relative; /* For potential future absolute elements like copy buttons */
+	line-height: 1.5;
+	max-width: 95%; /* Prevent messages from touching the very edge */
+	position: relative; /* For potential future elements */
 }
 .message strong {
 	/* Sender label */
-	display: block; /* Put sender on its own line */
+	display: block;
 	margin-bottom: 4px;
 	font-weight: 600;
 	font-size: 0.9em;
-	opacity: 0.8; /* Make sender slightly less prominent */
+	opacity: 0.85;
 }
 .user-message {
 	background-color: var(--vscode-list-activeSelectionBackground);
 	color: var(--vscode-list-activeSelectionForeground);
+	align-self: flex-end; /* Align user messages to the right */
+	margin-left: auto; /* Push to right */
 }
 .user-message strong {
-	color: var(
-		--vscode-list-activeSelectionForeground
-	); /* Ensure sender matches */
+	color: var(--vscode-list-activeSelectionForeground);
 }
 .ai-message {
 	background-color: var(--vscode-editorWidget-background);
 	border: 1px solid var(--vscode-editorWidget-border, transparent);
+	align-self: flex-start; /* Align AI messages to the left */
+	margin-right: auto; /* Push to left */
 }
 
-/* System/Loading/Error Messages */
+/* --- System / Loading / Error Messages --- */
 .system-message,
 .loading-message {
 	color: var(--vscode-descriptionForeground);
 	font-style: italic;
 	text-align: center;
 	background: none;
-	padding: 4px;
-	margin-top: var(--element-spacing);
-	margin-bottom: var(--element-spacing);
+	padding: 5px 0;
+	margin: var(--element-spacing) auto; /* Center horizontally */
+	align-self: center; /* Center in flex container */
+	width: 90%;
 }
 .error-message {
-	background-color: rgba(255, 100, 100, 0.1); /* Keep subtle background */
+	background-color: var(--vscode-inputValidation-errorBackground);
 	color: var(--vscode-errorForeground);
 	border: 1px solid var(--vscode-inputValidation-errorBorder);
-	padding-left: calc(var(--message-padding) * 1.5); /* Indent slightly */
-	border-left-width: 4px; /* Make left border more prominent */
+	border-left-width: 4px;
+	padding-left: calc(var(--message-padding) * 1.5);
+	align-self: flex-start; /* Align errors to the left */
+	margin-right: auto;
 }
 .error-message strong {
 	color: var(--vscode-errorForeground);
 }
 
-/* Code Blocks within Messages */
+/* --- Code Blocks within Messages --- */
 .message pre {
 	background-color: var(--vscode-textCodeBlock-background);
 	padding: 10px;
 	border-radius: var(--border-radius);
-	overflow-x: auto; /* Allow horizontal scroll for long code */
+	overflow-x: auto;
 	margin-top: 8px;
 	margin-bottom: 4px;
-	border: 1px solid var(--vscode-editorWidget-border, transparent);
+	border: 1px solid
+		var(--vscode-editorWidget-border, var(--vscode-contrastBorder, transparent)); /* Use contrast border as fallback */
 }
 .message code {
 	font-family: var(--vscode-editor-font-family, monospace);
-	font-size: 0.95em; /* Slightly smaller than main text */
+	font-size: 0.95em;
 }
 .message pre code {
-	/* Styles specific to code within pre blocks */
-	padding: 0; /* Remove padding from inline code style */
-	background: none; /* Inherit pre background */
-	color: var(--vscode-editor-foreground); /* Standard editor text */
+	padding: 0;
+	background: none;
+	color: var(--vscode-editor-foreground);
 	border-radius: 0;
 }
-/* Inline code */
 .message :not(pre) > code {
+	/* Inline code */
 	background-color: var(--vscode-textCodeBlock-background);
 	padding: 0.2em 0.4em;
 	border-radius: var(--border-radius);
 	font-size: 0.9em;
 }
 
-/* Input Area */
+/* --- Status Area --- */
+#status-area {
+	font-size: 0.9em;
+	color: var(--vscode-descriptionForeground);
+	min-height: 1.5em; /* Ensure space even when empty */
+	text-align: center;
+	padding: 4px 0 6px 0;
+	flex-shrink: 0;
+}
+
+/* --- Input Area --- */
 #input-container {
 	display: flex;
-	align-items: stretch;
+	align-items: flex-end; /* Align button with bottom of textarea */
 	margin-bottom: var(--element-spacing);
 	flex-shrink: 0;
-	border: 1px solid var(--vscode-focusBorder); /* Add focus border around container */
+	border: 1px solid var(--vscode-focusBorder, var(--vscode-input-border)); /* Use focus border or input border */
 	border-radius: var(--border-radius);
-	background-color: var(--vscode-input-background); /* Container background */
+	background-color: var(--vscode-input-background);
+	transition: border-color 0.1s ease-in-out;
+}
+#input-container:focus-within {
+	border-color: var(--vscode-focusBorder); /* Highlight when focused */
 }
 #chat-input {
 	flex-grow: 1;
-	background-color: transparent; /* Inherit container background */
-	border: none; /* Remove individual border */
+	background-color: transparent;
+	border: none;
 	color: var(--vscode-input-foreground);
-	padding: 8px 10px; /* Slightly more padding */
-	font-family: var(--vscode-editor-font-family, monospace);
-	font-size: var(--vscode-font-size);
-	border-radius: 0; /* No radius inside */
+	padding: 8px 10px;
+	font-family: inherit; /* Use body font */
+	font-size: inherit;
 	resize: none;
-	outline: none; /* Remove default outline */
+	outline: none;
+	min-height: var(--input-height); /* Minimum height */
+	max-height: 150px; /* Prevent excessive growth */
+	line-height: 1.4; /* Match message line height */
 }
-#chat-input:focus {
-	/* No specific focus style needed as container has border */
+#chat-input::placeholder {
+	color: var(--vscode-input-placeholderForeground);
 }
 #input-container button#send-button {
 	flex-shrink: 0;
-	margin: 4px; /* Margin around the button */
-	/* Use standard button styles */
-	padding: 4px 12px;
+	margin: 4px;
+	padding: 4px 8px; /* Adjusted padding for icon */
+	height: calc(var(--input-height) + 4px); /* Align better with textarea */
+	width: calc(var(--input-height) + 10px);
 	background-color: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
 	border: 1px solid var(--vscode-button-border, var(--vscode-button-background));
 	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out;
+	display: inline-flex; /* Center icon */
+	align-items: center;
+	justify-content: center;
+	font-size: 1.2em; /* Make send icon slightly bigger */
 }
 #input-container button#send-button:hover {
 	background-color: var(--vscode-button-hoverBackground);
@@ -209,17 +271,7 @@ h2 {
 	cursor: not-allowed;
 }
 
-/* General Status Area */
-#status-area {
-	font-size: 0.9em;
-	color: var(--vscode-descriptionForeground);
-	min-height: 1.2em;
-	text-align: center;
-	padding: 2px 0 5px 0;
-	flex-shrink: 0;
-}
-
-/* API Key Section */
+/* --- API Key Section --- */
 .section {
 	margin-top: var(--element-spacing);
 	border-top: 1px solid
@@ -232,42 +284,54 @@ h2 {
 	align-items: center;
 	justify-content: space-between;
 	margin-bottom: var(--element-spacing);
-	flex-wrap: nowrap;
+	gap: 5px; /* Space between controls */
 }
 .key-management-controls span#current-key-display {
 	font-size: 0.9em;
-	color: var(--vscode-descriptionForeground);
-	margin: 0 5px;
+	color: var(--vscode-input-foreground); /* Match input text color */
+	margin: 0;
 	text-align: center;
 	flex-grow: 1;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	padding: 4px;
+	padding: 4px 8px; /* Match input padding */
 	background-color: var(--vscode-input-background);
 	border-radius: var(--border-radius);
 	border: 1px solid var(--vscode-input-border, transparent);
+	height: var(--input-height); /* Match input height */
+	line-height: calc(var(--input-height) - 2px); /* Vertically center text */
 }
 .key-management-controls button {
-	padding: 4px 8px; /* Small icon-like buttons */
-	background-color: var(
-		--vscode-button-secondaryBackground
-	); /* Use secondary style */
+	padding: 4px;
+	width: var(--input-height);
+	height: var(--input-height);
+	background-color: var(--vscode-button-secondaryBackground);
 	color: var(--vscode-button-secondaryForeground);
-	border: 1px solid var(--vscode-button-border, transparent);
+	border: 1px solid var(--vscode-input-border, transparent); /* Use input border */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out;
+	display: inline-flex; /* Center icon */
+	align-items: center;
+	justify-content: center;
 }
 .key-management-controls button:hover {
-	background-color: var(--vscode-button-hoverBackground);
+	background-color: var(--vscode-button-secondaryHoverBackground);
 }
 .key-management-controls button:disabled {
-	background-color: var(--vscode-button-secondaryBackground);
+	background-color: var(
+		--vscode-input-background
+	); /* Less prominent disabled */
 	opacity: 0.6;
+	cursor: not-allowed;
+	border-color: var(--vscode-input-border, transparent);
 }
 
 .add-key-container {
 	display: flex;
 	margin-top: var(--element-spacing);
-	align-items: stretch;
+	align-items: stretch; /* Make input and button same height */
 }
 #add-key-input {
 	flex-grow: 1;
@@ -275,15 +339,27 @@ h2 {
 	background-color: var(--vscode-input-background);
 	border: 1px solid var(--vscode-input-border);
 	color: var(--vscode-input-foreground);
-	padding: 6px 8px;
+	padding: 0 8px; /* Remove vertical padding */
 	border-radius: var(--border-radius);
+	height: calc(var(--input-height) + 2px); /* Match button height */
+	outline: none;
+}
+#add-key-input:focus {
+	border-color: var(--vscode-focusBorder);
 }
 #add-key-button {
-	padding: 6px 10px;
+	padding: 4px 8px; /* Adjust padding for icon */
+	height: calc(var(--input-height) + 2px);
+	width: calc(var(--input-height) + 10px);
 	background-color: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
 	border: 1px solid var(--vscode-button-border, transparent);
 	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out;
+	display: inline-flex; /* Center icon */
+	align-items: center;
+	justify-content: center;
 }
 #add-key-button:hover {
 	background-color: var(--vscode-button-hoverBackground);
@@ -298,7 +374,7 @@ h2 {
 	font-size: 0.9em;
 	margin-top: 5px;
 	color: var(--vscode-descriptionForeground);
-	min-height: 1.2em;
+	min-height: 1.5em;
 	text-align: center;
 }
 .section p small {
@@ -309,51 +385,57 @@ h2 {
 	margin-top: var(--element-spacing);
 }
 
-/* Plan Confirmation Container */
+/* --- Plan Confirmation Container --- */
 #plan-confirmation-container {
 	border: 1px solid var(--vscode-inputOption-activeBorder);
 	background-color: var(--vscode-inputOption-activeBackground);
 	padding: var(--container-padding);
-	margin-top: var(--element-spacing);
-	margin-bottom: var(--element-spacing);
+	margin: var(--element-spacing) 0;
 	text-align: center;
 	border-radius: var(--border-radius);
-	flex-shrink: 0;
+	flex-shrink: 0; /* Prevent shrinking */
 }
 #plan-confirmation-container p {
 	margin-top: 0;
 	margin-bottom: var(--element-spacing);
 	color: var(--vscode-inputOption-activeForeground);
+	font-weight: 500;
 }
 #plan-confirmation-container button {
 	margin: 0 5px;
-	padding: 4px 12px;
+	padding: 6px 14px; /* Standard button padding */
+	min-width: 80px; /* Give buttons some width */
 	background-color: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
 	border: 1px solid var(--vscode-button-border, transparent);
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out;
 }
 #plan-confirmation-container button:hover {
 	background-color: var(--vscode-button-hoverBackground);
 }
-/* Make cancel button potentially secondary */
 #plan-confirmation-container button#cancel-plan-button {
 	background-color: var(--vscode-button-secondaryBackground);
 	color: var(--vscode-button-secondaryForeground);
 }
 #plan-confirmation-container button#cancel-plan-button:hover {
-	background-color: var(--vscode-button-hoverBackground);
+	background-color: var(--vscode-button-secondaryHoverBackground);
 }
 
-/* Scrollbar styling */
+/* --- Scrollbar Styling (Futuristic Touch: Thin Scrollbars) --- */
 ::-webkit-scrollbar {
-	width: 8px;
+	width: 6px; /* Make scrollbar thinner */
+	height: 6px;
 }
 ::-webkit-scrollbar-track {
-	background: var(--vscode-scrollbarSlider-background);
+	/* Use sidebar background or slightly darker */
+	background: var(--vscode-sideBar-background);
 }
 ::-webkit-scrollbar-thumb {
 	background: var(--vscode-scrollbarSlider-background);
-	border-radius: 4px;
+	border-radius: 3px;
+	border: 1px solid var(--vscode-sideBar-background); /* Match track background for illusion of floating */
 }
 ::-webkit-scrollbar-thumb:hover {
 	background: var(--vscode-scrollbarSlider-hoverBackground);

@@ -1264,30 +1264,41 @@ Assistant Response:
 				"style.css"
 			)
 		);
+		// --- Font Awesome CDN Link ---
+		const fontAwesomeUri =
+			"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"; // Using CDNJS as an example
+
 		const nonce = getNonce();
+
+		// --- Updated CSP ---
+		const cspSource = webview.cspSource;
+		const csp = `
+			default-src 'none';
+			style-src ${cspSource} 'unsafe-inline' https://cdnjs.cloudflare.com;
+			font-src https://cdnjs.cloudflare.com;
+			img-src ${cspSource} https: data:;
+			script-src 'nonce-${nonce}';
+			connect-src 'none';
+		`;
 
 		return `<!DOCTYPE html>
 		<html lang="en">
 		<head>
 				<meta charset="UTF-8">
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-				<meta http-equiv="Content-Security-Policy" content="
-						default-src 'none';
-						style-src ${webview.cspSource} 'unsafe-inline';
-						img-src ${webview.cspSource} https: data:;
-						script-src 'nonce-${nonce}';
-						connect-src 'none';
-				">
+				<meta http-equiv="Content-Security-Policy" content="${csp}">
 				<link href="${stylesUri}" rel="stylesheet">
+				<!-- Font Awesome -->
+				<link href="${fontAwesomeUri}" rel="stylesheet" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 				<title>Minovative Mind Chat</title>
 		</head>
 		<body>
 				<div class="chat-controls">
-					 <h1>Minovative Mind</h1>
+					 <h1>Minovative Mind</h1> <!-- Example Icon -->
 						<div>
-								<button id="save-chat-button" title="Save Chat">Save</button>
-								<button id="load-chat-button" title="Load Chat">Load</button>
-								<button id="clear-chat-button" title="Clear Chat">Clear</button>
+								<button id="save-chat-button" title="Save Chat"><i class="fa-regular fa-floppy-disk"></i></button>
+								<button id="load-chat-button" title="Load Chat"><i class="fa-regular fa-folder-open"></i></button>
+								<button id="clear-chat-button" title="Clear Chat"><i class="fa-solid fa-trash-can"></i></button>
 						</div>
 				</div>
 				<div id="chat-container">
@@ -1297,20 +1308,20 @@ Assistant Response:
 				<div id="status-area"></div>
 				<div id="input-container">
 						<textarea id="chat-input" rows="3" placeholder="Enter message or @plan [request]..."></textarea>
-						<button id="send-button" title="Send Message">Send</button>
+						<button id="send-button" title="Send Message"><i class="fa-solid fa-paper-plane"></i></button>
 				</div>
 				<div class="section">
-						<h2>API Key Management</h2>
+						<h2><i class="fa-solid fa-key"></i> API Key Management</h2>
 						<div class="key-management-controls">
-								 <button id="prev-key-button" title="Previous Key" disabled>&lt;</button>
+								 <button id="prev-key-button" title="Previous Key" disabled><i class="fa-solid fa-chevron-left"></i></button>
 								 <span id="current-key-display">No keys stored</span>
-								<button id="next-key-button" title="Next Key" disabled>&gt;</button>
-								<button id="delete-key-button" title="Delete Current Key" disabled>Del</button>
+								<button id="next-key-button" title="Next Key" disabled><i class="fa-solid fa-chevron-right"></i></button>
+								<button id="delete-key-button" title="Delete Current Key" disabled><i class="fa-solid fa-minus"></i></button>
 						</div>
 						 <div id="api-key-status">Please add an API key.</div>
 						<div class="add-key-container">
 								<input type="password" id="add-key-input" placeholder="Add new Gemini API Key">
-								<button id="add-key-button" title="Add API Key">Add</button>
+								<button id="add-key-button" title="Add API Key"><i class="fa-solid fa-plus"></i></button>
 						</div>
 						<p><small>Keys are stored securely using VS Code SecretStorage.</small></p>
 				</div>
