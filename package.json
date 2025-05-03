@@ -76,14 +76,6 @@
 				{
 					"command": "minovative-mind.explainSelection",
 					"group": "2_analysis@1"
-				},
-				{
-					"command": "minovative-mind.generateDocs",
-					"group": "2_analysis@2"
-				},
-				{
-					"command": "minovative-mind.findBugs",
-					"group": "2_analysis@3"
 				}
 			]
 		},

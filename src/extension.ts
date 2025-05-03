@@ -39,24 +39,11 @@ async function executePredefinedAction(
 
 	let userInstruction = "";
 	let systemPrompt = `You are an expert AI programmer assisting within VS Code. Analyze the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
-	let outputFormatInstruction = "";
 
 	switch (actionType) {
 		case "explain":
 			userInstruction =
-				"Explain the following code selection. Be concise and focus on its purpose and functionality.";
-			outputFormatInstruction =
-				"Provide the explanation in clear Markdown format. Do not include the original code in your response.";
-			break;
-		case "generateDocs":
-			userInstruction = `Generate documentation (e.g., JSDoc, Python docstrings, comments based on language ${languageId}) for the following code selection (function, class, or block).`;
-			outputFormatInstruction = `Provide ONLY the documentation block, suitable for insertion directly above the code. Do not include the original code or any surrounding explanations.`;
-			break;
-		case "findBugs":
-			userInstruction =
-				"Analyze the following code selection for potential bugs, errors, or anti-patterns. List any findings clearly.";
-			outputFormatInstruction =
-				"Provide the findings as a numbered or bulleted list in Markdown format. If no issues are found, state 'No potential issues found.' Do not include the original code.";
+				"Explain the following code selection concisely. Focus on its purpose, functionality, and key components. Explain it in a concise way. Provide the explanation without using Markdown formatting at ALL";
 			break;
 	}
 
@@ -79,10 +66,6 @@ ${selectedText}
 --- User Instruction ---
 ${userInstruction}
 --- End User Instruction ---
-
---- Output Format ---
-${outputFormatInstruction}
---- End Output Format ---
 
 Assistant Response:
 `;
@@ -163,7 +146,7 @@ export function activate(context: vscode.ExtensionContext) {
 			// Get user instructions OR shortcut
 			const instructionsInput = await vscode.window.showInputBox({
 				prompt: "Enter modification instructions, or use /fix or /docs:",
-				placeHolder: "e.g., refactor to use async/await, /fix, /docs",
+				placeHolder: "Type /fix, /docs or custom prompt",
 				title: "Minovative Mind: Modify Code",
 			});
 
@@ -674,7 +657,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(modifySelectionDisposable);
 	// --- Register New Predefined Action Commands ---
 
-	// Explain Selection
+	// Explain Selection (No structural change needed here if relying on Markdown in detail)
 	const explainDisposable = vscode.commands.registerCommand(
 		"minovative-mind.explainSelection",
 		async () => {
@@ -686,6 +669,7 @@ export function activate(context: vscode.ExtensionContext) {
 				},
 				async (progress) => {
 					progress.report({ increment: 20, message: "Preparing..." });
+					// Call the helper which now requests Markdown
 					const result = await executePredefinedAction(
 						"explain",
 						sidebarProvider
@@ -698,9 +682,13 @@ export function activate(context: vscode.ExtensionContext) {
 					});
 
 					if (result.success) {
+						// Display the Markdown-formatted result in the detail section of a modal popup
 						vscode.window.showInformationMessage(
-							"Minovative Mind: Explanation",
-							{ modal: true, detail: result.content } // Use modal and detail for potentially long explanations
+							"Minovative Mind: Code Explanation", // Main title
+							{
+								modal: true,
+								detail: result.content, // The AI's Markdown response goes here
+							}
 						);
 					} else {
 						vscode.window.showErrorMessage(`Minovative Mind: ${result.error}`);
@@ -710,120 +698,6 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	);
 	context.subscriptions.push(explainDisposable);
-
-	// Generate Docs
-	const generateDocsDisposable = vscode.commands.registerCommand(
-		"minovative-mind.generateDocs",
-		async () => {
-			await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: "Minovative Mind: Generating documentation...",
-					cancellable: false,
-				},
-				async (progress) => {
-					progress.report({ increment: 20, message: "Preparing..." });
-					const result = await executePredefinedAction(
-						"generateDocs",
-						sidebarProvider
-					);
-					progress.report({
-						increment: 60,
-						message: result.success
-							? "Processing result..."
-							: "Handling error...",
-					});
-
-					if (result.success) {
-						const editor = vscode.window.activeTextEditor;
-						// Double-check editor and selection validity
-						if (editor && !editor.selection.isEmpty) {
-							const selection = editor.selection;
-							const edit = new vscode.WorkspaceEdit();
-							// Insert the generated documentation string before the selection start
-							edit.insert(
-								editor.document.uri,
-								selection.start,
-								result.content + "\n"
-							); // Add a newline for spacing
-							const success = await vscode.workspace.applyEdit(edit);
-							progress.report({
-								increment: 20,
-								message: success ? "Applying changes..." : "Failed to apply...",
-							});
-
-							if (success) {
-								vscode.window.showInformationMessage(
-									"Minovative Mind: Documentation inserted."
-								);
-								// Optional: Format the relevant part of the document
-								// vscode.commands.executeCommand('editor.action.formatSelection');
-							} else {
-								vscode.window.showErrorMessage(
-									"Minovative Mind: Failed to insert documentation."
-								);
-							}
-						} else {
-							// Handle case where editor/selection became invalid between checks
-							vscode.window.showWarningMessage(
-								"Minovative Mind: No active selection found to insert documentation."
-							);
-						}
-					} else {
-						vscode.window.showErrorMessage(`Minovative Mind: ${result.error}`);
-					}
-				}
-			);
-		}
-	);
-	context.subscriptions.push(generateDocsDisposable);
-
-	// Find Bugs
-	const findBugsDisposable = vscode.commands.registerCommand(
-		"minovative-mind.findBugs",
-		async () => {
-			await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: "Minovative Mind: Finding potential bugs...",
-					cancellable: false,
-				},
-				async (progress) => {
-					progress.report({ increment: 20, message: "Preparing..." });
-					const result = await executePredefinedAction(
-						"findBugs",
-						sidebarProvider
-					);
-					progress.report({
-						increment: 80,
-						message: result.success
-							? "Processing result..."
-							: "Handling error...",
-					});
-
-					if (result.success) {
-						if (
-							result.content.toLowerCase().includes("no potential issues found")
-						) {
-							// If AI confirms no issues, show as information
-							vscode.window.showInformationMessage(
-								"Minovative Mind: " + result.content
-							);
-						} else {
-							// Otherwise, show findings as a warning in a modal
-							vscode.window.showWarningMessage(
-								"Minovative Mind: Potential Issues Found",
-								{ modal: true, detail: result.content }
-							);
-						}
-					} else {
-						vscode.window.showErrorMessage(`Minovative Mind: ${result.error}`);
-					}
-				}
-			);
-		}
-	);
-	context.subscriptions.push(findBugsDisposable);
 } // End activate function
 
 // --- Deactivate Function ---
