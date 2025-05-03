@@ -20,6 +20,19 @@ interface KeyUpdateData {
 	totalKeys: number;
 }
 
+// Define the structure for saving/loading chat history
+interface ChatMessage {
+	sender: "User" | "Gemini" | "System"; // Keep sender simple for saving
+	text: string;
+	className: string; // Keep class for potential styling on load
+}
+
+// Structure matching Google's Content type for internal use
+interface HistoryEntry {
+	role: "user" | "model";
+	parts: { text: string }[];
+}
+
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
 
@@ -28,6 +41,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	private readonly _secretStorage: vscode.SecretStorage;
 	private _apiKeyList: string[] = []; // Cache the list of keys
 	private _activeKeyIndex: number = -1; // Cache the active index, -1 if none
+	private _chatHistory: HistoryEntry[] = []; // Store chat history using Gemini structure
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri,
@@ -267,6 +281,139 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		return undefined;
 	}
 
+	// --- Chat History & Actions ---
+
+	private _addHistoryEntry(role: "user" | "model", text: string) {
+		this._chatHistory.push({ role, parts: [{ text }] });
+		// Optional: Add logic here to prune history if it gets too long
+		// to avoid excessive memory usage or overly large save files.
+		// e.g., if (this._chatHistory.length > MAX_HISTORY_LENGTH) { this._chatHistory.shift(); }
+	}
+
+	private async _clearChat() {
+		this._chatHistory = [];
+		this.postMessageToWebview({ type: "chatCleared" });
+		this.postMessageToWebview({
+			type: "statusUpdate", // Use a general status update message type
+			value: "Chat cleared.",
+		});
+	}
+
+	private async _saveChat() {
+		const options: vscode.SaveDialogOptions = {
+			saveLabel: "Save Chat History",
+			filters: {
+				"JSON Files": ["json"],
+				"Text Files": ["txt"], // Allow saving as plain text too (might lose structure)
+			},
+			defaultUri: vscode.workspace.workspaceFolders
+				? vscode.Uri.joinPath(
+						vscode.workspace.workspaceFolders[0].uri,
+						`minovative-mind-chat-${
+							new Date().toISOString().split("T")[0]
+						}.json`
+				  )
+				: undefined,
+		};
+
+		const fileUri = await vscode.window.showSaveDialog(options);
+		if (fileUri) {
+			try {
+				// Convert internal history to simpler save format
+				const saveableHistory: ChatMessage[] = this._chatHistory.map(
+					(entry) => ({
+						sender: entry.role === "user" ? "User" : "Gemini",
+						text: entry.parts[0].text, // Assuming single text part
+						className: entry.role === "user" ? "user-message" : "ai-message",
+					})
+				);
+
+				const contentString = JSON.stringify(saveableHistory, null, 2); // Pretty print JSON
+				await vscode.workspace.fs.writeFile(
+					fileUri,
+					Buffer.from(contentString, "utf-8")
+				);
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Chat saved successfully.",
+				});
+			} catch (error) {
+				console.error("Error saving chat:", error);
+				vscode.window.showErrorMessage(
+					`Failed to save chat: ${
+						error instanceof Error ? error.message : String(error)
+					}`
+				);
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Error: Failed to save chat.",
+				});
+			}
+		}
+	}
+
+	private async _loadChat() {
+		const options: vscode.OpenDialogOptions = {
+			canSelectMany: false,
+			openLabel: "Load Chat History",
+			filters: {
+				"JSON Files": ["json"],
+				"All Files": ["*"],
+			},
+		};
+
+		const fileUris = await vscode.window.showOpenDialog(options);
+		if (fileUris && fileUris.length > 0) {
+			const fileUri = fileUris[0];
+			try {
+				const contentBytes = await vscode.workspace.fs.readFile(fileUri);
+				const contentString = Buffer.from(contentBytes).toString("utf-8");
+				const loadedData: any = JSON.parse(contentString);
+
+				// Validate and convert back to internal format
+				if (
+					Array.isArray(loadedData) &&
+					loadedData.every(
+						(item) =>
+							item &&
+							typeof item.sender === "string" &&
+							typeof item.text === "string"
+					)
+				) {
+					this._chatHistory = loadedData.map(
+						(item: ChatMessage): HistoryEntry => ({
+							role: item.sender === "User" ? "user" : "model", // Basic mapping
+							parts: [{ text: item.text }],
+						})
+					);
+
+					// Send the loaded history to the webview for display
+					this.postMessageToWebview({
+						type: "restoreHistory",
+						value: loadedData, // Send the saveable format back
+					});
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Chat loaded successfully.",
+					});
+				} else {
+					throw new Error("Invalid chat history file format.");
+				}
+			} catch (error) {
+				console.error("Error loading chat:", error);
+				vscode.window.showErrorMessage(
+					`Failed to load chat: ${
+						error instanceof Error ? error.message : String(error)
+					}`
+				);
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Error: Failed to load or parse chat file.",
+				});
+			}
+		}
+	}
+
 	// --- VS Code Provider Methods ---
 
 	public resolveWebviewView(
@@ -285,8 +432,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				vscode.Uri.joinPath(this._extensionUri, "dist"),
 				vscode.Uri.joinPath(this._extensionUri, "media"),
 				vscode.Uri.joinPath(this._extensionUri, "src", "sidebar", "webview"),
-				// Alternatively, allow the whole 'src' dir, but being specific is slightly more secure:
-				// vscode.Uri.joinPath(this._extensionUri, "src"),
 			],
 		};
 
@@ -295,7 +440,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		// Handle messages from the webview (this part remains the same)
 		webviewView.webview.onDidReceiveMessage(async (data) => {
-			// ... (message handling logic remains the same)
 			switch (data.type) {
 				case "addApiKey": // Renamed from apiKeyUpdate
 					if (typeof data.value === "string") {
@@ -388,13 +532,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							type: "aiResponse",
 							value:
 								"Error: No active API Key set. Please add or select a key.",
+							isError: true, // Add flag for webview styling
 						});
 						return;
 					}
 
-					let projectContext = "";
-					const workspaceFolders = vscode.workspace.workspaceFolders;
+					// Add user message to history *before* sending to AI
+					this._addHistoryEntry("user", userMessage);
 
+					let projectContext = "";
+					// ... (keep existing context building logic) ...
+					const workspaceFolders = vscode.workspace.workspaceFolders;
 					if (workspaceFolders && workspaceFolders.length > 0) {
 						const rootFolder = workspaceFolders[0];
 						try {
@@ -432,10 +580,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					this.postMessageToWebview({
 						type: "aiResponse",
 						value: "Gemini is thinking...",
+						isLoading: true, // Add flag
 					}); // Show thinking message immediately
 
 					try {
-						// --->>> New Prompt Structure <<<---
+						// Prepare history for the API call (use a copy)
+						// Note: The Gemini SDK's startChat likely handles history limits,
+						// but you could implement truncation here if needed.
+						const historyForApi = [...this._chatHistory];
+						// Remove the last user message from history sent *to* the API,
+						// as it's part of the current prompt.
+						historyForApi.pop();
+
 						const finalPrompt = `
 						You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query. Dont use Markdown formatting. Keep things concise but informative.
 						
@@ -448,11 +604,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						--- End User Query ---
 						
 						Assistant Response:
-						`; // Added "Assistant Response:" to guide the start
+						`;
 
-						// --- DIAGNOSTIC LOG ---
 						console.log("--- Sending Final Prompt to Gemini ---");
-						// Limit logged prompt length to avoid flooding console
 						console.log(
 							finalPrompt.length > 1000
 								? finalPrompt.substring(0, 1000) +
@@ -461,28 +615,65 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						);
 						console.log("--- End Final Prompt ---");
 
-						const aiResponse = await generateContent(activeKey, finalPrompt); // Pass the structured prompt
+						// Pass history to generateContent
+						const aiResponseText = await generateContent(
+							activeKey,
+							finalPrompt,
+							historyForApi // <-- Pass history here
+						);
 
+						// Add AI response to history *after* getting it
+						this._addHistoryEntry("model", aiResponseText);
+
+						// Send response to webview
 						this.postMessageToWebview({
 							type: "aiResponse",
-							value: aiResponse,
+							value: aiResponseText,
+							isLoading: false,
+							isError: aiResponseText.toLowerCase().startsWith("error:"),
 						});
 					} catch (error) {
 						console.error("Unhandled error during chat generation:", error);
 						const errorMessage =
 							error instanceof Error ? error.message : String(error);
-						// Ensure thinking message is cleared on error too
+						// Don't add error to history, just display it
 						this.postMessageToWebview({
-							type: "aiResponse", // Keep same type to overwrite thinking message
+							type: "aiResponse",
 							value: `Error: ${errorMessage}`,
+							isLoading: false,
+							isError: true,
 						});
 					}
 					break;
-				}
+				} // End chatMessage case
 
+				// --- New Cases for Chat Actions ---
+				case "clearChatRequest":
+					await this._clearChat();
+					break;
+				case "saveChatRequest":
+					await this._saveChat();
+					break;
+				case "loadChatRequest":
+					await this._loadChat();
+					break;
+
+				// --- Webview Ready Case ---
 				case "webviewReady": {
 					console.log("Webview reported ready.");
 					this._updateWebviewKeyList(); // Send initial key list
+					// Send existing chat history on ready
+					const historyForWebview: ChatMessage[] = this._chatHistory.map(
+						(entry) => ({
+							sender: entry.role === "user" ? "User" : "Gemini",
+							text: entry.parts[0].text,
+							className: entry.role === "user" ? "user-message" : "ai-message",
+						})
+					);
+					this.postMessageToWebview({
+						type: "restoreHistory",
+						value: historyForWebview,
+					});
 					break;
 				}
 			}
@@ -499,11 +690,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	// --- HTML Generation ---
 	private _getHtmlForWebview(webview: vscode.Webview): string {
-		// --- Get URIs for resources ---
 		const scriptUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(this._extensionUri, "dist", "webview.js")
 		);
-		// Get URI for the CSS file
+
 		const stylesUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(
 				this._extensionUri,
@@ -514,6 +704,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			)
 		);
 
+		// Get URIs for Codicons
+		const codiconsUri = webview.asWebviewUri(
+			vscode.Uri.joinPath(
+				this._extensionUri,
+				"node_modules",
+				"@vscode/codicons",
+				"dist",
+				"codicon.css"
+			)
+		);
+
 		const nonce = getNonce();
 
 		return `<!DOCTYPE html>
@@ -521,47 +722,53 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    
-                    <!-- 
-                      Use a content security policy to only allow loading specific resources in the webview
-                    -->
                     <meta http-equiv="Content-Security-Policy" content="
-                        default-src 'none'; 
-                        style-src ${webview.cspSource}; 
-                        img-src ${webview.cspSource} https: data:; 
+                        default-src 'none';
+                        style-src ${webview.cspSource} 'unsafe-inline'; 
+                        font-src ${webview.cspSource};
+                        img-src ${webview.cspSource} https: data:;
                         script-src 'nonce-${nonce}';
-                        font-src ${webview.cspSource}; 
                         connect-src 'none';
                     ">
-                    
-                    <!-- Link the external CSS file -->
                     <link href="${stylesUri}" rel="stylesheet">
-
-                     <title>Minovative Mind Chat</title>
+                    <link href="${codiconsUri}" rel="stylesheet" /> 
+                    <title>Minovative Mind Chat</title>
                 </head>
                 <body>
-                    <h1>Chat</h1>
+                    <!-- Chat Area -->
+                    <div class="chat-controls">
+                       <h1>Chat</h1>
+                        <div>
+                            <button id="save-chat-button" title="Save Chat"><i class="codicon codicon-save"></i></button>
+                            <button id="load-chat-button" title="Load Chat"><i class="codicon codicon-folder-opened"></i></button>
+                            <button id="clear-chat-button" title="Clear Chat"><i class="codicon codicon-clear-all"></i></button>
+                        </div>
+                    </div>
                     <div id="chat-container">
                         <!-- Chat messages will appear here -->
                     </div>
                     <div id="input-container">
                         <textarea id="chat-input" rows="3" placeholder="Enter your message..."></textarea>
-                        <button id="send-button">Send</button>
+                        <button id="send-button" title="Send Message"><i class="codicon codicon-send"></i></button>
                     </div>
 
+                     <!-- Status Area -->
+                     <div id="status-area"></div> 
+
+                    <!-- API Key Management -->
                     <div class="section">
                         <h2>API Key Management</h2>
                         <div class="key-management-controls">
-                            <button id="prev-key-button" title="Previous Key" disabled><</button>
-                            <span id="current-key-display">No keys stored</span>
-                            <button id="next-key-button" title="Next Key" disabled>></button>
-                            <button id="delete-key-button" title="Delete Current Key" disabled>Delete</button>
+                             <button id="prev-key-button" title="Previous Key" disabled><i class="codicon codicon-chevron-left"></i></button>
+                             <span id="current-key-display">No keys stored</span>
+                            <button id="next-key-button" title="Next Key" disabled><i class="codicon codicon-chevron-right"></i></button>
+                            <button id="delete-key-button" title="Delete Current Key" disabled><i class="codicon codicon-trash"></i></button>
                         </div>
-                         <div id="api-key-status">Please add an API key.</div> <!-- General status -->
+                         <div id="api-key-status">Please add an API key.</div> 
 
                         <div class="add-key-container">
                             <input type="password" id="add-key-input" placeholder="Add new Gemini API Key">
-                            <button id="add-key-button">Add Key</button>
+                            <button id="add-key-button" title="Add API Key"><i class="codicon codicon-add"></i></button>
                         </div>
                         <p><small>Keys are stored securely using VS Code SecretStorage.</small></p>
                     </div>

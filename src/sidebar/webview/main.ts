@@ -1,6 +1,5 @@
 // src/sidebar/webview/main.ts
 
-// Type definition for the VS Code API provided by acquireVsCodeApi
 interface VsCodeApi {
 	postMessage(message: any): void;
 	getState(): any;
@@ -41,21 +40,29 @@ const currentKeyDisplay = document.getElementById(
 const apiKeyStatusDiv = document.getElementById(
 	"api-key-status"
 ) as HTMLDivElement | null;
-const saveKeyButton = document.getElementById(
-	"save-key-button"
+// Chat Action Buttons
+const saveChatButton = document.getElementById(
+	"save-chat-button"
 ) as HTMLButtonElement | null;
-const apiKeyInput = document.getElementById(
-	"api-key-input"
-) as HTMLInputElement | null;
+const loadChatButton = document.getElementById(
+	"load-chat-button"
+) as HTMLButtonElement | null;
+const clearChatButton = document.getElementById(
+	"clear-chat-button"
+) as HTMLButtonElement | null;
+// Status Area
+const statusArea = document.getElementById(
+	"status-area"
+) as HTMLDivElement | null;
 
 // State
-let isApiKeySet = false; // True if at least one key exists and is active
+let isApiKeySet = false;
 let isLoading = false;
-let totalKeys = 0; // Cache total number of keys
+let totalKeys = 0;
 
 console.log("Webview script loaded.");
 
-// Check for essential elements
+// Check for essential elements (now includes new buttons)
 if (
 	!sendButton ||
 	!chatInput ||
@@ -66,7 +73,11 @@ if (
 	!nextKeyButton ||
 	!deleteKeyButton ||
 	!currentKeyDisplay ||
-	!apiKeyStatusDiv
+	!apiKeyStatusDiv ||
+	!saveChatButton ||
+	!loadChatButton ||
+	!clearChatButton ||
+	!statusArea // Add statusArea check
 ) {
 	console.error("Required DOM elements not found!");
 	const body = document.querySelector("body");
@@ -78,104 +89,101 @@ if (
 	// --- Event Listeners ---
 	sendButton.addEventListener("click", sendMessage);
 	chatInput.addEventListener("keydown", (e) => {
-		// Send on Enter, newline on Shift+Enter
 		if (e.key === "Enter" && !e.shiftKey) {
-			e.preventDefault(); // Prevent default newline insertion
+			e.preventDefault();
 			sendMessage();
 		}
 	});
 
-	// Key Management Listeners
+	// Key Management Listeners (keep existing)
 	addKeyButton.addEventListener("click", () => {
 		const apiKey = addKeyInput.value.trim();
 		if (apiKey) {
 			vscode.postMessage({ type: "addApiKey", value: apiKey });
 			addKeyInput.value = "";
+			updateApiKeyStatus("Adding key..."); // Give immediate feedback
 		} else {
-			// Keep this error message for immediate feedback
 			updateApiKeyStatus("Error: Please enter an API key to add.");
 		}
 	});
-
 	addKeyInput.addEventListener("keydown", (e) => {
 		if (e.key === "Enter") {
 			e.preventDefault();
-			addKeyButton.click(); // Trigger button click on Enter
+			addKeyButton.click();
 		}
 	});
-
 	prevKeyButton.addEventListener("click", () => {
 		vscode.postMessage({ type: "switchToPrevKey" });
 		updateApiKeyStatus("Switching key...");
 	});
-
 	nextKeyButton.addEventListener("click", () => {
 		vscode.postMessage({ type: "switchToNextKey" });
 		updateApiKeyStatus("Switching key...");
 	});
-
 	deleteKeyButton.addEventListener("click", () => {
-		// --- DIAGNOSTIC LOG (Webview) ---
 		console.log(
-			"[Webview] Delete button clicked. Sending 'requestDeleteConfirmation' message."
+			"[Webview] Delete button clicked. Sending 'requestDeleteConfirmation'."
 		);
-		// REMOVE the confirm() call entirely
-		// Just send a request to the provider to show the confirmation
 		vscode.postMessage({ type: "requestDeleteConfirmation" });
-		// Optional: Give some immediate feedback, though the modal dialog is better
-		// updateApiKeyStatus('Waiting for confirmation...');
+		updateApiKeyStatus("Waiting for delete confirmation..."); // Immediate feedback
 	});
 
-	saveKeyButton?.addEventListener("click", () => {
-		const apiKey = apiKeyInput?.value.trim();
-		if (apiKey && apiKeyInput) {
-			vscode.postMessage({ type: "apiKeyUpdate", value: apiKey });
-			apiKeyInput.value = "";
-			updateApiKeyStatus("Attempting to save key...");
-		} else {
-			updateApiKeyStatus("Error: Please enter an API key.");
-		}
+	// New Chat Action Listeners
+	clearChatButton.addEventListener("click", () => {
+		vscode.postMessage({ type: "clearChatRequest" });
+		// Don't clear UI immediately, wait for confirmation message ('chatCleared')
+	});
+	saveChatButton.addEventListener("click", () => {
+		vscode.postMessage({ type: "saveChatRequest" });
+		updateStatus("Requesting chat save..."); // Use general status area
+	});
+	loadChatButton.addEventListener("click", () => {
+		vscode.postMessage({ type: "loadChatRequest" });
+		updateStatus("Requesting chat load..."); // Use general status area
 	});
 
 	// --- Core Functions ---
 	function sendMessage() {
+		// ... (keep existing sendMessage logic, but remove the apiKeyStatus update)
 		if (isLoading) {
 			return;
-		} // Prevent sending multiple messages while waiting
-
+		}
 		const message = chatInput?.value.trim();
-
 		if (chatInput) {
 			chatInput.value = "";
-		} // Clear input immediately after getting value
-
+		} // Clear input *after* getting value
 		if (message) {
-			// Check if message had content *before* clearing
 			if (!isApiKeySet) {
 				appendMessage(
 					"System",
-					"Please save a valid API Key first.",
-					"system-message"
+					"Please add or select a valid API Key first.",
+					"error-message" // Use error class
 				);
 				return;
 			}
-			appendMessage("You", message, "user-message"); // Add user message to chat
+			appendMessage("You", message, "user-message");
 			vscode.postMessage({ type: "chatMessage", value: message });
-			// chatInput.value = ""; // <--- REMOVE FROM HERE ---
-			setLoadingState(true); // Show loading indicator
+			setLoadingState(true);
 		} else {
-			// If message was empty after trim, do nothing (or maybe give feedback)
 			console.log("Empty message submitted.");
 		}
 	}
 
 	function setLoadingState(loading: boolean) {
+		// ... (keep existing setLoadingState logic, but use correct element IDs/classes)
 		isLoading = loading;
 		if (sendButton && chatInput) {
 			sendButton.disabled = loading;
 			chatInput.disabled = loading;
 			if (loading) {
-				appendMessage("Gemini", "Thinking...", "loading-message");
+				// Ensure we don't add multiple "Thinking..." messages
+				const lastMessage = chatContainer?.lastElementChild;
+				if (
+					!lastMessage ||
+					!lastMessage.classList.contains("loading-message")
+				) {
+					appendMessage("Gemini", "Thinking...", "loading-message");
+				}
 			} else {
 				// Remove "Thinking..." message if it's the last one
 				const lastMessage = chatContainer?.lastElementChild;
@@ -189,32 +197,33 @@ if (
 	// --- Message Handling from Extension Host ---
 	window.addEventListener("message", (event: MessageEvent) => {
 		const message = event.data;
-		console.log("Message received from extension:", message);
+		console.log("Message received from extension:", message.type); // Log type
 
 		switch (message.type) {
 			case "aiResponse": {
-				setLoadingState(false); // Hide loading indicator
-				// Simple check if response indicates an error
-				const isError =
-					typeof message.value === "string" &&
-					message.value.toLowerCase().startsWith("error:");
+				setLoadingState(false);
 				appendMessage(
 					"Gemini",
 					message.value,
-					isError ? "error-message" : "ai-message"
+					message.isError ? "error-message" : "ai-message"
 				);
 				break;
 			}
 			case "apiKeyStatus": {
-				// General status updates
 				if (typeof message.value === "string") {
-					// ALWAYS update the status div with the message from the provider
 					updateApiKeyStatus(message.value);
 				}
 				break;
 			}
+			case "statusUpdate": {
+				// Handle general status updates
+				if (typeof message.value === "string") {
+					updateStatus(message.value);
+				}
+				break;
+			}
 			case "updateKeyList": {
-				// Handle the detailed key list update
+				// ... (keep existing key list update logic)
 				if (message.value && Array.isArray(message.value.keys)) {
 					const updateData = message.value as {
 						keys: any[];
@@ -222,7 +231,7 @@ if (
 						totalKeys: number;
 					};
 					totalKeys = updateData.totalKeys;
-					isApiKeySet = updateData.activeIndex !== -1; // API is set if there's an active key
+					isApiKeySet = updateData.activeIndex !== -1;
 
 					if (
 						updateData.activeIndex !== -1 &&
@@ -230,25 +239,56 @@ if (
 					) {
 						currentKeyDisplay.textContent =
 							updateData.keys[updateData.activeIndex].maskedKey;
-						apiKeyStatusDiv.textContent = `Using key ${
-							updateData.activeIndex + 1
-						} of ${totalKeys}.`;
-						apiKeyStatusDiv.style.color = "var(--vscode-descriptionForeground)"; // Reset color
+						updateApiKeyStatus(
+							`Using key ${updateData.activeIndex + 1} of ${totalKeys}.`
+						); // Use the dedicated status div
 					} else {
 						currentKeyDisplay.textContent = "No active key";
-						apiKeyStatusDiv.textContent = "Please add an API key.";
-						apiKeyStatusDiv.style.color = "var(--vscode-errorForeground)";
+						updateApiKeyStatus("Please add an API key.");
+						apiKeyStatusDiv.style.color = "var(--vscode-errorForeground)"; // Set error color here too
 					}
 
-					// Enable/disable buttons based on state
 					prevKeyButton.disabled = totalKeys <= 1;
 					nextKeyButton.disabled = totalKeys <= 1;
-					deleteKeyButton.disabled = updateData.activeIndex === -1; // Disable if no key active
-					// Enable chat input only if a key is set and active
+					deleteKeyButton.disabled = updateData.activeIndex === -1;
 					chatInput.disabled = !isApiKeySet || isLoading;
 					sendButton.disabled = !isApiKeySet || isLoading;
+					// Enable chat action buttons if there's history potentially
+					clearChatButton.disabled = chatContainer.childElementCount === 0;
+					saveChatButton.disabled = chatContainer.childElementCount === 0;
+					// Load button is always enabled
 				} else {
 					console.error("Invalid 'updateKeyList' message received:", message);
+				}
+				break;
+			}
+			// --- New Handlers ---
+			case "chatCleared": {
+				if (chatContainer) {
+					chatContainer.innerHTML = ""; // Clear the display
+				}
+				appendMessage("System", "Chat history cleared.", "system-message");
+				// Update button states after clearing
+				clearChatButton.disabled = true;
+				saveChatButton.disabled = true;
+				break;
+			}
+			case "restoreHistory": {
+				if (chatContainer && Array.isArray(message.value)) {
+					chatContainer.innerHTML = ""; // Clear existing messages first
+					message.value.forEach((msg: any) => {
+						// Add type safety check if possible
+						if (msg && msg.sender && msg.text) {
+							appendMessage(msg.sender, msg.text, msg.className || "");
+						}
+					});
+					updateStatus("Chat history restored.");
+					// Update button states after loading
+					const hasMessages = chatContainer.childElementCount > 0;
+					clearChatButton.disabled = !hasMessages;
+					saveChatButton.disabled = !hasMessages;
+				} else {
+					updateStatus("Error: Failed to restore chat history format.");
 				}
 				break;
 			}
@@ -258,85 +298,124 @@ if (
 	// --- Helper Functions ---
 	function appendMessage(sender: string, text: string, className: string = "") {
 		if (chatContainer) {
-			// Remove previous loading message before adding new message
+			// Remove previous loading message *only* if this isn't another loading msg
 			if (className !== "loading-message") {
 				const lastMessage = chatContainer.lastElementChild;
 				if (lastMessage && lastMessage.classList.contains("loading-message")) {
 					lastMessage.remove();
 				}
+			} else if (chatContainer.querySelector(".loading-message")) {
+				// If a loading message already exists, don't add another one
+				return;
 			}
 
-			const messageElement = document.createElement("p");
+			const messageElement = document.createElement("div"); // Use div for easier styling/structure
+			messageElement.classList.add("message");
 			if (className) {
 				messageElement.classList.add(className);
 			}
-			// Basic sanitization (replace < and > to prevent simple HTML injection)
-			// Consider a more robust library (like DOMPurify) if handling complex/untrusted HTML
-			const sanitizedText = text.replace(/</g, "<").replace(/>/g, ">");
-			// Convert markdown-like newlines (\n) to <br> tags for display
-			const formattedText = sanitizedText.replace(/\n/g, "<br>");
 
-			messageElement.innerHTML = `<strong>${sender}:</strong> ${formattedText}`;
+			const senderElement = document.createElement("strong");
+			senderElement.textContent = `${sender}: `;
+			messageElement.appendChild(senderElement);
+
+			const textElement = document.createElement("span");
+			// Basic sanitization
+			const sanitizedText = text.replace(/</g, "<").replace(/>/g, ">");
+			// Convert markdown-like newlines (\n) to <br> for display
+			textElement.innerHTML = sanitizedText.replace(/\n/g, "<br>");
+			messageElement.appendChild(textElement);
+
 			chatContainer.appendChild(messageElement);
-			// Scroll to the bottom only if the user isn't scrolled up
-			if (
-				chatContainer.scrollHeight - chatContainer.scrollTop <=
-				chatContainer.clientHeight + 100
-			) {
+
+			// Scroll logic (only scroll if near the bottom)
+			const isScrolledToBottom =
+				chatContainer.scrollHeight - chatContainer.clientHeight <=
+				chatContainer.scrollTop + 50; // Add some tolerance
+
+			if (isScrolledToBottom || className === "user-message") {
+				// Always scroll for user's own messages
 				chatContainer.scrollTop = chatContainer.scrollHeight;
+			}
+
+			// Update button states based on whether messages exist
+			const hasMessages = chatContainer.childElementCount > 0;
+			if (clearChatButton && saveChatButton) {
+				clearChatButton.disabled = !hasMessages;
+				saveChatButton.disabled = !hasMessages;
 			}
 		}
 	}
 
 	function updateApiKeyStatus(text: string) {
-		// This function now *always* displays the text received
-		// in the apiKeyStatus div. Styling is applied based on content.
+		// ... (keep existing updateApiKeyStatus logic)
 		if (apiKeyStatusDiv) {
 			const sanitizedText = text.replace(/</g, "<").replace(/>/g, ">");
-			apiKeyStatusDiv.textContent = sanitizedText; // Set the text directly
+			apiKeyStatusDiv.textContent = sanitizedText;
 
-			// Apply color based on common prefixes/keywords
 			const lowerText = text.toLowerCase();
 			if (lowerText.startsWith("error:")) {
 				apiKeyStatusDiv.style.color = "var(--vscode-errorForeground)";
 			} else if (
 				lowerText.startsWith("info:") ||
 				lowerText.includes("success") ||
-				lowerText.includes(" key added") ||
-				lowerText.includes(" deleted")
+				lowerText.includes("key added") || // More specific checks
+				lowerText.includes("key deleted") ||
+				lowerText.includes("using key") ||
+				lowerText.startsWith("waiting")
 			) {
-				apiKeyStatusDiv.style.color = "var(--vscode-editorInfo-foreground)"; // Use info color for success/info
+				apiKeyStatusDiv.style.color = "var(--vscode-editorInfo-foreground)";
 			} else {
-				apiKeyStatusDiv.style.color = "var(--vscode-descriptionForeground)"; // Default color
+				apiKeyStatusDiv.style.color = "var(--vscode-descriptionForeground)";
 			}
+		}
+	}
+
+	// New function for general status updates
+	function updateStatus(text: string, isError = false) {
+		if (statusArea) {
+			const sanitizedText = text.replace(/</g, "<").replace(/>/g, ">");
+			statusArea.textContent = sanitizedText;
+			statusArea.style.color = isError
+				? "var(--vscode-errorForeground)"
+				: "var(--vscode-descriptionForeground)";
+			// Optional: fade out the message after a few seconds
+			setTimeout(() => {
+				if (statusArea.textContent === sanitizedText) {
+					// Avoid clearing if a new message arrived
+					statusArea.textContent = "";
+				}
+			}, 5000); // Clear after 5 seconds
 		}
 	}
 
 	// --- Initialization ---
 	function initializeWebview() {
-		appendMessage(
-			"System",
-			"Welcome! Manage Gemini API keys below and start chatting.",
-			"system-message"
-		);
-		vscode.postMessage({ type: "webviewReady" }); // Inform extension host
+		// Don't add welcome message here, let history restore handle it or show empty state
+		vscode.postMessage({ type: "webviewReady" });
 		console.log("Webview sent ready message.");
-		updateApiKeyStatus("Initializing key status..."); // Initial status check request
-		chatInput?.focus(); // Focus input field on load
+		updateApiKeyStatus("Initializing..."); // Request initial status
+		chatInput?.focus();
 
-		// Initial button state
 		if (
 			prevKeyButton &&
 			nextKeyButton &&
 			deleteKeyButton &&
 			chatInput &&
-			sendButton
+			sendButton &&
+			clearChatButton &&
+			saveChatButton &&
+			loadChatButton
 		) {
+			// Initial button states
 			prevKeyButton.disabled = true;
 			nextKeyButton.disabled = true;
 			deleteKeyButton.disabled = true;
 			chatInput.disabled = true;
 			sendButton.disabled = true;
+			clearChatButton.disabled = true; // Disabled until history loads
+			saveChatButton.disabled = true; // Disabled until history loads
+			loadChatButton.disabled = false; // Load is always possible
 		}
 	}
 

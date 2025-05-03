@@ -1,8 +1,13 @@
+/* Keep all existing styles */
 body {
 	font-family: var(--vscode-font-family, sans-serif);
 	padding: 0 10px 10px 10px;
 	color: var(--vscode-editor-foreground);
 	background-color: var(--vscode-sideBar-background);
+	display: flex; /* Use flexbox for layout */
+	flex-direction: column;
+	height: 100vh; /* Make body take full viewport height */
+	box-sizing: border-box;
 }
 h1,
 h2 {
@@ -11,45 +16,87 @@ h2 {
 		var(--vscode-editorWidget-border, var(--vscode-contrastBorder));
 	padding-bottom: 5px;
 	font-weight: normal;
-	margin-top: 15px;
+	margin-top: 15px; /* Keep margin for sections */
 	margin-bottom: 10px;
 }
-h1:first-of-type {
+/* Special case for h1 in chat controls */
+.chat-controls h1 {
 	margin-top: 0;
+	margin-bottom: 0;
+	border-bottom: none;
+	flex-grow: 1; /* Allow title to take space */
 }
+
+.chat-controls {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 5px 0; /* Add some padding */
+	border-bottom: 1px solid var(--vscode-input-border); /* Separator */
+	flex-shrink: 0; /* Prevent shrinking */
+}
+.chat-controls button {
+	padding: 2px 5px; /* Smaller padding for icon buttons */
+	background: none;
+	border: none;
+	color: var(--vscode-icon-foreground); /* Use icon color */
+	margin-left: 4px;
+}
+.chat-controls button:hover {
+	background-color: var(--vscode-toolbar-hoverBackground);
+}
+
 #chat-container {
-	margin-bottom: 10px;
-	max-height: calc(100vh - 300px); /* Adjust dynamically maybe? */
-	height: 45vh;
+	flex-grow: 1; /* Allow chat to take remaining vertical space */
 	overflow-y: auto;
 	border: 1px solid var(--vscode-input-border, var(--vscode-contrastBorder));
-	padding: 5px;
+	padding: 8px; /* Slightly more padding */
 	background-color: var(--vscode-editor-background);
+	margin-top: 5px; /* Space below chat controls */
+	margin-bottom: 10px; /* Space above input */
 }
-#chat-container p {
-	margin: 3px 0;
+
+/* Style individual messages */
+.message {
+	margin-bottom: 8px; /* Space between messages */
+	padding: 6px 8px;
+	border-radius: 4px;
 	word-wrap: break-word;
+	line-height: 1.4; /* Improve readability */
 }
-#chat-container p.user-message strong {
-	color: var(--vscode-terminal-ansiBrightBlue);
+.message strong {
+	margin-right: 5px; /* Space after sender name */
 }
-#chat-container p.ai-message strong {
-	color: var(--vscode-terminal-ansiBrightGreen);
+.user-message {
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
 }
-#chat-container p.system-message strong {
-	color: var(--vscode-descriptionForeground);
+.ai-message {
+	background-color: var(
+		--vscode-textBlockQuote-background,
+		var(--vscode-editorWidget-background)
+	); /* Use a slightly different background */
 }
-#chat-container p.error-message {
-	color: var(--vscode-errorForeground);
-}
-#chat-container p.loading-message {
+.system-message,
+.loading-message {
 	color: var(--vscode-descriptionForeground);
 	font-style: italic;
+	text-align: center;
+	background: none;
+	padding: 2px;
+	margin-top: 10px;
+	margin-bottom: 10px;
+}
+.error-message {
+	background-color: rgba(255, 100, 100, 0.1); /* Faint red background */
+	color: var(--vscode-errorForeground);
+	border-left: 3px solid var(--vscode-errorForeground); /* Error indicator */
 }
 
 #input-container {
 	display: flex;
-	margin-bottom: 15px;
+	margin-bottom: 10px; /* Reduced margin */
+	flex-shrink: 0; /* Prevent shrinking */
 }
 #chat-input {
 	flex-grow: 1;
@@ -57,42 +104,58 @@ h1:first-of-type {
 	background-color: var(--vscode-input-background);
 	border: 1px solid var(--vscode-input-border);
 	color: var(--vscode-input-foreground);
-	padding: 6px;
+	padding: 6px 8px; /* Consistent padding */
 	font-family: var(--vscode-editor-font-family, monospace);
 	font-size: var(--vscode-editor-font-size);
+	resize: none; /* Disable manual resize */
 }
-button {
-	cursor: pointer;
+#input-container button {
+	/* Style the send button */
+	padding: 6px 10px;
 	background-color: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
 	border: 1px solid var(--vscode-button-border, transparent);
-	padding: 6px 12px;
-	font-size: var(--vscode-font-size);
 }
-button:hover {
+#input-container button:hover {
 	background-color: var(--vscode-button-hoverBackground);
 }
-button:disabled {
+#input-container button:disabled {
 	opacity: 0.6;
 	cursor: not-allowed;
 }
 
+#status-area {
+	font-size: 0.9em;
+	color: var(--vscode-descriptionForeground);
+	min-height: 1.2em; /* Reserve space */
+	text-align: center;
+	padding: 2px 0 5px 0; /* Padding top/bottom */
+	flex-shrink: 0; /* Prevent shrinking */
+}
+
 .section {
-	margin-top: 15px;
+	margin-top: 10px; /* Reduced margin */
 	border-top: 1px solid
 		var(--vscode-editorWidget-border, var(--vscode-contrastBorder));
 	padding-top: 10px;
+	flex-shrink: 0; /* Prevent shrinking */
 }
 .key-management-controls {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	margin-bottom: 8px;
-	flex-wrap: wrap;
+	flex-wrap: nowrap; /* Prevent wrapping */
 }
 .key-management-controls button {
-	padding: 4px 8px;
-	font-size: 0.9em;
+	padding: 4px 6px; /* Slightly smaller padding */
+	font-size: 1em; /* Make icons normal size */
+	background: none;
+	border: none;
+	color: var(--vscode-icon-foreground);
+}
+.key-management-controls button:hover {
+	background-color: var(--vscode-toolbar-hoverBackground);
 }
 .key-management-controls span {
 	font-size: 0.9em;
@@ -100,6 +163,9 @@ button:disabled {
 	margin: 0 5px;
 	text-align: center;
 	flex-grow: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 .add-key-container {
 	display: flex;
@@ -111,15 +177,31 @@ button:disabled {
 	background-color: var(--vscode-input-background);
 	border: 1px solid var(--vscode-input-border);
 	color: var(--vscode-input-foreground);
-	padding: 6px;
+	padding: 6px 8px; /* Consistent padding */
 }
 #add-key-button {
-	padding: 6px 10px;
-} /* Match chat send button */
+	/* Style the add key button */
+	padding: 6px 8px;
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: 1px solid var(--vscode-button-border, transparent);
+}
+#add-key-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
 #api-key-status {
 	font-size: 0.9em;
 	margin-top: 5px;
 	color: var(--vscode-descriptionForeground);
 	min-height: 1.2em;
 	text-align: center;
+}
+.section p small {
+	font-size: 0.85em;
+	color: var(--vscode-descriptionForeground);
+}
+
+/* Codicon specific adjustments if needed */
+.codicon {
+	vertical-align: middle;
 }
