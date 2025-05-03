@@ -1,26 +1,29 @@
 // src/sidebar/SidebarProvider.ts
+
 import * as vscode from "vscode";
 import { getNonce } from "../utilities/nonce";
 import { generateContent, resetClient } from "../ai/gemini";
 import { scanWorkspace } from "../context/workspaceScanner";
 import { buildContextString } from "../context/contextBuilder";
-import * as path from "path"; // Import path for joining paths correctly
 import {
 	ExecutionPlan,
+	PlanStep,
+	PlanStepAction,
 	isCreateDirectoryStep,
 	isCreateFileStep,
 	isModifyFileStep,
+	isRunCommandStep, // <-- Import the new type guard
 	parseAndValidatePlan,
-	PlanStepAction,
 } from "../ai/workflowPlanner";
+import * as path from "path";
 
 // Secret storage keys
-const GEMINI_API_KEYS_LIST_SECRET_KEY = "geminiApiKeysList"; // Stores array of key strings
-const GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY = "geminiActiveApiKeyIndex"; // Stores index (as string)
+const GEMINI_API_KEYS_LIST_SECRET_KEY = "geminiApiKeysList";
+const GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY = "geminiActiveApiKeyIndex";
 
 // Type for the data sent to the webview regarding keys
 interface ApiKeyInfo {
-	maskedKey: string; // e.g., "Key ending in ...1234"
+	maskedKey: string;
 	index: number;
 	isActive: boolean;
 }
@@ -30,11 +33,11 @@ interface KeyUpdateData {
 	totalKeys: number;
 }
 
-// Define the structure for saving/loading chat history (matches webview expectation)
+// Define the structure for saving/loading chat history
 interface ChatMessage {
-	sender: "User" | "Gemini" | "System"; // Keep sender simple for saving
+	sender: "User" | "Gemini" | "System";
 	text: string;
-	className: string; // Keep class for potential styling on load
+	className: string;
 }
 
 // Structure matching Google's Content type for internal use
@@ -49,10 +52,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	private _view?: vscode.WebviewView;
 	private readonly _extensionUri: vscode.Uri;
 	private readonly _secretStorage: vscode.SecretStorage;
-	private _apiKeyList: string[] = []; // Cache the list of keys
-	private _activeKeyIndex: number = -1; // Cache the active index, -1 if none
-	private _chatHistory: HistoryEntry[] = []; // Store chat history using Gemini structure
-	private _currentPlan: ExecutionPlan | null = null; // Store the plan awaiting confirmation or execution
+	private _apiKeyList: string[] = [];
+	private _activeKeyIndex: number = -1;
+	private _chatHistory: HistoryEntry[] = [];
+	private _currentPlan: ExecutionPlan | null = null;
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri,
@@ -61,22 +64,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this._extensionUri = _extensionUri_in;
 		this._secretStorage = context.secrets;
 
-		// Listen for changes in secret storage
 		context.secrets.onDidChange((e) => {
 			if (
 				e.key === GEMINI_API_KEYS_LIST_SECRET_KEY ||
 				e.key === GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY
 			) {
 				console.log(`Secret key changed: ${e.key}. Reloading keys.`);
-				this._loadKeysFromStorage(); // Reload keys if secrets change externally
+				this._loadKeysFromStorage();
 			}
 		});
-		this._loadKeysFromStorage(); // Load initial keys on activation
+		this._loadKeysFromStorage();
 	}
 
 	// --- Key Management Logic ---
 
-	/** Loads keys and active index from secret storage and updates cache */
 	private async _loadKeysFromStorage() {
 		try {
 			const keysJson = await this._secretStorage.get(
@@ -89,22 +90,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 			let potentialIndex = activeIndexStr ? parseInt(activeIndexStr, 10) : -1;
 
-			// Validate index against the newly loaded list
 			if (potentialIndex < 0 || potentialIndex >= this._apiKeyList.length) {
-				potentialIndex = this._apiKeyList.length > 0 ? 0 : -1; // Default to 0 if keys exist, else -1
+				potentialIndex = this._apiKeyList.length > 0 ? 0 : -1;
 				if (
 					potentialIndex !== -1 &&
 					potentialIndex !==
 						(activeIndexStr ? parseInt(activeIndexStr, 10) : -2)
 				) {
-					// Only save if we actually changed it from a stored value
 					await this._secretStorage.store(
 						GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY,
 						String(potentialIndex)
 					);
 					console.log(`Corrected active index to ${potentialIndex}`);
 				} else if (potentialIndex === -1 && activeIndexStr !== null) {
-					// If we had a stored index but now have no keys, clear the stored index
 					await this._secretStorage.delete(
 						GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY
 					);
@@ -118,18 +116,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			console.log(
 				`Loaded ${this._apiKeyList.length} keys. Active index: ${this._activeKeyIndex}`
 			);
-			resetClient(); // Reset Gemini client as keys/active key might have changed
-			this._updateWebviewKeyList(); // Notify webview
+			resetClient();
+			this._updateWebviewKeyList();
 		} catch (error) {
 			console.error("Error loading API keys from storage:", error);
 			this._apiKeyList = [];
 			this._activeKeyIndex = -1;
 			vscode.window.showErrorMessage("Failed to load API keys.");
-			this._updateWebviewKeyList(); // Notify webview even on error (empty list)
+			this._updateWebviewKeyList();
 		}
 	}
 
-	/** Saves the current key list and active index to secret storage */
 	private async _saveKeysToStorage() {
 		let saveError: any = null;
 		try {
@@ -137,14 +134,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				GEMINI_API_KEYS_LIST_SECRET_KEY,
 				JSON.stringify(this._apiKeyList)
 			);
-			// Only store active index if there are keys
 			if (this._activeKeyIndex !== -1) {
 				await this._secretStorage.store(
 					GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY,
 					String(this._activeKeyIndex)
 				);
 			} else {
-				// If no keys, ensure the active index is also removed from storage
 				await this._secretStorage.delete(
 					GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY
 				);
@@ -153,16 +148,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			console.log(
 				`Saved ${this._apiKeyList.length} keys. Active index: ${this._activeKeyIndex}`
 			);
-			resetClient(); // Reset Gemini client as keys/active key might have changed
+			resetClient();
 		} catch (error) {
-			saveError = error; // Store error to handle after UI update
+			saveError = error;
 			console.error("Error saving API keys to storage:", error);
-			// The webview status message will be handled by _updateWebviewKeyList
 		}
-		// Update the webview *after* attempting the save, regardless of success/failure.
-		// This ensures the webview reflects the cached state (_apiKeyList, _activeKeyIndex).
 		this._updateWebviewKeyList();
-		// If there was an error during save, notify the user via status AFTER updating the list display
 		if (saveError) {
 			this.postMessageToWebview({
 				type: "apiKeyStatus",
@@ -171,7 +162,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	/** Adds a new API key */
 	private async _addApiKey(key: string) {
 		if (this._apiKeyList.includes(key)) {
 			this.postMessageToWebview({
@@ -182,13 +172,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 
 		this._apiKeyList.push(key);
-		if (this._activeKeyIndex === -1) {
-			this._activeKeyIndex = this._apiKeyList.length - 1; // Make the new key active if none were active
-		} else {
-			// If keys already exist and one was active, make the *new* key the active one
-			this._activeKeyIndex = this._apiKeyList.length - 1;
-		}
-		// Save changes BEFORE sending success message
+		this._activeKeyIndex = this._apiKeyList.length - 1; // Make new key active
 		await this._saveKeysToStorage();
 		this.postMessageToWebview({
 			type: "apiKeyStatus",
@@ -196,7 +180,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		});
 	}
 
-	/** Deletes the currently active API key */
 	private async _deleteActiveApiKey() {
 		console.log(
 			`[Minovative Mind] Attempting delete. Current active index: ${this._activeKeyIndex}, Key list length: ${this._apiKeyList.length}`
@@ -215,6 +198,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					this._apiKeyList.length === 0
 						? "Error: Cannot delete, key list is empty."
 						: "Error: No active key selected to delete.",
+				isError: true, // Added for consistency
 			});
 			return;
 		}
@@ -234,13 +218,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		} else if (this._activeKeyIndex >= this._apiKeyList.length) {
 			this._activeKeyIndex = this._apiKeyList.length - 1;
 		}
-		// If index is within bounds after splice, it stays pointing to the *new* element at that index
 
 		console.log(
 			`[Minovative Mind] Key deleted. Old index: ${oldIndex}, New active index: ${this._activeKeyIndex}`
 		);
 
-		await this._saveKeysToStorage(); // This will trigger _updateWebviewKeyList
+		await this._saveKeysToStorage();
 
 		this.postMessageToWebview({
 			type: "apiKeyStatus",
@@ -248,14 +231,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		});
 	}
 
-	/** Switches to the next API key in the list */
 	private async _switchToNextApiKey() {
 		if (this._apiKeyList.length <= 1 || this._activeKeyIndex === -1) {
-			// No other keys or no active key to start with
 			return;
 		}
-		this._activeKeyIndex = (this._activeKeyIndex + 1) % this._apiKeyList.length; // Wrap around
-		await this._saveKeysToStorage(); // Save the new active index
+		this._activeKeyIndex = (this._activeKeyIndex + 1) % this._apiKeyList.length;
+		await this._saveKeysToStorage();
 		const newKey = this._apiKeyList[this._activeKeyIndex];
 		this.postMessageToWebview({
 			type: "apiKeyStatus",
@@ -263,16 +244,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		});
 	}
 
-	/** Switches to the previous API key in the list */
 	private async _switchToPreviousApiKey() {
 		if (this._apiKeyList.length <= 1 || this._activeKeyIndex === -1) {
-			// No other keys or no active key to start with
 			return;
 		}
 		this._activeKeyIndex =
 			(this._activeKeyIndex - 1 + this._apiKeyList.length) %
-			this._apiKeyList.length; // Wrap around
-		await this._saveKeysToStorage(); // Save the new active index
+			this._apiKeyList.length;
+		await this._saveKeysToStorage();
 		const newKey = this._apiKeyList[this._activeKeyIndex];
 		this.postMessageToWebview({
 			type: "apiKeyStatus",
@@ -280,7 +259,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		});
 	}
 
-	/** Sends the current list of keys (masked) and active state to the webview */
 	private _updateWebviewKeyList() {
 		const keyInfos: ApiKeyInfo[] = this._apiKeyList.map((key, index) => ({
 			maskedKey: `Key ...${key.slice(-4)} (${index + 1}/${
@@ -298,7 +276,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.postMessageToWebview({ type: "updateKeyList", value: updateData });
 	}
 
-	/** Gets the currently active API key string */
 	public getActiveApiKey(): string | undefined {
 		if (
 			this._activeKeyIndex >= 0 &&
@@ -313,11 +290,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	private _addHistoryEntry(role: "user" | "model", text: string) {
 		this._chatHistory.push({ role, parts: [{ text }] });
-		// Optional: Add logic here to prune history if it gets too long
-		// e.g., Keep last N messages or last X tokens
-		const MAX_HISTORY_ITEMS = 50; // Arbitrary limit
+		const MAX_HISTORY_ITEMS = 50;
 		if (this._chatHistory.length > MAX_HISTORY_ITEMS) {
-			this._chatHistory.shift(); // Remove oldest message
+			this._chatHistory.shift();
 		}
 	}
 
@@ -328,7 +303,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			type: "statusUpdate",
 			value: "Chat cleared.",
 		});
-		// Re-enable input after clearing chat
 		this.postMessageToWebview({ type: "reenableInput" });
 	}
 
@@ -337,7 +311,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			saveLabel: "Save Chat History",
 			filters: {
 				"JSON Files": ["json"],
-				"Text Files": ["txt"], // Allow saving as plain text too (might lose structure)
+				"Text Files": ["txt"],
 			},
 			defaultUri: vscode.workspace.workspaceFolders
 				? vscode.Uri.joinPath(
@@ -356,11 +330,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					(entry) => ({
 						sender: entry.role === "user" ? "User" : "Gemini",
 						text: entry.parts[0].text,
-						className: entry.role === "user" ? "user-message" : "ai-message", // Simple mapping, could enhance
+						className: entry.role === "user" ? "user-message" : "ai-message",
 					})
 				);
 
-				const contentString = JSON.stringify(saveableHistory, null, 2); // Pretty print JSON
+				const contentString = JSON.stringify(saveableHistory, null, 2);
 				await vscode.workspace.fs.writeFile(
 					fileUri,
 					Buffer.from(contentString, "utf-8")
@@ -408,7 +382,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				const contentString = Buffer.from(contentBytes).toString("utf-8");
 				const loadedData: any = JSON.parse(contentString);
 
-				// Validate and convert back to internal format
 				if (
 					Array.isArray(loadedData) &&
 					loadedData.every(
@@ -418,22 +391,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							typeof item.text === "string" &&
 							(item.sender === "User" ||
 								item.sender === "Gemini" ||
-								item.sender === "System") // Validate sender type
+								item.sender === "System")
 					)
 				) {
-					// Clear current history before loading
-					this._chatHistory = [];
+					this._chatHistory = []; // Clear current history
 					this._chatHistory = loadedData.map(
 						(item: ChatMessage): HistoryEntry => ({
-							role: item.sender === "User" ? "user" : "model", // Basic mapping
+							role: item.sender === "User" ? "user" : "model",
 							parts: [{ text: item.text }],
 						})
 					);
 
-					// Send the loaded history to the webview for display
 					this.postMessageToWebview({
 						type: "restoreHistory",
-						value: loadedData, // Send the saveable format back for display
+						value: loadedData,
 					});
 					this.postMessageToWebview({
 						type: "statusUpdate",
@@ -481,56 +452,46 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			],
 		};
 
-		// Set the HTML content
 		webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-		// Handle messages from the webview
 		webviewView.webview.onDidReceiveMessage(async (data) => {
-			console.log(`[Provider] Message received: ${data.type}`); // Log message type
+			console.log(`[Provider] Message received: ${data.type}`);
 
 			switch (data.type) {
 				// --- Plan Execution Handling ---
 				case "planRequest": {
 					const userRequest = data.value;
-					console.log("Plan request received:", userRequest);
 					const activeKey = this.getActiveApiKey();
 					if (!activeKey) {
 						this.postMessageToWebview({
 							type: "aiResponse",
-							value:
-								"Error: No active API Key set. Please add or select a key to generate a plan.",
+							value: "Error: No active API Key set.",
 							isError: true,
 						});
-						// Re-enable input as the action failed immediately
 						this.postMessageToWebview({ type: "reenableInput" });
 						break;
 					}
-					// Add user's @plan message to history before processing
 					this._addHistoryEntry("user", `@plan ${userRequest}`);
 					await this._handlePlanRequest(userRequest, activeKey);
 					break;
 				}
 				case "confirmPlanExecution": {
-					// The plan data is sent with the message
 					const planToExecute = data.value as ExecutionPlan | null;
-					const currentActiveKey = this.getActiveApiKey(); // Get key again just before execution
-
+					const currentActiveKey = this.getActiveApiKey();
 					if (!currentActiveKey) {
 						this.postMessageToWebview({
 							type: "statusUpdate",
 							value: "Error: Cannot execute plan - no active API key.",
 							isError: true,
 						});
-						// Re-enable input if cancelling due to no key
 						this.postMessageToWebview({ type: "reenableInput" });
 						break;
 					}
 					if (planToExecute) {
-						// Pass the key to the execution method
 						await this._executePlan(planToExecute, currentActiveKey);
 					} else {
 						console.error(
-							"Received confirmPlanExecution but plan data was missing or invalid."
+							"Received confirmPlanExecution but plan data was missing."
 						);
 						this.postMessageToWebview({
 							type: "statusUpdate",
@@ -538,45 +499,35 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								"Error: Failed to confirm plan execution - missing plan data.",
 							isError: true,
 						});
-						// Re-enable input on error
 						this.postMessageToWebview({ type: "reenableInput" });
 					}
 					break;
 				}
 				case "cancelPlanExecution": {
-					console.log("Plan execution cancelled by user.");
-					this._currentPlan = null; // Clear any pending plan
+					this._currentPlan = null;
 					this.postMessageToWebview({
 						type: "statusUpdate",
 						value: "Plan execution cancelled.",
 					});
-					// Add cancellation to history
 					this._addHistoryEntry("model", "Plan execution cancelled by user.");
-					// Re-enable input (Webview handles this now)
-					// this.postMessageToWebview({ type: "reenableInput" }); // Webview manages this on hide
+					this.postMessageToWebview({ type: "reenableInput" });
 					break;
 				}
 
 				// --- Regular Chat Handling ---
 				case "chatMessage": {
 					const userMessage = data.value;
-					console.log(`Regular chat message received: ${userMessage}`);
 					const activeKey = this.getActiveApiKey();
-
 					if (!activeKey) {
 						this.postMessageToWebview({
 							type: "aiResponse",
-							value:
-								"Error: No active API Key set. Please add or select a key.",
+							value: "Error: No active API Key set.",
 							isError: true,
 						});
-						// Re-enable input
 						this.postMessageToWebview({ type: "reenableInput" });
 						return;
 					}
-					// Add user message to history before processing
 					this._addHistoryEntry("user", userMessage);
-					// Handle the regular chat flow
 					await this._handleRegularChat(userMessage, activeKey);
 					break;
 				}
@@ -587,8 +538,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						await this._addApiKey(data.value.trim());
 					}
 					break;
-				case "requestDeleteConfirmation": // Keep this logic
-					await this._requestDeleteConfirmation(); // Refactored for clarity
+				case "requestDeleteConfirmation":
+					await this._requestDeleteConfirmation();
 					break;
 				case "switchToNextKey":
 					await this._switchToNextApiKey();
@@ -606,30 +557,23 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					await this._loadChat();
 					break;
 				case "webviewReady":
-					console.log("Webview reported ready.");
-					this._updateWebviewKeyList(); // Send initial key list state
-					this._restoreChatHistoryToWebview(); // Send existing chat history
-					// No need to re-enable input here, webview does it based on key list state
+					this._updateWebviewKeyList();
+					this._restoreChatHistoryToWebview();
 					break;
-				// 'reenableInput' message from webview is just an acknowledgement
 				case "reenableInput":
-					console.log("Webview reported input re-enabled.");
+					console.log("Webview reported input re-enabled (acknowledged).");
 					break;
-
 				default:
 					console.warn(`Unknown message type received: ${data.type}`);
 			}
 		});
 	}
 
-	/** Helper to restore history to webview */
 	private _restoreChatHistoryToWebview() {
 		const historyForWebview: ChatMessage[] = this._chatHistory.map((entry) => ({
 			sender: entry.role === "user" ? "User" : "Gemini",
 			text: entry.parts[0].text,
-			// Determine className based on role
 			className: entry.role === "user" ? "user-message" : "ai-message",
-			// System messages added directly via postMessage in _handlePlanRequest or _executePlan
 		}));
 		this.postMessageToWebview({
 			type: "restoreHistory",
@@ -637,7 +581,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		});
 	}
 
-	/** Helper to show delete confirmation */
 	private async _requestDeleteConfirmation() {
 		const keyToDeleteIndex = this._activeKeyIndex;
 		let keyIdentifier = "the active key";
@@ -646,7 +589,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		} else {
 			this.postMessageToWebview({
 				type: "apiKeyStatus",
-				value: "Error: Cannot request deletion, no active key selected.",
+				value: "Error: No active key selected to delete.",
 				isError: true,
 			});
 			return;
@@ -659,56 +602,44 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 
 		if (confirmation === "Delete Key") {
-			// Double-check index hasn't changed while dialog was open (unlikely with modal=true)
 			if (this._activeKeyIndex === keyToDeleteIndex) {
-				await this._deleteActiveApiKey(); // Call the actual deletion logic
+				await this._deleteActiveApiKey();
 			} else {
 				this.postMessageToWebview({
 					type: "apiKeyStatus",
 					value: "Info: Active key changed, deletion aborted.",
-					isError: false, // Use info style for this
+					isError: false,
 				});
 			}
 		} else {
 			this.postMessageToWebview({
 				type: "apiKeyStatus",
 				value: "Key deletion cancelled.",
-				isError: false, // Use info style for this
+				isError: false,
 			});
 		}
 	}
 
 	// --- Planning Workflow Logic ---
 
-	/**
-	 * Creates the prompt for requesting an execution plan from the AI.
-	 * @param userRequest The user's high-level feature request.
-	 * @param projectContext The stringified project context.
-	 * @returns The formatted prompt string.
-	 */
 	private _createPlanningPrompt(
 		userRequest: string,
 		projectContext: string
 	): string {
-		// Keep the existing JSON format description
 		const jsonFormatDescription = `
 		{
 			"planDescription": "Brief summary of the overall goal.",
 			"steps": [
 				{
 					"step": 1,
-					"action": "create_directory | create_file | modify_file",
+					"action": "create_directory | create_file | modify_file | run_command",
 					"description": "What this step does.",
-					"path": "relative/path/to/target", // Required for create/modify actions
-					// --- Specific properties based on action ---
-					// For "create_directory": Nothing else needed.
-					// For "create_file":
-					// "content": "Full initial file content (only for simple files, less than 10 lines)"
-					// OR
-					// "generate_prompt": "Detailed prompt for AI to generate content later (for complex files)"
-					// Do NOT include both "content" and "generate_prompt".
-					// For "modify_file":
-					// "modification_prompt": "Detailed prompt describing exact changes needed (e.g., function signature, logic change). This will be used in a subsequent AI call."
+					// --- Properties depend on action ---
+					"path": "relative/path/to/target", // For file/dir actions
+					"content": "...", // For simple create_file
+					"generate_prompt": "...", // For complex create_file
+					"modification_prompt": "...", // For modify_file
+					"command": "full command line string" // For run_command
 				},
 				// ... more steps
 			]
@@ -720,15 +651,16 @@ You are an expert AI programmer assisting within VS Code. Your task is to create
 **Goal:** Generate ONLY a valid JSON object representing the plan. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself.
 
 **Instructions for Plan Generation:**
-1.  **Analyze Request:** Understand the user's high-level request: "${userRequest}".
-2.  **Analyze Context:** Use the project context (file structure, existing code snippets) to determine necessary actions (creating directories/files, modifying existing files). Identify correct relative paths from the workspace root. Ensure paths are valid and do not contain forbidden characters or traverse upwards outside the root.
-3.  **Break Down:** Decompose the request into logical, sequential steps. Each step should represent a single file system operation (create dir, create file, modify file). Number steps starting from 1.
-4.  **Specify Actions & Paths:** For each step, define the 'action' and the relative 'path' from the workspace root.
-5.  **Detail Prompts/Content:**
-    *   For **create_directory**: Only 'path' and 'description' are needed besides 'step' and 'action'.
-    *   For **create_file**: Provide 'path' and 'description'. If the file is very simple (e.g., basic config, < 10 lines), provide the exact raw 'content' (as a string). Otherwise, provide a detailed 'generate_prompt' (as a string) for a *separate* AI call to generate the content later. Do NOT provide both 'content' and 'generate_prompt'. The 'generate_prompt' should be specific enough for another AI call to produce the full file content later.
-    *   For **modify_file**: Provide 'path' and 'description' and a detailed 'modification_prompt' (as a string) describing the exact changes (e.g., "In the 'login' function, add a try-catch block around the API call.", "Import the 'Logger' class from 'src/utils/logger.ts' and add logging statements at the beginning and end of the 'processData' method."). This prompt will be used in a subsequent AI call for the modification.
-6.  **JSON Output:** Format the plan strictly according to the JSON structure below. Ensure correct step numbering.
+1.  Analyze Request: Understand the user's high-level request: "${userRequest}".
+2.  Analyze Context: Use the project context (file structure, existing code, detected package manager via lock files if present) to determine necessary actions. Identify correct relative paths.
+3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
+4.  Specify Actions: For each step, define the 'action'.
+5.  Detail Properties:
+    *   For **create_directory**: Provide 'path' and 'description'.
+    *   For **create_file**: Provide 'path', 'description', and EITHER 'content' (for simple files <10 lines) OR a specific 'generate_prompt'.
+    *   For **modify_file**: Provide 'path', 'description', and a detailed 'modification_prompt'.
+    *   For **run_command**: Provide 'description' and the exact shell 'command' to run (e.g., "npm install @fortawesome/fontawesome-svg-core --save", "yarn add react-router-dom", "pnpm install --save-dev eslint"). **IMPORTANT:** Use this action for installing/adding dependencies *instead* of modifying package.json directly for dependencies. Base the command (npm/yarn/pnpm) on the project's likely package manager (check for lock files mentioned in context). Determine if it's a dev dependency (--save-dev / -D) or regular dependency. Place this step *after* any steps that might require the dependency.
+6.  JSON Output: Format the plan strictly according to the JSON structure below. Ensure correct step numbering and only include relevant properties for each action type.
 
 *** Project Context (Reference Only) ***
 ${projectContext}
@@ -746,24 +678,17 @@ Execution Plan (JSON only):
 `;
 	}
 
-	/**
-	 * Handles the workflow for generating and confirming an execution plan.
-	 * @param userRequest The user's high-level feature request.
-	 * @param apiKey The active API key.
-	 */
 	private async _handlePlanRequest(
 		userRequest: string,
 		apiKey: string
 	): Promise<void> {
-		// Send immediate feedback to webview
 		this.postMessageToWebview({
-			type: "aiResponse", // Reuse aiResponse with isLoading
+			type: "aiResponse",
 			value: "Minovative Mind is generating an execution plan...",
 			isLoading: true,
 		});
-		this._currentPlan = null; // Clear any previous pending plan
+		this._currentPlan = null;
 
-		// 1. Build Context
 		const projectContext = await this._buildProjectContext();
 		if (projectContext.startsWith("[Error")) {
 			this.postMessageToWebview({
@@ -772,57 +697,37 @@ Execution Plan (JSON only):
 				isLoading: false,
 				isError: true,
 			});
-			// Re-enable input
 			this.postMessageToWebview({ type: "reenableInput" });
 			return;
 		}
 
-		// 2. Create Planning Prompt
 		const planningPrompt = this._createPlanningPrompt(
 			userRequest,
 			projectContext
 		);
 
-		// --- DIAGNOSTIC LOG (optional) ---
-		// console.log("--- Sending Planning Prompt to Gemini ---");
-		// console.log(planningPrompt);
-		// console.log("--- End Planning Prompt ---");
-
-		// 3. Call AI for Plan Generation
 		let planJsonString = "";
 		try {
-			// Use a *separate* history or no history for planning calls.
-			// Let's stick with *no* chat history for the planning call itself
-			// to ensure the AI focuses on the JSON plan format strictly.
 			planJsonString = await generateContent(apiKey, planningPrompt);
-
-			// --- DIAGNOSTIC LOG (optional) ---
-			// console.log("--- Received Plan Response from Gemini ---");
-			// console.log(planJsonString);
-			// console.log("--- End Plan Response ---");
-
-			// Attempt to clean potential markdown fences or surrounding text
 			planJsonString = planJsonString
-				.replace(/^```json\n?/, "") // Remove ```json potentially followed by newline
-				.replace(/^```\n?/, "") // Remove ``` potentially followed by newline
-				.replace(/\n?```$/, "") // Remove ``` at the end
+				.replace(/^```json\n?/, "")
+				.replace(/^```\n?/, "")
+				.replace(/\n?```$/, "")
 				.trim();
 
-			// Basic check if the response looks like JSON before parsing
 			if (
 				!planJsonString.startsWith("{") ||
 				!planJsonString.endsWith("}") ||
-				planJsonString.length < 10 // Minimum length for a valid plan
+				planJsonString.length < 10
 			) {
 				console.error("AI response doesn't look like JSON:", planJsonString);
 				throw new Error(
-					"AI did not return a valid JSON plan. Ensure the model is instructed to ONLY output JSON.\nRaw Response:\n" +
+					"AI did not return a valid JSON plan.\nRaw Response:\n" +
 						planJsonString.substring(0, 500) +
-						(planJsonString.length > 500 ? "..." : "") // Log partial raw response
+						(planJsonString.length > 500 ? "..." : "")
 				);
 			}
 		} catch (error) {
-			console.error("Error getting plan from Gemini:", error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			this.postMessageToWebview({
 				type: "aiResponse",
@@ -830,26 +735,23 @@ Execution Plan (JSON only):
 				isLoading: false,
 				isError: true,
 			});
-			// Add error to history as well
 			this._addHistoryEntry("model", `Error generating plan: ${errorMsg}`);
 			this.postMessageToWebview({ type: "reenableInput" });
 			return;
 		}
 
-		// 4. Parse and Validate
 		const plan: ExecutionPlan | null = parseAndValidatePlan(planJsonString);
 
 		if (!plan) {
 			const errorDetail =
-				"Failed to parse or validate the execution plan JSON received from the AI. The response might be malformed. Check the Developer Tools console for the raw response.";
-			console.error(errorDetail, "Raw:", planJsonString); // Log raw response on error
+				"Failed to parse or validate the execution plan JSON received from the AI.";
+			console.error(errorDetail, "Raw:", planJsonString);
 			this.postMessageToWebview({
 				type: "aiResponse",
 				value: `Error: ${errorDetail}`,
 				isLoading: false,
 				isError: true,
 			});
-			// Add the failure and raw response to chat history for user visibility
 			this._addHistoryEntry(
 				"model",
 				`Error: Failed to parse/validate plan.\nRaw Response:\n\`\`\`json\n${planJsonString}\n\`\`\``
@@ -858,20 +760,18 @@ Execution Plan (JSON only):
 			return;
 		}
 
-		// 5. Store and Present Plan for Confirmation
-		this._currentPlan = plan; // Store the valid plan
-		// Add the received plan (stringified) to chat history for review
+		this._currentPlan = plan;
 		this._addHistoryEntry(
 			"model",
 			`Plan Generated:\n\`\`\`json\n${JSON.stringify(plan, null, 2)}\n\`\`\``
 		);
 
-		// Format a user-friendly display text for the chat window
 		let planDisplayText = `**Execution Plan Proposed:**\n*${
-			plan.planDescription || "No description provided."
+			plan.planDescription || "No description."
 		}*\n\n`;
 		if (plan.steps && plan.steps.length > 0) {
-			plan.steps.forEach((step, index) => {
+			plan.steps.forEach((step: PlanStep, index: number) => {
+				// Added types here
 				planDisplayText += `**Step ${index + 1}: ${
 					step.action ? step.action.replace(/_/g, " ") : "Unknown Action"
 				}**\n`;
@@ -881,7 +781,6 @@ Execution Plan (JSON only):
 				}
 				if (isCreateFileStep(step)) {
 					if (step.content !== undefined) {
-						// Use !== undefined as content could be empty string
 						planDisplayText += `   - Content: Provided (short)\n`;
 					} else if (step.generate_prompt) {
 						planDisplayText += `   - To Generate: ${step.generate_prompt.substring(
@@ -894,31 +793,25 @@ Execution Plan (JSON only):
 						0,
 						80
 					)}...\n`;
+				} else if (isRunCommandStep(step)) {
+					planDisplayText += `   - Command: \`${step.command}\`\n`;
 				}
-				planDisplayText += "\n"; // Add newline after each step
+				planDisplayText += "\n";
 			});
 		} else {
 			planDisplayText += "The AI did not generate any steps for this plan.\n\n";
 		}
-		planDisplayText += `\nDo you want to execute this plan?`; // Prompt for action
+		planDisplayText += `\nDo you want to execute this plan?`;
 
-		// Send message to webview to display the plan and confirmation buttons
 		this.postMessageToWebview({
 			type: "aiResponse",
-			value: planDisplayText, // Send formatted plan text for display
-			isLoading: false, // Turn off loading spinner
-			requiresConfirmation: true, // Flag for webview to show buttons
-			planData: plan, // Send the actual plan object to webview state for execution
+			value: planDisplayText,
+			isLoading: false,
+			requiresConfirmation: true,
+			planData: plan,
 		});
-
-		// Input will be disabled by the webview upon receiving requiresConfirmation: true
 	}
 
-	/**
-	 * Handles regular (non-planning) chat messages.
-	 * @param userMessage The user's message.
-	 * @param apiKey The active API key.
-	 */
 	private async _handleRegularChat(
 		userMessage: string,
 		apiKey: string
@@ -928,7 +821,7 @@ Execution Plan (JSON only):
 			value: "Minovative Mind is thinking...",
 			isLoading: true,
 		});
-		this._currentPlan = null; // Clear any pending plan if regular chat starts
+		this._currentPlan = null;
 
 		const projectContext = await this._buildProjectContext();
 		if (projectContext.startsWith("[Error")) {
@@ -938,23 +831,19 @@ Execution Plan (JSON only):
 				isLoading: false,
 				isError: true,
 			});
-			// Re-enable input
 			this.postMessageToWebview({ type: "reenableInput" });
 			return;
 		}
 
-		// Prepare history for the API call (ensure the last user message isn't sent *in* the history)
-		// This prevents the model from seeing the current user message twice (once in history, once in prompt)
 		const historyForApi = [...this._chatHistory];
 		if (
 			historyForApi.length > 0 &&
 			historyForApi[historyForApi.length - 1].role === "user" &&
-			historyForApi[historyForApi.length - 1].parts[0].text === userMessage // Make sure it's the current message
+			historyForApi[historyForApi.length - 1].parts[0].text === userMessage
 		) {
 			historyForApi.pop();
 		}
 
-		// Construct the prompt (keep existing logic, ensure Markdown is allowed for chat)
 		const finalPrompt = `
 You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query. Use Markdown formatting for code blocks where appropriate. Keep things concise but informative.
 
@@ -968,28 +857,21 @@ ${userMessage}
 
 Assistant Response:
 `;
-		// --- DIAGNOSTIC LOG (optional) ---
-		// console.log("--- Sending Regular Chat Prompt to Gemini ---");
-		// console.log(finalPrompt);
-		// console.log("--- End Regular Chat Prompt ---");
 
 		try {
 			const aiResponseText = await generateContent(
 				apiKey,
 				finalPrompt,
-				historyForApi // Pass history
+				historyForApi
 			);
-
-			this._addHistoryEntry("model", aiResponseText); // Add AI response to history
+			this._addHistoryEntry("model", aiResponseText);
 			this.postMessageToWebview({
-				// Send response to webview
 				type: "aiResponse",
 				value: aiResponseText,
 				isLoading: false,
 				isError: aiResponseText.toLowerCase().startsWith("error:"),
 			});
 		} catch (error) {
-			console.error("Unhandled error during chat generation:", error);
 			const errorMessage =
 				error instanceof Error ? error.message : String(error);
 			this.postMessageToWebview({
@@ -998,45 +880,23 @@ Assistant Response:
 				isLoading: false,
 				isError: true,
 			});
-			// Add error to history
 			this._addHistoryEntry("model", `Error: ${errorMessage}`);
 		}
-		// Re-enable input (handled by webview based on isLoading=false)
-		// this.postMessageToWebview({ type: "reenableInput" }); // Webview manages this
+		// Input re-enabled by webview based on isLoading=false
 	}
 
-	/**
-	 * Builds the project context string.
-	 * @returns Project context string or an error placeholder.
-	 */
 	private async _buildProjectContext(): Promise<string> {
 		try {
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (workspaceFolders && workspaceFolders.length > 0) {
 				const rootFolder = workspaceFolders[0];
-				console.log("Scanning workspace for context...");
-				const relevantFiles = await scanWorkspace({
-					respectGitIgnore: true,
-					// Consider adding settings here later for custom ignores, maxDepth, etc.
-				});
-
+				const relevantFiles = await scanWorkspace({ respectGitIgnore: true });
 				if (relevantFiles.length > 0) {
-					console.log(
-						`Found ${relevantFiles.length} relevant files. Building context string...`
-					);
-					const projectContext = await buildContextString(
-						relevantFiles,
-						rootFolder.uri
-						// Consider adding settings here later for maxFileLength, maxTotalLength
-					);
-					console.log(`Context built (${projectContext.length} characters).`);
-					return projectContext;
+					return await buildContextString(relevantFiles, rootFolder.uri);
 				} else {
-					console.log("No relevant files found for context.");
 					return "[No relevant files found in workspace]";
 				}
 			} else {
-				console.log("No workspace open, skipping context building.");
 				return "[No workspace open]";
 			}
 		} catch (scanOrBuildError) {
@@ -1062,9 +922,8 @@ Assistant Response:
 			type: "statusUpdate",
 			value: `Starting execution: ${plan.planDescription}`,
 		});
-		// Don't add the execution plan JSON to history again, it was added after generation.
-		// Just add a simple message indicating execution started.
 		this._addHistoryEntry("model", "Initiating plan execution...");
+		this._currentPlan = null; // Clear pending plan
 
 		const workspaceFolders = vscode.workspace.workspaceFolders;
 		if (!workspaceFolders || workspaceFolders.length === 0) {
@@ -1077,25 +936,22 @@ Assistant Response:
 				"model",
 				"Execution Failed: No workspace folder open."
 			);
-			this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input on immediate failure
+			this.postMessageToWebview({ type: "reenableInput" });
 			return;
 		}
 		const rootUri = workspaceFolders[0].uri;
 		let executionOk = true;
-		let stepIndex = 0; // Use index to iterate, step.step is just for logging
 
-		// Wrap execution in VS Code Progress Notification
 		await vscode.window.withProgress(
 			{
 				location: vscode.ProgressLocation.Notification,
 				title: `Minovative Mind: Executing Plan - ${
 					plan.planDescription || "No description"
 				}`,
-				cancellable: false, // Making this cancellable requires cancellation token propagation
+				cancellable: false,
 			},
 			async (progress) => {
 				const totalSteps = plan.steps ? plan.steps.length : 0;
-
 				if (totalSteps === 0) {
 					progress.report({ message: "Plan has no steps.", increment: 100 });
 					this.postMessageToWebview({
@@ -1103,120 +959,65 @@ Assistant Response:
 						value: "Plan has no steps. Execution finished.",
 					});
 					this._addHistoryEntry("model", "Plan execution finished (no steps).");
-					executionOk = true; // Consider no steps as successful execution of an empty plan
-					return; // Exit progress callback
+					executionOk = true;
+					return;
 				}
 
 				for (const step of plan.steps!) {
-					// Use ! assertion after checking totalSteps
-					stepIndex++; // Increment step index for progress reporting
-					const stepDescription = step.description || "No description";
-					const stepPath = step.path || "";
-
 					progress.report({
 						message: `Step ${step.step}/${totalSteps}: ${step.action.replace(
 							/_/g,
 							" "
-						)} - ${stepPath}...`,
-						increment: (1 / totalSteps) * 100, // Estimate progress
+						)}...`,
+						increment: (1 / totalSteps) * 100,
 					});
+					const stepPath = step.path || "";
+					const stepCommand = step.command || ""; // For logging RunCommand
 
 					this.postMessageToWebview({
 						type: "statusUpdate",
 						value: `Executing Step ${
 							step.step
-						}/${totalSteps}: ${step.action.replace(/_/g, " ")} - ${stepPath}`,
+						}/${totalSteps}: ${step.action.replace(/_/g, " ")} ${
+							step.action === PlanStepAction.RunCommand
+								? `- '${stepCommand}'`
+								: `- ${stepPath}`
+						}`,
 					});
 
 					try {
 						switch (step.action) {
 							case PlanStepAction.CreateDirectory:
-								if (isCreateDirectoryStep(step)) {
-									// Check for valid path
-									if (
-										!step.path ||
-										path.isAbsolute(step.path) ||
-										step.path.includes("..")
-									) {
-										throw new Error(`Invalid directory path: ${step.path}`);
-									}
-									const dirUri = vscode.Uri.joinPath(rootUri, step.path);
-									// Use `createDirectory` with `recursive: true` for nested directories
-									await vscode.workspace.fs.createDirectory(dirUri);
-									console.log(`Created directory: ${step.path}`);
-									this._addHistoryEntry(
-										"model",
-										`Step ${step.step} OK: Created directory \`${step.path}\``
-									);
-								} else {
-									throw new Error("Invalid CreateDirectoryStep structure.");
-								}
-								break;
-
 							case PlanStepAction.CreateFile:
-								if (isCreateFileStep(step)) {
-									// Check for valid path
-									if (
-										!step.path ||
-										path.isAbsolute(step.path) ||
-										step.path.includes("..")
-									) {
-										throw new Error(`Invalid file path: ${step.path}`);
-									}
+							case PlanStepAction.ModifyFile:
+								if (isCreateDirectoryStep(step)) {
+									const dirUri = vscode.Uri.joinPath(rootUri, step.path);
+									await vscode.workspace.fs.createDirectory(dirUri);
+								} else if (isCreateFileStep(step)) {
 									const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 									let contentToWrite = "";
-
-									if (step.content !== undefined && step.content !== null) {
-										// Check specifically for presence
+									if (step.content !== undefined) {
 										contentToWrite = step.content;
-										console.log(
-											`Step ${step.step}: Using provided content for ${step.path}`
-										);
 									} else if (step.generate_prompt) {
-										// --- AI Call for Content Generation ---
-										console.log(
-											`Step ${step.step}: Calling AI to generate content for ${step.path}`
-										);
 										this.postMessageToWebview({
 											type: "statusUpdate",
 											value: `Step ${step.step}/${totalSteps}: Generating content for ${step.path}...`,
 										});
-
-										const generationPrompt = `
-										You are an AI programmer. Generate the complete raw file content for the following request.
-										Provide ONLY the raw code or text for the file, without any explanations, comments about the code, or markdown formatting like backticks. The entire response must be the file content. Add comments to your code to help the user understand the code
-
-										File Path: ${step.path}
-										Instructions: ${step.generate_prompt}
-
-										File Content:
-										`;
-										// Consider adding relevant context snippet here if possible/needed
-										// For now, let's omit history for content generation to keep it focused
+										const generationPrompt = `You are an AI programmer. Generate the complete raw file content for the following request.\nProvide ONLY the raw code or text for the file, without any explanations, comments about the code, or markdown formatting like backticks. The entire response must be the file content.\n\nFile Path: ${step.path}\nInstructions: ${step.generate_prompt}\n\nFile Content:`;
 										contentToWrite = await generateContent(
 											apiKey,
 											generationPrompt
 										);
-
-										// Basic check for errors from generation API call
 										if (contentToWrite.toLowerCase().startsWith("error:")) {
 											throw new Error(
 												`AI content generation failed: ${contentToWrite}`
 											);
 										}
-										// Attempt to remove potential markdown fences or surrounding text
 										contentToWrite = contentToWrite
-											.replace(/^```[a-z]*\n?/, "") // Remove leading fence
-											.replace(/^```\n?/, "") // Remove leading fence without language
-											.replace(/\n?```$/, "") // Remove trailing fence
+											.replace(/^```[a-z]*\n?/, "")
+											.replace(/\n?```$/, "")
 											.trim();
-
-										console.log(
-											`Step ${step.step}: Generated content (${contentToWrite.length} chars) for ${step.path}`
-										);
-										// --- End AI Call ---
 									} else {
-										// Case where neither content nor generate_prompt is provided (handled by validator, but defensive)
 										throw new Error(
 											"CreateFileStep must have 'content' or 'generate_prompt'."
 										);
@@ -1225,30 +1026,7 @@ Assistant Response:
 										fileUri,
 										Buffer.from(contentToWrite, "utf-8")
 									);
-									console.log(`Created file: ${step.path}`);
-									this._addHistoryEntry(
-										"model",
-										`Step ${step.step} OK: Created file \`${step.path}\``
-									);
-									// Optional: Open the newly created file
-									// vscode.window.showTextDocument(fileUri);
-								} else {
-									throw new Error("Invalid CreateFileStep structure.");
-								}
-								break;
-
-							case PlanStepAction.ModifyFile:
-								if (isModifyFileStep(step)) {
-									// Check for valid path
-									if (
-										!step.path ||
-										path.isAbsolute(step.path) ||
-										step.path.includes("..")
-									) {
-										throw new Error(
-											`Invalid file path for modification: ${step.path}`
-										);
-									}
+								} else if (isModifyFileStep(step)) {
 									const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 									let existingContent = "";
 									try {
@@ -1258,71 +1036,34 @@ Assistant Response:
 										existingContent =
 											Buffer.from(contentBytes).toString("utf-8");
 									} catch (readError: any) {
-										// Handle file not found specifically
 										if (readError.code === "FileNotFound") {
 											throw new Error(
 												`File to modify not found: \`${step.path}\``
 											);
 										}
-										throw readError; // Re-throw other read errors
+										throw readError;
 									}
-
-									// --- AI Call for Modification ---
-									console.log(
-										`Step ${step.step}: Calling AI to modify content for ${step.path}`
-									);
 									this.postMessageToWebview({
 										type: "statusUpdate",
 										value: `Step ${step.step}/${totalSteps}: Generating modifications for ${step.path}...`,
 									});
-
-									const modificationPrompt = `
-You are an AI programmer. Modify the following code based on the instructions.
-Provide ONLY the complete, raw, modified code for the entire file. Do not include explanations, comments about the changes (unless specifically asked in the instructions), or markdown formatting. The entire response must be the final file content.
-
-File Path: ${step.path}
-Modification Instructions: ${step.modification_prompt}
-
---- Existing File Content ---
-\`\`\`
-${existingContent}
-\`\`\`
---- End Existing File Content ---
-
-Complete Modified File Content:
-`;
-									// Again, omit history for modification generation focus
+									const modificationPrompt = `You are an AI programmer. Modify the following code based on the instructions.\nProvide ONLY the complete, raw, modified code for the entire file. Do not include explanations, comments about the changes (unless specifically asked in the instructions), or markdown formatting. The entire response must be the final file content.\n\nFile Path: ${step.path}\nModification Instructions: ${step.modification_prompt}\n\n--- Existing File Content ---\n\`\`\`\n${existingContent}\n\`\`\`\n--- End Existing File Content ---\n\nComplete Modified File Content:`;
 									let modifiedContent = await generateContent(
 										apiKey,
 										modificationPrompt
 									);
-
-									// Basic check for errors from modification API call
 									if (modifiedContent.toLowerCase().startsWith("error:")) {
 										throw new Error(
 											`AI modification failed: ${modifiedContent}`
 										);
 									}
-									// Attempt to remove potential markdown fences
 									modifiedContent = modifiedContent
-										.replace(/^```[a-z]*\n?/, "") // Remove leading fence
-										.replace(/^```\n?/, "") // Remove leading fence without language
-										.replace(/\n?```$/, "") // Remove trailing fence
+										.replace(/^```[a-z]*\n?/, "")
+										.replace(/\n?```$/, "")
 										.trim();
 
-									if (modifiedContent === existingContent) {
-										console.log(
-											`Step ${step.step}: AI returned identical content for ${step.path}. Skipping write.`
-										);
-										this._addHistoryEntry(
-											"model",
-											`Step ${step.step} OK: Modification for \`${step.path}\` resulted in no changes.`
-										);
-									} else {
-										// --- Apply Edit ---
+									if (modifiedContent !== existingContent) {
 										const edit = new vscode.WorkspaceEdit();
-										// To replace the entire file, get the range from start (0,0)
-										// to the end of the last line of the existing content.
 										const lastLine = existingContent.split(/\r?\n/).length - 1;
 										const fullRange = new vscode.Range(
 											new vscode.Position(0, 0),
@@ -1331,8 +1072,7 @@ Complete Modified File Content:
 												existingContent.split(/\r?\n/)[lastLine].length
 											)
 										);
-
-										// Clear the file content first to handle cases where new content is shorter
+										// Clear first, then insert (safer for shorter replacements)
 										edit.replace(
 											fileUri,
 											new vscode.Range(
@@ -1341,44 +1081,100 @@ Complete Modified File Content:
 											),
 											""
 										);
-										// Then insert the new content
 										edit.insert(
 											fileUri,
 											new vscode.Position(0, 0),
 											modifiedContent
 										);
-
 										const success = await vscode.workspace.applyEdit(edit);
 										if (!success) {
 											throw new Error(
 												`Failed to apply modifications to \`${step.path}\``
 											);
 										}
-										console.log(`Modified file: ${step.path}`);
+									} else {
+										console.log(
+											`Step ${step.step}: AI returned identical content for ${step.path}. Skipping write.`
+										);
 										this._addHistoryEntry(
 											"model",
-											`Step ${step.step} OK: Modified file \`${step.path}\``
+											`Step ${step.step} OK: Modification for \`${step.path}\` resulted in no changes.`
 										);
-										// Optional: Open the modified file after it's changed
-										// vscode.window.showTextDocument(fileUri);
+										continue; // Skip the final log for this specific case
 									}
-									// --- End Apply Edit ---
 								} else {
-									throw new Error("Invalid ModifyFileStep structure.");
+									throw new Error(
+										`Internal error: Step ${step.step} action ${step.action} structure mismatch.`
+									);
+								}
+								console.log(`${step.action} OK: ${stepPath}`);
+								this._addHistoryEntry(
+									"model",
+									`Step ${step.step} OK: ${step.action.replace(
+										/_/g,
+										" "
+									)} \`${stepPath}\``
+								);
+								break;
+
+							case PlanStepAction.RunCommand:
+								if (isRunCommandStep(step)) {
+									const commandToRun = step.command;
+									const userChoice = await vscode.window.showWarningMessage(
+										`The plan wants to run a command in the terminal:\n\n\`${commandToRun}\`\n\nThis could install packages or modify your system. Allow?`,
+										{ modal: true },
+										"Allow Command",
+										"Skip Command"
+									);
+
+									if (userChoice === "Allow Command") {
+										try {
+											const term = vscode.window.createTerminal({
+												name: `Plan Step ${step.step}`,
+												cwd: rootUri.fsPath,
+											});
+											term.sendText(commandToRun);
+											term.show();
+											this.postMessageToWebview({
+												type: "statusUpdate",
+												value: `Step ${step.step}: Running command '${commandToRun}' in terminal...`,
+											});
+											this._addHistoryEntry(
+												"model",
+												`Step ${step.step} OK: User allowed running command \`${commandToRun}\`.`
+											);
+										} catch (termError) {
+											const errorMsg =
+												termError instanceof Error
+													? termError.message
+													: String(termError);
+											throw new Error(
+												`Failed to run command '${commandToRun}': ${errorMsg}`
+											); // Treat terminal error as plan failure
+										}
+									} else {
+										this.postMessageToWebview({
+											type: "statusUpdate",
+											value: `Step ${step.step}: Skipped command '${commandToRun}'.`,
+											isError: false,
+										});
+										this._addHistoryEntry(
+											"model",
+											`Step ${step.step} SKIPPED: User did not allow command \`${commandToRun}\`.`
+										);
+										// Continue the plan even if command is skipped
+									}
+								} else {
+									throw new Error("Invalid RunCommandStep structure.");
 								}
 								break;
 
 							default:
 								console.warn(`Unsupported plan action: ${step.action}`);
-								this.postMessageToWebview({
-									type: "statusUpdate",
-									value: `Step ${step.step}/${totalSteps} SKIPPED: Unsupported action ${step.action}`,
-								});
 								this._addHistoryEntry(
 									"model",
 									`Step ${step.step} SKIPPED: Unsupported action ${step.action}`
 								);
-								// Do not set executionOk = false or break; for unsupported actions, just skip
 								break;
 						}
 					} catch (error) {
@@ -1386,31 +1182,30 @@ Complete Modified File Content:
 						const errorMsg =
 							error instanceof Error ? error.message : String(error);
 						console.error(
-							`Error executing step ${step.step} (${step.action}, Path: ${stepPath}):`,
+							`Error executing step ${step.step} (${step.action}, ${
+								stepPath || stepCommand
+							}):`,
 							error
 						);
 						this.postMessageToWebview({
 							type: "statusUpdate",
-							value: `Error on Step ${step.step}/${totalSteps}: ${errorMsg}`,
+							value: `Error on Step ${step.step}: ${errorMsg}`,
 							isError: true,
 						});
 						this._addHistoryEntry(
 							"model",
 							`Step ${step.step} FAILED: ${errorMsg}`
 						);
-						break; // Stop execution on the first error
+						break; // Stop plan execution on error
 					}
-				} // End loop through steps
-
-				// Report final progress
+				} // End loop
 				progress.report({
 					message: executionOk ? "Execution complete." : "Execution failed.",
 					increment: 100,
 				});
-			} // End progress task function
-		); // End withProgress
+			}
+		);
 
-		// Execution finished (either succeeded or failed)
 		if (executionOk) {
 			this.postMessageToWebview({
 				type: "statusUpdate",
@@ -1423,14 +1218,11 @@ Complete Modified File Content:
 				value: "Plan execution failed. Check chat for details.",
 				isError: true,
 			});
-			// The specific step failure was already added to history
 		}
 
-		// Re-enable input after execution attempt (whether success or failure)
 		this.postMessageToWebview({ type: "reenableInput" });
-	} // End _executePlan
+	}
 
-	/** Post message helper */
 	public postMessageToWebview(message: any) {
 		if (this._view) {
 			this._view.webview.postMessage(message);
@@ -1439,12 +1231,10 @@ Complete Modified File Content:
 		}
 	}
 
-	// --- HTML Generation ---
 	private _getHtmlForWebview(webview: vscode.Webview): string {
 		const scriptUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(this._extensionUri, "dist", "webview.js")
 		);
-
 		const stylesUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(
 				this._extensionUri,
@@ -1454,7 +1244,6 @@ Complete Modified File Content:
 				"style.css"
 			)
 		);
-
 		const nonce = getNonce();
 
 		return `<!DOCTYPE html>
@@ -1465,7 +1254,6 @@ Complete Modified File Content:
 				<meta http-equiv="Content-Security-Policy" content="
 						default-src 'none';
 						style-src ${webview.cspSource} 'unsafe-inline';
-						/* font-src ${webview.cspSource}; */ /* Comment out if not using icons */
 						img-src ${webview.cspSource} https: data:;
 						script-src 'nonce-${nonce}';
 						connect-src 'none';
@@ -1474,7 +1262,6 @@ Complete Modified File Content:
 				<title>Minovative Mind Chat</title>
 		</head>
 		<body>
-				<!-- Chat Area -->
 				<div class="chat-controls">
 					 <h1>Minovative Mind</h1>
 						<div>
@@ -1484,19 +1271,14 @@ Complete Modified File Content:
 						</div>
 				</div>
 				<div id="chat-container">
-						<!-- Chat messages and dynamically added plan confirmation buttons will appear here -->
+						<!-- Chat messages will appear here -->
 				</div>
-
-				<!-- Status Area -->
+                <!-- Plan confirmation buttons will be injected after chat-container by main.ts if needed -->
 				<div id="status-area"></div>
-
-				<!-- Input Area -->
 				<div id="input-container">
 						<textarea id="chat-input" rows="3" placeholder="Enter message or @plan [request]..."></textarea>
 						<button id="send-button" title="Send Message">Send</button>
 				</div>
-
-				<!-- API Key Management -->
 				<div class="section">
 						<h2>API Key Management</h2>
 						<div class="key-management-controls">
@@ -1506,14 +1288,12 @@ Complete Modified File Content:
 								<button id="delete-key-button" title="Delete Current Key" disabled>Del</button>
 						</div>
 						 <div id="api-key-status">Please add an API key.</div>
-
 						<div class="add-key-container">
 								<input type="password" id="add-key-input" placeholder="Add new Gemini API Key">
 								<button id="add-key-button" title="Add API Key">Add</button>
 						</div>
 						<p><small>Keys are stored securely using VS Code SecretStorage.</small></p>
 				</div>
-
 				<script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 		 </body>
 		</html>`;
