@@ -264,3 +264,36 @@ button:disabled {
 	); /* Use secondary style for disabled */
 	color: var(--vscode-button-secondaryForeground);
 }
+
+/* Style for the dynamically added plan confirmation container */
+#plan-confirmation-container {
+	border: 1px solid var(--vscode-inputOption-activeBorder);
+	background-color: var(--vscode-inputOption-activeBackground);
+	padding: 10px;
+	margin-top: 10px; /* Add margin below chat */
+	margin-bottom: 10px; /* Add margin above input */
+	text-align: center;
+	border-radius: 4px;
+	flex-shrink: 0; /* Prevent shrinking */
+	/* display: none; is handled by JS */
+}
+
+#plan-confirmation-container p {
+	margin-top: 0;
+	margin-bottom: 8px;
+	color: var(--vscode-inputOption-activeForeground);
+}
+
+#plan-confirmation-container button {
+	margin: 0 5px;
+	padding: 4px 8px; /* Smaller buttons */
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: 1px solid var(--vscode-button-border, transparent);
+}
+#plan-confirmation-container button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+/* Ensure chat container doesn't push input off-screen when confirmation is shown */
+/* No specific changes needed if flexbox handles shrinking correctly */
