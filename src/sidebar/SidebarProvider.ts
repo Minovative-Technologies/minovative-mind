@@ -1397,51 +1397,100 @@ Assistant Response:
 							case PlanStepAction.RunCommand:
 								if (isRunCommandStep(step)) {
 									const commandToRun = step.command;
-									const userChoice = await vscode.window.showWarningMessage(
-										`The plan wants to run a command in the terminal:\n\n\`${commandToRun}\`\n\nThis could install packages or modify your system. Allow?`,
-										{ modal: true },
-										"Allow Command",
-										"Skip Command"
+									const stepIdentifier = `Minovative Mind Plan Step ${step.step}`;
+
+									this.postMessageToWebview({
+										type: "statusUpdate",
+										value: `Step ${step.step}: Preparing to run command '${commandToRun}'...`,
+									});
+
+									// Create a ShellExecution for the command
+									const execution = new vscode.ShellExecution(commandToRun, {
+										cwd: rootUri.fsPath, // Run in the workspace root
+									});
+
+									// Define the Task
+									const task = new vscode.Task(
+										{ type: "shell", stepIdentifier }, // Unique identifier for our task
+										vscode.TaskScope.Workspace, // Scope to the workspace
+										stepIdentifier, // Name shown in UI
+										"Minovative Mind", // Source
+										execution
 									);
 
-									if (userChoice === "Allow Command") {
-										try {
-											const term = vscode.window.createTerminal({
-												name: `Plan Step ${step.step}`,
-												cwd: rootUri.fsPath,
-											});
-											term.sendText(commandToRun);
-											term.show();
-											this.postMessageToWebview({
-												type: "statusUpdate",
-												value: `Step ${step.step}: Running command '${commandToRun}' in terminal...`,
-											});
-											this._addHistoryEntry(
-												"model",
-												`Step ${step.step} OK: User allowed running command \`${commandToRun}\`.`
-											);
-										} catch (termError) {
-											const errorMsg =
-												termError instanceof Error
-													? termError.message
-													: String(termError);
-											// Important: Throwing here stops the *plan execution*, but the terminal might still be running
+									// Set presentation options (optional but good practice)
+									task.presentationOptions = {
+										reveal: vscode.TaskRevealKind.Silent, // Don't force reveal terminal
+										focus: false,
+										panel: vscode.TaskPanelKind.Dedicated, // Use a dedicated panel
+										clear: false, // Don't clear terminal each time
+									};
+
+									// --- Execute Task and Wait for Completion ---
+									let taskCompletionError: Error | null = null;
+									try {
+										// Execute the task
+										const executedTask = await vscode.tasks.executeTask(task); // executedTask is of type TaskExecution
+										console.log(
+											`Step ${step.step}: Task '${stepIdentifier}' started.`
+										);
+
+										// Create a promise that resolves when the task process ends
+										const taskEndPromise = new Promise<number | undefined>(
+											(resolve, reject) => {
+												const disposable = vscode.tasks.onDidEndTaskProcess(
+													(e) => {
+														// CORRECTED COMPARISON: Compare the execution objects directly
+														if (e.execution === executedTask) {
+															console.log(
+																`Step ${step.step}: Task '${stepIdentifier}' ended with exit code: ${e.exitCode}`
+															);
+															disposable.dispose(); // Clean up the listener
+															resolve(e.exitCode);
+														}
+													}
+												);
+											}
+										);
+
+										// Wait for the task to finish
+										const exitCode = await taskEndPromise;
+
+										// Check the exit code
+										if (exitCode !== 0 && exitCode !== undefined) {
+											// Added undefined check for robustness
 											throw new Error(
-												`Failed to launch terminal for command '${commandToRun}': ${errorMsg}`
+												`Command '${commandToRun}' failed with exit code ${exitCode}. Check the terminal output for details.`
+											);
+										} else if (exitCode === undefined) {
+											// This might happen if the task system couldn't determine an exit code (rare, but possible)
+											console.warn(
+												`Step ${step.step}: Task '${stepIdentifier}' ended without a specific exit code. Assuming success, but check terminal output.`
 											);
 										}
-									} else {
-										this.postMessageToWebview({
-											type: "statusUpdate",
-											value: `Step ${step.step}: Skipped command '${commandToRun}'.`,
-											isError: false, // Skipping is not an error in execution flow
-										});
+
+										// Task completed successfully (or assumed success if exit code is undefined)
+										console.log(`${step.action} OK: Command '${commandToRun}'`);
 										this._addHistoryEntry(
 											"model",
-											`Step ${step.step} SKIPPED: User did not allow command \`${commandToRun}\`.`
+											`Step ${step.step} OK: Command \`${commandToRun}\` executed successfully.`
 										);
-										// Continue the plan even if command is skipped
+										this.postMessageToWebview({
+											type: "statusUpdate",
+											value: `Step ${step.step}: Command '${commandToRun}' completed.`,
+										});
+									} catch (error) {
+										// Capture errors from executeTask or the exit code check
+										taskCompletionError =
+											error instanceof Error ? error : new Error(String(error));
+										console.error(
+											`Error during task execution for step ${step.step}:`,
+											taskCompletionError
+										);
+										// Re-throw to be caught by the outer try-catch block
+										throw taskCompletionError;
 									}
+									// --- End Task Execution ---
 								} else {
 									throw new Error("Invalid RunCommandStep structure.");
 								}
