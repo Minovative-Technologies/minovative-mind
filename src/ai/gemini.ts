@@ -6,7 +6,9 @@ import {
 	Content,
 } from "@google/generative-ai";
 
-// REMOVED: const MODEL_NAME = ...
+// --- Add this constant ---
+export const ERROR_QUOTA_EXCEEDED = "ERROR_GEMINI_QUOTA_EXCEEDED";
+// --- End Add ---
 
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
@@ -82,38 +84,53 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
  */
 export async function generateContent(
 	apiKey: string,
-	modelName: string, // <-- Added modelName parameter
+	modelName: string,
 	prompt: string,
 	history?: Content[]
 ): Promise<string> {
-	// Ensure initialization with the correct key AND model
+	// Return type remains string, but can be our special error string
 	if (!initializeGenerativeAI(apiKey, modelName)) {
+		// Return a standard error string for initialization failure
 		return `Error: Gemini AI client not initialized. Please check your API key and selected model (${modelName}).`;
 	}
-
-	// Defensive check, should be initialized by the call above
 	if (!model) {
-		// This case should ideally be covered by initializeGenerativeAI, but good practice
+		// Return a standard error string for model unavailability
 		return `Error: Gemini model (${modelName}) is not available after initialization attempt.`;
 	}
 
 	try {
-		// Start a new chat session with the current model instance
 		const chat = model.startChat({
 			history: history || [],
-			// generationConfig: { ... } // Optional configuration
 		});
-
 		console.log(
 			`Sending prompt to Gemini (${modelName}):`,
 			prompt.substring(0, 100) + "..."
 		);
 		const result = await chat.sendMessage(prompt);
-
-		// Optional: Check for safety ratings
-		// if (result.response.promptFeedback?.blockReason) { ... }
-
 		const response = result.response;
+
+		// --- Optional: More robust safety check ---
+		if (response.promptFeedback?.blockReason) {
+			console.warn(
+				`Gemini (${modelName}) blocked prompt: ${response.promptFeedback.blockReason}`,
+				response.promptFeedback.safetyRatings
+			);
+			return `Error: Request blocked by Gemini due to safety settings (${response.promptFeedback.blockReason}). Please adjust your prompt.`;
+		}
+		if (
+			response.candidates &&
+			response.candidates.length > 0 &&
+			response.candidates[0].finishReason !== "STOP"
+		) {
+			console.warn(
+				`Gemini (${modelName}) finished unexpectedly: ${response.candidates[0].finishReason}`,
+				response.candidates[0].safetyRatings
+			);
+			// Provide specific messages based on finishReason if desired
+			return `Error: Gemini stopped generation unexpectedly (${response.candidates[0].finishReason}).`;
+		}
+		// --- End safety check ---
+
 		const text = response.text();
 		console.log(
 			`Received response from Gemini (${modelName}):`,
@@ -125,27 +142,64 @@ export async function generateContent(
 			`Error generating content with Gemini (${modelName}):`,
 			error
 		);
-		// Provide a more user-friendly error message
+
+		// --- Refined Error Handling ---
 		let errorMessage = `An error occurred while communicating with the Gemini API (${modelName}).`;
+		let isQuotaError = false;
+		let isInvalidKeyError = false;
+
 		if (error instanceof Error) {
-			// Specific error checks
-			if (error.message.includes("API key not valid")) {
+			const lowerErrorMessage = error.message.toLowerCase();
+
+			// Check for specific quota/rate limit errors (adjust keywords as needed based on actual SDK errors)
+			if (
+				lowerErrorMessage.includes("quota") ||
+				lowerErrorMessage.includes("rate limit") ||
+				lowerErrorMessage.includes("resource has been exhausted") ||
+				(error.name === "GoogleGenerativeAIError" &&
+					(error as any).status === 429) // Example if SDK uses standard HTTP status codes in errors
+			) {
+				errorMessage = `API quota or rate limit exceeded for model ${modelName}.`;
+				isQuotaError = true; // Signal quota issue
+			}
+			// Check for invalid API key errors
+			else if (
+				lowerErrorMessage.includes("api key not valid") ||
+				lowerErrorMessage.includes("invalid api key")
+			) {
 				errorMessage =
 					"Error: Invalid API Key. Please check your key in the settings.";
-				resetClient(); // Reset client state on invalid key
-			} else if (error.message.includes("quota")) {
-				errorMessage = `Error: API quota exceeded for model ${modelName}. Please check your usage or try again later.`;
-			} else if (error.message.includes("invalid model")) {
+				isInvalidKeyError = true;
+				resetClient(); // Reset client state on definitively invalid key
+			}
+			// Check for invalid model errors
+			else if (
+				lowerErrorMessage.includes("invalid model") ||
+				lowerErrorMessage.includes("model not found")
+			) {
 				errorMessage = `Error: The selected model '${modelName}' is not valid or not accessible with your API key.`;
-				resetClient(); // Reset client state on invalid model
+				isInvalidKeyError = true; // Treat as key/model issue, reset
+				resetClient();
 			} else {
-				errorMessage = `Error (${modelName}): ${error.message}`;
+				errorMessage = `Error (${modelName}): ${error.message}`; // General error
 			}
 		} else {
-			errorMessage = `Error (${modelName}): ${String(error)}`;
+			errorMessage = `Error (${modelName}): ${String(error)}`; // Non-Error object thrown
 		}
-		vscode.window.showErrorMessage(errorMessage);
-		return errorMessage; // Return error message for display
+
+		// Return the special signal for quota errors, otherwise return the descriptive error message
+		if (isQuotaError) {
+			console.log(`Gemini (${modelName}): Detected quota/rate limit error.`);
+			return ERROR_QUOTA_EXCEEDED; // Return signal
+		} else {
+			// Show error message only for non-quota errors, as quota errors will be retried silently first.
+			// If retries fail, the provider will show a final message.
+			if (!isQuotaError) {
+				vscode.window.showErrorMessage(errorMessage);
+			}
+			return errorMessage; // Return standard error message for other issues
+		}
+		// --- End Refined Error Handling ---
 	}
 }
 
