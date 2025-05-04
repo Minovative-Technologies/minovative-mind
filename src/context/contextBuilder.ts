@@ -1,6 +1,7 @@
 // src/context/contextBuilder.ts
 import * as vscode from "vscode";
 import * as path from "path";
+import { createAsciiTree } from "../utilities/treeFormatter";
 
 // Configuration for context building - Adjusted for large context windows
 interface ContextConfig {
@@ -35,39 +36,70 @@ export async function buildContextString(
 		workspaceRoot.fsPath
 	)}):\n`;
 	context += `Relevant files identified: ${relevantFiles.length}\n\n`;
-	// let filesIncludedCount = 0; // No longer strictly needed unless for logging
 	let currentTotalLength = context.length;
-	let filesSkippedForTotalSize = 0;
+	let filesSkippedForTotalSize = 0; // For file *content* skipping
 
-	// Add file structure first (less token intensive)
+	// --- NEW: Generate ASCII Tree ---
 	context += "File Structure:\n";
-	const fileListString = relevantFiles
-		.map((uri) => `- ${path.relative(workspaceRoot.fsPath, uri.fsPath)}`)
-		.join("\n");
+	const rootName = path.basename(workspaceRoot.fsPath);
+	const relativePaths = relevantFiles.map((uri) =>
+		// Normalize paths to use forward slashes for consistent tree building
+		path.relative(workspaceRoot.fsPath, uri.fsPath).replace(/\\/g, "/")
+	);
+	let fileStructureString = createAsciiTree(relativePaths, rootName);
 
-	// Check if just the file list exceeds the limit (highly unlikely but possible)
-	if (currentTotalLength + fileListString.length + 10 > config.maxTotalLength) {
+	// Check if the generated tree itself exceeds the total limit
+	const treeHeaderLength = "File Structure:\n".length + "\n\n".length; // Account for header and spacing
+	const treeStringLength = fileStructureString.length;
+
+	if (
+		currentTotalLength + treeHeaderLength + treeStringLength >
+		config.maxTotalLength
+	) {
 		console.warn(
-			"File structure list alone exceeds total context length limit. Context will be truncated."
+			`Generated file structure tree (${treeStringLength} chars) exceeds total context limit (${config.maxTotalLength} chars). Truncating structure.`
 		);
-		// Truncate file list - simple substring for now
-		const availableLength = config.maxTotalLength - currentTotalLength - 50; // Reserve space for headers/footers
-		context +=
-			fileListString.substring(0, availableLength > 0 ? availableLength : 0) +
-			"\n... (File list truncated)\n\n";
-		return context.trim(); // Return early if structure alone is too big
+		const availableLength =
+			config.maxTotalLength - currentTotalLength - treeHeaderLength - 50; // Reserve space for headers/footers/truncation message
+		fileStructureString =
+			fileStructureString.substring(
+				0,
+				availableLength > 0 ? availableLength : 0
+			) + "\n... (File structure truncated due to size limit)";
+		context += fileStructureString + "\n\n";
+		currentTotalLength = config.maxTotalLength; // Maxed out after adding truncated structure
+		console.log(
+			`Truncated context size after adding structure: ${currentTotalLength} chars.`
+		);
+	} else {
+		context += fileStructureString + "\n\n";
+		currentTotalLength += treeHeaderLength + treeStringLength; // Update length
+		console.log(
+			`Context size after adding structure: ${currentTotalLength} chars.`
+		);
 	}
-
-	context += fileListString + "\n\n";
-	currentTotalLength += fileListString.length + 10; // Update length accounting for header
+	// --- END: Generate ASCII Tree ---
 
 	context += "File Contents (partial):\n";
-	currentTotalLength += 25; // Length of "File Contents (partial):\n"
+	const contentHeaderLength = "File Contents (partial):\n".length;
+	currentTotalLength += contentHeaderLength;
+
+	let contentAdded = false; // Track if any content was added
 
 	for (const fileUri of relevantFiles) {
-		// Removed the maxFiles check
+		// Check if we have *any* space left for content after the structure
+		if (currentTotalLength >= config.maxTotalLength) {
+			filesSkippedForTotalSize =
+				relevantFiles.length - relevantFiles.indexOf(fileUri);
+			console.log(
+				`Skipping remaining ${filesSkippedForTotalSize} file contents as total limit reached.`
+			);
+			break; // Stop processing file contents immediately
+		}
 
-		const relativePath = path.relative(workspaceRoot.fsPath, fileUri.fsPath);
+		const relativePath = path
+			.relative(workspaceRoot.fsPath, fileUri.fsPath)
+			.replace(/\\/g, "/");
 		const fileHeader = `--- File: ${relativePath} ---\n`;
 		let fileContent = "";
 		let truncated = false;
@@ -76,6 +108,7 @@ export async function buildContextString(
 			const contentBytes = await vscode.workspace.fs.readFile(fileUri);
 			fileContent = Buffer.from(contentBytes).toString("utf-8");
 
+			// Apply per-file length limit
 			if (fileContent.length > config.maxFileLength) {
 				fileContent = fileContent.substring(0, config.maxFileLength);
 				truncated = true;
@@ -92,19 +125,49 @@ export async function buildContextString(
 			fileHeader + fileContent + (truncated ? "\n[...truncated]" : "") + "\n\n";
 		const estimatedLengthIncrease = contentToAdd.length;
 
-		// Check if adding this file exceeds the total length limit
+		// Check if adding *this* file's content exceeds the total length limit
 		if (currentTotalLength + estimatedLengthIncrease > config.maxTotalLength) {
+			// Try adding a truncated version if it fits
+			const availableContentSpace = config.maxTotalLength - currentTotalLength;
+			const minContentHeader = `--- File: ${relativePath} --- [...content omitted]\n\n`;
+			if (availableContentSpace > minContentHeader.length) {
+				// Try to fit at least the header and some truncated content
+				const maxAllowedContentLength =
+					availableContentSpace -
+					fileHeader.length -
+					"\n[...truncated]\n\n".length;
+				if (maxAllowedContentLength > 50) {
+					// Only add if we can fit a reasonable snippet
+					const partialContentToAdd =
+						fileHeader +
+						fileContent.substring(0, maxAllowedContentLength) +
+						"\n[...truncated]\n\n";
+					context += partialContentToAdd;
+					currentTotalLength += partialContentToAdd.length;
+					console.log(
+						`Added truncated content for ${relativePath} to fit total limit.`
+					);
+					contentAdded = true;
+				}
+			}
+			// Calculate remaining skipped files after this potentially truncated one
 			filesSkippedForTotalSize =
-				relevantFiles.length - relevantFiles.indexOf(fileUri); // Calculate remaining files
-			break; // Stop processing files
+				relevantFiles.length - relevantFiles.indexOf(fileUri);
+			console.log(
+				`Skipping remaining ${filesSkippedForTotalSize} file contents as total limit reached.`
+			);
+			break; // Stop processing further files
 		}
 
 		context += contentToAdd;
 		currentTotalLength += estimatedLengthIncrease;
-		// filesIncludedCount++; // No longer strictly needed
+		contentAdded = true;
 	}
 
-	if (filesSkippedForTotalSize > 0) {
+	// Add the final skipped message if needed
+	if (!contentAdded && currentTotalLength < config.maxTotalLength) {
+		context += "\n(No file content included due to size limits or errors)";
+	} else if (filesSkippedForTotalSize > 0) {
 		context += `\n... (Content from ${filesSkippedForTotalSize} more files omitted due to total size limit)`;
 	}
 
