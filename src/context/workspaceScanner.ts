@@ -6,13 +6,52 @@ import * as path from "path"; // Import path for joining
 
 // Default patterns to ignore, mimicking common project build/dependency folders and git
 const DEFAULT_IGNORE_PATTERNS: string[] = [
+	// --- Common Build/Dependency Folders ---
 	"node_modules",
-	".git",
+	".git", // Git directory
 	"dist",
 	"out",
 	"build",
+	"target", // Common in Java/Rust
+	"bin", // Common for compiled binaries/scripts
+	"obj", // Common for .NET
 
-	// --- Media Files ---
+	// --- Hidden Files/Folders (Dotfiles/Dotfolders) ---
+	".vscode", // VS Code workspace settings
+	".idea", // JetBrains IDE settings
+	".settings", // Eclipse settings
+	".github", // GitHub specific files (workflows, etc.)
+	".gitlab", // GitLab specific files
+	".env*", // Environment variables (e.g., .env, .env.local)
+	".DS_Store", // macOS folder metadata
+	".classpath", // Java classpath file
+	".project", // Eclipse project file
+	".cache", // Common cache directory
+	".npm", // npm cache/config
+	".yarn", // Yarn cache/config
+
+	// --- Lock Files ---
+	"package-lock.json",
+	"yarn.lock",
+	"pnpm-lock.yaml",
+	"composer.lock", // PHP
+	"Gemfile.lock", // Ruby
+	"Pipfile.lock", // Python
+	"poetry.lock", // Python
+
+	// --- Log Files ---
+	"*.log",
+
+	// --- Temporary/System Files ---
+	"*.swp", // Vim swap files
+	"*.swo", // Vim swap files
+	"*~", // Backup files
+
+	// --- Compiled Code/Cache ---
+	"*.pyc",
+	"__pycache__",
+
+	// --- Media & Archive Files (already present, kept for completeness) ---
 	"*.vsix",
 	// Images
 	"*.png",
