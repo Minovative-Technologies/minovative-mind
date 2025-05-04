@@ -947,28 +947,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					: `The user provided the custom instruction: "${editorContext.instruction}".`;
 
 			specificContextPrompt = `
---- Specific User Request from Editor ---
-File Path: ${editorContext.filePath}
-Language: ${editorContext.languageId}
-${instructionType}
+		--- Specific User Request from Editor ---
+		File Path: ${editorContext.filePath}
+		Language: ${editorContext.languageId}
+		${instructionType}
 
---- Selected Code in Editor ---
-\`\`\`${editorContext.languageId}
-${editorContext.selectedText}
-\`\`\`
---- End Selected Code ---
+		--- Selected Code in Editor ---
+		\`\`\`${editorContext.languageId}
+		${editorContext.selectedText}
+		\`\`\`
+		--- End Selected Code ---
 
---- Full Content of Affected File (${editorContext.filePath}) ---
-\`\`\`${editorContext.languageId}
-${editorContext.fullText}
-\`\`\`
---- End Full Content ---
-`;
+		--- Full Content of Affected File (${editorContext.filePath}) ---
+		\`\`\`${editorContext.languageId}
+		${editorContext.fullText}
+		\`\`\`
+		--- End Full Content ---
+		`;
 		} else {
 			specificContextPrompt = `
---- User Request from Chat ---
-${userRequest}
---- End User Request ---`;
+		--- User Request from Chat ---
+		${userRequest}
+		--- End User Request ---`;
 		}
 
 		const mainInstructions = editorContext
@@ -980,29 +980,32 @@ ${userRequest}
 			: `Based on the user's request from the chat ("${userRequest}"), generate a plan to fulfill it.`;
 
 		return `
-You are an expert AI programmer assisting within VS Code. Your task is to create a step-by-step execution plan in JSON format.
+		You are an expert AI programmer assisting within VS Code. Your task is to create a step-by-step execution plan in JSON format.
 
-**Goal:** Generate ONLY a valid JSON object representing the plan. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself.
+		**Goal:** Generate ONLY a valid JSON object representing the plan. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself.
 
-**Instructions for Plan Generation:**
-1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference.
-2.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
-3.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
-4.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description. Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly. **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
-5.  JSON Output: Format the plan strictly according to the JSON structure below.
+		**Instructions for Plan Generation:**
+		1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference.
+		2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not omit any requested actions or components. If a request is complex, break it into multiple granular steps.
+		3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
+		4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
+		5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description. Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly. **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
+		6.  JSON Output: Format the plan strictly according to the JSON structure below.
 
-${specificContextPrompt}
+		${specificContextPrompt}
 
-*** Broader Project Context (Reference Only) ***
-${projectContext}
-*** End Broader Project Context ***
+		*** Broader Project Context (Reference Only) ***
+		${projectContext}
+		*** End Broader Project Context ***
 
---- Expected JSON Plan Format ---
-${jsonFormatDescription}
---- End Expected JSON Plan Format ---
+		--- Expected JSON Plan Format ---
+		${jsonFormatDescription}
+		--- End Expected JSON Plan Format ---
 
-Execution Plan (JSON only):
-`;
+		**Remember: The output MUST be ONLY the valid JSON plan, fully addressing the user's request.**
+
+		Execution Plan (JSON only):
+		`;
 	}
 
 	// Existing method, handles @plan from chat input
@@ -1482,7 +1485,17 @@ Assistant Response:
 											type: "statusUpdate",
 											value: `Step ${stepNumber}/${totalSteps}: Generating content for ${step.path}...`,
 										});
-										const generationPrompt = `You are an AI programmer. Generate the complete raw file content for the following request.\nProvide ONLY the raw code or text for the file, without any explanations, comments about the code, or markdown formatting like backticks. The entire response must be the file content.\n\nFile Path: ${step.path}\nInstructions: ${step.generate_prompt}\n\nFile Content:`;
+
+										const generationPrompt = `
+										You are an AI programmer tasked with generating file content.
+										**Critical Instruction:** Generate the **complete and comprehensive** file content based *fully* on the user's instructions below. Do **not** provide a minimal, placeholder, or incomplete implementation unless the instructions *specifically* ask for it. Fulfill the entire request.
+										**Output Format:** Provide ONLY the raw code or text for the file. Do NOT include any explanations, or markdown formatting like backticks. Add comments in the code to help the user understand the code and the entire response MUST be only the final file content.
+										
+										File Path: ${step.path}
+										Instructions: ${step.generate_prompt}
+										
+										Complete File Content:
+										`;
 
 										// Use retry wrapper for AI content generation
 										contentToWrite = await this._generateWithRetry(
@@ -1555,7 +1568,24 @@ Assistant Response:
 										type: "statusUpdate",
 										value: `Step ${stepNumber}/${totalSteps}: Generating modifications for ${step.path}...`,
 									});
-									const modificationPrompt = `You are an AI programmer. Modify the following code based on the instructions.\nProvide ONLY the complete, raw, modified code for the entire file. Do not include explanations, comments about the changes (unless specifically asked in the instructions), or markdown formatting. The entire response must be the final file content.\n\nFile Path: ${step.path}\nModification Instructions: ${step.modification_prompt}\n\n--- Existing File Content ---\n\`\`\`\n${existingContent}\n\`\`\`\n--- End Existing File Content ---\n\nComplete Modified File Content:`;
+
+									// --- MODIFIED PROMPT for ModifyFile ---
+									const modificationPrompt = `
+									You are an AI programmer tasked with modifying an existing file.
+									**Critical Instruction:** Modify the code based *fully* on the user's instructions below. Ensure the modifications are **complete and comprehensive**, addressing the entire request. Do **not** make partial changes or leave placeholders unless the instructions *specifically* ask for it.
+									**Output Format:** Provide ONLY the complete, raw, modified code for the **entire file**. Do NOT include explanations, or markdown formatting. Add comments in the code to help the user understand the code and the entire response MUST be the final, complete file content after applying all requested modifications. 
+
+									File Path: ${step.path}
+									Modification Instructions: ${step.modification_prompt}
+
+									--- Existing File Content ---
+									\`\`\`
+									${existingContent}
+									\`\`\`
+									--- End Existing File Content ---
+
+									Complete Modified File Content:
+									`;
 
 									// Use retry wrapper for AI modification
 									let modifiedContent = await this._generateWithRetry(
