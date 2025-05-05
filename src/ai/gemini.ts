@@ -80,15 +80,25 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
  * @param modelName The specific Gemini model name to use.
  * @param prompt The user's text prompt.
  * @param history Optional chat history for context.
+ * @param token Optional cancellation token to allow aborting the request before it's sent. // Added token parameter documentation
  * @returns The generated text content or an error message string.
  */
 export async function generateContent(
 	apiKey: string,
 	modelName: string,
 	prompt: string,
-	history?: Content[]
+	history?: Content[],
+	token?: vscode.CancellationToken // MODIFICATION 1: Added optional token parameter
 ): Promise<string> {
 	// Return type remains string, but can be our special error string
+
+	// MODIFICATION 2: Check for cancellation before proceeding
+	// Check if the request was cancelled before attempting to initialize or call the API
+	if (token?.isCancellationRequested) {
+		console.log("Gemini request cancelled before sending."); // Log cancellation
+		return "Cancelled by user."; // Return a specific message indicating cancellation
+	}
+
 	if (!initializeGenerativeAI(apiKey, modelName)) {
 		// Return a standard error string for initialization failure
 		return `Error: Gemini AI client not initialized. Please check your API key and selected model (${modelName}).`;
@@ -99,6 +109,9 @@ export async function generateContent(
 	}
 
 	try {
+		// The cancellation check is performed *before* this try block, as requested.
+		// This ensures we don't even attempt the API call if cancellation was requested early.
+
 		const chat = model.startChat({
 			history: history || [],
 		});
@@ -106,7 +119,20 @@ export async function generateContent(
 			`Sending prompt to Gemini (${modelName}):`,
 			prompt.substring(0, 100) + "..."
 		);
+
+		// Note: The Gemini SDK's `sendMessage` might not inherently support cancellation via a token
+		// after the request has started. This check primarily prevents initiating the request.
 		const result = await chat.sendMessage(prompt);
+
+		// Optional: Check cancellation again *after* the call returns, in case the user cancelled
+		// during the request and we want to avoid processing the result.
+		if (token?.isCancellationRequested) {
+			console.log(
+				"Gemini request cancelled after response received, before processing."
+			);
+			return "Cancelled by user (after response received).";
+		}
+
 		const response = result.response;
 
 		// --- Optional: More robust safety check ---
@@ -138,6 +164,12 @@ export async function generateContent(
 		);
 		return text;
 	} catch (error) {
+		// Also check for cancellation in the catch block.
+		if (token?.isCancellationRequested) {
+			console.log("Gemini request cancelled during error handling.");
+			return "Cancelled by user.";
+		}
+
 		console.error(
 			`Error generating content with Gemini (${modelName}):`,
 			error

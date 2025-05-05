@@ -35,7 +35,7 @@ body {
 	flex-direction: column;
 	height: 100vh; /* Ensure body takes full height */
 	box-sizing: border-box;
-	overflow: scroll; /* Prevent body scrolling, rely on #chat-container scroll */
+	overflow-y: auto; /* The body should scroll */
 }
 
 /* --- Headers --- */
@@ -137,6 +137,62 @@ h2 {
 	cursor: not-allowed;
 }
 
+/* --- Stop Button Container (assuming ID #stop-button-container) --- */
+/* Styles for the parent div to center the stop button */
+#stop-button-container {
+	display: flex; /* Use flexbox for centering */
+	justify-content: center; /* Center the button horizontally */
+	margin-bottom: 8px; /* Add space below the button, above the input container */
+	flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* --- Stop Button (matching #send-button style) --- */
+/* Default appearance for the Stop button */
+#stop-button {
+	flex-shrink: 0; /* Prevent shrinking */
+	padding: 0; /* Remove padding */
+	height: var(--input-height); /* Match send button height */
+	width: calc(var(--input-height) + 10px); /* Match send button width */
+	background-color: var(
+		--vscode-button-background
+	); /* Match send button background */
+	color: var(
+		--vscode-button-foreground
+	); /* Match send button text/icon color */
+	border: none; /* Match send button border */
+	border-radius: var(--border-radius); /* Match send button border radius */
+	cursor: pointer; /* Pointer cursor */
+	transition: background-color 0.1s ease-in-out; /* Match send button transition */
+	display: inline-flex; /* Use flex to center icon */
+	align-items: center; /* Center icon vertically */
+	justify-content: center; /* Center icon horizontally */
+}
+
+/* Hover effect for the Stop button */
+#stop-button:hover {
+	background-color: var(
+		--vscode-button-hoverBackground
+	); /* Match send button hover background */
+}
+
+/* Disabled state for the Stop button */
+#stop-button:disabled {
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Match send button disabled background */
+	color: var(
+		--vscode-button-secondaryForeground
+	); /* Match send button disabled text color */
+	opacity: 0.7; /* Match send button disabled opacity */
+	cursor: not-allowed; /* Not-allowed cursor */
+}
+
+/* Icon styling within the stop button */
+#stop-button .fa-icon {
+	font-size: 1.1em; /* Match send button icon size */
+}
+/* --- End Stop Button Styles --- */
+
 /* --- Chat Container --- */
 #chat-container {
 	flex-grow: 1;
@@ -185,6 +241,8 @@ h2 {
 	border: 1px solid var(--border-color);
 	align-self: flex-start;
 	margin-right: auto;
+	min-height: fit-content;
+	overflow-x: auto;
 }
 
 /* --- System / Loading / Error Messages --- */
@@ -231,6 +289,7 @@ h2 {
 	color: inherit; /* Inherit color from parent message */
 	border-bottom: none; /* Override global header style */
 	padding-bottom: 0; /* Override global header style */
+	white-space: normal; /* Override parent white-space: pre for headings */
 }
 #chat-container .message h1 {
 	font-size: 1.1em; /* Slightly larger than body */
@@ -256,6 +315,7 @@ h2 {
 	margin-top: 0.5em;
 	margin-bottom: 0.8em;
 	padding-left: 2em; /* Standard list indentation */
+	white-space: normal; /* Override parent white-space: pre for lists */
 }
 #chat-container .message ul {
 	list-style-type: disc; /* Standard bullet points */
@@ -281,6 +341,20 @@ h2 {
 	list-style-type: square;
 }
 
+/* Paragraphs */
+#chat-container .message p {
+	white-space: normal; /* Override parent white-space: pre for paragraphs */
+	word-wrap: break-word; /* Allow wrapping within paragraphs */
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+#chat-container .message p:first-child {
+	margin-top: 0;
+}
+#chat-container .message p:last-child {
+	margin-bottom: 0;
+}
+
 /* Blockquotes */
 #chat-container .message blockquote {
 	margin: 0.8em 0;
@@ -291,6 +365,7 @@ h2 {
 		--vscode-descriptionForeground,
 		inherit
 	); /* Use description color or inherit */
+	white-space: normal; /* Override parent white-space: pre for blockquotes */
 }
 #chat-container .message blockquote p {
 	margin-bottom: 0.3em; /* Reduce bottom margin for paragraphs inside blockquote */
@@ -309,6 +384,7 @@ h2 {
 	margin-bottom: 0.8em; /* Adjusted margin */
 	border: 1px solid var(--border-color);
 	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1); /* Subtle inset shadow */
+	white-space: pre; /* Ensure pre formatting is respected within code blocks */
 }
 .message code {
 	font-family: var(--vscode-editor-font-family, monospace);

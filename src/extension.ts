@@ -81,13 +81,17 @@ async function executeExplainAction(
 	console.log(`--- End explain Action Prompt ---`);
 
 	try {
-		// Use the retry wrapper from the provider for consistency, though less likely needed here
+		// Use the retry wrapper from the provider for consistency
+		// MODIFICATION: Ensure arguments match the _generateWithRetry signature.
+		// Pass undefined for history (4th arg) and cancellationToken (5th arg).
+		// Pass "explain selection" for requestType (6th arg).
 		const result = await sidebarProvider._generateWithRetry(
-			prompt, // Direct prompt, no history needed for explain
-			activeApiKey,
-			selectedModel,
-			undefined, // No history context needed for explain
-			"explain selection"
+			prompt, // 1st arg: prompt
+			activeApiKey, // 2nd arg: apiKey
+			selectedModel, // 3rd arg: modelName
+			undefined, // 4th arg: history (not needed for explain)
+			undefined, // 5th arg: cancellationToken (not needed here)
+			"explain selection" // 6th arg: requestType
 		);
 
 		if (
@@ -97,6 +101,7 @@ async function executeExplainAction(
 		) {
 			throw new Error(result || `Empty response from AI (${selectedModel}).`);
 		}
+		// Clean potential markdown code blocks from the explanation
 		const cleanedResult = result
 			.replace(/^```.*\n?/, "")
 			.replace(/\n?```$/, "")
@@ -233,12 +238,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
 						let responseContent = "";
 						try {
+							// Call _generateWithRetry for /docs
 							responseContent = await sidebarProvider._generateWithRetry(
 								modificationPrompt,
 								activeApiKey,
 								selectedModel,
-								undefined,
-								"/docs generation"
+								undefined, // No history needed
+								undefined, // No cancellation token needed
+								"/docs generation" // Request type
 							);
 
 							if (
@@ -251,7 +258,7 @@ export async function activate(context: vscode.ExtensionContext) {
 										`Empty response from AI (${selectedModel}).`
 								);
 							}
-
+							// Clean potential markdown
 							responseContent = responseContent
 								.replace(/^```[a-z]*\n?/, "")
 								.replace(/\n?```$/, "")
@@ -307,7 +314,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					await vscode.commands.executeCommand(
 						"minovative-mind.activitybar.focus"
 					);
-					await new Promise((resolve) => setTimeout(resolve, 100));
+					await new Promise((resolve) => setTimeout(resolve, 100)); // Short delay
 					await vscode.commands.executeCommand(
 						"minovativeMindSidebarView.focus"
 					);
@@ -340,7 +347,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 	context.subscriptions.push(modifySelectionDisposable);
 
-	// Explain Selection Command (NO CHANGE HERE)
+	// Explain Selection Command (NO CHANGE HERE, logic moved to helper)
 	const explainDisposable = vscode.commands.registerCommand(
 		"minovative-mind.explainSelection",
 		async () => {
@@ -360,7 +367,8 @@ export async function activate(context: vscode.ExtensionContext) {
 				},
 				async (progress) => {
 					progress.report({ increment: 20, message: "Preparing..." });
-					const result = await executeExplainAction(sidebarProvider); // Use the dedicated helper
+					// Use the dedicated helper function
+					const result = await executeExplainAction(sidebarProvider);
 					progress.report({
 						increment: 80,
 						message: result.success
@@ -372,8 +380,8 @@ export async function activate(context: vscode.ExtensionContext) {
 						vscode.window.showInformationMessage(
 							"Minovative Mind: Code Explanation",
 							{
-								modal: true,
-								detail: result.content,
+								modal: true, // Show in a modal dialog
+								detail: result.content, // Use 'detail' for longer content
 							}
 						);
 					} else {
