@@ -747,6 +747,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						console.log("Welcome page already shown this session.");
 					}
 					break;
+
 				case "reenableInput": // Acknowledgment from webview or internal signal
 					this.postMessageToWebview({ type: "reenableInput" }); // Forward to webview if needed
 					break;
@@ -1907,11 +1908,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						connect-src 'none';
 				">
 				<link href="${stylesUri}" rel="stylesheet">
-				<title>Minovative Mind Chat</title>
+				<title>Minovative Mind Chat (BETA)</title>
 		</head>
 		<body>
 				<div class="chat-controls">
-					 <h1>Minovative Mind</h1>
+					 <h1>Minovative Mind (BETA)</h1>
 						<div class="button-group">
 								<button id="save-chat-button" title="Save Chat">S</button> <!-- Icon added by JS -->
 								<button id="load-chat-button" title="Load Chat">L</button> <!-- Icon added by JS -->
