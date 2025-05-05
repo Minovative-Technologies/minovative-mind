@@ -218,14 +218,95 @@ h2 {
 	color: var(--vscode-errorForeground);
 }
 
-/* --- Code Blocks within Messages --- */
+/* --- Markdown Content within Messages --- */
+
+/* Headings */
+#chat-container .message h1,
+#chat-container .message h2,
+#chat-container .message h3 {
+	font-weight: 600;
+	margin-top: 1em;
+	margin-bottom: 0.5em;
+	line-height: 1.3;
+	color: inherit; /* Inherit color from parent message */
+	border-bottom: none; /* Override global header style */
+	padding-bottom: 0; /* Override global header style */
+}
+#chat-container .message h1 {
+	font-size: 1.1em; /* Slightly larger than body */
+	border-bottom: 1px solid
+		var(--vscode-editorWidget-border, var(--border-color)); /* Add a subtle separator */
+	padding-bottom: 0.3em;
+}
+#chat-container .message h2 {
+	font-size: 1.05em; /* Slightly larger than body */
+}
+#chat-container .message h3 {
+	font-size: 1em; /* Same size as body, but bold */
+}
+#chat-container .message *:first-child > h1, /* Remove top margin if heading is the very first element */
+#chat-container .message *:first-child > h2,
+#chat-container .message *:first-child > h3 {
+	margin-top: 0;
+}
+
+/* Lists (ul, ol, li) */
+#chat-container .message ul,
+#chat-container .message ol {
+	margin-top: 0.5em;
+	margin-bottom: 0.8em;
+	padding-left: 2em; /* Standard list indentation */
+}
+#chat-container .message ul {
+	list-style-type: disc; /* Standard bullet points */
+}
+#chat-container .message ol {
+	list-style-type: decimal; /* Standard numbering */
+}
+#chat-container .message li {
+	margin-bottom: 0.3em; /* Spacing between list items */
+}
+/* Nested lists */
+#chat-container .message ul ul,
+#chat-container .message ul ol,
+#chat-container .message ol ol,
+#chat-container .message ol ul {
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+}
+#chat-container .message ul ul {
+	list-style-type: circle;
+}
+#chat-container .message ul ul ul {
+	list-style-type: square;
+}
+
+/* Blockquotes */
+#chat-container .message blockquote {
+	margin: 0.8em 0;
+	padding: 0.4em 1em;
+	border-left: 3px solid var(--vscode-focusBorder, #007fd4); /* Use focus border color for highlight */
+	background-color: rgba(128, 128, 128, 0.1); /* Subtle background */
+	color: var(
+		--vscode-descriptionForeground,
+		inherit
+	); /* Use description color or inherit */
+}
+#chat-container .message blockquote p {
+	margin-bottom: 0.3em; /* Reduce bottom margin for paragraphs inside blockquote */
+}
+#chat-container .message blockquote p:last-child {
+	margin-bottom: 0;
+}
+
+/* Code Blocks within Messages */
 .message pre {
 	background-color: var(--vscode-textCodeBlock-background);
 	padding: 10px;
 	border-radius: var(--border-radius);
 	overflow-x: auto;
-	margin-top: 8px;
-	margin-bottom: 4px;
+	margin-top: 0.8em; /* Adjusted margin */
+	margin-bottom: 0.8em; /* Adjusted margin */
 	border: 1px solid var(--border-color);
 	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1); /* Subtle inset shadow */
 }
@@ -239,14 +320,17 @@ h2 {
 	color: var(--vscode-editor-foreground);
 	border-radius: 0;
 	box-shadow: none;
+	border: none; /* Ensure no border inside pre */
+	white-space: pre; /* Ensure pre formatting is respected */
 }
+/* Inline code */
 .message :not(pre) > code {
-	/* Inline code */
 	background-color: var(--vscode-textCodeBlock-background);
 	padding: 0.2em 0.4em;
 	border-radius: var(--border-radius);
 	font-size: 0.9em;
 	border: 1px solid var(--border-color);
+	white-space: nowrap; /* Prevent inline code from wrapping */
 }
 
 /* --- Status Area --- */
