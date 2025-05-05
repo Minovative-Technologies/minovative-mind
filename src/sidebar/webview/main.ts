@@ -12,7 +12,6 @@ import {
 	faPlus,
 	faCheck,
 	faTimes,
-	faStop, // 1. Import the Font Awesome 'stop' icon
 } from "@fortawesome/free-solid-svg-icons";
 
 // Add icons to the library
@@ -25,8 +24,7 @@ library.add(
 	faChevronRight,
 	faPlus,
 	faCheck,
-	faTimes,
-	faStop // 2. Add the faStop icon to the FontAwesome library
+	faTimes
 );
 // --- End Font Awesome Imports ---
 
@@ -42,9 +40,6 @@ const vscode = acquireVsCodeApi();
 const sendButton = document.getElementById(
 	"send-button"
 ) as HTMLButtonElement | null;
-const stopButton = document.getElementById(
-	"stop-button"
-) as HTMLButtonElement | null; // 3. Get a reference to the new #stop-button DOM element.
 const chatInput = document.getElementById(
 	"chat-input"
 ) as HTMLTextAreaElement | null;
@@ -106,7 +101,6 @@ console.log("Webview script loaded.");
 // Check for essential elements
 if (
 	!sendButton ||
-	!stopButton || // Check if stop button exists
 	!chatInput ||
 	!chatContainer ||
 	!modelSelect ||
@@ -456,18 +450,14 @@ if (
 		}
 	}
 
-	// MODIFICATION POINT 4: Modify setLoadingState to enable/disable the Stop button based *only* on loading state.
 	function setLoadingState(loading: boolean) {
 		isLoading = loading;
-		if (sendButton && stopButton && chatInput && modelSelect) {
+		if (sendButton && chatInput && modelSelect) {
 			// Determine if controls should be enabled (not loading AND API key is set)
 			const enableSendControls = !loading && isApiKeySet;
 			sendButton.disabled = !enableSendControls;
 			chatInput.disabled = !enableSendControls;
 			modelSelect.disabled = !enableSendControls;
-
-			// Stop button is enabled *only* when loading (an operation is active)
-			stopButton.disabled = !loading; // Correctly enable only when loading
 
 			// Show/hide loading indicator message
 			if (loading) {
@@ -603,20 +593,6 @@ if (
 	// Send message on button click
 	sendButton.addEventListener("click", sendMessage);
 
-	// Add an event listener to the Stop button
-	stopButton.addEventListener("click", () => {
-		if (!isLoading) {
-			console.warn("Stop button clicked but not currently loading.");
-			return; // Don't send stop request if not loading
-		}
-		console.log("Stop button clicked. Sending stopRequest.");
-		vscode.postMessage({ type: "stopRequest" });
-		updateStatus("Requesting to stop operation...");
-		// Optionally disable the stop button immediately after clicking
-		// stopButton.disabled = true; // Keep this commented, setLoadingState manages it
-		// The setLoadingState(false) call from the backend response will definitively disable it.
-	});
-
 	// Send message on Enter key (if Shift is not pressed)
 	chatInput.addEventListener("keydown", (e) => {
 		if (e.key === "Enter" && !e.shiftKey) {
@@ -720,7 +696,6 @@ if (
 						if (modelSelect) {
 							modelSelect.disabled = true;
 						}
-						// Stop button should already be disabled by setLoadingState(false)
 					} else {
 						// Error handling if UI couldn't be created
 						console.error("Plan confirmation container failed to create!");
@@ -784,7 +759,6 @@ if (
 						chatInput!.disabled = !enableSendControls;
 						sendButton!.disabled = !enableSendControls;
 						modelSelect!.disabled = !enableSendControls;
-						// Stop button state is managed by setLoadingState based on isLoading
 					}
 				} else {
 					console.error("Invalid 'updateKeyList' message received:", message);
@@ -853,38 +827,9 @@ if (
 				setLoadingState(false); // Ensure loading state is off after restore
 				break;
 			}
-			// Explicit request to re-enable input (e.g., after an error or cancellation or stop)
 			case "reenableInput": {
 				console.log("Received reenableInput request from provider.");
 				setLoadingState(false); // Turn off loading and re-enable controls based on API key status
-				break;
-			}
-			// MODIFICATION POINT 1: Remove the old "updateStopButtonState" case
-			// Removed case "updateStopButtonState": { ... }
-
-			// MODIFICATION POINT 2: Add case to explicitly enable the stop button
-			case "enableStopButton": {
-				if (stopButton) {
-					stopButton.disabled = false;
-					console.log("Stop button explicitly enabled by message.");
-				}
-				break;
-			}
-
-			// MODIFICATION POINT 3: Add case to explicitly disable the stop button
-			case "disableStopButton": {
-				if (stopButton) {
-					stopButton.disabled = true;
-					console.log("Stop button explicitly disabled by message.");
-					// If disabling stop button, ensure loading state is also turned off
-					// to keep the UI consistent (stop button should only be enabled when loading)
-					if (isLoading) {
-						console.log(
-							"Stop button disabled by message, ensuring loading state is also turned off."
-						);
-						setLoadingState(false);
-					}
-				}
 				break;
 			}
 
@@ -910,7 +855,6 @@ if (
 		deleteKeyButton!.disabled = true;
 		chatInput!.disabled = true;
 		sendButton!.disabled = true;
-		stopButton!.disabled = true; // Ensure Stop button is initially disabled
 		modelSelect!.disabled = true;
 		clearChatButton!.disabled = true; // Disabled initially until chat has content
 		saveChatButton!.disabled = true; // Disabled initially until chat has content
@@ -918,7 +862,6 @@ if (
 
 		// Apply Font Awesome icons to the buttons
 		setIconForButton(sendButton, faPaperPlane);
-		setIconForButton(stopButton, faStop); // Set icon for Stop button
 		setIconForButton(saveChatButton, faFloppyDisk);
 		setIconForButton(loadChatButton, faFolderOpen);
 		setIconForButton(clearChatButton, faTrashCan);

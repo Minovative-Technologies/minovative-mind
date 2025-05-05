@@ -82,16 +82,14 @@ async function executeExplainAction(
 
 	try {
 		// Use the retry wrapper from the provider for consistency
-		// MODIFICATION: Ensure arguments match the _generateWithRetry signature.
-		// Pass undefined for history (4th arg) and cancellationToken (5th arg).
-		// Pass "explain selection" for requestType (6th arg).
+		// Ensure arguments match the _generateWithRetry signature: (prompt, initialApiKey, modelName, history, requestType)
+		// Pass undefined for history (4th arg) and "explain selection" for requestType (5th arg).
 		const result = await sidebarProvider._generateWithRetry(
 			prompt, // 1st arg: prompt
 			activeApiKey, // 2nd arg: apiKey
 			selectedModel, // 3rd arg: modelName
 			undefined, // 4th arg: history (not needed for explain)
-			undefined, // 5th arg: cancellationToken (not needed here)
-			"explain selection" // 6th arg: requestType
+			"explain selection" // 5th arg: requestType
 		);
 
 		if (
@@ -193,7 +191,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			// --- BRANCHING LOGIC ---
 			if (instructionLower === "/docs") {
-				// --- Handle /docs directly (NO CHANGE HERE) ---
+				// --- Handle /docs directly ---
 				await vscode.window.withProgress(
 					{
 						location: vscode.ProgressLocation.Notification,
@@ -239,13 +237,14 @@ export async function activate(context: vscode.ExtensionContext) {
 						let responseContent = "";
 						try {
 							// Call _generateWithRetry for /docs
+							// Signature: _generateWithRetry(prompt, initialApiKey, modelName, history, requestType)
+							// Removed the fifth argument (cancellationToken) which was undefined.
 							responseContent = await sidebarProvider._generateWithRetry(
-								modificationPrompt,
-								activeApiKey,
-								selectedModel,
-								undefined, // No history needed
-								undefined, // No cancellation token needed
-								"/docs generation" // Request type
+								modificationPrompt, // 1st arg: prompt
+								activeApiKey, // 2nd arg: apiKey
+								selectedModel, // 3rd arg: modelName
+								undefined, // 4th arg: history (not needed)
+								"/docs generation" // 5th arg: requestType
 							);
 
 							if (
@@ -406,24 +405,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
 // --- Deactivate Function ---
 export function deactivate() {
-	/* // Commenting out welcomePanel disposal as the panel variable and creation logic are removed
-	if (welcomePanel) {
-		welcomePanel.dispose();
-	}
-	*/
 	resetClient(); // Ensure client is reset on deactivation
 	console.log("Minovative Mind extension deactivated.");
 }
-
-// Helper function (ensure it's defined if not imported)
-/* // Commenting out getNonce as it was used for the welcome page webview CSP and is no longer needed
-function getNonce() {
-	let text = "";
-	const possible =
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-	for (let i = 0; i < 32; i++) {
-		text += possible.charAt(Math.floor(Math.random() * possible.length));
-	}
-	return text;
-}
-*/

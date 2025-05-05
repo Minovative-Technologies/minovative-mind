@@ -74,10 +74,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	private _chatHistory: HistoryEntry[] = [];
 	private _currentPlan: ExecutionPlan | null = null;
 
-	// --- Added for Cancellation Support ---
-	private _isCancellableOperationInProgress: boolean = false;
-	private _cancellationTokenSource?: vscode.CancellationTokenSource;
-	// --- End Cancellation Support ---
+	// Removed: _isCancellableOperationInProgress
+	// Removed: _cancellationTokenSource
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri,
@@ -109,7 +107,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		console.log("SidebarProvider initialization complete.");
 	}
 
-	// --- Key Management Logic (No Changes Here) ---
+	// --- Key Management Logic (No Changes Here except _saveKeysToStorage update) ---
 	private async _loadKeysFromStorage() {
 		try {
 			const keysJson = await this._secretStorage.get(
@@ -545,7 +543,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public resolveWebviewView(
 		webviewView: vscode.WebviewView,
 		context: vscode.WebviewViewResolveContext,
-		_token: vscode.CancellationToken
+		_token: vscode.CancellationToken // This token is for the webview itself, not individual operations
 	) {
 		this._view = webviewView;
 
@@ -555,15 +553,23 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				vscode.Uri.joinPath(this._extensionUri, "dist"), // Compiled JS
 				vscode.Uri.joinPath(this._extensionUri, "media"), // Icons/Images
 				vscode.Uri.joinPath(this._extensionUri, "src", "sidebar", "webview"), // CSS
-				vscode.Uri.joinPath(this._extensionUri, "src", "resources"), // Welcome page assets
 			],
 		};
 
+		console.log("--- Generated Webview HTML ---");
+		const generatedHtml = this._getHtmlForWebview(webviewView.webview);
+		console.log(generatedHtml.substring(0, 1000) + "..."); // Log the first 1000 chars
 		webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
 		// --- Handle Messages from Webview ---
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			console.log(`[Provider] Message received: ${data.type}`);
+
+			// Check if an operation is already in progress before starting a new one
+			// The plan execution itself will use VS Code's progress cancellation, but
+			// we prevent starting *another* plan or chat request if one is going.
+			// Removed _isCancellableOperationInProgress check as flag is removed.
+			// Plan execution is handled differently below.
 
 			switch (data.type) {
 				// Plan Execution Handling
@@ -590,10 +596,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						this.postMessageToWebview({ type: "reenableInput" });
 						break;
 					}
-					if (this._isCancellableOperationInProgress) {
+					// Allow plan request even if execution is running, but prevent generating a *new* plan
+					// if the _currentPlan hasn't been executed/cancelled yet.
+					if (this._currentPlan) {
 						this.postMessageToWebview({
 							type: "aiResponse",
-							value: "Error: Another AI operation is already in progress.",
+							value: "Error: Another plan is already pending confirmation.",
 							isError: true,
 						});
 						this.postMessageToWebview({ type: "reenableInput" });
@@ -601,6 +609,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					}
 					this._addHistoryEntry("user", `@plan ${userRequest}`); // Add user's raw @plan request
 					await this._handlePlanRequest(userRequest, activeKey, selectedModel);
+					// _handlePlanRequest now re-enables input in its error paths.
+					// If successful, _generateAndPresentPlan sends requiresConfirmation: true,
+					// and the webview keeps input disabled until confirmation/cancel.
 					break;
 				}
 				case "confirmPlanExecution": {
@@ -626,15 +637,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						this.postMessageToWebview({ type: "reenableInput" });
 						break;
 					}
-					if (this._isCancellableOperationInProgress) {
-						this.postMessageToWebview({
-							type: "statusUpdate",
-							value: "Error: Another AI operation is already in progress.",
-							isError: true,
-						});
-						this.postMessageToWebview({ type: "reenableInput" });
-						break;
-					}
 					if (planToExecute) {
 						// Execute the plan using the key/model active *at the time of confirmation*
 						await this._executePlan(
@@ -642,6 +644,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							currentActiveKey,
 							selectedModel
 						);
+						// _executePlan handles reenabling input in its finally block
 					} else {
 						console.error(
 							"Received confirmPlanExecution but plan data was missing."
@@ -660,11 +663,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					this._currentPlan = null; // Discard the pending plan
 					this.postMessageToWebview({
 						type: "statusUpdate",
-						value: "Plan execution cancelled.",
+						value: "Plan execution cancelled by user.",
 					});
 					this._addHistoryEntry("model", "Plan execution cancelled by user.");
-					this.postMessageToWebview({ type: "reenableInput" });
-					// Note: This only cancels *before* execution starts. Ongoing execution needs the stop button.
+					this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input after cancellation
 					break;
 				}
 
@@ -692,10 +694,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						this.postMessageToWebview({ type: "reenableInput" });
 						return; // Stop processing if no model
 					}
-					if (this._isCancellableOperationInProgress) {
+					// Prevent starting a new chat if a plan is pending confirmation
+					if (this._currentPlan) {
 						this.postMessageToWebview({
 							type: "aiResponse",
-							value: "Error: Another AI operation is already in progress.",
+							value:
+								"Error: A plan is pending confirmation. Please confirm or cancel it first.",
 							isError: true,
 						});
 						this.postMessageToWebview({ type: "reenableInput" });
@@ -703,6 +707,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					}
 					this._addHistoryEntry("user", userMessage); // Add user message to history
 					await this._handleRegularChat(userMessage, activeKey, selectedModel);
+					// _handleRegularChat handles reenabling input in its finally block
 					break;
 				}
 
@@ -745,37 +750,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					this._updateWebviewModelList();
 					this._restoreChatHistoryToWebview();
 					this.postMessageToWebview({ type: "reenableInput" }); // Initial enable
-					// Ensure stop button is initially disabled if no operation is running
-					if (!this._isCancellableOperationInProgress) {
-						this.postMessageToWebview({ type: "disableStopButton" });
-					}
-					break; // Removed extra case label that caused fallthrough
-
-				// --- Stop Request Handling ---
-				case "stopRequest":
-					if (
-						this._isCancellableOperationInProgress &&
-						this._cancellationTokenSource
-					) {
-						console.log(
-							"[Provider] Stop request received. Cancelling operation."
-						);
-						this.postMessageToWebview({
-							type: "statusUpdate",
-							value: "Stopping request...",
-						});
-						this._cancellationTokenSource.cancel();
-						// The finally block of the *running operation* will handle state reset,
-						// history update, button disabling, and input re-enabling.
-					} else {
-						console.warn(
-							"[Provider] Received stopRequest but no cancellable operation is in progress."
-						);
-						// Optionally inform the user or just ignore
-						this.postMessageToWebview({ type: "disableStopButton" }); // Ensure button is disabled if state is inconsistent
-						this.postMessageToWebview({ type: "reenableInput" }); // Ensure input is enabled
-					}
 					break;
+
+				// Removed: stopRequest case
 
 				case "reenableInput": // Acknowledgment from webview or internal signal
 					this.postMessageToWebview({ type: "reenableInput" }); // Forward to webview if needed
@@ -853,41 +830,26 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 	// --- End VS Code Provider Methods ---
 
-	// --- Retry Logic Wrapper (Modified for Cancellation) ---
+	// --- Retry Logic Wrapper (Modified to remove Cancellation) ---
 	/**
 	 * Wraps the call to generateContent, handling quota errors and retrying with the next key.
-	 * Supports cancellation.
+	 * Cancellation is no longer handled here directly, but relies on the calling context (VS Code progress).
 	 */
 	public async _generateWithRetry(
 		prompt: string,
 		initialApiKey: string,
 		modelName: string,
 		history: HistoryEntry[] | undefined,
-		// MODIFICATION START: Made cancellationToken optional
-		cancellationToken?: vscode.CancellationToken, // <-- Made optional
-		// MODIFICATION END
+		// Removed: cancellationToken parameter
 		requestType: string = "request" // Added for logging clarity
 	): Promise<string> {
 		let currentApiKey = initialApiKey;
 		const triedKeys = new Set<string>(); // Track keys failed *within this request* due to quota
 		const maxRetries = this._apiKeyList.length; // Try each key at most once per request
 		let attempts = 0;
-		const CANCELLATION_MESSAGE = "Operation cancelled by user."; // Define consistent cancellation message
 
 		while (attempts < maxRetries) {
 			attempts++;
-
-			// --- Cancellation Check ---
-			// MODIFICATION START: Added safe navigation for optional cancellationToken
-			if (cancellationToken?.isCancellationRequested) {
-				// MODIFICATION END
-				console.log(
-					`[RetryWrapper] Cancellation requested before attempt ${attempts} for ${requestType}.`
-				);
-				// No need to post status here, the calling function's finally block will handle it.
-				return CANCELLATION_MESSAGE;
-			}
-			// --- End Cancellation Check ---
 
 			console.log(
 				`[RetryWrapper] Attempt ${attempts}/${maxRetries} for ${requestType} with key ...${currentApiKey.slice(
@@ -896,27 +858,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 
 			// generateContent handles initialization checks internally now
-			// Pass the cancellation token down if the underlying API supports it (assuming it doesn't here)
-			// If generateContent becomes async and long-running itself, it would need its own internal checks.
+			// We do NOT pass a cancellation token here anymore
 			const result = await generateContent(
 				currentApiKey,
 				modelName,
 				prompt,
 				history
-				// We don't pass the token to generateContent itself unless it supports it
 			);
-
-			// --- Post-API Call Cancellation Check ---
-			// Check again in case cancellation happened *during* the API call
-			// MODIFICATION START: Added safe navigation for optional cancellationToken
-			if (cancellationToken?.isCancellationRequested) {
-				// MODIFICATION END
-				console.log(
-					`[RetryWrapper] Cancellation requested after API call attempt ${attempts} for ${requestType}.`
-				);
-				return CANCELLATION_MESSAGE;
-			}
-			// --- End Post-API Call Check ---
 
 			if (result === ERROR_QUOTA_EXCEEDED) {
 				console.warn(
@@ -980,7 +928,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 	// --- End Retry Logic Wrapper ---
 
-	// --- Planning Workflow Logic (Modified for Cancellation) ---
+	// --- Planning Workflow Logic (Modified to remove Cancellation) ---
 
 	/**
 	 * Creates the prompt for the AI to generate an execution plan.
@@ -1083,7 +1031,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
 		5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description. Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly. **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
 		6.  JSON Output: Format the plan strictly according to the JSON structure below.
-		7.  Never Aussume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING
+		7.  Never Aussume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
 
 		${specificContextPrompt}
 
@@ -1107,14 +1055,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		apiKey: string,
 		modelName: string
 	): Promise<void> {
-		// --- Setup Cancellation ---
-		this._cancellationTokenSource?.dispose(); // Dispose any previous source
-		this._cancellationTokenSource = new vscode.CancellationTokenSource();
-		const token = this._cancellationTokenSource.token;
-		this._isCancellableOperationInProgress = true;
-		this.postMessageToWebview({ type: "enableStopButton" });
-		// --- End Cancellation Setup ---
-
 		try {
 			this.postMessageToWebview({
 				type: "aiResponse",
@@ -1131,7 +1071,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					isLoading: false,
 					isError: true,
 				});
-				// No reenable input here, finally block handles it
+				this._addHistoryEntry(
+					"model",
+					`Error generating plan: Failed to build project context. ${projectContext}`
+				);
+				this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input on error
 				return;
 			}
 
@@ -1142,46 +1086,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				/* No editor context */
 				/* No diagnostics */
 			);
-			// Pass the token to the generation function
-			await this._generateAndPresentPlan(
-				planningPrompt,
-				apiKey,
-				modelName,
-				token
-			);
+			// Call generate and present plan
+			await this._generateAndPresentPlan(planningPrompt, apiKey, modelName);
+
+			// _generateAndPresentPlan handles setting isLoading: false and requiresConfirmation: true.
+			// Input remains disabled by the webview until confirm/cancel is clicked.
 		} catch (error) {
-			// Catch errors *not* caught within _generateAndPresentPlan (e.g., context build error if check removed)
-			// Or if _generateAndPresentPlan re-throws an error
+			// Catch errors during context building or _generateAndPresentPlan (if it re-throws non-cancellation error)
 			console.error("Error in _handlePlanRequest:", error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
-			// Avoid duplicating error message if it's the cancellation message
-			if (errorMsg !== "Operation cancelled by user.") {
-				this.postMessageToWebview({
-					type: "aiResponse",
-					value: `Error during plan request: ${errorMsg}`,
-					isLoading: false,
-					isError: true,
-				});
-				this._addHistoryEntry(
-					"model",
-					`Error during plan request: ${errorMsg}`
-				);
-			}
-		} finally {
-			// --- Final Cleanup for Cancellation ---
-			console.log("Plan request finished or cancelled. Cleaning up.");
-			this._isCancellableOperationInProgress = false;
-			this._cancellationTokenSource?.dispose();
-			this._cancellationTokenSource = undefined;
-			this.postMessageToWebview({ type: "disableStopButton" });
-			this.postMessageToWebview({ type: "reenableInput" }); // Ensure input is always re-enabled
-			// --- End Final Cleanup ---
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Error during plan request: ${errorMsg}`,
+				isLoading: false, // Ensure loading state is cleared
+				isError: true,
+			});
+			this._addHistoryEntry("model", `Error during plan request: ${errorMsg}`);
+			// Re-enable input on error
+			this.postMessageToWebview({ type: "reenableInput" });
 		}
+		// Removed: finally block for cancellation cleanup
 	}
 
 	/**
 	 * NEW: Public method called by extension.ts for /fix and custom editor modifications.
-	 * Modified for cancellation.
+	 * Modified to remove Cancellation.
 	 */
 	public async initiatePlanFromEditorAction(
 		instruction: string,
@@ -1195,15 +1124,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			`[SidebarProvider] Received plan request from editor action: "${instruction}"`
 		);
 
-		if (this._isCancellableOperationInProgress) {
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: "Error: Another AI operation is already in progress.",
-				isError: true,
-			});
-			this.postMessageToWebview({ type: "reenableInput" });
-			return;
-		}
+		// Removed: _isCancellableOperationInProgress check for starting
 
 		const activeKey = this.getActiveApiKey();
 		const modelName = this.getSelectedModelName();
@@ -1226,14 +1147,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.postMessageToWebview({ type: "reenableInput" });
 			return;
 		}
-
-		// --- Setup Cancellation ---
-		this._cancellationTokenSource?.dispose(); // Dispose any previous source
-		this._cancellationTokenSource = new vscode.CancellationTokenSource();
-		const token = this._cancellationTokenSource.token;
-		this._isCancellableOperationInProgress = true;
-		this.postMessageToWebview({ type: "enableStopButton" });
-		// --- End Cancellation Setup ---
 
 		try {
 			// Don't add the raw instruction to chat history. Add a system message instead.
@@ -1260,7 +1173,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"model",
 					`Error: Failed to build project context for editor action.`
 				);
-				// No reenable input here, finally block handles it
+				this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input on error
 				return;
 			}
 
@@ -1323,81 +1236,57 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				diagnosticsString // Pass the formatted diagnostics
 			);
 
-			// --- Call the common logic to generate and display the plan, passing the token ---
-			await this._generateAndPresentPlan(
-				planningPrompt,
-				activeKey,
-				modelName,
-				token
-			);
+			// --- Call the common logic to generate and display the plan, removing token ---
+			await this._generateAndPresentPlan(planningPrompt, activeKey, modelName);
+
+			// _generateAndPresentPlan handles setting isLoading: false and requiresConfirmation: true.
+			// Input remains disabled by the webview until confirm/cancel is clicked.
 		} catch (error) {
 			console.error("Error in initiatePlanFromEditorAction:", error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
-			// Avoid duplicating error message if it's the cancellation message
-			if (errorMsg !== "Operation cancelled by user.") {
-				this.postMessageToWebview({
-					type: "aiResponse",
-					value: `Error during editor action plan request: ${errorMsg}`,
-					isLoading: false,
-					isError: true,
-				});
-				this._addHistoryEntry(
-					"model",
-					`Error during editor action plan request: ${errorMsg}`
-				);
-			}
-		} finally {
-			// --- Final Cleanup for Cancellation ---
-			console.log("Editor plan request finished or cancelled. Cleaning up.");
-			this._isCancellableOperationInProgress = false;
-			this._cancellationTokenSource?.dispose();
-			this._cancellationTokenSource = undefined;
-			this.postMessageToWebview({ type: "disableStopButton" });
-			this.postMessageToWebview({ type: "reenableInput" }); // Ensure input is always re-enabled
-			// --- End Final Cleanup ---
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Error during editor action plan request: ${errorMsg}`,
+				isLoading: false, // Ensure loading state is cleared
+				isError: true,
+			});
+			this._addHistoryEntry(
+				"model",
+				`Error during editor action plan request: ${errorMsg}`
+			);
+			// Re-enable input on error
+			this.postMessageToWebview({ type: "reenableInput" });
 		}
+		// Removed: finally block for cancellation cleanup
 	}
 
 	/**
 	 * Common helper function to generate plan from prompt and display it.
-	 * Modified for cancellation.
+	 * Modified to remove Cancellation.
 	 */
 	private async _generateAndPresentPlan(
 		planningPrompt: string,
 		apiKey: string,
-		modelName: string,
-		token: vscode.CancellationToken // <-- Added cancellation token
+		modelName: string
+		// Removed: token parameter
 	): Promise<void> {
 		let planJsonString = "";
-		const CANCELLATION_MESSAGE = "Operation cancelled by user.";
+		// Removed: CANCELLATION_MESSAGE
 
 		try {
-			// Use the retry wrapper for generating the plan, passing the token
+			// Use the retry wrapper for generating the plan, removing token
 			planJsonString = await this._generateWithRetry(
 				planningPrompt,
 				apiKey,
 				modelName,
 				undefined, // No history needed for planning prompt itself
-				token, // Pass token
+				// Removed: token parameter
 				"plan generation"
 			);
 
-			// --- Cancellation Check ---
-			if (
-				token.isCancellationRequested ||
-				planJsonString === CANCELLATION_MESSAGE
-			) {
-				console.log("Plan generation cancelled.");
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value: "Plan generation cancelled.",
-				});
-				this._addHistoryEntry("model", CANCELLATION_MESSAGE);
-				throw new Error(CANCELLATION_MESSAGE); // Propagate cancellation as error to trigger finally block correctly
-			}
-			// --- End Cancellation Check ---
+			// Removed: Cancellation check after generation
 
-			// Check if the retry wrapper returned a final error message (other than cancellation)
+			// Check if the retry wrapper returned a final error message
 			if (
 				planJsonString.toLowerCase().startsWith("error:") ||
 				planJsonString === ERROR_QUOTA_EXCEEDED
@@ -1427,21 +1316,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		} catch (error) {
 			// This catch block now handles errors from _generateWithRetry and JSON validation/cleaning
 			const errorMsg = error instanceof Error ? error.message : String(error);
-			// Avoid duplicate messages if it's cancellation
-			if (errorMsg !== CANCELLATION_MESSAGE) {
-				this.postMessageToWebview({
-					type: "aiResponse",
-					value: `Error generating plan: ${errorMsg}`,
-					isLoading: false, // Ensure loading state is cleared
-					isError: true,
-				});
-				this._addHistoryEntry("model", `Error generating plan: ${errorMsg}`);
-			}
-			// Re-throw the error so the caller's finally block executes
+			console.error("Error generating plan:", error); // Log the original error
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Error generating plan: ${errorMsg}`,
+				isLoading: false, // Ensure loading state is cleared
+				isError: true,
+			});
+			this._addHistoryEntry("model", `Error generating plan: ${errorMsg}`);
+			// Re-throw the error so the caller's error handling/cleanup runs
 			throw error;
 		}
 
-		// If we reach here, plan generation was successful (and not cancelled)
+		// If we reach here, plan generation was successful
 		// Parse and Validate the Plan
 		const plan: ExecutionPlan | null = parseAndValidatePlan(planJsonString);
 
@@ -1460,8 +1347,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"model",
 				`Error: Failed to parse/validate plan.\nRaw Response:\n\`\`\`json\n${planJsonString}\n\`\`\``
 			);
-			// No reenable input here, finally block handles it
-			// Throw an error to ensure the caller's finally block runs
+			// Throw an error to ensure the caller's error handling/cleanup runs
 			throw new Error(errorDetail);
 		}
 
@@ -1517,29 +1403,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			requiresConfirmation: true,
 			planData: plan, // Send the actual plan data for execution later
 		});
-		// NOTE: The finally block in the *caller* (_handlePlanRequest / initiatePlanFromEditorAction)
-		// will handle resetting the cancellation state and re-enabling input AFTER confirmation/cancellation.
+		// Removed: rely on caller's finally block for cancellation cleanup
+		// The caller (_handlePlanRequest / initiatePlanFromEditorAction) now has try/catch blocks
+		// and the webview controls re-enabling input via confirm/cancel messages.
 	}
 
-	// Handles regular chat messages (non-@plan) - Modified for cancellation
+	// Handles regular chat messages (non-@plan) - Modified to remove Cancellation
 	private async _handleRegularChat(
 		userMessage: string,
 		apiKey: string,
 		modelName: string
 	): Promise<void> {
-		// --- MODIFICATION START: Setup Cancellation ---
-		this._cancellationTokenSource?.dispose(); // Dispose any previous source
-		this._cancellationTokenSource = new vscode.CancellationTokenSource();
-		const token = this._cancellationTokenSource.token;
-		this._isCancellableOperationInProgress = true;
-		this.postMessageToWebview({ type: "enableStopButton" }); // Enable stop button in UI
-		// --- MODIFICATION END ---
-
-		const CANCELLATION_MESSAGE = "Operation cancelled by user."; // Consistent message
-
-		// --- MODIFICATION START: Wrap existing logic in try...finally ---
+		// Wrapped logic in try...finally to ensure cleanup happens
 		try {
-			// Existing logic starts here
 			this.postMessageToWebview({
 				type: "aiResponse",
 				value: `Minovative Mind (${modelName}) is thinking...`,
@@ -1555,8 +1431,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					isLoading: false,
 					isError: true,
 				});
-				// Return early, the finally block will handle cleanup
-				return;
+				this._addHistoryEntry(
+					"model",
+					`Error processing message: Failed to build project context. ${projectContext}`
+				);
+				// Ensure cleanup in finally block
+				throw new Error("Failed to build project context."); // Re-throw to trigger finally
 			}
 
 			// Use the current chat history for context
@@ -1564,7 +1444,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			// Construct the final prompt including context and user query
 			const finalPrompt = `
-			You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query and when you do answer the user's queries, make sure you complete the entire request, don't do minimal, shorten, or partial of what the user asked for. Complete the entire request from the users no matter how long it may take. Use Markdown formatting for code blocks and lists where appropriate. Keep responses concise but informative. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
+			You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query and when you do answer the user's queries, make sure you complete the entire request, don't do minimal, shorten, or partial of what the user asked for. Complete the entire request from the users no matter how long it may take. Use Markdown formatting for code blocks and lists where appropriate. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
 
 			*** Project Context (Reference Only) ***
 			${projectContext}
@@ -1577,35 +1457,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			Assistant Response:
 	`;
 
-			// --- MODIFICATION START: Pass token to _generateWithRetry ---
+			// Pass the token to _generateWithRetry (removed this parameter)
 			const aiResponseText = await this._generateWithRetry(
 				finalPrompt,
 				apiKey,
 				modelName,
 				historyForApi, // Pass context history
-				token, // Pass cancellation token
+				// Removed: token parameter
 				"chat" // Specify request type for logging
 			);
-			// --- MODIFICATION END ---
 
-			// --- MODIFICATION START: Add cancellation check after generation ---
-			if (
-				token.isCancellationRequested ||
-				aiResponseText === CANCELLATION_MESSAGE
-			) {
-				console.log("[_handleRegularChat] Chat generation cancelled.");
-				this.postMessageToWebview({
-					// Update UI status
-					type: "statusUpdate",
-					value: "Chat request cancelled.",
-				});
-				this._addHistoryEntry("model", CANCELLATION_MESSAGE); // Add cancellation message to chat history
-				// No further processing needed, exit the try block. Cleanup happens in finally.
-				return;
-			}
-			// --- MODIFICATION END ---
+			// Removed: Cancellation check after generation
 
-			// Check if the retry wrapper returned a final error message (other than cancellation)
+			// Check if the retry wrapper returned a final error message
 			const isErrorResponse =
 				aiResponseText.toLowerCase().startsWith("error:") ||
 				aiResponseText === ERROR_QUOTA_EXCEEDED;
@@ -1617,36 +1481,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.postMessageToWebview({
 				type: "aiResponse",
 				value: aiResponseText,
-				isLoading: false,
+				isLoading: false, // Stop loading indicator
 				isError: isErrorResponse,
 			});
 		} catch (error) {
-			// Catch errors not handled by _generateWithRetry (e.g., context build)
+			// Catch errors during context build or from _generateWithRetry if it throws
 			console.error("Error in _handleRegularChat:", error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
-			// Avoid duplicate messages for cancellation (should have been handled by return above)
-			if (errorMsg !== CANCELLATION_MESSAGE) {
-				this.postMessageToWebview({
-					type: "aiResponse",
-					value: `Error during chat: ${errorMsg}`,
-					isLoading: false,
-					isError: true,
-				});
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Error during chat: ${errorMsg}`,
+				isLoading: false, // Stop loading indicator
+				isError: true,
+			});
+			// Error message added to history inside the try block if coming from _generateWithRetry.
+			// If coming from context build, add it here:
+			if (errorMsg.includes("Failed to build project context")) {
+				// Already added in the specific check above, do nothing.
+			} else {
 				this._addHistoryEntry("model", `Error during chat: ${errorMsg}`);
 			}
 		} finally {
-			// --- MODIFICATION START: Final Cleanup ---
-			console.log(
-				"[_handleRegularChat] Chat request finished or cancelled. Cleaning up."
-			);
-			this._isCancellableOperationInProgress = false; // Reset flag
-			this._cancellationTokenSource?.dispose(); // Dispose the source
-			this._cancellationTokenSource = undefined; // Clear the reference
-			this.postMessageToWebview({ type: "disableStopButton" }); // Disable stop button in UI
-			this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input after chat response/error/cancellation
-			// --- MODIFICATION END ---
+			console.log("[_handleRegularChat] Chat request finished. Cleaning up.");
+			this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input after chat response/error
 		}
-		// --- MODIFICATION END: Wrap existing logic in try...finally ---
 	}
 
 	// Builds project context string (No changes here)
@@ -1682,22 +1540,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	// --- Plan Execution Logic (Modified for Cancellation) ---
+	// --- Plan Execution Logic (Modified to remove internal Cancellation) ---
 	private async _executePlan(
 		plan: ExecutionPlan,
 		apiKey: string, // Key active *at time of confirmation*
 		modelName: string // Model active *at time of confirmation*
 	): Promise<void> {
-		// --- Setup Cancellation ---
-		this._cancellationTokenSource?.dispose(); // Dispose any previous source
-		this._cancellationTokenSource = new vscode.CancellationTokenSource();
-		const token = this._cancellationTokenSource.token;
-		this._isCancellableOperationInProgress = true;
-		this.postMessageToWebview({ type: "enableStopButton" });
-		// --- End Cancellation Setup ---
-
 		let executionOk = true; // Assume success initially
-		const CANCELLATION_MESSAGE = "Operation cancelled by user.";
 
 		try {
 			this.postMessageToWebview({
@@ -1719,8 +1568,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"Execution Failed: No workspace folder open."
 				);
 				executionOk = false; // Mark as failed
-				// No reenable input here, finally block handles it
-				return;
+				// Ensure cleanup in finally block
+				throw new Error("No workspace folder open."); // Re-throw to trigger finally
 			}
 			const rootUri = workspaceFolders[0].uri;
 			// Use the API key/model provided at confirmation time for all steps initially
@@ -1733,16 +1582,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					title: `Minovative Mind: Executing Plan - ${
 						plan.planDescription || "Processing..."
 					}`,
-					cancellable: true, // Make the VS Code progress notification cancellable
+					cancellable: true, // Keep the VS Code progress notification cancellable
 				},
 				async (progress, progressToken) => {
-					// Link the VS Code progress cancellation to our internal cancellation source
-					progressToken.onCancellationRequested(() => {
-						console.log(
-							"VS Code progress cancellation requested. Cancelling internal source."
-						);
-						this._cancellationTokenSource?.cancel();
-					});
+					// Removed: Linking VS Code progress cancellation to internal source
+					// Now cancellation relies ONLY on the progressToken.isCancellationRequested check
 
 					const totalSteps = plan.steps ? plan.steps.length : 0;
 					if (totalSteps === 0) {
@@ -1760,16 +1604,23 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					}
 
 					for (const [index, step] of plan.steps!.entries()) {
-						// --- Cancellation Check at Start of Loop Iteration ---
-						if (token.isCancellationRequested) {
-							console.log(`Plan execution cancelled before step ${index + 1}.`);
+						// --- Check for VS Code Progress Cancellation ---
+						if (progressToken.isCancellationRequested) {
+							console.log(
+								`Plan execution cancelled by VS Code progress UI before step ${
+									index + 1
+								}.`
+							);
 							this.postMessageToWebview({
 								type: "statusUpdate",
-								value: `Plan execution cancelled.`,
+								value: `Plan execution cancelled by user.`,
 							});
-							this._addHistoryEntry("model", CANCELLATION_MESSAGE);
+							this._addHistoryEntry(
+								"model",
+								"Plan execution cancelled by user."
+							);
 							executionOk = false; // Mark as failed due to cancellation
-							break; // Exit the loop
+							return; // Exit the async callback within withProgress
 						}
 						// --- End Cancellation Check ---
 
@@ -1846,26 +1697,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											Complete File Content:
 											`;
 
-											// Use retry wrapper for AI content generation, passing token
+											// Use retry wrapper for AI content generation, removing token
 											contentToWrite = await this._generateWithRetry(
 												generationPrompt,
 												currentApiKeyForExecution, // Use potentially updated key
 												modelName,
 												undefined, // No history context needed here
-												token, // Pass cancellation token
+												// Removed: token parameter
 												`plan step ${stepNumber} (create file)`
 											);
 											// Re-fetch key in case retry switched it
 											currentApiKeyForExecution =
 												this.getActiveApiKey() || currentApiKeyForExecution;
 
-											// Check for cancellation or error from generation
-											if (
-												token.isCancellationRequested ||
-												contentToWrite === CANCELLATION_MESSAGE
-											) {
-												throw new Error(CANCELLATION_MESSAGE); // Propagate cancellation
-											}
+											// Check for error from generation (cancellation handled by progressToken)
 											if (
 												!currentApiKeyForExecution || // Check again after potential retry
 												contentToWrite.toLowerCase().startsWith("error:") ||
@@ -1944,26 +1789,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 										Complete Modified File Content:
 										`;
 
-										// Use retry wrapper for AI modification, passing token
+										// Use retry wrapper for AI modification, removing token
 										let modifiedContent = await this._generateWithRetry(
 											modificationPrompt,
 											currentApiKeyForExecution, // Use potentially updated key
 											modelName,
 											undefined, // No history context needed here
-											token, // Pass cancellation token
+											// Removed: token parameter
 											`plan step ${stepNumber} (modify file)`
 										);
 										// Re-fetch key in case retry switched it
 										currentApiKeyForExecution =
 											this.getActiveApiKey() || currentApiKeyForExecution;
 
-										// Check for cancellation or error from generation
-										if (
-											token.isCancellationRequested ||
-											modifiedContent === CANCELLATION_MESSAGE
-										) {
-											throw new Error(CANCELLATION_MESSAGE); // Propagate cancellation
-										}
+										// Check for error from generation (cancellation handled by progressToken)
 										if (
 											!currentApiKeyForExecution || // Check again after potential retry
 											modifiedContent.toLowerCase().startsWith("error:") ||
@@ -2030,8 +1869,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 										);
 
 										// --- Check for cancellation after modal dialog ---
-										if (token.isCancellationRequested) {
-											throw new Error(CANCELLATION_MESSAGE);
+										if (progressToken.isCancellationRequested) {
+											throw new Error("Operation cancelled by user."); // Use a generic error message that catch block handles
 										}
 										// --- End Cancellation Check ---
 
@@ -2054,22 +1893,45 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 												);
 												// Give the command some time to potentially start/finish
 												// Note: This is heuristic. A better approach might involve terminal exit codes if possible.
-												// Add cancellation check during wait
-												await new Promise((resolve, reject) => {
+												// Add cancellation check during wait using progressToken
+												await new Promise<void>((resolve, reject) => {
 													const timeoutId = setTimeout(resolve, 2000);
-													token.onCancellationRequested(() => {
-														clearTimeout(timeoutId);
-														console.log(
-															"Delay cancelled during command execution wait."
-														);
-														reject(new Error(CANCELLATION_MESSAGE));
-													});
+													const cancellationListener =
+														progressToken.onCancellationRequested(() => {
+															clearTimeout(timeoutId);
+															console.log(
+																"Delay cancelled during command execution wait due to VS Code progress cancellation."
+															);
+															cancellationListener.dispose(); // Clean up listener
+															reject(new Error("Operation cancelled by user.")); // Propagate cancellation
+														});
+													// Clean up listener if promise resolves normally before cancellation
+													timeoutId.unref(); // Allow process to exit if only this timeout is pending
+													if (!progressToken.isCancellationRequested) {
+														// Add listener only if not already cancelled
+													} else {
+														cancellationListener.dispose(); // Immediately dispose if already cancelled
+														reject(new Error("Operation cancelled by user.")); // Propagate cancellation
+													}
+												}).catch((err) => {
+													// If the promise rejected due to cancellation, re-throw it
+													if (err.message === "Operation cancelled by user.") {
+														throw err;
+													}
+													// Handle other potential errors within the promise setup
+													console.error(
+														"Error in command wait promise setup:",
+														err
+													);
+													throw new Error(
+														`Internal error during command wait: ${err.message}`
+													);
 												});
 											} catch (termError) {
 												// Catch errors from terminal creation or the cancellation during wait
 												if (
 													termError instanceof Error &&
-													termError.message === CANCELLATION_MESSAGE
+													termError.message === "Operation cancelled by user."
 												) {
 													throw termError; // Propagate cancellation
 												}
@@ -2114,7 +1976,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									break;
 							}
 						} catch (error) {
-							// Catch errors within a step's execution (including cancellation)
+							// Catch errors within a step's execution (including cancellation propagated from promises)
 							executionOk = false; // Mark execution as failed
 							const errorMsg =
 								error instanceof Error ? error.message : String(error);
@@ -2124,128 +1986,179 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								}):`,
 								error
 							);
-							// If the error is cancellation, use the standard message
-							const displayMsg =
-								errorMsg === CANCELLATION_MESSAGE
-									? CANCELLATION_MESSAGE
-									: `Error on Step ${stepNumber}: ${errorMsg}`;
-							const historyMsg =
-								errorMsg === CANCELLATION_MESSAGE
-									? CANCELLATION_MESSAGE
-									: `Step ${stepNumber} FAILED: ${errorMsg}`;
+							// Check if the error is specifically the propagated cancellation message
+							const isCancellationError =
+								errorMsg === "Operation cancelled by user.";
+
+							const displayMsg = isCancellationError
+								? "Plan execution cancelled by user."
+								: `Error on Step ${stepNumber}: ${errorMsg}`;
+							const historyMsg = isCancellationError
+								? "Plan execution cancelled by user."
+								: `Step ${stepNumber} FAILED: ${errorMsg}`;
 
 							this.postMessageToWebview({
 								type: "statusUpdate",
 								value: displayMsg,
-								isError: errorMsg !== CANCELLATION_MESSAGE, // Only mark as error if not cancellation
+								isError: !isCancellationError, // Only mark as error if not cancellation
 							});
 							this._addHistoryEntry("model", historyMsg);
-							break; // Stop plan execution on the first error or cancellation
+
+							if (isCancellationError) {
+								// If cancelled via progress UI, exit the loop and the withProgress callback
+								return;
+							} else {
+								// If a step failed with a non-cancellation error, break the loop
+								break;
+							}
 						}
 
-						// --- Cancellation Check at End of Loop Iteration ---
-						// Important if a step finishes quickly after cancellation was requested
-						if (token.isCancellationRequested) {
-							console.log(`Plan execution cancelled after step ${index + 1}.`);
+						// --- Check for VS Code Progress Cancellation after Step ---
+						if (progressToken.isCancellationRequested) {
+							console.log(
+								`Plan execution cancelled by VS Code progress UI after step ${
+									index + 1
+								}.`
+							);
+							// The check inside the loop's try/catch or at the start of the loop
+							// should ideally catch this first, but this is a safeguard.
+							// The cancellation message should already be added to history.
 							this.postMessageToWebview({
 								type: "statusUpdate",
-								value: `Plan execution cancelled.`,
+								value: `Plan execution cancelled by user.`,
 							});
-							// Add history entry only if not already added by an error/cancellation within the step
-							if (
-								!this._chatHistory.some(
-									(entry) =>
-										entry.parts[0].text === CANCELLATION_MESSAGE &&
-										entry.role === "model"
-								)
-							) {
-								this._addHistoryEntry("model", CANCELLATION_MESSAGE);
-							}
 							executionOk = false; // Mark as failed due to cancellation
-							break; // Exit the loop
+							return; // Exit the async callback within withProgress
 						}
 						// --- End Cancellation Check ---
 					} // End loop through steps
 
-					// Final progress update based on whether the loop completed or was broken
+					// Final progress update based on whether the loop completed or was broken/cancelled
 					progress.report({
 						message: executionOk
 							? "Execution complete."
 							: "Execution stopped (failed or cancelled).",
 						increment: 100, // Ensure progress bar completes
 					});
+
+					// Return value of the async callback is not used by withProgress,
+					// but throwing here or returning based on executionOk determines
+					// if the main withProgress promise resolves or rejects.
+					if (!executionOk && progressToken.isCancellationRequested) {
+						// VS Code treated cancellation as success, but we internally track it as not 'OK'
+						// Don't throw a JS error here if it was just cancellation.
+						// The status update and history entry are handled.
+					} else if (!executionOk) {
+						// If executionOk is false and it wasn't cancellation (meaning a step failed)
+						// The catch block within the loop already added the error message and history.
+						// We just need to ensure the outer catch or finally handles the state.
+						// Returning here effectively finishes the async callback. The error was already logged.
+					} else {
+						// If executionOk is true (loop completed without non-cancellation errors)
+						// The success message is added in the final finally block.
+					}
+					// Returning implicitly resolves the inner async function.
 				} // End async progress callback
 			); // End vscode.window.withProgress
 		} catch (error) {
 			// Catch errors occurring outside the 'withProgress' scope but within the try block
-			// (e.g., error setting up workspace folders, though unlikely with current checks)
+			// (e.g., error setting up workspace folders or if the withProgress callback rejects)
 			executionOk = false;
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			console.error("Unexpected error during plan execution:", error);
-			const displayMsg =
-				errorMsg === CANCELLATION_MESSAGE
-					? CANCELLATION_MESSAGE
-					: `Plan execution failed unexpectedly: ${errorMsg}`;
-			const historyMsg =
-				errorMsg === CANCELLATION_MESSAGE
-					? CANCELLATION_MESSAGE
-					: `Plan execution FAILED unexpectedly: ${errorMsg}`;
+
+			// Check if the error is the propagated cancellation error message
+			const isCancellationError = errorMsg === "Operation cancelled by user.";
+
+			const displayMsg = isCancellationError
+				? "Plan execution cancelled by user."
+				: `Plan execution failed unexpectedly: ${errorMsg}`;
+			const historyMsg = isCancellationError
+				? "Plan execution cancelled by user."
+				: `Plan execution FAILED unexpectedly: ${errorMsg}`;
 
 			this.postMessageToWebview({
 				type: "statusUpdate",
 				value: displayMsg,
-				isError: errorMsg !== CANCELLATION_MESSAGE,
+				isError: !isCancellationError,
 			});
-			this._addHistoryEntry("model", historyMsg);
+			// Add history entry only if it wasn't already added inside the loop's catch (for step errors)
+			// or by the progress cancellation check. A simple check is to see if the *last* history item
+			// already indicates failure or cancellation.
+			const lastHistoryText =
+				this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
+			if (
+				lastHistoryText !== historyMsg &&
+				!lastHistoryText?.startsWith("Step ") &&
+				lastHistoryText !== "Plan execution cancelled by user."
+			) {
+				this._addHistoryEntry("model", historyMsg);
+			}
 		} finally {
-			// --- Final Cleanup for Cancellation/Completion/Error ---
+			// --- Final Cleanup for Completion/Error ---
 			console.log(
-				"Plan execution finished, failed, or cancelled. Cleaning up."
+				"Plan execution finished, failed, or cancelled via VS Code progress UI. Cleaning up."
 			);
 
 			// Final status update in the sidebar based on the final state of executionOk
-			// Check if the last message was already the cancellation message to avoid duplicates
-			const lastMessage =
+			// Check if the last message in history is already a final status (success, fail, cancel)
+			const lastHistoryText =
 				this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
+
 			if (executionOk) {
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value: "Plan execution completed successfully.",
-				});
-				// Add success message only if the last one wasn't already it (e.g., no steps plan)
+				// Only add success message if it wasn't already added (e.g., no steps plan)
 				if (
-					lastMessage !== "Plan execution finished successfully." &&
-					lastMessage !== "Plan execution finished (no steps)."
+					lastHistoryText !== "Plan execution finished successfully." &&
+					lastHistoryText !== "Plan execution finished (no steps)."
 				) {
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Plan execution completed successfully.",
+					});
 					this._addHistoryEntry(
 						"model",
 						"Plan execution finished successfully."
 					);
+				} else {
+					// If history already says success (e.g. no steps), just update status bar
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: lastHistoryText, // Use the history message for status consistency
+					});
 				}
-			} else if (lastMessage !== CANCELLATION_MESSAGE) {
-				// If failed (and not due to cancellation reported already)
+			} else if (
+				lastHistoryText !== "Plan execution cancelled by user." &&
+				!lastHistoryText?.startsWith("Step ")
+			) {
+				// If failed (and not due to cancellation, and not already reported per step error)
 				this.postMessageToWebview({
 					type: "statusUpdate",
 					value:
-						"Plan execution stopped due to failure or cancellation. Check chat for details.",
-					isError: true, // Mark as error unless it was just cancellation
+						"Plan execution stopped due to failure. Check chat for details.",
+					isError: true,
 				});
-				// Failure/cancellation message should have been added in the catch block or loop break
-			} else {
-				// If execution failed specifically due to cancellation already reported
+				// Error message should have been added in catch blocks
+			} else if (lastHistoryText === "Plan execution cancelled by user.") {
+				// If execution was cancelled via progress UI and the message is already in history
 				this.postMessageToWebview({
 					type: "statusUpdate",
-					value: "Plan execution cancelled.",
-					isError: false, // Cancellation isn't strictly an 'error' state
+					value: "Plan execution cancelled by user.",
+					isError: false,
+				});
+			} else {
+				// If executionOk is false but the last history item is a step error, just update the status
+				// with a generic failure message, don't add a new history item.
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value:
+						"Plan execution stopped due to step failure. Check chat for details.",
+					isError: true,
 				});
 			}
 
-			this._isCancellableOperationInProgress = false;
-			this._cancellationTokenSource?.dispose();
-			this._cancellationTokenSource = undefined;
-			this.postMessageToWebview({ type: "disableStopButton" });
-			this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input after execution finishes or fails/cancels
-			// --- End Final Cleanup ---
+			// Removed: _isCancellableOperationInProgress reset
+			// Removed: _cancellationTokenSource dispose and clear
+			this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input after execution finishes, fails, or cancels via progress
 		}
 	}
 	// --- End Planning Workflow Logic ---
@@ -2318,14 +2231,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				<div id="chat-container"></div>
 
 				<!-- Plan confirmation buttons will be injected here by JS -->
-				
-				<div id="input-container">
-						<textarea id="chat-input" rows="3" placeholder="Enter message or @plan [request]..."></textarea>
 
-					<div style="display: flex; flex-direction: column; gap: 5px;">
-						<button id="stop-button" title="Stop Current AI Operation" disabled>Stop</button> <!-- Icon maybe added by JS later -->
-						<button id="send-button" title="Send Message">S</button> <!-- Icon added by JS -->
-					</div>
+				<div id="input-container">
+					<textarea id="chat-input" rows="3" placeholder="Enter message or @plan [request]..."></textarea>
+					<button id="send-button" title="Send Message">S</button> <!-- Icon added by JS -->
 				</div>
 
 
