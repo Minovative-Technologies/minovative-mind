@@ -6,8 +6,8 @@ import {
 	ERROR_QUOTA_EXCEEDED,
 	resetClient,
 } from "./ai/gemini"; // Import necessary items
-import { scanWorkspace } from "./context/workspaceScanner";
-import { buildContextString } from "./context/contextBuilder";
+// Removed: scanWorkspace - not directly used here
+// Removed: buildContextString - not directly used here
 
 // Helper function type definition for AI action results (kept for potential future use)
 type ActionResult =
@@ -114,7 +114,6 @@ Assistant Response:
 // --- End Helper Function ---
 
 // --- Simple Markdown to HTML Converter ---
-// (Keep the existing markdownToHtml function as is)
 function markdownToHtml(md: string): string {
 	let html = md;
 
@@ -153,22 +152,10 @@ function markdownToHtml(md: string): string {
 	// Ordered list items (1., 2.)
 	html = html.replace(/^[ \t]*\d+\. +(.*$)/gim, "<li>$1</li>"); // Use <li> for both, wrap later
 
-	// Wrap consecutive <li> elements in <ul> or <ol> - This is tricky with regex, doing a simpler wrap
-	// Find blocks of <li> tags possibly separated by whitespace/newlines
+	// Wrap consecutive <li> elements in <ul> or <ol> - Simple wrap
 	html = html.replace(/(?:<li>.*<\/li>\s*)+/g, (match) => {
-		// Basic check: if the *first* list item in the match started with a number, assume <ol>
-		// This isn't perfect but works for simple lists.
-		if (/^\s*<li.*?>\d+\./.test(match.replace(/<.*?>/g, ""))) {
-			// Simple check on original text structure if possible, otherwise default to ul
-			// A better parser would track the original line format.
-			// For controlled welcome.md, might be okay, but fragile. Let's default to <ul> for simplicity here.
-			// return `<ol>${match.replace(/^\s+/, '').replace(/\s+$/, '')}</ol>`; // More robust would need lookbehind/state
-			return `<ul>${match.trim()}</ul>`; // Defaulting to UL for simplicity/safety with regex
-		} else {
-			return `<ul>${match.trim()}</ul>`;
-		}
+		return `<ul>${match.trim()}</ul>`;
 	});
-	// A more robust approach might involve splitting lines and processing statefully.
 
 	// Inline elements
 
@@ -203,40 +190,32 @@ function markdownToHtml(md: string): string {
 		return `<code>${escapedCode}</code>`;
 	});
 
-	// Paragraphs (handle line breaks - needs refinement for true paragraphs)
-	// Wrap remaining lines (not part of other blocks) in <p> tags
-	// This is complex with regex alone. A simple approach: wrap blocks separated by double newlines.
-	// Remove leading/trailing whitespace from the whole string first
+	// Paragraphs (handle line breaks)
 	html = html.trim();
-	// Split into paragraphs based on double newlines, then wrap non-block elements
 	html = html
-		.split(/\n\s*\n/) // Split by one or more empty lines
+		.split(/\n\s*\n/)
 		.map((paragraph) => {
-			// Trim each paragraph
 			const trimmedParagraph = paragraph.trim();
-			// Check if it's already a block element (heuristic)
 			if (
 				trimmedParagraph.startsWith("<h") ||
 				trimmedParagraph.startsWith("<ul") ||
 				trimmedParagraph.startsWith("<ol") ||
-				trimmedParagraph.startsWith("<li") || // Should be wrapped already, but check
+				trimmedParagraph.startsWith("<li") ||
 				trimmedParagraph.startsWith("<block") ||
-				trimmedParagraph.startsWith("<p") || // Avoid double wrapping
+				trimmedParagraph.startsWith("<p") ||
 				trimmedParagraph.startsWith("<hr") ||
 				trimmedParagraph.startsWith("<pre")
 			) {
-				return trimmedParagraph; // Return as is
+				return trimmedParagraph;
 			} else if (trimmedParagraph) {
-				// If it's not empty and not a known block, wrap in <p> and handle single newlines as <br>
 				return `<p>${trimmedParagraph.replace(/\n/g, "<br>")}</p>`;
 			}
-			return ""; // Remove empty paragraphs
+			return "";
 		})
-		.join("\n\n"); // Re-join paragraphs (browser collapses whitespace)
+		.join("\n\n");
 
-	// Final cleanup: Remove potentially introduced <br> inside <p> tags right before block elements if list wrapping was imperfect
+	// Final cleanup
 	html = html.replace(/<br>\s*(<\/?(ul|ol|li|h\d|blockquote|hr|pre))/gi, "$1");
-	// Remove <br> at the very end of a <p> tag
 	html = html.replace(/<br>\s*<\/p>/gi, "</p>");
 
 	return html;
@@ -285,10 +264,10 @@ export async function activate(context: vscode.ExtensionContext) {
 				"Welcome to Minovative Mind",
 				columnToShowIn || vscode.ViewColumn.One,
 				{
-					enableScripts: false,
+					enableScripts: false, // Keep scripts disabled for welcome page
 					localResourceRoots: [
 						vscode.Uri.joinPath(context.extensionUri, "src", "resources"),
-						vscode.Uri.joinPath(context.extensionUri, "media"), // Ensure media is allowed if needed
+						vscode.Uri.joinPath(context.extensionUri, "media"), // Allow media folder
 					],
 				}
 			);
@@ -299,7 +278,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				},
 				null,
 				context.subscriptions
-			); // Ensure disposal is tracked
+			);
 
 			const welcomeFilePath = vscode.Uri.joinPath(
 				context.extensionUri,
@@ -307,6 +286,15 @@ export async function activate(context: vscode.ExtensionContext) {
 				"resources",
 				"welcome.md"
 			);
+			const stylesUri = welcomePanel.webview.asWebviewUri(
+				vscode.Uri.joinPath(
+					context.extensionUri,
+					"src",
+					"resources",
+					"welcome.css"
+				)
+			);
+			const nonce = getNonce(); // Use nonce if needed for inline styles/scripts later
 
 			let htmlContent = "<p>Error loading welcome content.</p>";
 			try {
@@ -315,36 +303,25 @@ export async function activate(context: vscode.ExtensionContext) {
 				);
 				const mdString = Buffer.from(markdownContent).toString("utf-8");
 				const bodyHtml = markdownToHtml(mdString); // Use the enhanced function
-				const stylesUri = welcomePanel.webview.asWebviewUri(
-					vscode.Uri.joinPath(
-						context.extensionUri,
-						"src",
-						"resources",
-						"welcome.css"
-					)
-				);
-
-				// Add nonce for inline styles if needed, or use file like this
-				const nonce = getNonce(); // Make sure getNonce is imported or defined
 
 				htmlContent = `<!DOCTYPE html>
-							<html lang="en">
-							<head>
-									<meta charset="UTF-8">
-									<meta name="viewport" content="width=device-width, initial-scale=1.0">
-									<meta http-equiv="Content-Security-Policy" content="
-											default-src 'none';
-											style-src ${welcomePanel.webview.cspSource};
-											img-src ${welcomePanel.webview.cspSource} https: data:;
-											font-src ${welcomePanel.webview.cspSource};
-									">
-									<link rel="stylesheet" type="text/css" href="${stylesUri}">
-									<title>Welcome to Minovative Mind</title>
-							</head>
-							<body>
-									${bodyHtml}
-							</body>
-							</html>`;
+						<html lang="en">
+						<head>
+								<meta charset="UTF-8">
+								<meta name="viewport" content="width=device-width, initial-scale=1.0">
+								<meta http-equiv="Content-Security-Policy" content="
+										default-src 'none';
+										style-src ${welcomePanel.webview.cspSource};
+										img-src ${welcomePanel.webview.cspSource} https: data:;
+										font-src ${welcomePanel.webview.cspSource};
+								">
+								<link rel="stylesheet" type="text/css" href="${stylesUri}">
+								<title>Welcome to Minovative Mind</title>
+						</head>
+						<body>
+								${bodyHtml}
+						</body>
+						</html>`;
 			} catch (err) {
 				console.error("Error reading or processing welcome file:", err);
 				vscode.window.showErrorMessage(
@@ -368,13 +345,15 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			const selection = editor.selection;
-			if (selection.isEmpty) {
+			// --- Capture Selection Range ---
+			const selectionRange = editor.selection; // Get the full Range object
+			if (selectionRange.isEmpty) {
 				vscode.window.showWarningMessage("No text selected.");
 				return;
 			}
+			// --- End Capture Selection Range ---
 
-			const selectedText = editor.document.getText(selection);
+			const selectedText = editor.document.getText(selectionRange); // Use the range
 			const fullText = editor.document.getText();
 			const languageId = editor.document.languageId;
 			const documentUri = editor.document.uri;
@@ -411,7 +390,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			// --- BRANCHING LOGIC ---
 			if (instructionLower === "/docs") {
-				// --- Handle /docs directly (existing logic) ---
+				// --- Handle /docs directly (NO CHANGE HERE) ---
 				await vscode.window.withProgress(
 					{
 						location: vscode.ProgressLocation.Notification,
@@ -456,7 +435,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
 						let responseContent = "";
 						try {
-							// Use retry wrapper for consistency
 							responseContent = await sidebarProvider._generateWithRetry(
 								modificationPrompt,
 								activeApiKey,
@@ -481,7 +459,7 @@ export async function activate(context: vscode.ExtensionContext) {
 								.replace(/\n?```$/, "")
 								.trim();
 
-							// Special handling for /docs (append original code if AI only returned docs)
+							// Append original code if AI only returned docs
 							const originalStart = selectedText
 								.substring(0, Math.min(selectedText.length, 30))
 								.trim();
@@ -490,9 +468,9 @@ export async function activate(context: vscode.ExtensionContext) {
 									"AI might have only returned docs for /docs. Appending original code."
 								);
 								if (!responseContent.endsWith("\n")) {
-									responseContent += "\n"; // Ensure newline separation
+									responseContent += "\n";
 								}
-								responseContent += selectedText; // Append original selection
+								responseContent += selectedText;
 							}
 						} catch (error) {
 							console.error(`Error during /docs (${selectedModel}):`, error);
@@ -507,7 +485,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
 						progress.report({ increment: 90, message: "Applying changes..." });
 						const edit = new vscode.WorkspaceEdit();
-						edit.replace(documentUri, selection, responseContent);
+						// Use selectionRange here as well for consistency
+						edit.replace(documentUri, selectionRange, responseContent);
 						const success = await vscode.workspace.applyEdit(edit);
 
 						if (success) {
@@ -526,35 +505,30 @@ export async function activate(context: vscode.ExtensionContext) {
 			} else {
 				// --- Handle /fix and custom instructions via Sidebar ---
 				try {
-					// 1. Ensure sidebar is visible
-					// It's better to focus the container, then the view will reveal itself
+					// Focus view
 					await vscode.commands.executeCommand(
 						"minovative-mind.activitybar.focus"
-					); // Focus the custom container
-
-					// Slight delay to allow the UI to potentially update/reveal
+					);
 					await new Promise((resolve) => setTimeout(resolve, 100));
-
-					// Focus the specific view within the container
-					// Note: The view ID is defined in package.json `views` section
 					await vscode.commands.executeCommand(
 						"minovativeMindSidebarView.focus"
 					);
 
-					// 2. Show a status bar message
 					vscode.window.setStatusBarMessage(
 						`Minovative Mind: Processing '${instruction}' in sidebar...`,
-						4000 // Show for 4 seconds
+						4000
 					);
 
-					// 3. Call the new method on the provider
+					// --- Call provider with the selection range ---
 					await sidebarProvider.initiatePlanFromEditorAction(
-						instruction, // Pass the original instruction ('/fix' or custom)
+						instruction,
 						selectedText,
 						fullText,
 						languageId,
-						documentUri
+						documentUri,
+						selectionRange // Pass the range
 					);
+					// --- End updated call ---
 				} catch (error) {
 					console.error("Error redirecting modification to sidebar:", error);
 					vscode.window.showErrorMessage(
@@ -568,7 +542,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 	context.subscriptions.push(modifySelectionDisposable);
 
-	// Explain Selection Command
+	// Explain Selection Command (NO CHANGE HERE)
 	const explainDisposable = vscode.commands.registerCommand(
 		"minovative-mind.explainSelection",
 		async () => {
@@ -614,10 +588,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 	context.subscriptions.push(explainDisposable);
 
-	// Command to focus the activity bar container (useful for redirect logic)
+	// Command to focus the activity bar container (NO CHANGE HERE)
 	context.subscriptions.push(
 		vscode.commands.registerCommand("minovative-mind.activitybar.focus", () => {
-			// This assumes your views container ID in package.json is "minovative-mind"
 			vscode.commands.executeCommand(
 				"workbench.view.extension.minovative-mind"
 			);

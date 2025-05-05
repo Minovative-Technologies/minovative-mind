@@ -18,8 +18,6 @@ import {
 	isModifyFileStep,
 	isRunCommandStep,
 	parseAndValidatePlan,
-	CreateFileStep, // Import specific step types if needed for clarity
-	ModifyFileStep,
 } from "../ai/workflowPlanner";
 import { Content } from "@google/generative-ai"; // Import Content type
 import path = require("path"); // Node.js path module
@@ -31,7 +29,7 @@ const GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY = "geminiActiveApiKeyIndex";
 // Workspace state keys for persistent settings
 const MODEL_SELECTION_STORAGE_KEY = "geminiSelectedModel";
 
-// --- Available Models ---
+// --- DONT CHANGE THESE MODELS ---
 const AVAILABLE_GEMINI_MODELS = [
 	"gemini-2.5-pro-preview-03-25",
 	"gemini-2.5-pro-exp-03-25",
@@ -90,6 +88,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this._workspaceState.update(WELCOME_PAGE_SHOWN_SESSION_KEY, false);
 		console.log("Welcome page session flag reset.");
 
+		// --- Listen for Secret Changes ---
 		context.secrets.onDidChange((e) => {
 			if (
 				e.key === GEMINI_API_KEYS_LIST_SECRET_KEY ||
@@ -101,6 +100,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				});
 			}
 		});
+		// --- End Listen for Secret Changes ---
 	}
 
 	public async initialize(): Promise<void> {
@@ -110,9 +110,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		console.log("SidebarProvider initialization complete.");
 	}
 
-	// --- Key Management Logic ---
+	// --- Key Management Logic (No Changes Here) ---
 	private async _loadKeysFromStorage() {
-		// ... (Keep existing _loadKeysFromStorage method as is) ...
 		try {
 			const keysJson = await this._secretStorage.get(
 				GEMINI_API_KEYS_LIST_SECRET_KEY
@@ -124,9 +123,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 			let potentialIndex = activeIndexStr ? parseInt(activeIndexStr, 10) : -1;
 
+			// Validate and correct the active index
 			if (potentialIndex < 0 || potentialIndex >= this._apiKeyList.length) {
 				potentialIndex = this._apiKeyList.length > 0 ? 0 : -1;
-				const storedIndex = activeIndexStr ? parseInt(activeIndexStr, 10) : -2;
+				const storedIndex = activeIndexStr ? parseInt(activeIndexStr, 10) : -2; // Use -2 to differentiate from valid 0 or -1
+				// Only update storage if the corrected index is different from what was stored
 				if (potentialIndex !== storedIndex) {
 					if (potentialIndex !== -1) {
 						await this._secretStorage.store(
@@ -149,19 +150,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			console.log(
 				`Loaded ${this._apiKeyList.length} keys. Active index: ${this._activeKeyIndex}`
 			);
-			resetClient();
-			this._updateWebviewKeyList();
+			resetClient(); // Reset Gemini client as keys might have changed
+			this._updateWebviewKeyList(); // Update UI
 		} catch (error) {
 			console.error("Error loading API keys from storage:", error);
 			this._apiKeyList = [];
 			this._activeKeyIndex = -1;
 			vscode.window.showErrorMessage("Failed to load API keys.");
-			this._updateWebviewKeyList();
+			this._updateWebviewKeyList(); // Update UI even on error
 		}
 	}
 
 	private async _saveKeysToStorage() {
-		// ... (Keep existing _saveKeysToStorage method as is) ...
 		let saveError: any = null;
 		try {
 			await this._secretStorage.store(
@@ -174,6 +174,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					String(this._activeKeyIndex)
 				);
 			} else {
+				// If no keys are left or no active key, remove the index from storage
 				await this._secretStorage.delete(
 					GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY
 				);
@@ -182,11 +183,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			console.log(
 				`Saved ${this._apiKeyList.length} keys. Active index: ${this._activeKeyIndex}`
 			);
-			resetClient();
+			resetClient(); // Reset Gemini client as active key might have changed
 		} catch (error) {
-			saveError = error;
+			saveError = error; // Store error to report later
 			console.error("Error saving API keys to storage:", error);
 		}
+		// Update the webview regardless of save success/failure to reflect current state
 		this._updateWebviewKeyList();
 		if (saveError) {
 			this.postMessageToWebview({
@@ -198,18 +200,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _addApiKey(key: string) {
-		// ... (Keep existing _addApiKey method as is) ...
 		if (this._apiKeyList.includes(key)) {
 			this.postMessageToWebview({
 				type: "apiKeyStatus",
 				value: `Info: Key ...${key.slice(-4)} is already stored.`,
 			});
-			return;
+			return; // Don't add duplicates
 		}
 
 		this._apiKeyList.push(key);
+		// Make the newly added key the active one
 		this._activeKeyIndex = this._apiKeyList.length - 1;
-		await this._saveKeysToStorage();
+		await this._saveKeysToStorage(); // Save changes and reset client
 		this.postMessageToWebview({
 			type: "apiKeyStatus",
 			value: `Key ending in ...${key.slice(-4)} added and set as active.`,
@@ -217,7 +219,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _deleteActiveApiKey() {
-		// ... (Keep existing _deleteActiveApiKey method as is) ...
 		if (
 			this._activeKeyIndex === -1 ||
 			this._activeKeyIndex >= this._apiKeyList.length
@@ -234,23 +235,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 
 		const keyToDelete = this._apiKeyList[this._activeKeyIndex];
-		this._apiKeyList.splice(this._activeKeyIndex, 1);
+		this._apiKeyList.splice(this._activeKeyIndex, 1); // Remove the key
 
-		const oldIndex = this._activeKeyIndex;
+		const oldIndex = this._activeKeyIndex; // Store for logging if needed
+
+		// Adjust the active index after deletion
 		if (this._apiKeyList.length === 0) {
-			this._activeKeyIndex = -1;
+			this._activeKeyIndex = -1; // No keys left
 		} else if (this._activeKeyIndex >= this._apiKeyList.length) {
+			// If the last key was deleted, move to the new last key
 			this._activeKeyIndex = this._apiKeyList.length - 1;
 		}
-		// If we deleted item N (not the last), and there are items after, activeIndex stays N (which is now the next item, conceptually ok)
-		// If we deleted item 0 and there are others, activeIndex stays 0 (correct)
-		// The new item at this._activeKeyIndex is now the active one.
+		// If a key *before* the end was deleted, the index implicitly points to the next element now, which is okay.
 
 		console.log(
-			`[Minovative Mind] Key deleted. Old index: ${oldIndex}, New active index: ${this._activeKeyIndex}`
+			`Key deleted. Old index: ${oldIndex}, New active index: ${this._activeKeyIndex}`
 		);
 
-		await this._saveKeysToStorage();
+		await this._saveKeysToStorage(); // Save changes and reset client
 
 		this.postMessageToWebview({
 			type: "apiKeyStatus",
@@ -259,29 +261,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _switchToNextApiKey() {
-		// ... (Keep existing _switchToNextApiKey method as is) ...
 		if (this._apiKeyList.length <= 1 || this._activeKeyIndex === -1) {
-			return;
+			return; // Cannot switch if 0 or 1 key
 		}
-		this._activeKeyIndex = (this._activeKeyIndex + 1) % this._apiKeyList.length;
+		this._activeKeyIndex = (this._activeKeyIndex + 1) % this._apiKeyList.length; // Cycle forward
 		await this._saveKeysToStorage(); // Saves and resets client
 		const newKey = this._apiKeyList[this._activeKeyIndex];
 		this.postMessageToWebview({
 			type: "apiKeyStatus",
 			value: `Switched to key ...${newKey.slice(-4)}.`,
 		});
-		return newKey; // Return the new key for retry logic
+		return newKey; // Return the new key for retry logic if needed
 	}
 
 	private async _switchToPreviousApiKey() {
-		// ... (Keep existing _switchToPreviousApiKey method as is) ...
 		if (this._apiKeyList.length <= 1 || this._activeKeyIndex === -1) {
-			return;
+			return; // Cannot switch if 0 or 1 key
 		}
 		this._activeKeyIndex =
 			(this._activeKeyIndex - 1 + this._apiKeyList.length) %
-			this._apiKeyList.length;
-		await this._saveKeysToStorage();
+			this._apiKeyList.length; // Cycle backward
+		await this._saveKeysToStorage(); // Saves and resets client
 		const newKey = this._apiKeyList[this._activeKeyIndex];
 		this.postMessageToWebview({
 			type: "apiKeyStatus",
@@ -290,7 +290,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	private _updateWebviewKeyList() {
-		// ... (Keep existing _updateWebviewKeyList method as is) ...
+		if (!this._view) {
+			return;
+		}
+
 		const keyInfos: ApiKeyInfo[] = this._apiKeyList.map((key, index) => ({
 			maskedKey: `Key ...${key.slice(-4)} (${index + 1}/${
 				this._apiKeyList.length
@@ -308,28 +311,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	public getActiveApiKey(): string | undefined {
-		// ... (Keep existing getActiveApiKey method as is) ...
 		if (
 			this._activeKeyIndex >= 0 &&
 			this._activeKeyIndex < this._apiKeyList.length
 		) {
 			return this._apiKeyList[this._activeKeyIndex];
 		}
-		return undefined;
+		return undefined; // No active key
 	}
+	// --- End Key Management Logic ---
 
-	// --- Model Selection Logic ---
+	// --- Model Selection Logic (No Changes Here) ---
 	private _loadSettingsFromStorage() {
-		// ... (Keep existing _loadSettingsFromStorage method as is) ...
 		try {
 			const savedModel = this._workspaceState.get<string>(
 				MODEL_SELECTION_STORAGE_KEY
 			);
+			// Validate the saved model against the current list
 			if (savedModel && AVAILABLE_GEMINI_MODELS.includes(savedModel)) {
 				this._selectedModelName = savedModel;
 				console.log("Loaded selected model:", this._selectedModelName);
 			} else {
-				this._selectedModelName = DEFAULT_MODEL;
+				this._selectedModelName = DEFAULT_MODEL; // Use default if saved is invalid or not found
 				console.log(
 					"No saved model or invalid model found. Using default:",
 					DEFAULT_MODEL
@@ -337,32 +340,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			}
 		} catch (error) {
 			console.error("Error loading settings from storage:", error);
-			this._selectedModelName = DEFAULT_MODEL;
+			this._selectedModelName = DEFAULT_MODEL; // Fallback to default on error
 			vscode.window.showErrorMessage("Failed to load extension settings.");
 		}
 	}
 
 	private async _saveSettingsToStorage() {
-		// ... (Keep existing _saveSettingsToStorage method as is) ...
 		try {
 			await this._workspaceState.update(
 				MODEL_SELECTION_STORAGE_KEY,
 				this._selectedModelName
 			);
 			console.log("Saved selected model:", this._selectedModelName);
-			resetClient();
+			resetClient(); // Reset Gemini client as model preference changed
 		} catch (error) {
 			console.error("Error saving settings to storage:", error);
 			vscode.window.showErrorMessage("Failed to save extension settings.");
 		}
-		this._updateWebviewModelList();
+		this._updateWebviewModelList(); // Update UI
 	}
 
 	private async _handleModelSelection(modelName: string) {
-		// ... (Keep existing _handleModelSelection method as is) ...
 		if (AVAILABLE_GEMINI_MODELS.includes(modelName)) {
 			this._selectedModelName = modelName;
-			await this._saveSettingsToStorage();
+			await this._saveSettingsToStorage(); // Save and reset client
 			this.postMessageToWebview({
 				type: "statusUpdate",
 				value: `Switched to AI model: ${modelName}.`,
@@ -374,12 +375,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				value: `Error: Invalid model selected: ${modelName}.`,
 				isError: true,
 			});
+			// Revert UI back to the currently valid selected model
 			this._updateWebviewModelList();
 		}
 	}
 
 	private _updateWebviewModelList() {
-		// ... (Keep existing _updateWebviewModelList method as is) ...
 		if (this._view) {
 			this.postMessageToWebview({
 				type: "updateModelList",
@@ -392,35 +393,34 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	public getSelectedModelName(): string {
-		// ... (Keep existing getSelectedModelName method as is) ...
 		return this._selectedModelName;
 	}
+	// --- End Model Selection Logic ---
 
-	// --- Chat History & Actions ---
+	// --- Chat History & Actions (No Changes Here) ---
 	private _addHistoryEntry(role: "user" | "model", text: string) {
-		// ... (Keep existing _addHistoryEntry method as is) ...
 		// Convert to Content structure expected by Gemini API
 		this._chatHistory.push({ role, parts: [{ text }] });
-		const MAX_HISTORY_ITEMS = 50; // Keep history manageable
+
+		// Limit history size to prevent excessive memory usage/context length
+		const MAX_HISTORY_ITEMS = 50; // Keep history manageable (e.g., last 25 exchanges)
 		if (this._chatHistory.length > MAX_HISTORY_ITEMS) {
-			// Remove the oldest two entries (one user, one model typically)
+			// Remove the oldest entries (typically one user, one model)
 			this._chatHistory.splice(0, this._chatHistory.length - MAX_HISTORY_ITEMS);
 		}
 	}
 
 	private async _clearChat() {
-		// ... (Keep existing _clearChat method as is) ...
 		this._chatHistory = [];
-		this.postMessageToWebview({ type: "chatCleared" });
+		this.postMessageToWebview({ type: "chatCleared" }); // Tell webview to clear UI
 		this.postMessageToWebview({
 			type: "statusUpdate",
 			value: "Chat cleared.",
 		});
-		this.postMessageToWebview({ type: "reenableInput" });
+		this.postMessageToWebview({ type: "reenableInput" }); // Ensure input is enabled
 	}
 
 	private async _saveChat() {
-		// ... (Keep existing _saveChat method as is) ...
 		const options: vscode.SaveDialogOptions = {
 			saveLabel: "Save Chat History",
 			filters: { "JSON Files": ["json"] },
@@ -441,7 +441,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				const saveableHistory: ChatMessage[] = this._chatHistory.map(
 					(entry) => ({
 						sender: entry.role === "user" ? "User" : "Model",
-						text: entry.parts.map((p) => p.text).join(""), // Assuming single text part for now
+						// Combine parts if multiple exist (though we usually add single parts)
+						text: entry.parts.map((p) => p.text).join(""),
 						className: entry.role === "user" ? "user-message" : "ai-message",
 					})
 				);
@@ -474,7 +475,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _loadChat() {
-		// ... (Keep existing _loadChat method as is) ...
 		const options: vscode.OpenDialogOptions = {
 			canSelectMany: false,
 			openLabel: "Load Chat History",
@@ -499,13 +499,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							typeof item.text === "string" &&
 							(item.sender === "User" ||
 								item.sender === "Model" ||
-								item.sender === "System")
+								item.sender === "System") // Allow 'System' for potential future use
 					)
 				) {
 					this._chatHistory = []; // Clear current history
 					// Convert back to HistoryEntry format for internal use
 					this._chatHistory = loadedData.map(
 						(item: ChatMessage): HistoryEntry => ({
+							// Map sender to role ('System' could map to 'model' or a specific handling)
 							role: item.sender === "User" ? "user" : "model",
 							parts: [{ text: item.text }],
 						})
@@ -539,6 +540,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			});
 		}
 	}
+	// --- End Chat History & Actions ---
 
 	// --- VS Code Provider Methods ---
 	public resolveWebviewView(
@@ -546,42 +548,21 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		context: vscode.WebviewViewResolveContext,
 		_token: vscode.CancellationToken
 	) {
-		// ... (Keep existing resolveWebviewView setup and message handling logic as is) ...
 		this._view = webviewView;
 
 		webviewView.webview.options = {
 			enableScripts: true,
 			localResourceRoots: [
-				vscode.Uri.joinPath(this._extensionUri, "dist"),
-				vscode.Uri.joinPath(this._extensionUri, "media"),
-				vscode.Uri.joinPath(this._extensionUri, "src", "sidebar", "webview"),
-				vscode.Uri.joinPath(this._extensionUri, "src", "resources"), // Ensure resources is allowed
+				vscode.Uri.joinPath(this._extensionUri, "dist"), // Compiled JS
+				vscode.Uri.joinPath(this._extensionUri, "media"), // Icons/Images
+				vscode.Uri.joinPath(this._extensionUri, "src", "sidebar", "webview"), // CSS
+				vscode.Uri.joinPath(this._extensionUri, "src", "resources"), // Welcome page assets
 			],
 		};
 
 		webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-		// Trigger Welcome Page Logic (keep this)
-		const welcomeShown = this._workspaceState.get<boolean>(
-			WELCOME_PAGE_SHOWN_SESSION_KEY
-		);
-		if (!welcomeShown) {
-			console.log(
-				"First time sidebar viewed this session. Triggering welcome page."
-			);
-			vscode.commands.executeCommand("minovative-mind.showWelcomePage").then(
-				() => {
-					this._workspaceState.update(WELCOME_PAGE_SHOWN_SESSION_KEY, true);
-					console.log("Welcome page shown flag set for this session.");
-				},
-				(err) => {
-					console.error("Failed to execute showWelcomePage command:", err);
-				}
-			);
-		} else {
-			console.log("Welcome page already shown this session.");
-		}
-
+		// --- Handle Messages from Webview ---
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			console.log(`[Provider] Message received: ${data.type}`);
 
@@ -610,7 +591,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						this.postMessageToWebview({ type: "reenableInput" });
 						break;
 					}
-					this._addHistoryEntry("user", `@plan ${userRequest}`);
+					this._addHistoryEntry("user", `@plan ${userRequest}`); // Add user's raw @plan request
 					await this._handlePlanRequest(userRequest, activeKey, selectedModel);
 					break;
 				}
@@ -638,6 +619,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						break;
 					}
 					if (planToExecute) {
+						// Execute the plan using the key/model active *at the time of confirmation*
 						await this._executePlan(
 							planToExecute,
 							currentActiveKey,
@@ -658,7 +640,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					break;
 				}
 				case "cancelPlanExecution": {
-					this._currentPlan = null;
+					this._currentPlan = null; // Discard the pending plan
 					this.postMessageToWebview({
 						type: "statusUpdate",
 						value: "Plan execution cancelled.",
@@ -681,7 +663,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							isError: true,
 						});
 						this.postMessageToWebview({ type: "reenableInput" });
-						return;
+						return; // Stop processing if no key
 					}
 					if (!selectedModel) {
 						this.postMessageToWebview({
@@ -690,9 +672,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							isError: true,
 						});
 						this.postMessageToWebview({ type: "reenableInput" });
-						return;
+						return; // Stop processing if no model
 					}
-					this._addHistoryEntry("user", userMessage);
+					this._addHistoryEntry("user", userMessage); // Add user message to history
 					await this._handleRegularChat(userMessage, activeKey, selectedModel);
 					break;
 				}
@@ -729,14 +711,44 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					}
 					break;
 
+				// Webview Lifecycle
 				case "webviewReady":
 					console.log("[Provider] Webview ready. Updating UI.");
 					this._updateWebviewKeyList();
 					this._updateWebviewModelList();
 					this._restoreChatHistoryToWebview();
-					this.postMessageToWebview({ type: "reenableInput" });
+					this.postMessageToWebview({ type: "reenableInput" }); // Initial enable
+					// Show welcome page on first view
+					const welcomeShown = this._workspaceState.get<boolean>(
+						WELCOME_PAGE_SHOWN_SESSION_KEY
+					);
+					if (!welcomeShown) {
+						console.log(
+							"First time sidebar viewed this session. Triggering welcome page."
+						);
+						vscode.commands
+							.executeCommand("minovative-mind.showWelcomePage")
+							.then(
+								() => {
+									this._workspaceState.update(
+										WELCOME_PAGE_SHOWN_SESSION_KEY,
+										true
+									);
+									console.log("Welcome page shown flag set for this session.");
+								},
+								(err) => {
+									console.error(
+										"Failed to execute showWelcomePage command:",
+										err
+									);
+								}
+							);
+					} else {
+						console.log("Welcome page already shown this session.");
+					}
 					break;
-				case "reenableInput": // Acknowledgment from webview
+				case "reenableInput": // Acknowledgment from webview or internal signal
+					this.postMessageToWebview({ type: "reenableInput" }); // Forward to webview if needed
 					break;
 				default:
 					console.warn(`Unknown message type received: ${data.type}`);
@@ -745,7 +757,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	private _restoreChatHistoryToWebview() {
-		// ... (Keep existing _restoreChatHistoryToWebview method as is) ...
+		if (!this._view) {
+			return;
+		}
+
 		// Convert internal HistoryEntry back to ChatMessage for webview
 		const historyForWebview: ChatMessage[] = this._chatHistory.map((entry) => ({
 			sender: entry.role === "user" ? "User" : "Model",
@@ -759,7 +774,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _requestDeleteConfirmation() {
-		// ... (Keep existing _requestDeleteConfirmation method as is) ...
 		const keyToDeleteIndex = this._activeKeyIndex;
 		let keyIdentifier = "the active key";
 		if (keyToDeleteIndex >= 0 && keyToDeleteIndex < this._apiKeyList.length) {
@@ -773,19 +787,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
+		// Show warning message and wait for user action
 		const confirmation = await vscode.window.showWarningMessage(
 			`Are you sure you want to delete ${keyIdentifier}? This cannot be undone.`,
-			{ modal: true },
-			"Delete Key"
+			{ modal: true }, // Make it modal to block other actions
+			"Delete Key" // Action button text
 		);
 
 		if (confirmation === "Delete Key") {
+			// Double-check the index hasn't changed while the dialog was open
 			if (
 				this._activeKeyIndex === keyToDeleteIndex &&
 				keyToDeleteIndex < this._apiKeyList.length
 			) {
 				await this._deleteActiveApiKey();
 			} else {
+				// This could happen if the user somehow triggered a key switch while the modal was open (unlikely but possible)
 				console.warn(
 					"Active key index changed during delete confirmation. Aborting delete."
 				);
@@ -796,6 +813,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				});
 			}
 		} else {
+			// User cancelled the deletion
 			this.postMessageToWebview({
 				type: "apiKeyStatus",
 				value: "Key deletion cancelled.",
@@ -803,21 +821,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			});
 		}
 	}
+	// --- End VS Code Provider Methods ---
 
-	// --- Retry Logic Wrapper (Make Publicly Accessible from extension.ts) ---
+	// --- Retry Logic Wrapper (No Changes Here) ---
 	/**
 	 * Wraps the call to generateContent, handling quota errors and retrying with the next key.
-	 * Marked with `_` but intended for internal use by the extension's command handlers too.
+	 * Public for use by extension commands if needed, but primarily internal.
 	 */
 	public async _generateWithRetry(
-		// Changed to public
 		prompt: string,
 		initialApiKey: string,
 		modelName: string,
 		history: HistoryEntry[] | undefined,
-		requestType: string = "request"
+		requestType: string = "request" // Added for logging clarity
 	): Promise<string> {
-		// ... (Keep existing _generateWithRetry method logic as is) ...
 		let currentApiKey = initialApiKey;
 		const triedKeys = new Set<string>(); // Track keys failed *within this request* due to quota
 		const maxRetries = this._apiKeyList.length; // Try each key at most once per request
@@ -831,10 +848,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				)}`
 			);
 
-			// Ensure client is initialized with the potentially new key
-			// generateContent itself handles initialization checks, including key/model changes.
-			// No need to call resetClient explicitly here unless forcing a specific state.
-
+			// generateContent handles initialization checks internally now
 			const result = await generateContent(
 				currentApiKey,
 				modelName,
@@ -854,29 +868,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				if (availableKeysCount <= 1 || triedKeys.size >= availableKeysCount) {
 					// No other keys to try, or all available keys have hit quota in this cycle
 					const finalErrorMsg = `API quota or rate limit exceeded for model ${modelName}. All ${availableKeysCount} API key(s) failed or were rate-limited. Please try again later or check your Gemini usage.`;
-					// Don't show error message here, let the caller handle the final error string
-					// vscode.window.showErrorMessage(finalErrorMsg); // Removed
-					return finalErrorMsg; // Return final error message
+					// Let the caller display the final error if necessary
+					return finalErrorMsg;
 				}
 
-				// Find the index of the *next* key that hasn't been tried yet
+				// Find the index of the *next* key that hasn't been tried yet in this cycle
 				let nextKeyFound = false;
-				let originalIndex = this._activeKeyIndex; // Keep track of the starting index for this attempt cycle
+				let originalIndex = this._activeKeyIndex;
 				let nextIndex = originalIndex;
 
 				for (let i = 0; i < availableKeysCount; i++) {
-					nextIndex = (originalIndex + i + 1) % availableKeysCount; // Cycle through keys starting from the next one
+					nextIndex = (originalIndex + i + 1) % availableKeysCount; // Cycle through indices
 					const potentialNextKey = this._apiKeyList[nextIndex];
 					if (!triedKeys.has(potentialNextKey)) {
-						// Found a key not yet tried in this request cycle
+						// Found an untried key
 						this.postMessageToWebview({
 							type: "statusUpdate",
 							value: `Quota limit hit. Retrying ${requestType} with next key...`,
 						});
 						// Manually switch to this specific index
 						this._activeKeyIndex = nextIndex;
-						await this._saveKeysToStorage(); // Save the new active index (this also resets the client)
-						currentApiKey = this._apiKeyList[this._activeKeyIndex];
+						await this._saveKeysToStorage(); // Save the new active index (this resets the client)
+						currentApiKey = this._apiKeyList[this._activeKeyIndex]; // Update the key for the next loop
 						this.postMessageToWebview({
 							type: "apiKeyStatus", // Update the display
 							value: `Switched to key ...${currentApiKey.slice(-4)} for retry.`,
@@ -887,38 +900,42 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				}
 
 				if (!nextKeyFound) {
-					// This should theoretically be caught by triedKeys.size >= availableKeysCount, but as a safeguard
-					const finalErrorMsg = `API quota or rate limit exceeded for model ${modelName}. All available API keys have been tried for this request. Please try again later or check your Gemini usage.`;
-					// vscode.window.showErrorMessage(finalErrorMsg); // Removed
+					// This safeguard check should ideally be covered by triedKeys.size check above
+					const finalErrorMsg = `API quota or rate limit exceeded for model ${modelName}. All available API keys have been tried for this request cycle. Please try again later.`;
 					return finalErrorMsg;
 				}
-
 				// Continue to the next iteration of the while loop with the new key
 			} else {
-				// If it's not a quota error (either success or another error type), return the result directly.
-				// generateContent handles showing errors for non-quota issues.
+				// If it's not a quota error (could be success or another error type), return the result.
+				// generateContent already handles logging/showing other error messages.
 				return result;
 			}
 		}
 
-		// Should only reach here if maxRetries is exceeded without success or a non-quota error
+		// Should only reach here if maxRetries is hit without success or a non-quota error
 		const finalErrorMsg = `API quota or rate limit exceeded for model ${modelName}. Failed after trying ${attempts} keys. Please try again later.`;
-		// vscode.window.showErrorMessage(finalErrorMsg); // Removed
 		return finalErrorMsg;
 	}
+	// --- End Retry Logic Wrapper ---
 
 	// --- Planning Workflow Logic ---
+
+	/**
+	 * Creates the prompt for the AI to generate an execution plan.
+	 * NEW: Includes optional diagnostics information.
+	 */
 	private _createPlanningPrompt(
-		userRequest: string,
+		userRequest: string, // Request from chat (empty if from editor)
 		projectContext: string,
-		// --- NEW: Optional parameters for editor context ---
+		// --- NEW: Optional parameters for editor context + diagnostics ---
 		editorContext?: {
 			instruction: string;
 			selectedText: string;
 			fullText: string;
 			languageId: string;
 			filePath: string; // Relative path
-		}
+		},
+		diagnosticsString?: string // Formatted string of relevant diagnostics
 	): string {
 		const jsonFormatDescription = `
 		{
@@ -940,6 +957,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}`;
 
 		let specificContextPrompt = "";
+		let mainInstructions = "";
+
 		if (editorContext) {
 			const instructionType =
 				editorContext.instruction.toLowerCase() === "/fix"
@@ -947,7 +966,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					: `The user provided the custom instruction: "${editorContext.instruction}".`;
 
 			specificContextPrompt = `
-		--- Specific User Request from Editor ---
+		--- Specific User Request Context from Editor ---
 		File Path: ${editorContext.filePath}
 		Language: ${editorContext.languageId}
 		${instructionType}
@@ -958,26 +977,34 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		\`\`\`
 		--- End Selected Code ---
 
+		${
+			// --- Include diagnostics if available ---
+			diagnosticsString
+				? `\n--- Relevant Diagnostics in Selection ---\n${diagnosticsString}\n--- End Relevant Diagnostics ---\n`
+				: ""
+			// --- End diagnostics inclusion ---
+		}
+
 		--- Full Content of Affected File (${editorContext.filePath}) ---
 		\`\`\`${editorContext.languageId}
 		${editorContext.fullText}
 		\`\`\`
 		--- End Full Content ---
 		`;
+
+			mainInstructions = `Based on the user's request from the editor (${
+				editorContext.instruction.toLowerCase() === "/fix"
+					? "'/fix' command"
+					: "custom instruction"
+			}) and the provided file/selection context, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). For custom instructions, interpret the request in the context of the selected code and any diagnostics.`;
 		} else {
+			// Request originated from chat (@plan ...)
 			specificContextPrompt = `
 		--- User Request from Chat ---
 		${userRequest}
 		--- End User Request ---`;
+			mainInstructions = `Based on the user's request from the chat ("${userRequest}"), generate a plan to fulfill it.`;
 		}
-
-		const mainInstructions = editorContext
-			? `Based on the user's request from the editor (${
-					editorContext.instruction.toLowerCase() === "/fix"
-						? "'/fix' command"
-						: "custom instruction"
-			  }) and the provided file/selection context, generate a plan to fulfill the request. For '/fix', the plan should address the likely issues within the selection, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). For custom instructions, interpret the request in the context of the selected code.`
-			: `Based on the user's request from the chat ("${userRequest}"), generate a plan to fulfill it.`;
 
 		return `
 		You are an expert AI programmer assisting within VS Code. Your task is to create a step-by-step execution plan in JSON format.
@@ -985,7 +1012,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		**Goal:** Generate ONLY a valid JSON object representing the plan. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself.
 
 		**Instructions for Plan Generation:**
-		1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference.
+		1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. **${
+			editorContext && diagnosticsString
+				? "Pay close attention to the 'Relevant Diagnostics' section and ensure your plan addresses them for '/fix' requests."
+				: ""
+		}**
 		2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not omit any requested actions or components. If a request is complex, break it into multiple granular steps.
 		3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
 		4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
@@ -1008,7 +1039,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		`;
 	}
 
-	// Existing method, handles @plan from chat input
+	// Handles @plan command from chat input
 	private async _handlePlanRequest(
 		userRequest: string,
 		apiKey: string,
@@ -1019,7 +1050,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			value: `Minovative Mind (${modelName}) is generating an execution plan...`,
 			isLoading: true,
 		});
-		this._currentPlan = null;
+		this._currentPlan = null; // Clear previous pending plan
 
 		const projectContext = await this._buildProjectContext();
 		if (projectContext.startsWith("[Error")) {
@@ -1033,23 +1064,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
-		// Call _createPlanningPrompt without editorContext for chat-based @plan
+		// Call _createPlanningPrompt without editorContext or diagnostics for chat-based @plan
 		const planningPrompt = this._createPlanningPrompt(
 			userRequest,
 			projectContext
+			/* No editor context */
+			/* No diagnostics */
 		);
 		await this._generateAndPresentPlan(planningPrompt, apiKey, modelName);
 	}
 
 	/**
 	 * NEW: Public method called by extension.ts for /fix and custom editor modifications.
+	 * Now includes the selection range to find diagnostics.
 	 */
 	public async initiatePlanFromEditorAction(
 		instruction: string,
 		selectedText: string,
 		fullText: string,
 		languageId: string,
-		documentUri: vscode.Uri
+		documentUri: vscode.Uri,
+		selection: vscode.Range // <-- Receive the selection range
 	) {
 		console.log(
 			`[SidebarProvider] Received plan request from editor action: "${instruction}"`
@@ -1064,7 +1099,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				value: "Error: No active API Key set for planning.",
 				isError: true,
 			});
-			this.postMessageToWebview({ type: "reenableInput" }); // Ensure input is re-enabled
+			this.postMessageToWebview({ type: "reenableInput" });
 			return;
 		}
 		if (!modelName) {
@@ -1073,11 +1108,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				value: "Error: No AI model selected for planning.",
 				isError: true,
 			});
-			this.postMessageToWebview({ type: "reenableInput" }); // Ensure input is re-enabled
+			this.postMessageToWebview({ type: "reenableInput" });
 			return;
 		}
 
-		// Don't add the raw instruction to chat history here. Add a system message instead.
+		// Don't add the raw instruction to chat history. Add a system message instead.
 		this._addHistoryEntry(
 			"model", // Use 'model' role for system messages related to actions
 			`Received request from editor: "${instruction}" for the current selection. Generating plan...`
@@ -1087,7 +1122,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			value: `Minovative Mind (${modelName}) received '${instruction}' request from editor. Generating plan...`,
 			isLoading: true,
 		});
-		this._currentPlan = null;
+		this._currentPlan = null; // Clear previous pending plan
 
 		const projectContext = await this._buildProjectContext();
 		if (projectContext.startsWith("[Error")) {
@@ -1115,7 +1150,42 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 		}
 
-		// --- Create the planning prompt with editor context ---
+		// --- Get and Format Diagnostics ---
+		let diagnosticsString = "";
+		try {
+			const allDiagnostics = vscode.languages.getDiagnostics(documentUri);
+			const relevantDiagnostics = allDiagnostics.filter(
+				(diag) => diag.range.intersection(selection) // Check for intersection with selection
+			);
+
+			if (relevantDiagnostics.length > 0) {
+				// Sort diagnostics by line number, then severity
+				relevantDiagnostics.sort((a, b) => {
+					if (a.range.start.line !== b.range.start.line) {
+						return a.range.start.line - b.range.start.line;
+					}
+					return a.severity - b.severity; // Error > Warning > Info > Hint
+				});
+
+				diagnosticsString = relevantDiagnostics
+					.map(
+						(d) =>
+							`- ${vscode.DiagnosticSeverity[d.severity]} (Line ${
+								d.range.start.line + 1 // Use 1-based line number
+							}): ${d.message}`
+					)
+					.join("\n");
+				console.log("Found relevant diagnostics:", diagnosticsString);
+			} else {
+				console.log("No diagnostics found intersecting the selection.");
+			}
+		} catch (diagError) {
+			console.error("Error retrieving diagnostics:", diagError);
+			diagnosticsString = "[Could not retrieve diagnostics]";
+		}
+		// --- End Get and Format Diagnostics ---
+
+		// --- Create the planning prompt with editor context and diagnostics ---
 		const planningPrompt = this._createPlanningPrompt(
 			"", // userRequest is empty as it comes from editorContext
 			projectContext,
@@ -1125,7 +1195,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				fullText: fullText,
 				languageId: languageId,
 				filePath: relativeFilePath,
-			}
+			},
+			diagnosticsString // Pass the formatted diagnostics
 		);
 
 		// --- Call the common logic to generate and display the plan ---
@@ -1133,7 +1204,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	/**
-	 * NEW: Common helper function to generate plan from prompt and display it.
+	 * Common helper function to generate plan from prompt and display it.
+	 * (No changes needed in this function itself)
 	 */
 	private async _generateAndPresentPlan(
 		planningPrompt: string,
@@ -1160,7 +1232,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				throw new Error(planJsonString); // Throw to handle it in the catch block
 			}
 
-			// Clean potential markdown fences
+			// Clean potential markdown fences or other noise
 			planJsonString = planJsonString
 				.replace(/^```json\n?/, "")
 				.replace(/^```\n?/, "")
@@ -1192,6 +1264,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
+		// Parse and Validate the Plan
 		const plan: ExecutionPlan | null = parseAndValidatePlan(planJsonString);
 
 		if (!plan) {
@@ -1204,6 +1277,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				isLoading: false,
 				isError: true,
 			});
+			// Add raw response to history for debugging
 			this._addHistoryEntry(
 				"model",
 				`Error: Failed to parse/validate plan.\nRaw Response:\n\`\`\`json\n${planJsonString}\n\`\`\``
@@ -1212,15 +1286,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
+		// Store and Display the Plan for Confirmation
 		this._currentPlan = plan;
-		// Add the *proposed plan* to history, not the raw JSON
 		const planSummary = `Plan Generated:\n*${
-			plan.planDescription || "No description."
+			plan.planDescription || "No description provided."
 		}*\n\nReview the steps below and confirm execution.`;
-		this._addHistoryEntry("model", planSummary);
+		this._addHistoryEntry("model", planSummary); // Add summary to internal history
 
+		// Format plan for display in the webview
 		let planDisplayText = `**Execution Plan Proposed:**\n*${
-			plan.planDescription || "No description."
+			plan.planDescription || "No description provided."
 		}*\n\n`;
 		if (plan.steps && plan.steps.length > 0) {
 			plan.steps.forEach((step: PlanStep, index: number) => {
@@ -1254,21 +1329,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			planDisplayText += "The AI did not generate any steps for this plan.\n\n";
 		}
 
+		// Send the formatted plan and confirmation request to the webview
 		this.postMessageToWebview({
 			type: "aiResponse",
 			value: planDisplayText,
 			isLoading: false,
 			requiresConfirmation: true,
-			planData: plan,
+			planData: plan, // Send the actual plan data for execution later
 		});
 	}
 
+	// Handles regular chat messages (non-@plan)
 	private async _handleRegularChat(
 		userMessage: string,
 		apiKey: string,
 		modelName: string
 	): Promise<void> {
-		// ... (Keep existing _handleRegularChat method as is) ...
 		this.postMessageToWebview({
 			type: "aiResponse",
 			value: `Minovative Mind (${modelName}) is thinking...`,
@@ -1289,8 +1365,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 
 		// Use the current chat history for context
-		const historyForApi = [...this._chatHistory];
+		// Create a deep copy to avoid modifying the original history array if needed
+		const historyForApi = JSON.parse(JSON.stringify(this._chatHistory));
 
+		// Construct the final prompt including context and user query
 		const finalPrompt = `
 You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query. Use Markdown formatting for code blocks and lists where appropriate. Keep responses concise but informative.
 
@@ -1305,13 +1383,13 @@ ${userMessage}
 Assistant Response:
 `;
 
-		// Use the retry wrapper
+		// Use the retry wrapper to handle potential quota issues
 		const aiResponseText = await this._generateWithRetry(
 			finalPrompt,
 			apiKey,
 			modelName,
 			historyForApi, // Pass context history
-			"chat"
+			"chat" // Specify request type for logging
 		);
 
 		// Check if the retry wrapper returned a final error message
@@ -1327,6 +1405,7 @@ Assistant Response:
 			this._addHistoryEntry("model", `Error: ${aiResponseText}`);
 		}
 
+		// Send the response (or error) back to the webview
 		this.postMessageToWebview({
 			type: "aiResponse",
 			value: aiResponseText,
@@ -1337,8 +1416,8 @@ Assistant Response:
 		// Input re-enabled by webview based on isLoading=false
 	}
 
+	// Builds project context string (No changes here)
 	private async _buildProjectContext(): Promise<string> {
-		// ... (Keep existing _buildProjectContext method as is) ...
 		try {
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders || workspaceFolders.length === 0) {
@@ -1347,9 +1426,10 @@ Assistant Response:
 				return msg;
 			}
 			const rootFolder = workspaceFolders[0];
+			// Scan workspace respecting .gitignore and other patterns
 			const relevantFiles = await scanWorkspace({ respectGitIgnore: true });
 			if (relevantFiles.length > 0) {
-				// Use default config, or load from settings if implemented
+				// Build the context string, potentially truncating based on limits
 				return await buildContextString(relevantFiles, rootFolder.uri);
 			} else {
 				const msg = "[No relevant files found in workspace]";
@@ -1369,16 +1449,15 @@ Assistant Response:
 		}
 	}
 
-	// --- Plan Execution Logic ---
+	// --- Plan Execution Logic (No changes here) ---
 	private async _executePlan(
 		plan: ExecutionPlan,
-		apiKey: string,
-		modelName: string
+		apiKey: string, // Key active *at time of confirmation*
+		modelName: string // Model active *at time of confirmation*
 	): Promise<void> {
-		// ... (Keep existing _executePlan method as is, it already uses _generateWithRetry internally for AI steps) ...
 		this.postMessageToWebview({
 			type: "statusUpdate",
-			value: `Starting execution: ${plan.planDescription}`,
+			value: `Starting execution: ${plan.planDescription || "Unnamed Plan"}`,
 		});
 		this._addHistoryEntry("model", "Initiating plan execution...");
 		this._currentPlan = null; // Clear pending plan
@@ -1399,15 +1478,16 @@ Assistant Response:
 		}
 		const rootUri = workspaceFolders[0].uri;
 		let executionOk = true;
-		let currentApiKeyForExecution = apiKey; // Use a separate var for execution steps
+		// Use the API key/model provided at confirmation time for all steps
+		let currentApiKeyForExecution = apiKey;
 
 		await vscode.window.withProgress(
 			{
 				location: vscode.ProgressLocation.Notification,
 				title: `Minovative Mind: Executing Plan - ${
-					plan.planDescription || "No description"
+					plan.planDescription || "Processing..."
 				}`,
-				cancellable: false, // Consider making this cancellable in the future
+				cancellable: false, // Consider cancellable=true later
 			},
 			async (progress) => {
 				const totalSteps = plan.steps ? plan.steps.length : 0;
@@ -1423,7 +1503,7 @@ Assistant Response:
 				}
 
 				for (const [index, step] of plan.steps!.entries()) {
-					const stepNumber = index + 1; // Use index for accurate numbering
+					const stepNumber = index + 1;
 					const stepMessageTitle = `Step ${stepNumber}/${totalSteps}: ${
 						step.description || step.action.replace(/_/g, " ")
 					}`;
@@ -1434,28 +1514,31 @@ Assistant Response:
 					const stepPath = step.path || "";
 					const stepCommand = step.command || "";
 
+					// Update status in sidebar
 					this.postMessageToWebview({
 						type: "statusUpdate",
 						value: `Executing ${stepMessageTitle} ${
 							step.action === PlanStepAction.RunCommand
 								? `- '${stepCommand}'`
 								: stepPath
-								? `- ${stepPath}`
+								? `- \`${stepPath}\``
 								: ""
 						}`,
 					});
 
 					try {
 						// --- Get the currently active key *before* executing the step ---
+						// This ensures if user switched keys during execution, we use the *new* one for AI calls
 						currentApiKeyForExecution =
 							this.getActiveApiKey() || currentApiKeyForExecution;
 
 						if (!currentApiKeyForExecution) {
 							throw new Error(
-								"No active API key available during plan execution."
+								"No active API key available during plan execution step."
 							);
 						}
 
+						// --- Execute Step ---
 						switch (step.action) {
 							case PlanStepAction.CreateDirectory:
 								if (isCreateDirectoryStep(step)) {
@@ -1464,10 +1547,7 @@ Assistant Response:
 									console.log(`${step.action} OK: ${step.path}`);
 									this._addHistoryEntry(
 										"model",
-										`Step ${stepNumber} OK: ${step.action.replace(
-											/_/g,
-											" "
-										)} \`${step.path}\``
+										`Step ${stepNumber} OK: Created directory \`${step.path}\``
 									);
 								} else {
 									throw new Error(`Invalid ${step.action} structure.`);
@@ -1485,40 +1565,42 @@ Assistant Response:
 											type: "statusUpdate",
 											value: `Step ${stepNumber}/${totalSteps}: Generating content for ${step.path}...`,
 										});
-
+										// Prompt for AI to generate file content
 										const generationPrompt = `
 										You are an AI programmer tasked with generating file content.
 										**Critical Instruction:** Generate the **complete and comprehensive** file content based *fully* on the user's instructions below. Do **not** provide a minimal, placeholder, or incomplete implementation unless the instructions *specifically* ask for it. Fulfill the entire request.
 										**Output Format:** Provide ONLY the raw code or text for the file. Do NOT include any explanations, or markdown formatting like backticks. Add comments in the code to help the user understand the code and the entire response MUST be only the final file content.
-										
+
 										File Path: ${step.path}
 										Instructions: ${step.generate_prompt}
-										
+
 										Complete File Content:
 										`;
 
 										// Use retry wrapper for AI content generation
 										contentToWrite = await this._generateWithRetry(
 											generationPrompt,
-											currentApiKeyForExecution,
+											currentApiKeyForExecution, // Use potentially updated key
 											modelName,
-											undefined, // No history needed for file generation
+											undefined, // No history context needed here
 											`plan step ${stepNumber} (create file)`
 										);
-										currentApiKeyForExecution = // Update key after potential retry
+										// Re-fetch key in case retry switched it
+										currentApiKeyForExecution =
 											this.getActiveApiKey() || currentApiKeyForExecution;
 
 										if (
-											!currentApiKeyForExecution || // Check again after retry
+											!currentApiKeyForExecution || // Check again after potential retry
 											contentToWrite.toLowerCase().startsWith("error:") ||
 											contentToWrite === ERROR_QUOTA_EXCEEDED
 										) {
 											throw new Error(
 												`AI content generation failed: ${
-													contentToWrite || "No API Key"
+													contentToWrite || "No API Key available"
 												}`
 											);
 										}
+										// Clean potential markdown fences
 										contentToWrite = contentToWrite
 											.replace(/^```[a-z]*\n?/, "")
 											.replace(/\n?```$/, "")
@@ -1528,7 +1610,6 @@ Assistant Response:
 											"CreateFileStep must have 'content' or 'generate_prompt'."
 										);
 									}
-
 									await vscode.workspace.fs.writeFile(
 										fileUri,
 										Buffer.from(contentToWrite, "utf-8")
@@ -1536,10 +1617,7 @@ Assistant Response:
 									console.log(`${step.action} OK: ${step.path}`);
 									this._addHistoryEntry(
 										"model",
-										`Step ${stepNumber} OK: ${step.action.replace(
-											/_/g,
-											" "
-										)} \`${step.path}\``
+										`Step ${stepNumber} OK: Created file \`${step.path}\``
 									);
 								} else {
 									throw new Error(`Invalid ${step.action} structure.`);
@@ -1557,23 +1635,25 @@ Assistant Response:
 										existingContent =
 											Buffer.from(contentBytes).toString("utf-8");
 									} catch (readError: any) {
-										if (readError.code === "FileNotFound") {
+										if (
+											readError instanceof vscode.FileSystemError &&
+											readError.code === "FileNotFound"
+										) {
 											throw new Error(
 												`File to modify not found: \`${step.path}\``
 											);
 										}
-										throw readError;
+										throw readError; // Rethrow other read errors
 									}
 									this.postMessageToWebview({
 										type: "statusUpdate",
 										value: `Step ${stepNumber}/${totalSteps}: Generating modifications for ${step.path}...`,
 									});
-
-									// --- MODIFIED PROMPT for ModifyFile ---
+									// Prompt for AI to modify file content
 									const modificationPrompt = `
 									You are an AI programmer tasked with modifying an existing file.
 									**Critical Instruction:** Modify the code based *fully* on the user's instructions below. Ensure the modifications are **complete and comprehensive**, addressing the entire request. Do **not** make partial changes or leave placeholders unless the instructions *specifically* ask for it.
-									**Output Format:** Provide ONLY the complete, raw, modified code for the **entire file**. Do NOT include explanations, or markdown formatting. Add comments in the code to help the user understand the code and the entire response MUST be the final, complete file content after applying all requested modifications. 
+									**Output Format:** Provide ONLY the complete, raw, modified code for the **entire file**. Do NOT include explanations, or markdown formatting. Add comments in the code to help the user understand the code and the entire response MUST be the final, complete file content after applying all requested modifications.
 
 									File Path: ${step.path}
 									Modification Instructions: ${step.modification_prompt}
@@ -1590,37 +1670,41 @@ Assistant Response:
 									// Use retry wrapper for AI modification
 									let modifiedContent = await this._generateWithRetry(
 										modificationPrompt,
-										currentApiKeyForExecution,
+										currentApiKeyForExecution, // Use potentially updated key
 										modelName,
 										undefined, // No history context needed here
 										`plan step ${stepNumber} (modify file)`
 									);
-									currentApiKeyForExecution = // Update key after potential retry
+									// Re-fetch key in case retry switched it
+									currentApiKeyForExecution =
 										this.getActiveApiKey() || currentApiKeyForExecution;
 
 									if (
-										!currentApiKeyForExecution || // Check again
+										!currentApiKeyForExecution || // Check again after potential retry
 										modifiedContent.toLowerCase().startsWith("error:") ||
 										modifiedContent === ERROR_QUOTA_EXCEEDED
 									) {
 										throw new Error(
 											`AI modification failed: ${
-												modifiedContent || "No API Key"
+												modifiedContent || "No API Key available"
 											}`
 										);
 									}
+									// Clean potential markdown fences
 									modifiedContent = modifiedContent
 										.replace(/^```[a-z]*\n?/, "")
 										.replace(/\n?```$/, "")
 										.trim();
 
+									// Only apply edit if content actually changed
 									if (modifiedContent !== existingContent) {
 										const edit = new vscode.WorkspaceEdit();
+										// Need to get the full range of the document
 										const document = await vscode.workspace.openTextDocument(
 											fileUri
 										);
 										const fullRange = new vscode.Range(
-											new vscode.Position(0, 0),
+											document.positionAt(0),
 											document.positionAt(document.getText().length)
 										);
 										edit.replace(fileUri, fullRange, modifiedContent);
@@ -1630,14 +1714,10 @@ Assistant Response:
 												`Failed to apply modifications to \`${step.path}\``
 											);
 										}
-
 										console.log(`${step.action} OK: ${step.path}`);
 										this._addHistoryEntry(
 											"model",
-											`Step ${stepNumber} OK: ${step.action.replace(
-												/_/g,
-												" "
-											)} \`${step.path}\``
+											`Step ${stepNumber} OK: Modified file \`${step.path}\``
 										);
 									} else {
 										console.log(
@@ -1656,6 +1736,7 @@ Assistant Response:
 							case PlanStepAction.RunCommand:
 								if (isRunCommandStep(step)) {
 									const commandToRun = step.command;
+									// Ask user for confirmation before running potentially harmful commands
 									const userChoice = await vscode.window.showWarningMessage(
 										`The plan wants to run a command in the terminal:\n\n\`${commandToRun}\`\n\nThis could install packages or modify your system. Allow?`,
 										{ modal: true },
@@ -1665,12 +1746,13 @@ Assistant Response:
 
 									if (userChoice === "Allow Command") {
 										try {
+											// Create or get a terminal instance
 											const term = vscode.window.createTerminal({
 												name: `Plan Step ${stepNumber}`,
 												cwd: rootUri.fsPath, // Run in workspace root
 											});
-											term.sendText(commandToRun);
-											term.show();
+											term.sendText(commandToRun); // Send the command
+											term.show(); // Show the terminal to the user
 											this.postMessageToWebview({
 												type: "statusUpdate",
 												value: `Step ${stepNumber}: Running command '${commandToRun}' in terminal...`,
@@ -1680,7 +1762,7 @@ Assistant Response:
 												`Step ${stepNumber} OK: User allowed running command \`${commandToRun}\`.`
 											);
 											// Give the command some time to potentially start/finish
-											// This is heuristic - a better approach might involve terminal APIs if available/needed
+											// Note: This is heuristic. A better approach might involve terminal exit codes if possible.
 											await new Promise((resolve) => setTimeout(resolve, 2000));
 										} catch (termError) {
 											const errorMsg =
@@ -1692,6 +1774,7 @@ Assistant Response:
 											);
 										}
 									} else {
+										// User skipped the command
 										this.postMessageToWebview({
 											type: "statusUpdate",
 											value: `Step ${stepNumber}: Skipped command '${commandToRun}'.`,
@@ -1708,7 +1791,9 @@ Assistant Response:
 								break;
 
 							default:
-								console.warn(`Unsupported plan action: ${step.action}`);
+								// Handle unknown actions if the schema changes
+								const exhaustiveCheck: never = step.action;
+								console.warn(`Unsupported plan action: ${exhaustiveCheck}`);
 								this.postMessageToWebview({
 									type: "statusUpdate",
 									value: `Step ${stepNumber}: Skipped unsupported action ${step.action}.`,
@@ -1721,7 +1806,7 @@ Assistant Response:
 								break;
 						}
 					} catch (error) {
-						executionOk = false;
+						executionOk = false; // Mark execution as failed
 						const errorMsg =
 							error instanceof Error ? error.message : String(error);
 						console.error(
@@ -1739,16 +1824,19 @@ Assistant Response:
 							"model",
 							`Step ${stepNumber} FAILED: ${errorMsg}`
 						);
-						break; // Stop plan execution on error
+						break; // Stop plan execution on the first error
 					}
-				} // End loop
+				} // End loop through steps
+
+				// Final progress update
 				progress.report({
 					message: executionOk ? "Execution complete." : "Execution failed.",
-					increment: 100,
+					increment: 100, // Ensure progress bar completes
 				});
 			}
 		);
 
+		// Final status update in the sidebar
 		if (executionOk) {
 			this.postMessageToWebview({
 				type: "statusUpdate",
@@ -1761,13 +1849,15 @@ Assistant Response:
 				value: "Plan execution failed. Check chat for details.",
 				isError: true,
 			});
+			// Failure message already added to history in the catch block
 		}
 
-		this.postMessageToWebview({ type: "reenableInput" });
+		this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input after execution finishes or fails
 	}
+	// --- End Planning Workflow Logic ---
 
+	// --- Utility Methods ---
 	public postMessageToWebview(message: any) {
-		// ... (Keep existing postMessageToWebview method as is) ...
 		if (this._view) {
 			this._view.webview.postMessage(message);
 		} else {
@@ -1776,7 +1866,7 @@ Assistant Response:
 	}
 
 	private _getHtmlForWebview(webview: vscode.Webview): string {
-		// ... (Keep existing _getHtmlForWebview method as is) ...
+		// Get URIs for scripts and styles
 		const scriptUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(this._extensionUri, "dist", "webview.js")
 		);
@@ -1789,8 +1879,11 @@ Assistant Response:
 				"style.css"
 			)
 		);
+
+		// Generate a nonce for inline scripts/styles if needed (though prefer external files)
 		const nonce = getNonce();
 
+		// Create options for the model dropdown
 		const modelOptionsHtml = AVAILABLE_GEMINI_MODELS.map(
 			(modelName) =>
 				`<option value="${modelName}" ${
@@ -1798,7 +1891,7 @@ Assistant Response:
 				}>${modelName}</option>`
 		).join("");
 
-		// Note: Font Awesome icons are now handled via JS in webview/main.ts
+		// Return the HTML structure
 		return `<!DOCTYPE html>
 		<html lang="en">
 		<head>
@@ -1827,7 +1920,7 @@ Assistant Response:
 				<div id="status-area"></div>
 				<div id="chat-container"></div>
 
-				<!-- Plan confirmation buttons injected here -->
+				<!-- Plan confirmation buttons will be injected here by JS -->
 				<div id="input-container">
 						<textarea id="chat-input" rows="3" placeholder="Enter message or @plan [request]..."></textarea>
 						<button id="send-button" title="Send Message">S</button> <!-- Icon added by JS -->
@@ -1861,4 +1954,5 @@ Assistant Response:
 		 </body>
 		</html>`;
 	}
-}
+	// --- End Utility Methods ---
+} // End SidebarProvider class
