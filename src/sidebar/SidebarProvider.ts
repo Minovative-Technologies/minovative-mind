@@ -40,7 +40,7 @@ const AVAILABLE_GEMINI_MODELS = [
 const DEFAULT_MODEL = AVAILABLE_GEMINI_MODELS[0];
 
 // Workspace state key for welcome page tracking (session-based)
-const WELCOME_PAGE_SHOWN_SESSION_KEY = "minovativeMindWelcomeShownSession";
+// const WELCOME_PAGE_SHOWN_SESSION_KEY = "minovativeMindWelcomeShownSession"; // Commented out as requested
 
 // Type for the data sent to the webview regarding keys
 interface ApiKeyInfo {
@@ -85,8 +85,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this._secretStorage = context.secrets;
 		this._workspaceState = context.workspaceState;
 
-		this._workspaceState.update(WELCOME_PAGE_SHOWN_SESSION_KEY, false);
-		console.log("Welcome page session flag reset.");
+		// this._workspaceState.update(WELCOME_PAGE_SHOWN_SESSION_KEY, false); // Commented out as requested
+		// console.log("Welcome page session flag reset."); // Commented out as it related to the above line
 
 		// --- Listen for Secret Changes ---
 		context.secrets.onDidChange((e) => {
@@ -718,35 +718,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					this._updateWebviewModelList();
 					this._restoreChatHistoryToWebview();
 					this.postMessageToWebview({ type: "reenableInput" }); // Initial enable
-					// Show welcome page on first view
-					const welcomeShown = this._workspaceState.get<boolean>(
-						WELCOME_PAGE_SHOWN_SESSION_KEY
-					);
-					if (!welcomeShown) {
-						console.log(
-							"First time sidebar viewed this session. Triggering welcome page."
-						);
-						vscode.commands
-							.executeCommand("minovative-mind.showWelcomePage")
-							.then(
-								() => {
-									this._workspaceState.update(
-										WELCOME_PAGE_SHOWN_SESSION_KEY,
-										true
-									);
-									console.log("Welcome page shown flag set for this session.");
-								},
-								(err) => {
-									console.error(
-										"Failed to execute showWelcomePage command:",
-										err
-									);
-								}
-							);
-					} else {
-						console.log("Welcome page already shown this session.");
-					}
-					break;
 
 				case "reenableInput": // Acknowledgment from webview or internal signal
 					this.postMessageToWebview({ type: "reenableInput" }); // Forward to webview if needed

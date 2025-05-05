@@ -113,117 +113,6 @@ async function executeExplainAction(
 }
 // --- End Helper Function ---
 
-// --- Simple Markdown to HTML Converter ---
-function markdownToHtml(md: string): string {
-	let html = md;
-
-	// Block elements first (order matters)
-
-	// Code blocks (```lang\n...\n```) - Escape HTML inside
-	html = html.replace(/```(\w+)?\n([\s\S]*?)\n```/g, (match, lang, code) => {
-		const escapedCode = code
-			.replace(/&/g, "&amp;")
-			.replace(/</g, "&lt;")
-			.replace(/>/g, "&gt;");
-		return `<pre><code class="language-${
-			lang || "plaintext"
-		}">${escapedCode.trim()}</code></pre>`;
-	});
-
-	// Blockquotes (>)
-	html = html.replace(/^> (.*$)/gim, "<blockquote>$1</blockquote>");
-	// Collapse consecutive blockquotes
-	html = html.replace(
-		/<\/blockquote>\s*<blockquote>/g,
-		"<br>" // Or just "" if you want them merged tightly
-	);
-
-	// Headings (H1-H3)
-	html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
-	html = html.replace(/^## (.*$)/gim, "<h2>$1</h2>");
-	html = html.replace(/^# (.*$)/gim, "<h1>$1</h1>");
-
-	// Horizontal Rules (---, ***, ___)
-	html = html.replace(/^\s*(?:---|\*\*\*|___)\s*$/gm, "<hr>");
-
-	// Lists (Unordered and Ordered)
-	// Unordered list items (*, -, +)
-	html = html.replace(/^[ \t]*[\*\-\+] +(.*$)/gim, "<li>$1</li>");
-	// Ordered list items (1., 2.)
-	html = html.replace(/^[ \t]*\d+\. +(.*$)/gim, "<li>$1</li>"); // Use <li> for both, wrap later
-
-	// Wrap consecutive <li> elements in <ul> or <ol> - Simple wrap
-	html = html.replace(/(?:<li>.*<\/li>\s*)+/g, (match) => {
-		return `<ul>${match.trim()}</ul>`;
-	});
-
-	// Inline elements
-
-	// Links ([text](url))
-	html = html.replace(
-		/\[([^\]]+)\]\(([^)]+)\)/g,
-		'<a href="$2" title="$1">$1</a>'
-	);
-
-	// Images (![alt](url)) - Basic, no resizing etc.
-	// Ensure CSP allows images if used: `img-src ${webview.cspSource} https: data:;`
-	// html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
-
-	// Bold (**text**)
-	html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-	// Italic (*text* or _text_)
-	html = html.replace(
-		/([^*]|^)\*(?!\s)(.*?)(?<!\s)\*([^*]|$)/g,
-		"$1<em>$2</em>$3"
-	); // Avoid ** and spaces
-	html = html.replace(
-		/(^|[^_])_(?!\s)(.*?)(?<!\s)_([^_]|$)/g,
-		"$1<em>$2</em>$3"
-	); // Avoid __ and spaces
-
-	// Inline code (`text`) - Escape HTML inside
-	html = html.replace(/`([^`]+)`/g, (match, code) => {
-		const escapedCode = code
-			.replace(/&/g, "&amp;")
-			.replace(/</g, "&lt;")
-			.replace(/>/g, "&gt;");
-		return `<code>${escapedCode}</code>`;
-	});
-
-	// Paragraphs (handle line breaks)
-	html = html.trim();
-	html = html
-		.split(/\n\s*\n/)
-		.map((paragraph) => {
-			const trimmedParagraph = paragraph.trim();
-			if (
-				trimmedParagraph.startsWith("<h") ||
-				trimmedParagraph.startsWith("<ul") ||
-				trimmedParagraph.startsWith("<ol") ||
-				trimmedParagraph.startsWith("<li") ||
-				trimmedParagraph.startsWith("<block") ||
-				trimmedParagraph.startsWith("<p") ||
-				trimmedParagraph.startsWith("<hr") ||
-				trimmedParagraph.startsWith("<pre")
-			) {
-				return trimmedParagraph;
-			} else if (trimmedParagraph) {
-				return `<p>${trimmedParagraph.replace(/\n/g, "<br>")}</p>`;
-			}
-			return "";
-		})
-		.join("\n\n");
-
-	// Final cleanup
-	html = html.replace(/<br>\s*(<\/?(ul|ol|li|h\d|blockquote|hr|pre))/gi, "$1");
-	html = html.replace(/<br>\s*<\/p>/gi, "</p>");
-
-	return html;
-}
-
-// Reference to the welcome panel
-let welcomePanel: vscode.WebviewPanel | undefined = undefined;
-
 // --- Activate Function ---
 export async function activate(context: vscode.ExtensionContext) {
 	console.log(
@@ -243,97 +132,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			sidebarProvider
 		)
 	);
-
-	// --- Register Commands AFTER initialization ---
-
-	// --- Welcome Page Command ---
-	const showWelcomeDisposable = vscode.commands.registerCommand(
-		"minovative-mind.showWelcomePage",
-		async () => {
-			const columnToShowIn = vscode.window.activeTextEditor
-				? vscode.window.activeTextEditor.viewColumn
-				: undefined;
-
-			if (welcomePanel) {
-				welcomePanel.reveal(columnToShowIn);
-				return;
-			}
-
-			welcomePanel = vscode.window.createWebviewPanel(
-				"minovativeMindWelcome",
-				"Welcome to Minovative Mind",
-				columnToShowIn || vscode.ViewColumn.One,
-				{
-					enableScripts: false, // Keep scripts disabled for welcome page
-					localResourceRoots: [
-						vscode.Uri.joinPath(context.extensionUri, "src", "resources"),
-						vscode.Uri.joinPath(context.extensionUri, "media"), // Allow media folder
-					],
-				}
-			);
-
-			welcomePanel.onDidDispose(
-				() => {
-					welcomePanel = undefined;
-				},
-				null,
-				context.subscriptions
-			);
-
-			const welcomeFilePath = vscode.Uri.joinPath(
-				context.extensionUri,
-				"src",
-				"resources",
-				"welcome.md"
-			);
-			const stylesUri = welcomePanel.webview.asWebviewUri(
-				vscode.Uri.joinPath(
-					context.extensionUri,
-					"src",
-					"resources",
-					"welcome.css"
-				)
-			);
-			const nonce = getNonce(); // Use nonce if needed for inline styles/scripts later
-
-			let htmlContent = "<p>Error loading welcome content.</p>";
-			try {
-				const markdownContent = await vscode.workspace.fs.readFile(
-					welcomeFilePath
-				);
-				const mdString = Buffer.from(markdownContent).toString("utf-8");
-				const bodyHtml = markdownToHtml(mdString); // Use the enhanced function
-
-				htmlContent = `<!DOCTYPE html>
-						<html lang="en">
-						<head>
-								<meta charset="UTF-8">
-								<meta name="viewport" content="width=device-width, initial-scale=1.0">
-								<meta http-equiv="Content-Security-Policy" content="
-										default-src 'none';
-										style-src ${welcomePanel.webview.cspSource};
-										img-src ${welcomePanel.webview.cspSource} https: data:;
-										font-src ${welcomePanel.webview.cspSource};
-								">
-								<link rel="stylesheet" type="text/css" href="${stylesUri}">
-								<title>Welcome to Minovative Mind</title>
-						</head>
-						<body>
-								${bodyHtml}
-						</body>
-						</html>`;
-			} catch (err) {
-				console.error("Error reading or processing welcome file:", err);
-				vscode.window.showErrorMessage(
-					"Minovative Mind: Could not load welcome guide."
-				);
-			}
-
-			welcomePanel.webview.html = htmlContent;
-		}
-	);
-	context.subscriptions.push(showWelcomeDisposable);
-	// --- END: Welcome Page Command ---
 
 	// Modify Selection Command
 	const modifySelectionDisposable = vscode.commands.registerCommand(
@@ -600,14 +398,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
 // --- Deactivate Function ---
 export function deactivate() {
+	/* // Commenting out welcomePanel disposal as the panel variable and creation logic are removed
 	if (welcomePanel) {
 		welcomePanel.dispose();
 	}
+	*/
 	resetClient(); // Ensure client is reset on deactivation
 	console.log("Minovative Mind extension deactivated.");
 }
 
 // Helper function (ensure it's defined if not imported)
+/* // Commenting out getNonce as it was used for the welcome page webview CSP and is no longer needed
 function getNonce() {
 	let text = "";
 	const possible =
@@ -617,3 +418,4 @@ function getNonce() {
 	}
 	return text;
 }
+*/
