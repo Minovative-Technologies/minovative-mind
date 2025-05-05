@@ -1022,6 +1022,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
 		5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description. Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly. **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
 		6.  JSON Output: Format the plan strictly according to the JSON structure below.
+		7.  Never Aussume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING
 
 		${specificContextPrompt}
 
@@ -1370,17 +1371,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		// Construct the final prompt including context and user query
 		const finalPrompt = `
-You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query. Use Markdown formatting for code blocks and lists where appropriate. Keep responses concise but informative.
+		You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query and when you do answer the user's queries, make sure you complete the entire request, don't do minimal, shorten, or partial of what the user asked for. Complete the entire request from the users no matter how long it may take. Use Markdown formatting for code blocks and lists where appropriate. Keep responses concise but informative. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
 
-*** Project Context (Reference Only) ***
-${projectContext}
-*** End Project Context ***
+		*** Project Context (Reference Only) ***
+		${projectContext}
+		*** End Project Context ***
 
---- User Query ---
-${userMessage}
---- End User Query ---
+		--- User Query ---
+		${userMessage}
+		--- End User Query ---
 
-Assistant Response:
+		Assistant Response:
 `;
 
 		// Use the retry wrapper to handle potential quota issues
@@ -1569,7 +1570,7 @@ Assistant Response:
 										const generationPrompt = `
 										You are an AI programmer tasked with generating file content.
 										**Critical Instruction:** Generate the **complete and comprehensive** file content based *fully* on the user's instructions below. Do **not** provide a minimal, placeholder, or incomplete implementation unless the instructions *specifically* ask for it. Fulfill the entire request.
-										**Output Format:** Provide ONLY the raw code or text for the file. Do NOT include any explanations, or markdown formatting like backticks. Add comments in the code to help the user understand the code and the entire response MUST be only the final file content.
+										**Output Format:** Provide ONLY the raw code or text for the file. Do NOT include any explanations, or markdown formatting like backticks. Add comments in the code to help the user understand the code and the entire response MUST be only the final file content. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
 
 										File Path: ${step.path}
 										Instructions: ${step.generate_prompt}

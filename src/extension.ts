@@ -54,25 +54,25 @@ async function executeExplainAction(
 	const systemPrompt = `You are an expert AI programmer assisting within VS Code using the ${selectedModel} model. Analyze the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
 
 	const prompt = `
-${systemPrompt}
+	${systemPrompt}
 
---- Full File Content (${fileName}) ---
-\`\`\`${languageId}
-${fullText}
-\`\`\`
---- End Full File Content ---
+	--- Full File Content (${fileName}) ---
+	\`\`\`${languageId}
+	${fullText}
+	\`\`\`
+	--- End Full File Content ---
 
---- Code Selection to Analyze ---
-\`\`\`${languageId}
-${selectedText}
-\`\`\`
---- End Code Selection to Analyze ---
+	--- Code Selection to Analyze ---
+	\`\`\`${languageId}
+	${selectedText}
+	\`\`\`
+	--- End Code Selection to Analyze ---
 
---- User Instruction ---
-${userInstruction}
---- End User Instruction ---
+	--- User Instruction ---
+	${userInstruction}
+	--- End User Instruction ---
 
-Assistant Response:
+	Assistant Response:
 `;
 
 	console.log(
