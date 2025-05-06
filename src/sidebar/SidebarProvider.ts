@@ -954,14 +954,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"step": 1,
 					"action": "create_directory | create_file | modify_file | run_command",
 					"description": "What this step does.",
-					// --- Properties depend on action ---
-					"path": "relative/path/to/target", // For file/dir actions
-					"content": "...", // For simple create_file
-					"generate_prompt": "...", // For complex create_file (AI generates content based on this prompt)
-					"modification_prompt": "...", // For modify_file (AI modifies file based on this prompt)
-					"command": "full command line string" // For run_command
+					"path": "relative/path/to/target",
+					"content": "...",
+					"modification_prompt": "...",
+					"reenableInput": "...",
 				},
-				// ... more steps
 			]
 		}`;
 
@@ -1021,11 +1018,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		**Goal:** Generate ONLY a valid JSON object representing the plan. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself.
 
 		**Instructions for Plan Generation:**
-		1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. **${
+		1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
 			editorContext && diagnosticsString
-				? "Pay close attention to the 'Relevant Diagnostics' section and ensure your plan addresses them for '/fix' requests."
+				? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan addresses them for '/fix' requests.**"
 				: ""
-		}**
+		}
 		2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not omit any requested actions or components. If a request is complex, break it into multiple granular steps.
 		3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
 		4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
@@ -1042,8 +1039,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		--- Expected JSON Plan Format ---
 		${jsonFormatDescription}
 		--- End Expected JSON Plan Format ---
-
-		**Remember: The output MUST be ONLY the valid JSON plan, fully addressing the user's request.**
 
 		Execution Plan (JSON only):
 		`;
@@ -1105,12 +1100,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			// Re-enable input on error
 			this.postMessageToWebview({ type: "reenableInput" });
 		}
-		// Removed: finally block for cancellation cleanup
 	}
 
 	/**
 	 * NEW: Public method called by extension.ts for /fix and custom editor modifications.
-	 * Modified to remove Cancellation.
 	 */
 	public async initiatePlanFromEditorAction(
 		instruction: string,
@@ -1268,10 +1261,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		planningPrompt: string,
 		apiKey: string,
 		modelName: string
-		// Removed: token parameter
 	): Promise<void> {
 		let planJsonString = "";
-		// Removed: CANCELLATION_MESSAGE
 
 		try {
 			// Use the retry wrapper for generating the plan, removing token
@@ -1280,11 +1271,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				apiKey,
 				modelName,
 				undefined, // No history needed for planning prompt itself
-				// Removed: token parameter
 				"plan generation"
 			);
-
-			// Removed: Cancellation check after generation
 
 			// Check if the retry wrapper returned a final error message
 			if (
@@ -1395,7 +1383,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 
 		// Send the formatted plan and confirmation request to the webview
-		// Loading is finished, but confirmation is required. Input remains disabled until confirmation/cancellation.
 		this.postMessageToWebview({
 			type: "aiResponse",
 			value: planDisplayText,
@@ -1403,9 +1390,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			requiresConfirmation: true,
 			planData: plan, // Send the actual plan data for execution later
 		});
-		// Removed: rely on caller's finally block for cancellation cleanup
-		// The caller (_handlePlanRequest / initiatePlanFromEditorAction) now has try/catch blocks
-		// and the webview controls re-enabling input via confirm/cancel messages.
 	}
 
 	// Handles regular chat messages (non-@plan) - Modified to remove Cancellation

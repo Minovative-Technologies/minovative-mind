@@ -238,7 +238,6 @@ export async function activate(context: vscode.ExtensionContext) {
 						try {
 							// Call _generateWithRetry for /docs
 							// Signature: _generateWithRetry(prompt, initialApiKey, modelName, history, requestType)
-							// Removed the fifth argument (cancellationToken) which was undefined.
 							responseContent = await sidebarProvider._generateWithRetry(
 								modificationPrompt, // 1st arg: prompt
 								activeApiKey, // 2nd arg: apiKey
