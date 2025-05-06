@@ -186,7 +186,7 @@ h2 {
 	align-self: flex-start;
 	margin-right: auto;
 	min-height: fit-content;
-	overflow-x: auto;
+	overflow-x: auto; /* Allow horizontal scrolling for wide content like tables or code blocks */
 }
 
 /* --- System / Loading / Error Messages --- */
@@ -221,11 +221,15 @@ h2 {
 }
 
 /* --- Markdown Content within Messages --- */
+/* General styling for markdown rendered elements to ensure they fit well within messages */
 
 /* Headings */
 #chat-container .message h1,
 #chat-container .message h2,
-#chat-container .message h3 {
+#chat-container .message h3,
+#chat-container .message h4, /* Added h4, h5, h6 for completeness */
+#chat-container .message h5,
+#chat-container .message h6 {
 	font-weight: 600;
 	margin-top: 1em;
 	margin-bottom: 0.5em;
@@ -233,12 +237,12 @@ h2 {
 	color: inherit; /* Inherit color from parent message */
 	border-bottom: none; /* Override global header style */
 	padding-bottom: 0; /* Override global header style */
-	white-space: normal; /* Override parent white-space: pre for headings */
+	white-space: normal; /* Ensure headings wrap and don't inherit pre-like behavior */
 }
 #chat-container .message h1 {
 	font-size: 1.1em; /* Slightly larger than body */
 	border-bottom: 1px solid
-		var(--vscode-editorWidget-border, var(--border-color)); /* Add a subtle separator */
+		var(--vscode-editorWidget-border, var(--border-color)); /* Add a subtle separator for top-level headings */
 	padding-bottom: 0.3em;
 }
 #chat-container .message h2 {
@@ -247,10 +251,45 @@ h2 {
 #chat-container .message h3 {
 	font-size: 1em; /* Same size as body, but bold */
 }
-#chat-container .message *:first-child > h1, /* Remove top margin if heading is the very first element */
+#chat-container .message h4 {
+	font-size: 0.95em;
+	font-weight: 600;
+}
+#chat-container .message h5 {
+	font-size: 0.9em;
+	font-weight: 600;
+}
+#chat-container .message h6 {
+	font-size: 0.85em;
+	font-weight: 600;
+	color: var(
+		--vscode-descriptionForeground,
+		inherit
+	); /* Subtler color for h6 */
+}
+
+/* Remove top margin if heading is the very first element in the message content */
+#chat-container .message *:first-child > h1,
 #chat-container .message *:first-child > h2,
-#chat-container .message *:first-child > h3 {
+#chat-container .message *:first-child > h3,
+#chat-container .message *:first-child > h4,
+#chat-container .message *:first-child > h5,
+#chat-container .message *:first-child > h6 {
 	margin-top: 0;
+}
+
+/* Paragraphs */
+#chat-container .message p {
+	white-space: normal; /* Ensure paragraphs wrap */
+	word-wrap: break-word; /* Allow wrapping within paragraphs */
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+#chat-container .message p:first-child {
+	margin-top: 0; /* Remove top margin for first paragraph */
+}
+#chat-container .message p:last-child {
+	margin-bottom: 0; /* Remove bottom margin for last paragraph */
 }
 
 /* Lists (ul, ol, li) */
@@ -259,7 +298,8 @@ h2 {
 	margin-top: 0.5em;
 	margin-bottom: 0.8em;
 	padding-left: 2em; /* Standard list indentation */
-	white-space: normal; /* Override parent white-space: pre for lists */
+	white-space: normal; /* Ensure lists wrap */
+	list-style-position: outside; /* Place markers outside the text flow */
 }
 #chat-container .message ul {
 	list-style-type: disc; /* Standard bullet points */
@@ -269,6 +309,10 @@ h2 {
 }
 #chat-container .message li {
 	margin-bottom: 0.3em; /* Spacing between list items */
+}
+#chat-container .message li::marker {
+	/* Style list markers to match text color, if needed and supported */
+	color: var(--vscode-editor-foreground);
 }
 /* Nested lists */
 #chat-container .message ul ul,
@@ -285,72 +329,141 @@ h2 {
 	list-style-type: square;
 }
 
-/* Paragraphs */
-#chat-container .message p {
-	white-space: normal; /* Override parent white-space: pre for paragraphs */
-	word-wrap: break-word; /* Allow wrapping within paragraphs */
-	margin-top: 0.5em;
-	margin-bottom: 0.5em;
-}
-#chat-container .message p:first-child {
-	margin-top: 0;
-}
-#chat-container .message p:last-child {
-	margin-bottom: 0;
-}
-
 /* Blockquotes */
 #chat-container .message blockquote {
 	margin: 0.8em 0;
 	padding: 0.4em 1em;
 	border-left: 3px solid var(--vscode-focusBorder, #007fd4); /* Use focus border color for highlight */
-	background-color: rgba(128, 128, 128, 0.1); /* Subtle background */
+	background-color: rgba(
+		128,
+		128,
+		128,
+		0.1
+	); /* Subtle background, theme-agnostic */
 	color: var(
 		--vscode-descriptionForeground,
 		inherit
 	); /* Use description color or inherit */
-	white-space: normal; /* Override parent white-space: pre for blockquotes */
+	white-space: normal; /* Ensure blockquotes wrap */
 }
+/* Adjust spacing for paragraphs within blockquotes */
 #chat-container .message blockquote p {
-	margin-bottom: 0.3em; /* Reduce bottom margin for paragraphs inside blockquote */
+	margin-bottom: 0.3em;
 }
 #chat-container .message blockquote p:last-child {
 	margin-bottom: 0;
 }
 
-/* Code Blocks within Messages */
+/* Code Blocks (pre, code) */
+/* Styling for preformatted text blocks, typically used for code */
 .message pre {
-	background-color: var(--vscode-textCodeBlock-background);
+	background-color: var(
+		--vscode-textCodeBlock-background,
+		rgba(0, 0, 0, 0.1)
+	); /* VSCode var for code block bg */
 	padding: 10px;
 	border-radius: var(--border-radius);
-	overflow-x: auto;
-	margin-top: 0.8em; /* Adjusted margin */
-	margin-bottom: 0.8em; /* Adjusted margin */
-	border: 1px solid var(--border-color);
-	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1); /* Subtle inset shadow */
-	white-space: pre; /* Ensure pre formatting is respected within code blocks */
+	overflow-x: auto; /* Allow horizontal scrolling for long lines of code */
+	margin-top: 0.8em;
+	margin-bottom: 0.8em;
+	border: 1px solid var(--vscode-editorWidget-border, var(--border-color)); /* Subtle border */
+	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle inset shadow */
+	white-space: pre; /* Preserve whitespace and line breaks */
 }
+/* General styling for code elements (both inline and block) */
 .message code {
-	font-family: var(--vscode-editor-font-family, monospace);
-	font-size: 0.95em;
+	font-family: var(
+		--vscode-editor-font-family,
+		"Courier New",
+		Courier,
+		monospace
+	); /* VSCode editor font */
+	font-size: 0.95em; /* Slightly smaller font for code */
+	word-break: normal; /* Prevent breaking in middle of code tokens */
 }
+/* Specific styling for code inside pre blocks (markdown-it typically uses <pre><code class="language-..."></code></pre>) */
 .message pre code {
-	padding: 0;
-	background: none;
-	color: var(--vscode-editor-foreground);
-	border-radius: 0;
-	box-shadow: none;
-	border: none; /* Ensure no border inside pre */
-	white-space: pre; /* Ensure pre formatting is respected */
+	padding: 0; /* Remove padding, as 'pre' element handles it */
+	background: none; /* Transparent background, 'pre' has the background color */
+	color: var(
+		--vscode-editor-foreground
+	); /* Use editor foreground color for text */
+	border-radius: 0; /* No border radius for the code element itself */
+	box-shadow: none; /* No shadow for the code element itself */
+	border: none; /* No border for the code element itself */
+	white-space: pre; /* Ensure preformatting is respected, inheriting from pre */
+	/* Syntax highlighting classes like .language-javascript will be added by markdown-it.
+       VS Code's theming might apply styles to these. If not, text remains plain. */
 }
-/* Inline code */
+/* Inline code styling (code not inside a pre block) */
 .message :not(pre) > code {
-	background-color: var(--vscode-textCodeBlock-background);
+	background-color: var(
+		--vscode-textCodeBlock-background,
+		rgba(0, 0, 0, 0.07)
+	); /* Subtle background for inline code */
 	padding: 0.2em 0.4em;
 	border-radius: var(--border-radius);
-	font-size: 0.9em;
-	border: 1px solid var(--border-color);
-	white-space: nowrap; /* Prevent inline code from wrapping */
+	font-size: 0.9em; /* Slightly smaller for inline code */
+	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
+	white-space: nowrap; /* Prevent inline code from wrapping if possible */
+}
+
+/* Horizontal Rules */
+#chat-container .message hr {
+	border: 0;
+	border-top: 1px solid var(--vscode-editorWidget-border, var(--border-color)); /* A subtle line */
+	margin: 1.5em 0; /* Provide ample spacing around HR */
+}
+
+/* Links (<a> tags) */
+#chat-container .message a {
+	color: var(--vscode-textLink-foreground); /* Standard VS Code link color */
+	text-decoration: underline;
+	white-space: normal; /* Allow links to wrap if they are long */
+}
+#chat-container .message a:hover {
+	color: var(
+		--vscode-textLink-activeForeground
+	); /* Standard VS Code active/hover link color */
+	text-decoration: underline;
+}
+
+/* Tables (table, th, td) */
+#chat-container .message table {
+	border-collapse: collapse; /* Standard table border model */
+	margin: 1em 0; /* Spacing around tables */
+	width: auto; /* Let table determine its width based on content, up to 100% */
+	max-width: 100%; /* Prevent table from overflowing message width without scroll */
+	font-size: 0.95em; /* Slightly smaller text in tables */
+	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
+	white-space: normal; /* Ensure content within table cells wraps */
+	/* If table itself is too wide, .ai-message overflow-x:auto will handle scrolling */
+}
+#chat-container .message th,
+#chat-container .message td {
+	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
+	padding: 0.5em 0.75em; /* Padding within cells */
+	text-align: left; /* Align text to the left by default */
+	word-wrap: break-word; /* Allow long words in cells to break and wrap */
+}
+#chat-container .message th {
+	background-color: rgba(
+		128,
+		128,
+		128,
+		0.07
+	); /* Subtle header background for table, theme-agnostic */
+	font-weight: 600; /* Bold header text */
+	color: inherit; /* Inherit text color */
+}
+/* Optional: Alternate row striping for better readability in tables */
+#chat-container .message tr:nth-child(even) {
+	background-color: rgba(
+		128,
+		128,
+		128,
+		0.03
+	); /* Very subtle striping for even rows */
 }
 
 /* --- Status Area --- */

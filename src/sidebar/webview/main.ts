@@ -1,4 +1,5 @@
 // src/sidebar/webview/main.ts
+import MarkdownIt from "markdown-it"; // Added import
 
 // --- Font Awesome Imports ---
 import { library, dom, icon } from "@fortawesome/fontawesome-svg-core";
@@ -35,6 +36,9 @@ interface VsCodeApi {
 }
 declare const acquireVsCodeApi: () => VsCodeApi;
 const vscode = acquireVsCodeApi();
+
+// Initialize markdown-it with common options for robust rendering
+const md = new MarkdownIt({ html: false, linkify: true, typographer: true }); // Added markdown-it initialization
 
 // --- DOM Elements ---
 const sendButton = document.getElementById(
@@ -156,186 +160,10 @@ if (
 
 			const textElement = document.createElement("span");
 
-			// --- Start Markdown Conversion Logic ---
+			// Render the raw message text using the initialized markdown-it instance
+			const renderedHtml = md.render(text);
 
-			// 1. Initial HTML Escaping (escape '<' and '>')
-			let htmlContent = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-			// 2. Handle Code Blocks (Extract, Process内HTML Escape, Placeholder)
-			const codeBlocks: string[] = [];
-			// Unique placeholder unlikely to appear in normal text
-			const codeBlockPlaceholder =
-				"___CODE_BLOCK_PLACEHOLDER_" + Date.now() + "___";
-			const codeBlockRegex =
-				/```(json|typescript|javascript|python|html|css|plaintext|\w*)?\n([\s\S]*?)\n```/g;
-			htmlContent = htmlContent.replace(codeBlockRegex, (match, lang, code) => {
-				// Escape HTML entities *inside* the code block content *again* just to be safe,
-				// though initial escape should handle most. This ensures `<` inside code is `&lt;`.
-				const escapedCode = code
-					.trim()
-					.replace(/</g, "&lt;")
-					.replace(/>/g, "&gt;");
-				// Store the complete pre/code HTML structure
-				codeBlocks.push(
-					`<pre><code class="language-${
-						lang || "plaintext"
-					}">${escapedCode}</code></pre>`
-				);
-				return codeBlockPlaceholder; // Replace with placeholder in the main text
-			});
-
-			// 3. Process Block Elements Line by Line (Headings, Lists, Blockquotes)
-			const lines = htmlContent.split("\n");
-			let resultLines: string[] = []; // Array to hold processed lines/HTML blocks
-			let inUl = false; // State flag for unordered list
-			let inOl = false; // State flag for ordered list
-			let inBlockquote = false; // State flag for blockquote
-			let currentBlockquoteLines: string[] = []; // Buffer for consecutive blockquote lines
-
-			for (let i = 0; i < lines.length; i++) {
-				let line = lines[i];
-
-				// Regular expressions to detect markdown patterns at the start of a line
-				// Allowing leading spaces for potential (though not fully supported) nesting
-				const ulMatch = /^\s*([*\-+])\s+(.*)/.exec(line);
-				const olMatch = /^\s*(\d+)\.\s+(.*)/.exec(line);
-				const bqMatch = /^\s*>\s?(.*)/.exec(line);
-				const hMatch = /^\s*(#{1,3})\s+(.*)/.exec(line);
-
-				// --- Close Blocks Check ---
-				// If the current line doesn't continue the active block, close the block.
-				if (inBlockquote && !bqMatch) {
-					// Join buffered blockquote lines with <br> and wrap in <blockquote>
-					resultLines.push(
-						`<blockquote>${currentBlockquoteLines.join("<br>")}</blockquote>`
-					);
-					currentBlockquoteLines = []; // Reset buffer
-					inBlockquote = false;
-				}
-				if (inUl && !ulMatch) {
-					resultLines.push("</ul>"); // Close unordered list
-					inUl = false;
-				}
-				if (inOl && !olMatch) {
-					resultLines.push("</ol>"); // Close ordered list
-					inOl = false;
-				}
-
-				// --- Process Current Line ---
-				if (hMatch) {
-					// Handle Headings (H1, H2, H3)
-					const level = hMatch[1].length; // Number of '#' determines level
-					const content = hMatch[2]; // Text after '### '
-					resultLines.push(`<h${level}>${content}</h${level}>`);
-				} else if (bqMatch) {
-					// Handle Blockquotes
-					if (!inBlockquote) {
-						inBlockquote = true; // Mark blockquote start (tag added when block ends)
-					}
-					currentBlockquoteLines.push(bqMatch[1]); // Add line content (without '>') to buffer
-				} else if (ulMatch) {
-					// Handle Unordered Lists
-					if (!inUl) {
-						resultLines.push("<ul>"); // Start <ul> if not already in one
-						inUl = true;
-					}
-					resultLines.push(`<li>${ulMatch[2]}</li>`); // Add list item (content without marker)
-				} else if (olMatch) {
-					// Handle Ordered Lists
-					if (!inOl) {
-						resultLines.push("<ol>"); // Start <ol> if not already in one
-						inOl = true;
-					}
-					resultLines.push(`<li>${olMatch[2]}</li>`); // Add list item (content without marker)
-				} else {
-					// Handle Regular Lines (potential paragraph content)
-					// Push non-empty lines; preserve empty lines between content for potential breaks
-					if (line.trim().length > 0) {
-						resultLines.push(line);
-					} else if (
-						resultLines.length > 0 &&
-						resultLines[resultLines.length - 1].trim().length > 0
-					) {
-						// Add an empty line marker if the previous line had content
-						resultLines.push("");
-					}
-				}
-			}
-
-			// --- Close Remaining Blocks ---
-			// After the loop, close any blocks that were still open (e.g., if the text ends with a list)
-			if (inBlockquote) {
-				resultLines.push(
-					`<blockquote>${currentBlockquoteLines.join("<br>")}</blockquote>`
-				);
-			}
-			if (inUl) {
-				resultLines.push("</ul>");
-			}
-			if (inOl) {
-				resultLines.push("</ol>");
-			}
-
-			// --- Combine Processed Lines ---
-			// Join lines, paragraphs will be implicitly separated by block tags or empty lines
-			htmlContent = resultLines.join("\n");
-
-			// 4. Apply Inline Formatting (Bold, Italic, Inline Code) to the entire structured content
-			// Note: Apply these *after* block structure is formed to avoid conflicts.
-			// Italic (using negative lookarounds for robustness against ***)
-			htmlContent = htmlContent.replace(
-				/(?<!\*)\*(?!\s|[*])(.*?)(?<!\s)\*(?!\*)/g,
-				"<em>$1</em>"
-			);
-			// Bold
-			htmlContent = htmlContent.replace(
-				/\*\*(?!\s)(.*?)(?<!\s)\*\*/g,
-				"<strong>$1</strong>"
-			);
-			// Inline Code
-			htmlContent = htmlContent.replace(/`([^`]+)`/g, "<code>$1</code>");
-
-			// --- Split by placeholders to handle newlines correctly around code blocks ---
-			const contentSegments = htmlContent.split(codeBlockPlaceholder);
-			let finalHtml = "";
-
-			for (let i = 0; i < contentSegments.length; i++) {
-				let segment = contentSegments[i];
-
-				// Convert remaining newlines in non-code segments to <br> tags
-				// Replace sequences of 2+ newlines (paragraph breaks) with a single newline first
-				// Then replace single newlines with <br>
-				// Finally, remove the temporary single newlines used for paragraph separation.
-				segment = segment
-					.replace(/\n{2,}/g, "\n") // Consolidate paragraph breaks
-					.replace(/\n/g, "<br>"); // Convert single newlines (incl. consolidated ones) to <br>
-
-				finalHtml += segment;
-
-				// Re-insert the corresponding code block if it exists
-				if (i < codeBlocks.length) {
-					finalHtml += codeBlocks[i]; // Add the <pre><code> block back
-				}
-			}
-			htmlContent = finalHtml;
-
-			// 6. Final Cleanup
-			// Remove leading/trailing <br> tags that might have been added unnecessarily
-			htmlContent = htmlContent.replace(/^<br>|<br>$/g, "");
-			// Remove <br> tags that are immediately before or after major block elements
-			// (Helps clean up spacing around lists, headings, etc.)
-			htmlContent = htmlContent.replace(
-				/<br>\s*(<(ul|ol|li|h[1-3]|blockquote|pre|code)[^>]*>)/gi,
-				"$1"
-			);
-			htmlContent = htmlContent.replace(
-				/(<\/(ul|ol|h[1-3]|blockquote|pre)>)\s*<br>/gi,
-				"$1"
-			);
-
-			// --- End Markdown Conversion Logic ---
-
-			textElement.innerHTML = htmlContent; // Set the final processed HTML content
+			textElement.innerHTML = renderedHtml; // Set the final processed HTML content
 			messageElement.appendChild(textElement);
 
 			// Append the new message element to the chat container
@@ -457,6 +285,9 @@ if (
 			const enableSendControls = !loading && isApiKeySet;
 			sendButton.disabled = !enableSendControls;
 			chatInput.disabled = !enableSendControls;
+			// The following line correctly disables modelSelect when 'loading' is true.
+			// If loading is true, enableSendControls is false, so !enableSendControls is true,
+			// thus modelSelect.disabled becomes true.
 			modelSelect.disabled = !enableSendControls;
 
 			// Show/hide loading indicator message
