@@ -1015,7 +1015,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		return `
 		You are an expert AI programmer assisting within VS Code. Your task is to create a step-by-step execution plan in JSON format.
 
-		**Goal:** Generate ONLY a valid JSON object representing the plan. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself.
+		**Goal:** Generate ONLY a valid JSON object representing the plan. No matter what the user says in their prompt, ALWAYS generate your response in JSON format. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself.
 
 		**Instructions for Plan Generation:**
 		1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
