@@ -20,6 +20,7 @@ import {
 } from "../ai/workflowPlanner";
 import { Content, GenerationConfig } from "@google/generative-ai";
 import path = require("path");
+import { exec } from "child_process"; // Added import for exec
 
 // Secret storage keys
 const GEMINI_API_KEYS_LIST_SECRET_KEY = "geminiApiKeysList";
@@ -1537,6 +1538,182 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
+	// New private asynchronous method _getGitStagedDiff
+	private async _getGitStagedDiff(rootPath: string): Promise<string> {
+		return new Promise((resolve, reject) => {
+			const command = "git diff --staged";
+			exec(command, { cwd: rootPath }, (error, stdout, stderr) => {
+				if (error) {
+					console.error(
+						`Error executing 'git diff --staged': ${error.message}`
+					);
+					if (stderr) {
+						console.error(`stderr from 'git diff --staged': ${stderr}`);
+					}
+					reject(
+						new Error(
+							`Failed to execute 'git diff --staged': ${error.message}${
+								stderr ? `\\nStderr: ${stderr}` : ""
+							}`
+						)
+					);
+					return;
+				}
+				if (stderr) {
+					// Log non-fatal stderr too, as it might contain warnings or be empty
+					console.warn(
+						`stderr from 'git diff --staged' (command successful): ${stderr}`
+					);
+				}
+				resolve(stdout.trim());
+			});
+		});
+	}
+
+	// Method to handle the /commit command
+	private async _handleCommitCommand(
+		apiKey: string,
+		modelName: string
+	): Promise<void> {
+		try {
+			this._addHistoryEntry("user", "/commit");
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Minovative Mind (${modelName}) is preparing to commit...`,
+				isLoading: true,
+			});
+
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+				throw new Error("No workspace folder open to perform git operations.");
+			}
+			const rootPath = workspaceFolders[0].uri.fsPath;
+
+			// 1. Create the terminal instance that will be used for git operations.
+			const terminal = vscode.window.createTerminal({
+				name: "Minovative Mind Git Operations", // Terminal name
+				cwd: rootPath,
+			});
+			terminal.show(); // Show the terminal
+
+			// 2. Add logic to execute `git add .` using the created terminal.
+			// Post status update to webview
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Staging all changes (git add .)...",
+			});
+			// Send command to terminal
+			terminal.sendText("git add .");
+			// Add delay to allow `git add .` to process
+			await new Promise((resolve) => setTimeout(resolve, 1500));
+
+			// 4. Update status message before calling _getGitStagedDiff
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Fetching staged changes for commit message...",
+			});
+
+			// 3. Ensure _getGitStagedDiff happens *after* `git add .` and its delay.
+			// Assuming _getGitStagedDiff is a method that fetches git diff.
+			// This method is not defined in the provided existing code but is called here.
+			// The @ts-ignore comment below this line has been removed as per instructions.
+			const diff = await this._getGitStagedDiff(rootPath);
+
+			// 5. If _getGitStagedDiff returns an empty diff (after `git add .`)
+			if (!diff || diff.trim() === "") {
+				this.postMessageToWebview({
+					type: "aiResponse",
+					value: "No changes to commit after staging.", // Updated message
+					isLoading: false,
+				});
+				this._addHistoryEntry("model", "No changes to commit after staging."); // Updated history
+				return; // Exit if no changes
+			}
+
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Generating commit message based on changes...",
+			});
+			const commitMessagePrompt = `Based *solely and only* on the following git diff of staged changes, generate a concise and descriptive commit message. The message should follow conventional commit standards if possible (e.g., 'feat: add new login button', 'fix: resolve issue with user authentication', 'docs: update README'). Output ONLY the commit message string, without any surrounding quotes or explanations, and ensure it's a single line unless the changes are extensive enough to warrant a multi-line conventional commit body (separated by two newlines from the subject).
+
+			--- Staged Diff ---
+			${diff}
+			--- End Staged Diff ---
+
+			Commit Message:`;
+
+			let commitMessage = await this._generateWithRetry(
+				commitMessagePrompt,
+				apiKey,
+				modelName,
+				undefined, // No history for this specific generation
+				"commit message generation"
+			);
+
+			if (
+				commitMessage.toLowerCase().startsWith("error:") ||
+				commitMessage === ERROR_QUOTA_EXCEEDED
+			) {
+				throw new Error(
+					`AI failed to generate commit message: ${commitMessage}`
+				);
+			}
+
+			// Clean up the commit message
+			commitMessage = commitMessage.trim();
+			if (
+				(commitMessage.startsWith('"') && commitMessage.endsWith('"')) ||
+				(commitMessage.startsWith("'") && commitMessage.endsWith("'"))
+			) {
+				commitMessage = commitMessage.substring(1, commitMessage.length - 1);
+			}
+			commitMessage = commitMessage.split("\n").join(" "); // Ensure single line for simplicity
+
+			if (!commitMessage) {
+				throw new Error("AI generated an empty commit message.");
+			}
+
+			const gitCommitCommand = `git commit -m "${commitMessage.replace(
+				/"/g,
+				'\\"'
+			)}"`;
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: `Executing: ${gitCommitCommand}`,
+			});
+
+			// 6. Ensure the final `git commit -m "..."` command is sent to the *same terminal instance*.
+			// 7. The original creation of the terminal later in the function is removed.
+			terminal.sendText(gitCommitCommand);
+			// terminal.show(); // Already shown earlier
+
+			// Optimistic success feedback with a small delay.
+			await new Promise((resolve) => setTimeout(resolve, 1500));
+
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Git commit command sent to terminal with message: "${commitMessage}"\n(Check terminal for actual commit status).`,
+				isLoading: false,
+			});
+			this._addHistoryEntry(
+				"model",
+				`Attempted commit with message: "${commitMessage}".`
+			);
+		} catch (error: any) {
+			console.error("Error in _handleCommitCommand:", error);
+			const errorMsg = error.message || String(error);
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Error during commit process: ${errorMsg}`,
+				isLoading: false,
+				isError: true,
+			});
+			this._addHistoryEntry("model", `Commit failed: ${errorMsg}`);
+		} finally {
+			this.postMessageToWebview({ type: "reenableInput" });
+		}
+	}
+
 	private async _loadKeysFromStorage() {
 		try {
 			const keysJson = await this._secretStorage.get(
@@ -2066,6 +2243,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						this.postMessageToWebview({ type: "reenableInput" });
 						return;
 					}
+
+					// Check for /commit command
+					if (userMessage.trim().toLowerCase() === "/commit") {
+						// This specific call to _handleCommitCommand was moved to the "commitRequest" case
+						// However, we'll keep the history entry here for now if the user types /commit directly.
+						// The webview should ideally send "commitRequest" for the button.
+						// If typed, it will be handled here.
+						this._addHistoryEntry("user", userMessage); // Add user message to history
+						await this._handleCommitCommand(activeKey, selectedModel);
+						break;
+					}
+
 					this._addHistoryEntry("user", userMessage);
 					await this._handleRegularChat(userMessage, activeKey, selectedModel);
 					break;
@@ -2105,9 +2294,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					this._restoreChatHistoryToWebview();
 					this.postMessageToWebview({ type: "reenableInput" });
 					break;
-				case "reenableInput":
+				case "reenableInput": // Centralized reenableInput, often called by other logic paths
 					this.postMessageToWebview({ type: "reenableInput" });
 					break;
+				// START: Added case for "commitRequest"
+				case "commitRequest": {
+					const activeKey = this.getActiveApiKey();
+					const selectedModel = this.getSelectedModelName();
+
+					// Check if both an active key and a model are set
+					if (!activeKey || !selectedModel) {
+						this.postMessageToWebview({
+							type: "aiResponse",
+							value: "Error: API Key or Model not set for commit operation.",
+							isError: true,
+						});
+						this.postMessageToWebview({ type: "reenableInput" });
+						break; // Exit the case
+					}
+
+					// If both a key and model are set, call _handleCommitCommand
+					// The _handleCommitCommand itself adds "/commit" to history and handles loading states.
+					await this._handleCommitCommand(activeKey, selectedModel);
+					break; // Prevent fall-through
+				}
+				// END: Added case for "commitRequest"
 				default:
 					console.warn(`Unknown message type received: ${data.type}`);
 			}
