@@ -85,7 +85,7 @@ const statusArea = document.getElementById(
 
 let planConfirmationContainer: HTMLDivElement | null = null;
 let confirmPlanButton: HTMLButtonElement | null = null;
-let cancelPlanButton: HTMLButtonElement | null = null;
+let cancelPlanButton: HTMLButtonElement | null = null; // User Request: cancelPlanButton (HTMLButtonElement)
 
 // State
 let isApiKeySet = false;
@@ -284,12 +284,17 @@ if (
 			confirmPlanButton.id = "confirm-plan-button";
 			confirmPlanButton.title = "Confirm Plan";
 
+			// User Request: Start - cancelPlanButton (HTMLButtonElement) initialization
 			cancelPlanButton = document.createElement("button");
+			// User Request: cancelPlanButton ID is 'cancel-plan-button'
 			cancelPlanButton.id = "cancel-plan-button";
+			// User Request: cancelPlanButton title is 'Cancel Plan'
 			cancelPlanButton.title = "Cancel Plan";
+			// User Request: End - cancelPlanButton initialization
 
 			planConfirmationContainer.appendChild(textElement);
 			planConfirmationContainer.appendChild(confirmPlanButton);
+			// User Request: cancelPlanButton is appended to planConfirmationContainer
 			planConfirmationContainer.appendChild(cancelPlanButton);
 
 			chatContainer?.insertAdjacentElement(
@@ -298,8 +303,10 @@ if (
 			);
 
 			setIconForButton(confirmPlanButton, faCheck);
+			// User Request: faTimes icon is assigned to cancelPlanButton
 			setIconForButton(cancelPlanButton, faTimes);
 
+			// User Request: Event listener for cancelPlanButton click
 			planConfirmationContainer.addEventListener(
 				"click",
 				(event: MouseEvent) => {
@@ -320,12 +327,18 @@ if (
 						setLoadingState(true); // Loading while structured plan is generated & executed
 					} else if (
 						target.id === "cancel-plan-button" ||
-						target.closest("#cancel-plan-button")
+						target.closest("#cancel-plan-button") // Ensures click on icon inside button also works
 					) {
+						// User Request: Click on cancelPlanButton (or its icon) triggers the following sequence:
+						// User Request: 1. vscode.postMessage({ type: "cancelPlanExecution" }); is called.
 						vscode.postMessage({ type: "cancelPlanExecution" });
+						// User Request: 2. updateStatus("Plan cancelled."); or a similar message is displayed.
 						updateStatus("Plan cancelled.");
+						// User Request: 3. planConfirmationContainer.style.display = "none"; is executed.
 						planConfirmationContainer!.style.display = "none";
+						// User Request: 4. pendingPlanData = null; is executed.
 						pendingPlanData = null;
+						// User Request: 5. setLoadingState(false); is called.
 						setLoadingState(false);
 					}
 				}

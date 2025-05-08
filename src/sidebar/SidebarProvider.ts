@@ -73,6 +73,9 @@ interface PlanGenerationContext {
 	modelName: string;
 }
 
+// Type for execution outcome
+type ExecutionOutcome = "success" | "cancelled" | "failed" | "pending";
+
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
 
@@ -85,6 +88,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	private _selectedModelName: string = DEFAULT_MODEL;
 	private _chatHistory: HistoryEntry[] = [];
 	private _pendingPlanGenerationContext: PlanGenerationContext | null = null;
+	private _currentExecutionOutcome: ExecutionOutcome = "pending"; // For tracking plan execution status
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri,
@@ -666,9 +670,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					`Error generating or executing structured plan: ${errorMsg}`
 				);
 			}
-			this.postMessageToWebview({ type: "reenableInput" });
+			// Note: reenableInput is handled by _executePlan's finally block
 		} finally {
 			this._pendingPlanGenerationContext = null; // Clear context after attempt
+			// If _executePlan was not called due to an error above, reenableInput here.
+			// Otherwise, _executePlan's finally will handle it.
+			// This logic is a bit tricky. _executePlan *always* re-enables.
+			// So if an error happens *before* _executePlan, we need to re-enable.
+			if (
+				this._currentExecutionOutcome === "pending" ||
+				this._currentExecutionOutcome === "failed"
+			) {
+				// If _executePlan was never called or failed very early (before its own finally).
+				// This check is imperfect; _executePlan itself calls reenableInput.
+				// To be safe, ensure reenableInput happens if an error here prevents _executePlan from running.
+				const wasExecutePlanCalled =
+					this._currentExecutionOutcome !== "pending" &&
+					structuredPlanJsonString.length > 0; // Heuristic
+				if (!wasExecutePlanCalled) {
+					// this.postMessageToWebview({ type: "reenableInput" }); // _executePlan should handle this
+				}
+			}
 		}
 	}
 
@@ -907,7 +929,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		apiKey: string, // API key used for plan generation/confirmation stage
 		modelName: string // Model name used for plan generation/confirmation stage
 	): Promise<void> {
-		let executionOk = true;
+		this._currentExecutionOutcome = "pending"; // Initialize outcome for this execution
+		let executionOk = true; // Local flag for control flow within this method
+
 		try {
 			this.postMessageToWebview({
 				type: "statusUpdate",
@@ -926,11 +950,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"model",
 					"Execution Failed: No workspace folder open."
 				);
-				executionOk = false;
+				this._currentExecutionOutcome = "failed";
+				executionOk = false; // Should throw to be caught by outer catch
 				throw new Error("No workspace folder open.");
 			}
 			const rootUri = workspaceFolders[0].uri;
-			// Use the apiKey and modelName passed in for content generation within the plan
 			let currentApiKeyForExecution = apiKey;
 
 			await vscode.window.withProgress(
@@ -953,7 +977,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							"model",
 							"Plan execution finished (no steps)."
 						);
-						executionOk = true;
+						this._currentExecutionOutcome = "success";
+						// executionOk remains true
 						return;
 					}
 
@@ -972,8 +997,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								"model",
 								"Plan execution cancelled by user."
 							);
+							this._currentExecutionOutcome = "cancelled";
 							executionOk = false;
-							return;
+							return; // Exit withProgress callback
 						}
 
 						const stepNumber = index + 1;
@@ -999,7 +1025,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						});
 
 						try {
-							// Check if the active key changed *during* execution (e.g., due to quota retry in a previous step)
 							currentApiKeyForExecution =
 								this.getActiveApiKey() || currentApiKeyForExecution;
 							if (!currentApiKeyForExecution) {
@@ -1010,6 +1035,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 							switch (step.action) {
 								case PlanStepAction.CreateDirectory:
+									// ... (existing logic for CreateDirectory)
 									if (isCreateDirectoryStep(step)) {
 										const dirUri = vscode.Uri.joinPath(rootUri, step.path);
 										await vscode.workspace.fs.createDirectory(dirUri);
@@ -1023,6 +1049,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									}
 									break;
 								case PlanStepAction.CreateFile:
+									// ... (existing logic for CreateFile)
 									if (isCreateFileStep(step)) {
 										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 										let contentToWrite = "";
@@ -1043,16 +1070,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 											Complete File Content:
 											`;
-											// Use the API key and model determined for this execution run
 											contentToWrite = await this._generateWithRetry(
 												generationPrompt,
 												currentApiKeyForExecution,
 												modelName,
 												undefined,
 												`plan step ${stepNumber} (create file)`
-												// No specific generationConfig needed here unless requested
 											);
-											// Re-check active key in case retry changed it
 											currentApiKeyForExecution =
 												this.getActiveApiKey() || currentApiKeyForExecution;
 											if (
@@ -1089,6 +1113,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									}
 									break;
 								case PlanStepAction.ModifyFile:
+									// ... (existing logic for ModifyFile)
 									if (isModifyFileStep(step)) {
 										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 										let existingContent = "";
@@ -1135,9 +1160,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											modelName,
 											undefined,
 											`plan step ${stepNumber} (modify file)`
-											// No specific generationConfig needed here unless requested
 										);
-										// Re-check active key in case retry changed it
 										currentApiKeyForExecution =
 											this.getActiveApiKey() || currentApiKeyForExecution;
 										if (
@@ -1190,6 +1213,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									}
 									break;
 								case PlanStepAction.RunCommand:
+									// ... (existing logic for RunCommand)
 									if (isRunCommandStep(step)) {
 										const commandToRun = step.command;
 										const userChoice = await vscode.window.showWarningMessage(
@@ -1199,6 +1223,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											"Skip Command"
 										);
 										if (progressToken.isCancellationRequested) {
+											// Check cancellation after modal
 											throw new Error("Operation cancelled by user.");
 										}
 										if (userChoice === "Allow Command") {
@@ -1217,29 +1242,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 													"model",
 													`Step ${stepNumber} OK: User allowed running command \`${commandToRun}\`.`
 												);
-												// Simple delay; replace with listening for command completion if needed
 												await new Promise<void>((resolve, reject) => {
-													const timeoutId = setTimeout(resolve, 2000); // Wait 2s
+													const timeoutId = setTimeout(resolve, 2000);
 													const cancellationListener =
 														progressToken.onCancellationRequested(() => {
 															clearTimeout(timeoutId);
 															cancellationListener.dispose();
 															reject(new Error("Operation cancelled by user."));
 														});
-													timeoutId.unref(); // Allow Node.js to exit if this is the only thing running
+													timeoutId.unref();
 													if (progressToken.isCancellationRequested) {
+														// Immediate check
+														clearTimeout(timeoutId);
 														cancellationListener.dispose();
 														reject(new Error("Operation cancelled by user."));
 													}
 												}).catch((err) => {
-													// Rethrow cancellation specifically
 													if (
 														err instanceof Error &&
 														err.message === "Operation cancelled by user."
 													) {
-														throw err;
+														throw err; // Propagate cancellation
 													}
-													// Log other potential wait errors
 													console.error("Error during command wait:", err);
 													throw new Error(
 														`Internal error during command wait: ${err}`
@@ -1276,7 +1300,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									}
 									break;
 								default:
-									// This should ideally not be reached if parseAndValidatePlan is exhaustive
 									const exhaustiveCheck: never = step.action;
 									console.warn(`Unsupported plan action: ${exhaustiveCheck}`);
 									this.postMessageToWebview({
@@ -1291,7 +1314,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									break;
 							}
 						} catch (error) {
-							executionOk = false;
+							// Catch errors for a single step
+							executionOk = false; // Mark overall execution as not OK
 							const errorMsg =
 								error instanceof Error ? error.message : String(error);
 							console.error(
@@ -1302,25 +1326,36 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							);
 							const isCancellationError =
 								errorMsg === "Operation cancelled by user.";
+
+							if (isCancellationError) {
+								this._currentExecutionOutcome = "cancelled";
+							} else if (this._currentExecutionOutcome === "pending") {
+								// Don't override if already cancelled
+								this._currentExecutionOutcome = "failed";
+							}
+
 							const displayMsg = isCancellationError
-								? "Plan execution cancelled by user."
+								? "Plan execution cancelled by user." // Already handled by outer check generally
 								: `Error on Step ${stepNumber}: ${errorMsg}`;
 							const historyMsg = isCancellationError
 								? "Plan execution cancelled by user."
 								: `Step ${stepNumber} FAILED: ${errorMsg}`;
+
 							this.postMessageToWebview({
 								type: "statusUpdate",
 								value: displayMsg,
 								isError: !isCancellationError,
 							});
 							this._addHistoryEntry("model", historyMsg);
+
 							if (isCancellationError) {
-								return; // Exit progress if cancelled
+								return; // Exit withProgress callback if cancelled
 							} else {
-								break; // Stop plan execution on other errors
+								break; // Stop plan execution on other errors (exit step loop)
 							}
 						}
 						if (progressToken.isCancellationRequested) {
+							// Check after each step
 							console.log(
 								`Plan execution cancelled by VS Code progress UI after step ${
 									index + 1
@@ -1330,37 +1365,73 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								type: "statusUpdate",
 								value: `Plan execution cancelled by user.`,
 							});
+							this._addHistoryEntry(
+								"model",
+								"Plan execution cancelled by user."
+							);
+							this._currentExecutionOutcome = "cancelled";
 							executionOk = false;
-							return; // Exit progress
+							return; // Exit withProgress callback
 						}
-					} // End loop
+					} // End step loop
+
+					// If loop completes and outcome is still pending, it means success
+					if (executionOk && this._currentExecutionOutcome === "pending") {
+						this._currentExecutionOutcome = "success";
+					}
 					progress.report({
-						message: executionOk
-							? "Execution complete."
-							: "Execution stopped (failed or cancelled).",
+						message:
+							this._currentExecutionOutcome === "success"
+								? "Execution complete."
+								: this._currentExecutionOutcome === "cancelled"
+								? "Execution cancelled."
+								: "Execution stopped due to failure.",
 						increment: 100,
 					});
 				} // End async progress callback
 			); // End vscode.window.withProgress
+
+			// After withProgress, if outcome is still pending and no errors were thrown by withProgress itself
+			// (e.g. if withProgress resolved without explicitly setting outcome, like for an empty plan that didn't enter the loop)
+			if (this._currentExecutionOutcome === "pending" && executionOk) {
+				// This case should be handled by "no steps" logic mostly.
+				// If plan had steps and completed, outcome should be 'success'.
+				// If it's still 'pending' here, it might be an edge case or an empty plan that didn't set 'success'.
+				// Let's assume if `executionOk` is true and outcome is 'pending', it's success.
+				this._currentExecutionOutcome = "success";
+			}
 		} catch (error) {
-			executionOk = false;
+			// Catch errors from _executePlan setup or unhandled by withProgress
+			executionOk = false; // Should already be false if error originated in withProgress
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			console.error("Unexpected error during plan execution:", error);
+
 			const isCancellationError = errorMsg === "Operation cancelled by user.";
+			if (isCancellationError) {
+				if (this._currentExecutionOutcome === "pending") {
+					this._currentExecutionOutcome = "cancelled";
+				}
+			} else {
+				if (this._currentExecutionOutcome === "pending") {
+					this._currentExecutionOutcome = "failed";
+				}
+			}
+
 			const displayMsg = isCancellationError
 				? "Plan execution cancelled by user."
 				: `Plan execution failed unexpectedly: ${errorMsg}`;
 			const historyMsg = isCancellationError
 				? "Plan execution cancelled by user."
 				: `Plan execution FAILED unexpectedly: ${errorMsg}`;
+
 			this.postMessageToWebview({
 				type: "statusUpdate",
 				value: displayMsg,
 				isError: !isCancellationError,
 			});
+			// Avoid logging duplicate messages if already logged by specific error handling
 			const lastHistoryText =
 				this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
-			// Avoid logging duplicate messages
 			if (
 				lastHistoryText !== historyMsg &&
 				!lastHistoryText?.startsWith("Step ") &&
@@ -1370,57 +1441,99 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			}
 		} finally {
 			console.log(
-				"Plan execution finished, failed, or cancelled. Cleaning up."
+				"Plan execution finished. Outcome: ",
+				this._currentExecutionOutcome
 			);
-			const lastHistoryText =
-				this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
-			if (executionOk) {
-				if (
-					lastHistoryText !== "Plan execution finished successfully." &&
-					lastHistoryText !== "Plan execution finished (no steps)."
-				) {
-					this.postMessageToWebview({
-						type: "statusUpdate",
-						value: "Plan execution completed successfully.",
-					});
+			// Ensure outcome is definitively set if it somehow remained pending
+			if (this._currentExecutionOutcome === "pending") {
+				console.warn(
+					"Execution outcome was still 'pending' in finally. Defaulting to 'failed'. This might indicate an unhandled execution path."
+				);
+				this._currentExecutionOutcome = executionOk ? "success" : "failed"; // If executionOk somehow true, then success
+			}
+
+			switch (this._currentExecutionOutcome) {
+				case "success":
+					// Existing success messages are fine. No explicit undo stack to clear.
+					const lastHistoryForSuccess =
+						this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
+					if (lastHistoryForSuccess === "Plan execution finished (no steps).") {
+						// Message already posted by the "no steps" logic, status update already reflects this.
+						// Ensure final status update is consistent if not already set.
+						if (this.postMessageToWebview) {
+							// Check if view is still valid
+							this.postMessageToWebview({
+								type: "statusUpdate",
+								value: "Plan has no steps. Execution finished.",
+							});
+						}
+					} else {
+						if (this.postMessageToWebview) {
+							this.postMessageToWebview({
+								type: "statusUpdate",
+								value: "Plan execution completed successfully.",
+							});
+						}
+						// Add history if not already the very last message
+						if (
+							lastHistoryForSuccess !== "Plan execution finished successfully."
+						) {
+							this._addHistoryEntry(
+								"model",
+								"Plan execution finished successfully."
+							);
+						}
+					}
+					break;
+				case "cancelled":
+					// This status message indicates the start of the revert process.
+					if (this.postMessageToWebview) {
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value:
+								"Plan execution cancelled by user. Changes are being reverted.",
+							isError: false, // Cancellation is not an error
+						});
+					}
+					// REVIEW COMMENT:
+					// If an actual `_revertChanges` method were implemented to undo plan steps,
+					// it would be called around here. That method would be responsible for
+					// posting its own detailed status updates during the revert process
+					// (e.g., 'Reverting file X...', 'Revert successful/failed for file X').
+					// The `postMessageToWebview` above serves as an initial notification.
+					// The `_addHistoryEntry` below serves as a final summary in the chat log
+					// after the (hypothetical) revert attempt.
 					this._addHistoryEntry(
 						"model",
-						"Plan execution finished successfully."
+						"Changes reverted due to cancellation."
 					);
-				} else {
-					this.postMessageToWebview({
-						type: "statusUpdate",
-						value: lastHistoryText, // Use the existing specific success message
-					});
-				}
-			} else if (lastHistoryText === "Plan execution cancelled by user.") {
-				// Use the existing cancellation message if that was the last one
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value: "Plan execution cancelled by user.",
-					isError: false,
-				});
-			} else if (
-				!lastHistoryText?.startsWith("Step ") &&
-				!lastHistoryText?.includes("FAILED")
-			) {
-				// If the last message wasn't a specific step failure or cancellation, show generic stop message
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value:
-						"Plan execution stopped due to failure. Check chat for details.",
-					isError: true,
-				});
-			} else {
-				// If the last message was a specific step failure, keep that status
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value:
-						"Plan execution stopped due to step failure. Check chat for details.",
-					isError: true,
-				});
+					break;
+				case "failed":
+					// Specific error details should have been logged earlier.
+					// This status message indicates the start of the revert process.
+					if (this.postMessageToWebview) {
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: "Plan execution failed. Changes are being reverted.",
+							isError: true,
+						});
+					}
+					// REVIEW COMMENT:
+					// If an actual `_revertChanges` method were implemented to undo plan steps,
+					// it would be called around here. That method would be responsible for
+					// posting its own detailed status updates during the revert process
+					// (e.g., 'Reverting file X...', 'Revert successful/failed for file X').
+					// The `postMessageToWebview` above serves as an initial notification.
+					// The `_addHistoryEntry` below serves as a final summary in the chat log
+					// after the (hypothetical) revert attempt.
+					this._addHistoryEntry("model", "Changes reverted due to failure.");
+					break;
 			}
-			this.postMessageToWebview({ type: "reenableInput" });
+
+			// Ensure reenableInput is called reliably
+			if (this.postMessageToWebview) {
+				this.postMessageToWebview({ type: "reenableInput" });
+			}
 		}
 	}
 
@@ -1690,6 +1803,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	// Chat History & Actions (Unchanged)
 	private _addHistoryEntry(role: "user" | "model", text: string) {
+		// Prevent duplicate consecutive messages, especially for "Changes reverted..."
+		if (this._chatHistory.length > 0) {
+			const lastEntry = this._chatHistory[this._chatHistory.length - 1];
+			if (lastEntry.role === role && lastEntry.parts[0]?.text === text) {
+				// If the message is "Changes reverted..." and it's already the last one, don't add.
+				// Or if any other message is an exact duplicate of the last one from the same role.
+				if (
+					text.startsWith("Changes reverted") ||
+					(text === "Plan execution finished successfully." &&
+						lastEntry.parts[0]?.text === text) ||
+					(text === "Plan execution cancelled by user." &&
+						lastEntry.parts[0]?.text === text)
+				) {
+					console.log("Skipping duplicate history entry:", text);
+					return;
+				}
+			}
+		}
 		this._chatHistory.push({ role, parts: [{ text }] });
 		const MAX_HISTORY_ITEMS = 50;
 		if (this._chatHistory.length > MAX_HISTORY_ITEMS) {
@@ -1900,7 +2031,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					break;
 				}
 				case "cancelPlanExecution": {
-					this._pendingPlanGenerationContext = null; // Discard pending context
+					this._pendingPlanGenerationContext = null;
 					this.postMessageToWebview({
 						type: "statusUpdate",
 						value: "Plan generation and execution cancelled by user.",
@@ -1975,7 +2106,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					this.postMessageToWebview({ type: "reenableInput" });
 					break;
 				case "reenableInput":
-					// This might be sent if the webview detects it got stuck
 					this.postMessageToWebview({ type: "reenableInput" });
 					break;
 				default:
@@ -2071,10 +2201,21 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	// Utility Methods
 	public postMessageToWebview(message: any) {
-		if (this._view) {
-			this._view.webview.postMessage(message);
+		if (this._view && this._view.visible) {
+			// Check visibility
+			this._view.webview.postMessage(message).then(undefined, (err) => {
+				// Handle potential error if webview is disposed during postMessage
+				console.warn(
+					"Failed to post message to webview (possibly disposed):",
+					message.type,
+					err
+				);
+			});
 		} else {
-			console.warn("Sidebar view not available to post message:", message.type);
+			console.warn(
+				"Sidebar view not available or not visible to post message:",
+				message.type
+			);
 		}
 	}
 

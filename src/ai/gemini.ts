@@ -92,8 +92,9 @@ export async function generateContent(
 	generationConfig?: GenerationConfig, // <-- MODIFIED: Added generationConfig parameter
 	token?: vscode.CancellationToken
 ): Promise<string> {
+	// 1. Check for cancellation at the very beginning of the function.
 	if (token?.isCancellationRequested) {
-		console.log("Gemini request cancelled before sending.");
+		console.log("Cancelled by user."); // MODIFIED: Log message updated
 		return "Cancelled by user.";
 	}
 
@@ -123,12 +124,17 @@ export async function generateContent(
 			prompt.substring(0, 100) + "..."
 		);
 
+		// 2. Check for cancellation immediately before the chat.sendMessage(prompt) call.
+		if (token?.isCancellationRequested) {
+			console.log("Cancelled by user."); // ADDED: Cancellation check
+			return "Cancelled by user.";
+		}
+
 		const result = await chat.sendMessage(prompt);
 
+		// 3. Check for cancellation immediately after result = await chat.sendMessage(prompt) resolves.
 		if (token?.isCancellationRequested) {
-			console.log(
-				"Gemini request cancelled after response received, before processing."
-			);
+			console.log("Cancelled by user (after response received)."); // MODIFIED: Log message updated
 			return "Cancelled by user (after response received).";
 		}
 
@@ -161,8 +167,9 @@ export async function generateContent(
 		);
 		return text;
 	} catch (error) {
+		// 4. Check for cancellation inside the catch (error) block, as the first check.
 		if (token?.isCancellationRequested) {
-			console.log("Gemini request cancelled during error handling.");
+			console.log("Cancelled by user."); // MODIFIED: Log message updated
 			return "Cancelled by user.";
 		}
 

@@ -706,6 +706,38 @@ h2 {
 }
 
 /* --- Plan Confirmation Container --- */
+/*
+    Review of #plan-confirmation-container button#cancel-plan-button and related styles:
+    1. Distinct Styling:
+       - The #cancel-plan-button uses `var(--vscode-button-secondaryBackground)` and 
+         `var(--vscode-button-secondaryForeground)`, which provides clear differentiation
+         from the primary confirm button.
+       - Border is consistent with the primary button, relying on background for distinction.
+       - Confirmed: Appropriate.
+
+    2. Hover and Focus States:
+       - Hover state for #cancel-plan-button uses `var(--vscode-button-secondaryHoverBackground)`,
+         providing clear feedback.
+       - A general focus state is added below for ALL buttons within this container 
+         (including #cancel-plan-button) using `border-color` and `box-shadow` with 
+         `var(--vscode-focusBorder)` for clear and consistent visual feedback.
+       - Confirmed: Met (with added focus style).
+
+    3. Font Awesome Icon:
+       - Icons (`.fa-icon`) within these buttons are styled by `#plan-confirmation-container button .fa-icon`.
+       - `font-size: 0.9em;` provides appropriate sizing.
+       - `margin-right: 6px;` ensures good spacing if text is present.
+       - Alignment is handled by the button's `display: inline-flex; align-items: center;`.
+       - Visibility is ensured by inheriting the button's color.
+       - Confirmed: Correctly sized, aligned, and visible.
+
+    4. Dimensions and Padding:
+       - General button styles in this container (`#plan-confirmation-container button`) define
+         `height: var(--input-height);`, `min-width: 80px;`, and `padding: 5px 12px;`.
+       - These dimensions are consistent with other UI elements (e.g., input fields, other buttons)
+         and provide a good, easily clickable target.
+       - Confirmed: Consistent and provides a good click target.
+*/
 #plan-confirmation-container {
 	border: 1px solid
 		var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
@@ -724,33 +756,58 @@ h2 {
 }
 #plan-confirmation-container button {
 	margin: 0 5px;
-	padding: 5px 12px; /* Adjusted padding */
-	height: var(--input-height); /* Match other buttons */
-	min-width: 80px;
-	background-color: var(--vscode-button-background);
+	padding: 5px 12px; /* Point 4: Padding provides good click target area */
+	height: var(--input-height); /* Point 4: Consistent height */
+	min-width: 80px; /* Point 4: Ensures a minimum clickable width */
+	background-color: var(
+		--vscode-button-background
+	); /* Default for primary/confirm button */
 	color: var(--vscode-button-foreground);
-	border: 1px solid var(--vscode-button-border, transparent);
+	border: 1px solid var(--vscode-button-border, transparent); /* Point 1: Base border for buttons */
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out;
-	display: inline-flex;
-	align-items: center;
+	/* Point 2: Transition updated to include border-color for focus state */
+	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
+	display: inline-flex; /* Point 3: Assists with icon alignment */
+	align-items: center; /* Point 3: Assists with icon alignment */
 	justify-content: center;
 	font-size: inherit;
+	outline: none; /* Point 2: Remove default outline to use custom box-shadow/border for focus */
 }
+/* Point 2: General hover state for primary/confirm button */
 #plan-confirmation-container button:hover {
 	background-color: var(--vscode-button-hoverBackground);
 }
+/* Point 2: General focus state for all buttons in this container */
+#plan-confirmation-container button:focus {
+	border-color: var(--vscode-focusBorder); /* Clear visual feedback for focus */
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder); /* Additional emphasis consistent with inputs */
+}
+
+/* Point 1: Distinct styling for the cancel button */
 #plan-confirmation-container button#cancel-plan-button {
-	background-color: var(--vscode-button-secondaryBackground);
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Differentiates from confirm button */
 	color: var(--vscode-button-secondaryForeground);
+	/* Border is inherited from general button style, which is fine as background provides distinction */
 }
+/* Point 2: Hover state for the cancel button */
 #plan-confirmation-container button#cancel-plan-button:hover {
-	background-color: var(--vscode-button-secondaryHoverBackground);
+	background-color: var(
+		--vscode-button-secondaryHoverBackground
+	); /* Clear hover feedback */
 }
+/* Focus for cancel button is handled by the general `#plan-confirmation-container button:focus` rule,
+   maintaining its secondary background/foreground colors while gaining the focus border/shadow. */
+
+/* Point 3: Styling for Font Awesome icons within any button in this container */
 #plan-confirmation-container button .fa-icon {
-	margin-right: 6px;
-	font-size: 0.9em;
+	margin-right: 6px; /* Spacing between icon and text */
+	font-size: 0.9em; /* Icon size relative to button font size, appropriate for visibility */
+	/* Alignment is handled by parent button's flex properties (`display: inline-flex; align-items: center;`)
+	   and global .fa-icon styles (`vertical-align`). */
+	/* Visibility is ensured by color inherited from button. */
 }
 
 /* --- Scrollbar Styling --- */
