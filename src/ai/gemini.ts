@@ -4,23 +4,23 @@ import {
 	GoogleGenerativeAI,
 	GenerativeModel,
 	Content,
+	GenerationConfig, // <-- Add this import
+	StartChatParams, // <-- Add this import
 } from "@google/generative-ai";
 
-// --- Add this constant ---
 export const ERROR_QUOTA_EXCEEDED = "ERROR_GEMINI_QUOTA_EXCEEDED";
-// --- End Add ---
 
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
-let currentApiKey: string | null = null; // Store the key used for initialization
-let currentModelName: string | null = null; // Store the model name used
+let currentApiKey: string | null = null;
+let currentModelName: string | null = null;
 
 /**
  * Initializes the GoogleGenerativeAI client and the GenerativeModel if needed.
  * Re-initializes if the API key or model name changes.
  *
  * @param apiKey The Google Gemini API key.
- * @param modelName The specific Gemini model name to use (e.g., "gemini-2.0-flash").
+ * @param modelName The specific Gemini model name to use (e.g., "gemini-1.5-flash-latest").
  * @returns True if initialization was successful or already initialized correctly, false otherwise.
  */
 function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
@@ -28,7 +28,6 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
 		if (!apiKey) {
 			console.error("Gemini API Key is missing.");
 			if (model) {
-				// Reset if key becomes invalid
 				resetClient();
 			}
 			return false;
@@ -36,13 +35,11 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
 		if (!modelName) {
 			console.error("Gemini Model Name is missing.");
 			if (model) {
-				// Reset if model name becomes invalid
 				resetClient();
 			}
 			return false;
 		}
 
-		// Re-initialize if API key or model name has changed, or if not initialized yet
 		if (
 			!generativeAI ||
 			!model ||
@@ -55,9 +52,12 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
 				}, Model changed: ${modelName !== currentModelName}`
 			);
 			generativeAI = new GoogleGenerativeAI(apiKey);
+			// Note: Default generationConfig can be set here if needed for all calls using this model instance
+			// model = generativeAI.getGenerativeModel({ model: modelName, generationConfig: { temperature: 0.7 } });
+			// However, for JSON mode, it's often better to apply it per-request.
 			model = generativeAI.getGenerativeModel({ model: modelName });
-			currentApiKey = apiKey; // Store current key
-			currentModelName = modelName; // Store current model name
+			currentApiKey = apiKey;
+			currentModelName = modelName;
 			console.log("GoogleGenerativeAI initialized with model:", modelName);
 		}
 		return true;
@@ -68,7 +68,7 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
 				error instanceof Error ? error.message : String(error)
 			}`
 		);
-		resetClient(); // Reset on error
+		resetClient();
 		return false;
 	}
 }
@@ -80,7 +80,8 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
  * @param modelName The specific Gemini model name to use.
  * @param prompt The user's text prompt.
  * @param history Optional chat history for context.
- * @param token Optional cancellation token to allow aborting the request before it's sent. // Added token parameter documentation
+ * @param generationConfig Optional configuration for this generation request (e.g., for JSON mode).
+ * @param token Optional cancellation token.
  * @returns The generated text content or an error message string.
  */
 export async function generateContent(
@@ -88,44 +89,42 @@ export async function generateContent(
 	modelName: string,
 	prompt: string,
 	history?: Content[],
-	token?: vscode.CancellationToken // MODIFICATION 1: Added optional token parameter
+	generationConfig?: GenerationConfig, // <-- MODIFIED: Added generationConfig parameter
+	token?: vscode.CancellationToken
 ): Promise<string> {
-	// Return type remains string, but can be our special error string
-
-	// MODIFICATION 2: Check for cancellation before proceeding
-	// Check if the request was cancelled before attempting to initialize or call the API
 	if (token?.isCancellationRequested) {
-		console.log("Gemini request cancelled before sending."); // Log cancellation
-		return "Cancelled by user."; // Return a specific message indicating cancellation
+		console.log("Gemini request cancelled before sending.");
+		return "Cancelled by user.";
 	}
 
 	if (!initializeGenerativeAI(apiKey, modelName)) {
-		// Return a standard error string for initialization failure
 		return `Error: Gemini AI client not initialized. Please check your API key and selected model (${modelName}).`;
 	}
 	if (!model) {
-		// Return a standard error string for model unavailability
 		return `Error: Gemini model (${modelName}) is not available after initialization attempt.`;
 	}
 
 	try {
-		// The cancellation check is performed *before* this try block, as requested.
-		// This ensures we don't even attempt the API call if cancellation was requested early.
-
-		const chat = model.startChat({
+		// --- MODIFIED: Include generationConfig in StartChatParams ---
+		const chatParams: StartChatParams = {
 			history: history || [],
-		});
+		};
+		if (generationConfig) {
+			chatParams.generationConfig = generationConfig;
+			console.log(
+				`Starting chat with custom generationConfig for model ${modelName}:`,
+				generationConfig
+			);
+		}
+
+		const chat = model.startChat(chatParams); // Pass params here
 		console.log(
 			`Sending prompt to Gemini (${modelName}):`,
 			prompt.substring(0, 100) + "..."
 		);
 
-		// Note: The Gemini SDK's `sendMessage` might not inherently support cancellation via a token
-		// after the request has started. This check primarily prevents initiating the request.
 		const result = await chat.sendMessage(prompt);
 
-		// Optional: Check cancellation again *after* the call returns, in case the user cancelled
-		// during the request and we want to avoid processing the result.
 		if (token?.isCancellationRequested) {
 			console.log(
 				"Gemini request cancelled after response received, before processing."
@@ -135,7 +134,6 @@ export async function generateContent(
 
 		const response = result.response;
 
-		// --- Optional: More robust safety check ---
 		if (response.promptFeedback?.blockReason) {
 			console.warn(
 				`Gemini (${modelName}) blocked prompt: ${response.promptFeedback.blockReason}`,
@@ -146,16 +144,15 @@ export async function generateContent(
 		if (
 			response.candidates &&
 			response.candidates.length > 0 &&
-			response.candidates[0].finishReason !== "STOP"
+			response.candidates[0].finishReason !== "STOP" &&
+			response.candidates[0].finishReason !== "MAX_TOKENS" // MAX_TOKENS is a valid stop reason if output is partial
 		) {
 			console.warn(
 				`Gemini (${modelName}) finished unexpectedly: ${response.candidates[0].finishReason}`,
 				response.candidates[0].safetyRatings
 			);
-			// Provide specific messages based on finishReason if desired
 			return `Error: Gemini stopped generation unexpectedly (${response.candidates[0].finishReason}).`;
 		}
-		// --- End safety check ---
 
 		const text = response.text();
 		console.log(
@@ -164,7 +161,6 @@ export async function generateContent(
 		);
 		return text;
 	} catch (error) {
-		// Also check for cancellation in the catch block.
 		if (token?.isCancellationRequested) {
 			console.log("Gemini request cancelled during error handling.");
 			return "Cancelled by user.";
@@ -175,63 +171,71 @@ export async function generateContent(
 			error
 		);
 
-		// --- Refined Error Handling ---
 		let errorMessage = `An error occurred while communicating with the Gemini API (${modelName}).`;
 		let isQuotaError = false;
-		let isInvalidKeyError = false;
 
 		if (error instanceof Error) {
 			const lowerErrorMessage = error.message.toLowerCase();
+			const errorName = (error as any).name || ""; // Handle cases where name might not exist
+			const errorStatus = (error as any).status || (error as any).code; // Common places for status codes
 
-			// Check for specific quota/rate limit errors (adjust keywords as needed based on actual SDK errors)
 			if (
 				lowerErrorMessage.includes("quota") ||
 				lowerErrorMessage.includes("rate limit") ||
 				lowerErrorMessage.includes("resource has been exhausted") ||
-				(error.name === "GoogleGenerativeAIError" &&
-					(error as any).status === 429) // Example if SDK uses standard HTTP status codes in errors
+				((errorName === "GoogleGenerativeAIError" ||
+					errorName.includes("HttpError")) && // Broader check for HTTP errors
+					(errorStatus === 429 || String(errorStatus).startsWith("429")))
 			) {
 				errorMessage = `API quota or rate limit exceeded for model ${modelName}.`;
-				isQuotaError = true; // Signal quota issue
-			}
-			// Check for invalid API key errors
-			else if (
+				isQuotaError = true;
+			} else if (
 				lowerErrorMessage.includes("api key not valid") ||
-				lowerErrorMessage.includes("invalid api key")
+				lowerErrorMessage.includes("invalid api key") ||
+				((errorName === "GoogleGenerativeAIError" ||
+					errorName.includes("HttpError")) &&
+					(errorStatus === 400 || errorStatus === 401 || errorStatus === 403) && // 400 can be bad API key
+					(lowerErrorMessage.includes("permission denied") ||
+						lowerErrorMessage.includes("api key"))) // More specific checks for 403
 			) {
 				errorMessage =
-					"Error: Invalid API Key. Please check your key in the settings.";
-				isInvalidKeyError = true;
-				resetClient(); // Reset client state on definitively invalid key
-			}
-			// Check for invalid model errors
-			else if (
+					"Error: Invalid API Key or insufficient permissions. Please check your key in the settings.";
+				resetClient();
+			} else if (
 				lowerErrorMessage.includes("invalid model") ||
-				lowerErrorMessage.includes("model not found")
+				lowerErrorMessage.includes("model not found") ||
+				((errorName === "GoogleGenerativeAIError" ||
+					errorName.includes("HttpError")) &&
+					errorStatus === 404) // 404 for model not found
 			) {
 				errorMessage = `Error: The selected model '${modelName}' is not valid or not accessible with your API key.`;
-				isInvalidKeyError = true; // Treat as key/model issue, reset
 				resetClient();
+			} else if (
+				lowerErrorMessage.includes("json_parsing_error") ||
+				(generationConfig?.responseMimeType === "application/json" &&
+					lowerErrorMessage.includes("response was not valid json"))
+			) {
+				// Specific error if the model fails to produce JSON when explicitly asked
+				errorMessage = `Error: Gemini (${modelName}) failed to generate valid JSON as requested. The model's response might have been: ${error.message}`;
+				console.warn(
+					`Gemini (${modelName}) was asked for JSON but failed:`,
+					error
+				);
 			} else {
-				errorMessage = `Error (${modelName}): ${error.message}`; // General error
+				errorMessage = `Error (${modelName}): ${error.message}`;
 			}
 		} else {
-			errorMessage = `Error (${modelName}): ${String(error)}`; // Non-Error object thrown
+			errorMessage = `Error (${modelName}): ${String(error)}`;
 		}
 
-		// Return the special signal for quota errors, otherwise return the descriptive error message
 		if (isQuotaError) {
 			console.log(`Gemini (${modelName}): Detected quota/rate limit error.`);
-			return ERROR_QUOTA_EXCEEDED; // Return signal
+			return ERROR_QUOTA_EXCEEDED;
 		} else {
-			// Show error message only for non-quota errors, as quota errors will be retried silently first.
-			// If retries fail, the provider will show a final message.
-			if (!isQuotaError) {
-				vscode.window.showErrorMessage(errorMessage);
-			}
-			return errorMessage; // Return standard error message for other issues
+			// Show error message only for non-quota errors
+			vscode.window.showErrorMessage(errorMessage);
+			return errorMessage;
 		}
-		// --- End Refined Error Handling ---
 	}
 }
 

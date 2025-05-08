@@ -11,7 +11,6 @@ import { scanWorkspace } from "../context/workspaceScanner";
 import { buildContextString } from "../context/contextBuilder";
 import {
 	ExecutionPlan,
-	PlanStep,
 	PlanStepAction,
 	isCreateDirectoryStep,
 	isCreateFileStep,
@@ -19,7 +18,7 @@ import {
 	isRunCommandStep,
 	parseAndValidatePlan,
 } from "../ai/workflowPlanner";
-import { Content } from "@google/generative-ai";
+import { Content, GenerationConfig } from "@google/generative-ai";
 import path = require("path");
 
 // Secret storage keys
@@ -29,12 +28,13 @@ const GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY = "geminiActiveApiKeyIndex";
 // Workspace state keys
 const MODEL_SELECTION_STORAGE_KEY = "geminiSelectedModel";
 
+// DONT CHANGE THESE MODELS
 const AVAILABLE_GEMINI_MODELS = [
 	"gemini-2.5-pro-preview-05-06",
 	"gemini-2.5-pro-exp-03-25",
 	"gemini-2.5-flash-preview-04-17",
 ];
-const DEFAULT_MODEL = AVAILABLE_GEMINI_MODELS[0];
+const DEFAULT_MODEL = AVAILABLE_GEMINI_MODELS[2];
 
 interface ApiKeyInfo {
 	maskedKey: string;
@@ -55,25 +55,23 @@ interface ChatMessage {
 
 type HistoryEntry = Content;
 
-// --- NEW: Context for Two-Stage Plan Generation ---
 interface PlanGenerationContext {
-	type: "chat" | "editor"; // Origin of the plan request
-	originalUserRequest?: string; // For chat-initiated /plan
+	type: "chat" | "editor";
+	originalUserRequest?: string;
 	editorContext?: {
 		instruction: string;
 		selectedText: string;
 		fullText: string;
 		languageId: string;
-		filePath: string; // Added filePath property as per instructions
+		filePath: string;
 		documentUri: vscode.Uri;
 		selection: vscode.Range;
 	};
-	projectContext: string; // Built workspace context
-	diagnosticsString?: string; // Relevant diagnostics for editor actions
-	initialApiKey: string; // API key used for the first (textual plan) stage
-	modelName: string; // Model name used
+	projectContext: string;
+	diagnosticsString?: string;
+	initialApiKey: string;
+	modelName: string;
 }
-// --- END NEW ---
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -86,13 +84,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	private _activeKeyIndex: number = -1;
 	private _selectedModelName: string = DEFAULT_MODEL;
 	private _chatHistory: HistoryEntry[] = [];
-
-	// --- MODIFIED: State for pending plan ---
-	// _currentPlan is removed. We use _pendingPlanGenerationContext for the two-stage process.
-	// When a textual plan is shown and awaiting confirmation, _pendingPlanGenerationContext will be set.
-	// After the JSON plan is generated and _executePlan is called, _pendingPlanGenerationContext is cleared.
 	private _pendingPlanGenerationContext: PlanGenerationContext | null = null;
-	// --- END MODIFIED ---
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri,
@@ -122,7 +114,1316 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		console.log("SidebarProvider initialization complete.");
 	}
 
-	// Key Management (Unchanged)
+	public async _generateWithRetry(
+		prompt: string,
+		initialApiKey: string,
+		modelName: string,
+		history: HistoryEntry[] | undefined,
+		requestType: string = "request",
+		generationConfig?: GenerationConfig
+	): Promise<string> {
+		let currentApiKey = initialApiKey;
+		const triedKeys = new Set<string>();
+		const maxRetries =
+			this._apiKeyList.length > 0 ? this._apiKeyList.length : 1;
+		let attempts = 0;
+
+		if (!currentApiKey && this._apiKeyList.length > 0) {
+			console.warn(
+				"[RetryWrapper] Initial API key was undefined, but keys exist. Using the first available key."
+			);
+			currentApiKey = this._apiKeyList[0];
+			this._activeKeyIndex = 0; // Assume the first key is active if none was provided
+			await this._saveKeysToStorage(); // Update storage if we had to guess
+		} else if (!currentApiKey) {
+			console.error("[RetryWrapper] No API key available for the request.");
+			return "Error: No API Key available for the request.";
+		}
+
+		while (attempts < maxRetries) {
+			attempts++;
+			console.log(
+				`[RetryWrapper] Attempt ${attempts}/${maxRetries} for ${requestType} with key ...${currentApiKey.slice(
+					-4
+				)} and config:`,
+				generationConfig || "(default)"
+			);
+
+			const result = await generateContent(
+				currentApiKey,
+				modelName,
+				prompt,
+				history,
+				generationConfig, // Pass the config
+				undefined // Pass cancellation token if needed later
+			);
+
+			if (result === ERROR_QUOTA_EXCEEDED) {
+				console.warn(
+					`[RetryWrapper] Quota/Rate limit hit for key ...${currentApiKey.slice(
+						-4
+					)} on attempt ${attempts}.`
+				);
+				triedKeys.add(currentApiKey);
+				const availableKeysCount = this._apiKeyList.length;
+
+				if (availableKeysCount <= 1 || triedKeys.size >= availableKeysCount) {
+					const finalErrorMsg = `API quota or rate limit exceeded for model ${modelName}. All ${availableKeysCount} API key(s) failed or were rate-limited. Please try again later or check your Gemini usage.`;
+					return finalErrorMsg;
+				}
+
+				let nextKeyFound = false;
+				let originalIndex = this._activeKeyIndex;
+				let nextIndex = originalIndex;
+
+				for (let i = 0; i < availableKeysCount; i++) {
+					nextIndex = (originalIndex + i + 1) % availableKeysCount;
+					const potentialNextKey = this._apiKeyList[nextIndex];
+					if (!triedKeys.has(potentialNextKey)) {
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: `Quota limit hit. Retrying ${requestType} with next key...`,
+						});
+						this._activeKeyIndex = nextIndex;
+						await this._saveKeysToStorage();
+						currentApiKey = this._apiKeyList[this._activeKeyIndex]; // Update currentApiKey for the next loop iteration
+						this.postMessageToWebview({
+							type: "apiKeyStatus",
+							value: `Switched to key ...${currentApiKey.slice(-4)} for retry.`,
+						});
+						nextKeyFound = true;
+						break;
+					}
+				}
+
+				if (!nextKeyFound) {
+					const finalErrorMsg = `API quota or rate limit exceeded for model ${modelName}. All available API keys have been tried for this request cycle. Please try again later.`;
+					return finalErrorMsg;
+				}
+				// Continue to the next iteration of the while loop with the new key
+			} else {
+				// If it's not a quota error, return the result (success or other error)
+				return result;
+			}
+		} // End while loop
+
+		// This part is reached only if all retries resulted in quota errors
+		const finalErrorMsg = `API quota or rate limit exceeded for model ${modelName}. Failed after trying ${attempts} keys. Please try again later.`;
+		return finalErrorMsg;
+	}
+
+	private _createInitialPlanningExplanationPrompt(
+		projectContext: string,
+		userRequest?: string, // For chat-initiated /plan
+		editorContext?: {
+			// For editor-initiated actions
+			instruction: string;
+			selectedText: string;
+			fullText: string;
+			languageId: string;
+			filePath: string;
+		},
+		diagnosticsString?: string
+	): string {
+		let specificContextPrompt = "";
+		let mainInstructions = "";
+
+		if (editorContext) {
+			const instructionType =
+				editorContext.instruction.toLowerCase() === "/fix"
+					? `The user triggered the '/fix' command on the selected code.`
+					: `The user provided the custom instruction: "${editorContext.instruction}".`;
+
+			specificContextPrompt = `
+			--- Specific User Request Context from Editor ---
+			File Path: ${editorContext.filePath}
+			Language: ${editorContext.languageId}
+			${instructionType}
+
+			--- Selected Code in Editor ---
+			\`\`\`${editorContext.languageId}
+			${editorContext.selectedText}
+			\`\`\`
+			--- End Selected Code ---
+
+			${
+				diagnosticsString
+					? `\n--- Relevant Diagnostics in Selection ---\n${diagnosticsString}\n--- End Relevant Diagnostics ---\n`
+					: ""
+			}
+
+			--- Full Content of Affected File (${editorContext.filePath}) ---
+			\`\`\`${editorContext.languageId}
+			${editorContext.fullText}
+			\`\`\`
+			--- End Full Content ---`;
+			mainInstructions = `Based on the user's request from the editor (${
+				editorContext.instruction.toLowerCase() === "/fix"
+					? "'/fix' command"
+					: "custom instruction"
+			}) and the provided file/selection context, explain your step-by-step plan to fulfill the request. For '/fix', the plan should clearly address the 'Relevant Diagnostics' listed. For custom instructions, interpret the request in the context of the selected code and any diagnostics.`;
+		} else if (userRequest) {
+			specificContextPrompt = `
+			--- User Request from Chat ---
+			${userRequest}
+			--- End User Request ---`;
+			mainInstructions = `Based on the user's request from the chat ("${userRequest}"), explain your step-by-step plan to fulfill it.`;
+		}
+
+		return `
+		You are an expert AI programmer assisting within VS Code. Your task is to explain your plan to fulfill the user's request.
+
+		**Goal:** Provide a clear, human-readable, step-by-step explanation of your plan. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
+
+		**Instructions for Plan Explanation:**
+		1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
+			editorContext && diagnosticsString
+				? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your textual plan describes how you will address them for '/fix' requests.**"
+				: ""
+		}
+		2.  **Be Comprehensive:** Your explanation should cover all necessary steps to achieve the user's goal.
+		3.  Clarity: Make the plan easy for a developer to understand. Briefly describe what each step will do (e.g., "Create a new file named 'utils.ts'", "Modify 'main.ts' to import the new utility function", "Install the 'axios' package using npm").
+		4.  No JSON: **Do NOT output any JSON for this initial explanation.** Your entire response should be human-readable text.
+		5.  Never Aussume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
+
+		${specificContextPrompt}
+
+		*** Broader Project Context (Reference Only) ***
+		${projectContext}
+		*** End Broader Project Context ***
+
+		--- Plan Explanation (Text with Markdown) ---
+`;
+	}
+
+	private async _handleInitialPlanRequest(
+		userRequest: string,
+		apiKey: string,
+		modelName: string
+	): Promise<void> {
+		try {
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Minovative Mind (${modelName}) is formulating a plan explanation...`,
+				isLoading: true,
+			});
+			this._pendingPlanGenerationContext = null; // Clear any previous pending context
+
+			const projectContext = await this._buildProjectContext();
+			if (projectContext.startsWith("[Error")) {
+				this.postMessageToWebview({
+					type: "aiResponse",
+					value: `Error generating plan explanation: Failed to build project context. ${projectContext}`,
+					isLoading: false,
+					isError: true,
+				});
+				this._addHistoryEntry(
+					"model",
+					`Error: Failed to build project context for plan explanation.`
+				);
+				this.postMessageToWebview({ type: "reenableInput" });
+				return;
+			}
+
+			const textualPlanPrompt = this._createInitialPlanningExplanationPrompt(
+				projectContext,
+				userRequest,
+				undefined, // No editor context for /plan from chat
+				undefined // No diagnostics for /plan from chat
+			);
+
+			const textualPlanResponse = await this._generateWithRetry(
+				textualPlanPrompt,
+				apiKey,
+				modelName,
+				undefined,
+				"initial plan explanation"
+				// No generationConfig needed for textual explanation
+			);
+
+			if (
+				textualPlanResponse.toLowerCase().startsWith("error:") ||
+				textualPlanResponse === ERROR_QUOTA_EXCEEDED
+			) {
+				throw new Error(textualPlanResponse);
+			}
+
+			// Store context needed for generating the structured JSON plan later
+			this._pendingPlanGenerationContext = {
+				type: "chat",
+				originalUserRequest: userRequest,
+				projectContext,
+				initialApiKey: apiKey,
+				modelName,
+			};
+
+			this._addHistoryEntry("model", textualPlanResponse); // Add textual plan to history
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: textualPlanResponse,
+				isLoading: false,
+				requiresConfirmation: true,
+				planData: { originalRequest: userRequest, type: "textualPlanPending" },
+			});
+			// Input remains disabled by webview until confirm/cancel.
+		} catch (error) {
+			console.error("Error in _handleInitialPlanRequest:", error);
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Error generating plan explanation: ${errorMsg}`,
+				isLoading: false,
+				isError: true,
+			});
+			this._addHistoryEntry(
+				"model",
+				`Error generating plan explanation: ${errorMsg}`
+			);
+			this.postMessageToWebview({ type: "reenableInput" });
+		}
+	}
+
+	public async initiatePlanFromEditorAction(
+		instruction: string,
+		selectedText: string,
+		fullText: string,
+		languageId: string,
+		documentUri: vscode.Uri,
+		selection: vscode.Range
+	) {
+		console.log(
+			`[SidebarProvider] Received editor action: "${instruction}" for textual plan.`
+		);
+		const activeKey = this.getActiveApiKey();
+		const modelName = this.getSelectedModelName();
+
+		if (!activeKey || !modelName) {
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: "Error: No active API Key or Model set for planning.",
+				isError: true,
+			});
+			this.postMessageToWebview({ type: "reenableInput" });
+			return;
+		}
+		if (this._pendingPlanGenerationContext) {
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: "Error: Another plan is already pending confirmation.",
+				isError: true,
+			});
+			this.postMessageToWebview({ type: "reenableInput" });
+			return;
+		}
+
+		try {
+			this._addHistoryEntry(
+				"model",
+				`Received request from editor: "${instruction}". Generating plan explanation...`
+			);
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Minovative Mind (${modelName}) received '${instruction}' from editor. Generating plan explanation...`,
+				isLoading: true,
+			});
+			this._pendingPlanGenerationContext = null;
+
+			const projectContext = await this._buildProjectContext();
+			if (projectContext.startsWith("[Error")) {
+				throw new Error(
+					`Failed to build project context for editor action. ${projectContext}`
+				);
+			}
+
+			let relativeFilePath = documentUri.fsPath;
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (workspaceFolders && workspaceFolders.length > 0) {
+				relativeFilePath = path.relative(
+					workspaceFolders[0].uri.fsPath,
+					documentUri.fsPath
+				);
+			}
+
+			let diagnosticsString = "";
+			try {
+				const allDiagnostics = vscode.languages.getDiagnostics(documentUri);
+				const relevantDiagnostics = allDiagnostics.filter((diag) =>
+					diag.range.intersection(selection)
+				);
+				if (relevantDiagnostics.length > 0) {
+					relevantDiagnostics.sort((a, b) => {
+						if (a.range.start.line !== b.range.start.line) {
+							return a.range.start.line - b.range.start.line;
+						}
+						return a.severity - b.severity;
+					});
+					diagnosticsString = relevantDiagnostics
+						.map(
+							(d) =>
+								`- ${vscode.DiagnosticSeverity[d.severity]} (Line ${
+									d.range.start.line + 1
+								}): ${d.message}`
+						)
+						.join("\n");
+				}
+			} catch (diagError) {
+				console.error("Error retrieving diagnostics:", diagError);
+				diagnosticsString = "[Could not retrieve diagnostics]";
+			}
+
+			const editorCtx = {
+				instruction,
+				selectedText,
+				fullText,
+				languageId,
+				filePath: relativeFilePath,
+				documentUri, // Keep original URI too
+				selection,
+			};
+
+			const textualPlanPrompt = this._createInitialPlanningExplanationPrompt(
+				projectContext,
+				undefined, // No userRequest string for editor actions
+				editorCtx,
+				diagnosticsString
+			);
+
+			const textualPlanResponse = await this._generateWithRetry(
+				textualPlanPrompt,
+				activeKey,
+				modelName,
+				undefined,
+				"editor action plan explanation"
+				// No generationConfig needed for textual explanation
+			);
+
+			if (
+				textualPlanResponse.toLowerCase().startsWith("error:") ||
+				textualPlanResponse === ERROR_QUOTA_EXCEEDED
+			) {
+				throw new Error(textualPlanResponse);
+			}
+
+			this._pendingPlanGenerationContext = {
+				type: "editor",
+				editorContext: editorCtx,
+				projectContext,
+				diagnosticsString,
+				initialApiKey: activeKey,
+				modelName,
+			};
+
+			this._addHistoryEntry("model", textualPlanResponse);
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: textualPlanResponse,
+				isLoading: false,
+				requiresConfirmation: true,
+				planData: {
+					originalInstruction: instruction,
+					type: "textualPlanPending",
+				},
+			});
+		} catch (error) {
+			console.error("Error in initiatePlanFromEditorAction:", error);
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Error during editor action plan explanation: ${errorMsg}`,
+				isLoading: false,
+				isError: true,
+			});
+			this._addHistoryEntry(
+				"model",
+				`Error generating plan explanation for editor action: ${errorMsg}`
+			);
+			this.postMessageToWebview({ type: "reenableInput" });
+		}
+	}
+
+	// --- MODIFIED: Stage 2 - Generate and Execute Structured JSON Plan ---
+	private async _generateAndExecuteStructuredPlan(
+		planContext: PlanGenerationContext
+	): Promise<void> {
+		this.postMessageToWebview({
+			type: "statusUpdate",
+			value: `Minovative Mind (${planContext.modelName}) is generating the detailed execution plan (JSON)...`,
+		});
+		this._addHistoryEntry(
+			"model",
+			"User confirmed. Generating detailed execution plan (JSON)..."
+		);
+
+		let structuredPlanJsonString = "";
+		try {
+			// --- Define Generation Config for JSON Mode ---
+			const jsonGenerationConfig: GenerationConfig = {
+				responseMimeType: "application/json",
+				temperature: 0.2, // Lower temperature for more deterministic JSON output
+				// You might adjust topK, topP here if needed, but often not necessary with JSON mode
+			};
+			// --- End Define ---
+
+			// Create the prompt that asks for JSON (includes few-shot examples now)
+			const jsonPlanningPrompt = this._createPlanningPrompt(
+				planContext.originalUserRequest,
+				planContext.projectContext,
+				planContext.editorContext
+					? {
+							instruction: planContext.editorContext.instruction,
+							selectedText: planContext.editorContext.selectedText,
+							fullText: planContext.editorContext.fullText,
+							languageId: planContext.editorContext.languageId,
+							filePath: planContext.editorContext.filePath,
+					  }
+					: undefined,
+				planContext.diagnosticsString
+			);
+
+			// --- Call _generateWithRetry with JSON config ---
+			structuredPlanJsonString = await this._generateWithRetry(
+				jsonPlanningPrompt,
+				planContext.initialApiKey,
+				planContext.modelName,
+				undefined, // History not typically needed for the JSON plan generation itself
+				"structured plan generation",
+				jsonGenerationConfig // <-- Pass the config here
+			);
+			// --- End Call ---
+
+			if (
+				structuredPlanJsonString.toLowerCase().startsWith("error:") ||
+				structuredPlanJsonString === ERROR_QUOTA_EXCEEDED
+			) {
+				// Handle errors including potential JSON format errors from the API itself
+				throw new Error(
+					`AI failed to generate structured plan: ${structuredPlanJsonString}`
+				);
+			}
+
+			// Basic cleanup (remove potential markdown fences)
+			structuredPlanJsonString = structuredPlanJsonString
+				.replace(/^```json\n?/, "")
+				.replace(/^```\n?/, "")
+				.replace(/\n?```$/, "")
+				.trim();
+
+			// --- ADDED: Basic JSON structural check before parsing ---
+			// This helps catch non-JSON responses early before JSON.parse throws
+			if (
+				!structuredPlanJsonString.startsWith("{") ||
+				!structuredPlanJsonString.endsWith("}")
+			) {
+				console.error(
+					"AI response did not start/end with {}. Raw response:\n",
+					structuredPlanJsonString.substring(0, 500) +
+						(structuredPlanJsonString.length > 500 ? "..." : "")
+				);
+				throw new Error(
+					"AI did not return a valid JSON structure (missing braces)."
+				);
+			}
+			// --- END ADDED ---
+
+			const executablePlan: ExecutionPlan | null = parseAndValidatePlan(
+				structuredPlanJsonString
+			);
+
+			if (!executablePlan) {
+				const errorDetail =
+					"Failed to parse or validate the structured JSON plan from AI.";
+				console.error(errorDetail, "Raw JSON:", structuredPlanJsonString);
+				// Log the invalid JSON to the chat for debugging
+				this._addHistoryEntry(
+					"model",
+					`Error: Failed to parse/validate structured plan.\nRaw JSON from AI:\n\`\`\`json\n${structuredPlanJsonString}\n\`\`\``
+				);
+				throw new Error(errorDetail);
+			}
+
+			// If JSON plan is valid, proceed to execute
+			await this._executePlan(
+				executablePlan,
+				planContext.initialApiKey, // Use the key from the initial stage for consistency
+				planContext.modelName
+			);
+		} catch (error) {
+			console.error("Error in _generateAndExecuteStructuredPlan:", error);
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: `Error generating or executing structured plan: ${errorMsg}`,
+				isError: true,
+			});
+			// Avoid adding duplicate error messages if already added by parseAndValidatePlan failure
+			if (
+				!errorMsg.includes(
+					"Failed to parse or validate the structured JSON plan"
+				)
+			) {
+				this._addHistoryEntry(
+					"model",
+					`Error generating or executing structured plan: ${errorMsg}`
+				);
+			}
+			this.postMessageToWebview({ type: "reenableInput" });
+		} finally {
+			this._pendingPlanGenerationContext = null; // Clear context after attempt
+		}
+	}
+
+	// --- MODIFIED: _createPlanningPrompt to include few-shot examples ---
+	private _createPlanningPrompt(
+		userRequest: string | undefined,
+		projectContext: string,
+		editorContext?: {
+			instruction: string;
+			selectedText: string;
+			fullText: string;
+			languageId: string;
+			filePath: string;
+		},
+		diagnosticsString?: string
+	): string {
+		const jsonFormatDescription = `
+		{
+			"planDescription": "Brief summary of the overall goal.",
+			"steps": [
+				{
+					"step": 1,
+					"action": "create_directory | create_file | modify_file | run_command",
+					"description": "What this step does.",
+					"path": "relative/path/to/target", // Required for file/dir ops. Relative to workspace root. No leading '/'. Use forward slashes. Safe paths only (no '..').
+					"content": "...", // For create_file with direct content (string). Use ONLY this OR generate_prompt.
+					"generate_prompt": "...", // For create_file, AI instruction to generate content (string). Use ONLY this OR content.
+					"modification_prompt": "...", // For modify_file, AI instruction to generate changes (string). Required.
+					"command": "..." // For run_command, the shell command to execute (string). Required.
+				}
+				// ... more steps
+			]
+		}`;
+
+		// --- Few-Shot Examples ---
+		const fewShotExamples = `
+		--- Valid JSON Output Examples ---
+		Example 1: A simple file creation
+		{
+			"planDescription": "Create a configuration file.",
+			"steps": [
+				{
+					"step": 1,
+					"action": "create_file",
+					"description": "Create a basic config.json file.",
+					"path": "src/config.json",
+					"content": "{\\n  \\"setting\\": \\"default\\"\\n}"
+				}
+			]
+		}
+
+		Example 2: Modifying a file and running a command
+		{
+			"planDescription": "Add analytics tracking and install dependency.",
+			"steps": [
+				{
+					"step": 1,
+					"action": "modify_file",
+					"description": "Add analytics tracking code to index.html.",
+					"path": "public/index.html",
+					"modification_prompt": "In the <head> section, add a script tag to load 'analytics.js'."
+				},
+				{
+					"step": 2,
+					"action": "run_command",
+					"description": "Install the 'analytics-lib' package.",
+					"command": "npm install analytics-lib --save-dev"
+				}
+			]
+		}
+		--- End Valid JSON Output Examples ---
+`;
+		// --- End Few-Shot Examples ---
+
+		let specificContextPrompt = "";
+		let mainInstructions = "";
+
+		if (editorContext) {
+			const instructionType =
+				editorContext.instruction.toLowerCase() === "/fix"
+					? `The user triggered the '/fix' command on the selected code.`
+					: `The user provided the custom instruction: "${editorContext.instruction}".`;
+
+			specificContextPrompt = `
+			--- Specific User Request Context from Editor ---
+			File Path: ${editorContext.filePath}
+			Language: ${editorContext.languageId}
+			${instructionType}
+
+			--- Selected Code in Editor ---
+			\`\`\`${editorContext.languageId}
+			${editorContext.selectedText}
+			\`\`\`
+			--- End Selected Code ---
+
+			${
+				diagnosticsString
+					? `\n--- Relevant Diagnostics in Selection ---\n${diagnosticsString}\n--- End Relevant Diagnostics ---\n`
+					: ""
+			}
+
+			--- Full Content of Affected File (${editorContext.filePath}) ---
+			\`\`\`${editorContext.languageId}
+			${editorContext.fullText}
+			\`\`\`
+			--- End Full Content ---`;
+			mainInstructions = `Based on the user's request from the editor (${
+				editorContext.instruction.toLowerCase() === "/fix"
+					? "'/fix' command"
+					: "custom instruction"
+			}) and the provided file/selection context, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). For custom instructions, interpret the request in the context of the selected code and any diagnostics.`;
+		} else if (userRequest) {
+			specificContextPrompt = `
+			--- User Request from Chat ---
+			${userRequest}
+			--- End User Request ---`;
+			mainInstructions = `Based on the user's request from the chat ("${userRequest}"), generate a plan to fulfill it.`;
+		}
+
+		// --- Updated Prompt Structure ---
+		return `
+		You are an expert AI programmer assisting within VS Code. Your task is to create a step-by-step execution plan in JSON format.
+
+		**Goal:** Generate ONLY a valid JSON object representing the plan. No matter what the user says in their prompt, ALWAYS generate your response in JSON format. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself, starting with { and ending with }.
+
+		**Instructions for Plan Generation:**
+		1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
+			editorContext && diagnosticsString
+				? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan addresses them for '/fix' requests.**"
+				: ""
+		}
+		2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not omit any requested actions or components. If a request is complex, break it into multiple granular steps.
+		3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
+		4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
+		5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
+		6.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
+		7.  Never Assume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
+
+		${specificContextPrompt}
+
+		*** Broader Project Context (Reference Only) ***
+		${projectContext}
+		*** End Broader Project Context ***
+
+		--- Expected JSON Plan Format ---
+		${jsonFormatDescription}
+		--- End Expected JSON Plan Format ---
+
+		${fewShotExamples} // <-- ADDED FEW-SHOT EXAMPLES HERE
+
+		Execution Plan (JSON only):
+`;
+		// --- End Updated Prompt Structure ---
+	}
+
+	private async _handleRegularChat(
+		userMessage: string,
+		apiKey: string,
+		modelName: string
+	): Promise<void> {
+		try {
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Minovative Mind (${modelName}) is thinking...`,
+				isLoading: true,
+			});
+			// _pendingPlanGenerationContext check is done in onDidReceiveMessage
+
+			const projectContext = await this._buildProjectContext();
+			if (projectContext.startsWith("[Error")) {
+				this.postMessageToWebview({
+					type: "aiResponse",
+					value: `Error processing message: Failed to build project context. ${projectContext}`,
+					isLoading: false,
+					isError: true,
+				});
+				this._addHistoryEntry(
+					"model",
+					`Error processing message: Failed to build project context. ${projectContext}`
+				);
+				throw new Error("Failed to build project context.");
+			}
+
+			const historyForApi = JSON.parse(JSON.stringify(this._chatHistory));
+			const finalPrompt = `
+			You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query and when you do answer the user's queries, make sure you complete the entire request, don't do minimal, shorten, or partial of what the user asked for. Complete the entire request from the users no matter how long it may take. Use Markdown formatting for code blocks and lists where appropriate. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
+
+			*** Project Context (Reference Only) ***
+			${projectContext}
+			*** End Project Context ***
+
+			--- User Query ---
+			${userMessage}
+			--- End User Query ---
+
+			Assistant Response:
+	`;
+			const aiResponseText = await this._generateWithRetry(
+				finalPrompt,
+				apiKey,
+				modelName,
+				historyForApi,
+				"chat"
+				// No specific generationConfig for regular chat unless needed
+			);
+			const isErrorResponse =
+				aiResponseText.toLowerCase().startsWith("error:") ||
+				aiResponseText === ERROR_QUOTA_EXCEEDED;
+			this._addHistoryEntry("model", aiResponseText);
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: aiResponseText,
+				isLoading: false,
+				isError: isErrorResponse,
+			});
+		} catch (error) {
+			console.error("Error in _handleRegularChat:", error);
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Error during chat: ${errorMsg}`,
+				isLoading: false,
+				isError: true,
+			});
+			if (!errorMsg.includes("Failed to build project context")) {
+				this._addHistoryEntry("model", `Error during chat: ${errorMsg}`);
+			}
+		} finally {
+			console.log("[_handleRegularChat] Chat request finished. Cleaning up.");
+			this.postMessageToWebview({ type: "reenableInput" });
+		}
+	}
+
+	private async _executePlan(
+		plan: ExecutionPlan,
+		apiKey: string, // API key used for plan generation/confirmation stage
+		modelName: string // Model name used for plan generation/confirmation stage
+	): Promise<void> {
+		let executionOk = true;
+		try {
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: `Starting execution: ${plan.planDescription || "Unnamed Plan"}`,
+			});
+			this._addHistoryEntry("model", "Initiating plan execution...");
+
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Error: Cannot execute plan - no workspace folder open.",
+					isError: true,
+				});
+				this._addHistoryEntry(
+					"model",
+					"Execution Failed: No workspace folder open."
+				);
+				executionOk = false;
+				throw new Error("No workspace folder open.");
+			}
+			const rootUri = workspaceFolders[0].uri;
+			// Use the apiKey and modelName passed in for content generation within the plan
+			let currentApiKeyForExecution = apiKey;
+
+			await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: `Minovative Mind: Executing Plan - ${
+						plan.planDescription || "Processing..."
+					}`,
+					cancellable: true,
+				},
+				async (progress, progressToken) => {
+					const totalSteps = plan.steps ? plan.steps.length : 0;
+					if (totalSteps === 0) {
+						progress.report({ message: "Plan has no steps.", increment: 100 });
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: "Plan has no steps. Execution finished.",
+						});
+						this._addHistoryEntry(
+							"model",
+							"Plan execution finished (no steps)."
+						);
+						executionOk = true;
+						return;
+					}
+
+					for (const [index, step] of plan.steps!.entries()) {
+						if (progressToken.isCancellationRequested) {
+							console.log(
+								`Plan execution cancelled by VS Code progress UI before step ${
+									index + 1
+								}.`
+							);
+							this.postMessageToWebview({
+								type: "statusUpdate",
+								value: `Plan execution cancelled by user.`,
+							});
+							this._addHistoryEntry(
+								"model",
+								"Plan execution cancelled by user."
+							);
+							executionOk = false;
+							return;
+						}
+
+						const stepNumber = index + 1;
+						const stepMessageTitle = `Step ${stepNumber}/${totalSteps}: ${
+							step.description || step.action.replace(/_/g, " ")
+						}`;
+						progress.report({
+							message: `${stepMessageTitle}...`,
+							increment: (1 / totalSteps) * 100,
+						});
+						const stepPath = step.path || "";
+						const stepCommand = step.command || "";
+
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: `Executing ${stepMessageTitle} ${
+								step.action === PlanStepAction.RunCommand
+									? `- '${stepCommand}'`
+									: stepPath
+									? `- \`${stepPath}\``
+									: ""
+							}`,
+						});
+
+						try {
+							// Check if the active key changed *during* execution (e.g., due to quota retry in a previous step)
+							currentApiKeyForExecution =
+								this.getActiveApiKey() || currentApiKeyForExecution;
+							if (!currentApiKeyForExecution) {
+								throw new Error(
+									"No active API key available during plan execution step."
+								);
+							}
+
+							switch (step.action) {
+								case PlanStepAction.CreateDirectory:
+									if (isCreateDirectoryStep(step)) {
+										const dirUri = vscode.Uri.joinPath(rootUri, step.path);
+										await vscode.workspace.fs.createDirectory(dirUri);
+										console.log(`${step.action} OK: ${step.path}`);
+										this._addHistoryEntry(
+											"model",
+											`Step ${stepNumber} OK: Created directory \`${step.path}\``
+										);
+									} else {
+										throw new Error(`Invalid ${step.action} structure.`);
+									}
+									break;
+								case PlanStepAction.CreateFile:
+									if (isCreateFileStep(step)) {
+										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
+										let contentToWrite = "";
+										if (step.content !== undefined) {
+											contentToWrite = step.content;
+										} else if (step.generate_prompt) {
+											this.postMessageToWebview({
+												type: "statusUpdate",
+												value: `Step ${stepNumber}/${totalSteps}: Generating content for ${step.path}...`,
+											});
+											const generationPrompt = `
+											You are an AI programmer tasked with generating file content.
+											**Critical Instruction:** Generate the **complete and comprehensive** file content based *fully* on the user's instructions below. Do **not** provide a minimal, placeholder, or incomplete implementation unless the instructions *specifically* ask for it. Fulfill the entire request.
+											**Output Format:** Provide ONLY the raw code or text for the file. Do NOT include any explanations, or markdown formatting like backticks. Add comments in the code to help the user understand the code and the entire response MUST be only the final file content. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
+
+											File Path: ${step.path}
+											Instructions: ${step.generate_prompt}
+
+											Complete File Content:
+											`;
+											// Use the API key and model determined for this execution run
+											contentToWrite = await this._generateWithRetry(
+												generationPrompt,
+												currentApiKeyForExecution,
+												modelName,
+												undefined,
+												`plan step ${stepNumber} (create file)`
+												// No specific generationConfig needed here unless requested
+											);
+											// Re-check active key in case retry changed it
+											currentApiKeyForExecution =
+												this.getActiveApiKey() || currentApiKeyForExecution;
+											if (
+												!currentApiKeyForExecution ||
+												contentToWrite.toLowerCase().startsWith("error:") ||
+												contentToWrite === ERROR_QUOTA_EXCEEDED
+											) {
+												throw new Error(
+													`AI content generation failed: ${
+														contentToWrite || "No API Key available"
+													}`
+												);
+											}
+											contentToWrite = contentToWrite
+												.replace(/^```[a-z]*\n?/, "")
+												.replace(/\n?```$/, "")
+												.trim();
+										} else {
+											throw new Error(
+												"CreateFileStep must have 'content' or 'generate_prompt'."
+											);
+										}
+										await vscode.workspace.fs.writeFile(
+											fileUri,
+											Buffer.from(contentToWrite, "utf-8")
+										);
+										console.log(`${step.action} OK: ${step.path}`);
+										this._addHistoryEntry(
+											"model",
+											`Step ${stepNumber} OK: Created file \`${step.path}\``
+										);
+									} else {
+										throw new Error(`Invalid ${step.action} structure.`);
+									}
+									break;
+								case PlanStepAction.ModifyFile:
+									if (isModifyFileStep(step)) {
+										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
+										let existingContent = "";
+										try {
+											const contentBytes = await vscode.workspace.fs.readFile(
+												fileUri
+											);
+											existingContent =
+												Buffer.from(contentBytes).toString("utf-8");
+										} catch (readError: any) {
+											if (
+												readError instanceof vscode.FileSystemError &&
+												readError.code === "FileNotFound"
+											) {
+												throw new Error(
+													`File to modify not found: \`${step.path}\``
+												);
+											}
+											throw readError;
+										}
+										this.postMessageToWebview({
+											type: "statusUpdate",
+											value: `Step ${stepNumber}/${totalSteps}: Generating modifications for ${step.path}...`,
+										});
+										const modificationPrompt = `
+										You are an AI programmer tasked with modifying an existing file.
+										**Critical Instruction:** Modify the code based *fully* on the user's instructions below. Ensure the modifications are **complete and comprehensive**, addressing the entire request. Do **not** make partial changes or leave placeholders unless the instructions *specifically* ask for it.
+										**Output Format:** Provide ONLY the complete, raw, modified code for the **entire file**. Do NOT include explanations, or markdown formatting. Add comments in the code to help the user understand the code and the entire response MUST be the final, complete file content after applying all requested modifications.
+
+										File Path: ${step.path}
+										Modification Instructions: ${step.modification_prompt}
+
+										--- Existing File Content ---
+										\`\`\`
+										${existingContent}
+										\`\`\`
+										--- End Existing File Content ---
+
+										Complete Modified File Content:
+										`;
+										let modifiedContent = await this._generateWithRetry(
+											modificationPrompt,
+											currentApiKeyForExecution,
+											modelName,
+											undefined,
+											`plan step ${stepNumber} (modify file)`
+											// No specific generationConfig needed here unless requested
+										);
+										// Re-check active key in case retry changed it
+										currentApiKeyForExecution =
+											this.getActiveApiKey() || currentApiKeyForExecution;
+										if (
+											!currentApiKeyForExecution ||
+											modifiedContent.toLowerCase().startsWith("error:") ||
+											modifiedContent === ERROR_QUOTA_EXCEEDED
+										) {
+											throw new Error(
+												`AI modification failed: ${
+													modifiedContent || "No API Key available"
+												}`
+											);
+										}
+										modifiedContent = modifiedContent
+											.replace(/^```[a-z]*\n?/, "")
+											.replace(/\n?```$/, "")
+											.trim();
+										if (modifiedContent !== existingContent) {
+											const edit = new vscode.WorkspaceEdit();
+											const document = await vscode.workspace.openTextDocument(
+												fileUri
+											);
+											const fullRange = new vscode.Range(
+												document.positionAt(0),
+												document.positionAt(document.getText().length)
+											);
+											edit.replace(fileUri, fullRange, modifiedContent);
+											const success = await vscode.workspace.applyEdit(edit);
+											if (!success) {
+												throw new Error(
+													`Failed to apply modifications to \`${step.path}\``
+												);
+											}
+											console.log(`${step.action} OK: ${step.path}`);
+											this._addHistoryEntry(
+												"model",
+												`Step ${stepNumber} OK: Modified file \`${step.path}\``
+											);
+										} else {
+											console.log(
+												`Step ${stepNumber}: AI returned identical content for ${step.path}. Skipping write.`
+											);
+											this._addHistoryEntry(
+												"model",
+												`Step ${stepNumber} OK: Modification for \`${step.path}\` resulted in no changes.`
+											);
+										}
+									} else {
+										throw new Error(`Invalid ${step.action} structure.`);
+									}
+									break;
+								case PlanStepAction.RunCommand:
+									if (isRunCommandStep(step)) {
+										const commandToRun = step.command;
+										const userChoice = await vscode.window.showWarningMessage(
+											`The plan wants to run a command in the terminal:\n\n\`${commandToRun}\`\n\nThis could install packages or modify your system. Allow?`,
+											{ modal: true },
+											"Allow Command",
+											"Skip Command"
+										);
+										if (progressToken.isCancellationRequested) {
+											throw new Error("Operation cancelled by user.");
+										}
+										if (userChoice === "Allow Command") {
+											try {
+												const term = vscode.window.createTerminal({
+													name: `Plan Step ${stepNumber}`,
+													cwd: rootUri.fsPath,
+												});
+												term.sendText(commandToRun);
+												term.show();
+												this.postMessageToWebview({
+													type: "statusUpdate",
+													value: `Step ${stepNumber}: Running command '${commandToRun}' in terminal...`,
+												});
+												this._addHistoryEntry(
+													"model",
+													`Step ${stepNumber} OK: User allowed running command \`${commandToRun}\`.`
+												);
+												// Simple delay; replace with listening for command completion if needed
+												await new Promise<void>((resolve, reject) => {
+													const timeoutId = setTimeout(resolve, 2000); // Wait 2s
+													const cancellationListener =
+														progressToken.onCancellationRequested(() => {
+															clearTimeout(timeoutId);
+															cancellationListener.dispose();
+															reject(new Error("Operation cancelled by user."));
+														});
+													timeoutId.unref(); // Allow Node.js to exit if this is the only thing running
+													if (progressToken.isCancellationRequested) {
+														cancellationListener.dispose();
+														reject(new Error("Operation cancelled by user."));
+													}
+												}).catch((err) => {
+													// Rethrow cancellation specifically
+													if (
+														err instanceof Error &&
+														err.message === "Operation cancelled by user."
+													) {
+														throw err;
+													}
+													// Log other potential wait errors
+													console.error("Error during command wait:", err);
+													throw new Error(
+														`Internal error during command wait: ${err}`
+													);
+												});
+											} catch (termError) {
+												if (
+													termError instanceof Error &&
+													termError.message === "Operation cancelled by user."
+												) {
+													throw termError; // Propagate cancellation
+												}
+												const errorMsg =
+													termError instanceof Error
+														? termError.message
+														: String(termError);
+												throw new Error(
+													`Failed to launch or wait for terminal for command '${commandToRun}': ${errorMsg}`
+												);
+											}
+										} else {
+											this.postMessageToWebview({
+												type: "statusUpdate",
+												value: `Step ${stepNumber}: Skipped command '${commandToRun}'.`,
+												isError: false,
+											});
+											this._addHistoryEntry(
+												"model",
+												`Step ${stepNumber} SKIPPED: User did not allow command \`${commandToRun}\`.`
+											);
+										}
+									} else {
+										throw new Error("Invalid RunCommandStep structure.");
+									}
+									break;
+								default:
+									// This should ideally not be reached if parseAndValidatePlan is exhaustive
+									const exhaustiveCheck: never = step.action;
+									console.warn(`Unsupported plan action: ${exhaustiveCheck}`);
+									this.postMessageToWebview({
+										type: "statusUpdate",
+										value: `Step ${stepNumber}: Skipped unsupported action ${step.action}.`,
+										isError: false,
+									});
+									this._addHistoryEntry(
+										"model",
+										`Step ${stepNumber} SKIPPED: Unsupported action ${step.action}`
+									);
+									break;
+							}
+						} catch (error) {
+							executionOk = false;
+							const errorMsg =
+								error instanceof Error ? error.message : String(error);
+							console.error(
+								`Error executing step ${stepNumber} (${step.action}, ${
+									stepPath || stepCommand
+								}):`,
+								error
+							);
+							const isCancellationError =
+								errorMsg === "Operation cancelled by user.";
+							const displayMsg = isCancellationError
+								? "Plan execution cancelled by user."
+								: `Error on Step ${stepNumber}: ${errorMsg}`;
+							const historyMsg = isCancellationError
+								? "Plan execution cancelled by user."
+								: `Step ${stepNumber} FAILED: ${errorMsg}`;
+							this.postMessageToWebview({
+								type: "statusUpdate",
+								value: displayMsg,
+								isError: !isCancellationError,
+							});
+							this._addHistoryEntry("model", historyMsg);
+							if (isCancellationError) {
+								return; // Exit progress if cancelled
+							} else {
+								break; // Stop plan execution on other errors
+							}
+						}
+						if (progressToken.isCancellationRequested) {
+							console.log(
+								`Plan execution cancelled by VS Code progress UI after step ${
+									index + 1
+								}.`
+							);
+							this.postMessageToWebview({
+								type: "statusUpdate",
+								value: `Plan execution cancelled by user.`,
+							});
+							executionOk = false;
+							return; // Exit progress
+						}
+					} // End loop
+					progress.report({
+						message: executionOk
+							? "Execution complete."
+							: "Execution stopped (failed or cancelled).",
+						increment: 100,
+					});
+				} // End async progress callback
+			); // End vscode.window.withProgress
+		} catch (error) {
+			executionOk = false;
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			console.error("Unexpected error during plan execution:", error);
+			const isCancellationError = errorMsg === "Operation cancelled by user.";
+			const displayMsg = isCancellationError
+				? "Plan execution cancelled by user."
+				: `Plan execution failed unexpectedly: ${errorMsg}`;
+			const historyMsg = isCancellationError
+				? "Plan execution cancelled by user."
+				: `Plan execution FAILED unexpectedly: ${errorMsg}`;
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: displayMsg,
+				isError: !isCancellationError,
+			});
+			const lastHistoryText =
+				this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
+			// Avoid logging duplicate messages
+			if (
+				lastHistoryText !== historyMsg &&
+				!lastHistoryText?.startsWith("Step ") &&
+				lastHistoryText !== "Plan execution cancelled by user."
+			) {
+				this._addHistoryEntry("model", historyMsg);
+			}
+		} finally {
+			console.log(
+				"Plan execution finished, failed, or cancelled. Cleaning up."
+			);
+			const lastHistoryText =
+				this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
+			if (executionOk) {
+				if (
+					lastHistoryText !== "Plan execution finished successfully." &&
+					lastHistoryText !== "Plan execution finished (no steps)."
+				) {
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Plan execution completed successfully.",
+					});
+					this._addHistoryEntry(
+						"model",
+						"Plan execution finished successfully."
+					);
+				} else {
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: lastHistoryText, // Use the existing specific success message
+					});
+				}
+			} else if (lastHistoryText === "Plan execution cancelled by user.") {
+				// Use the existing cancellation message if that was the last one
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Plan execution cancelled by user.",
+					isError: false,
+				});
+			} else if (
+				!lastHistoryText?.startsWith("Step ") &&
+				!lastHistoryText?.includes("FAILED")
+			) {
+				// If the last message wasn't a specific step failure or cancellation, show generic stop message
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value:
+						"Plan execution stopped due to failure. Check chat for details.",
+					isError: true,
+				});
+			} else {
+				// If the last message was a specific step failure, keep that status
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value:
+						"Plan execution stopped due to step failure. Check chat for details.",
+					isError: true,
+				});
+			}
+			this.postMessageToWebview({ type: "reenableInput" });
+		}
+	}
+
 	private async _loadKeysFromStorage() {
 		try {
 			const keysJson = await this._secretStorage.get(
@@ -581,8 +1882,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						this.postMessageToWebview({ type: "reenableInput" });
 						break;
 					}
-					// The `data.value` from webview might now be just a flag or the original request string
-					// The actual context to generate the JSON plan is in `_pendingPlanGenerationContext`
 					if (this._pendingPlanGenerationContext) {
 						await this._generateAndExecuteStructuredPlan(
 							this._pendingPlanGenerationContext
@@ -676,6 +1975,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					this.postMessageToWebview({ type: "reenableInput" });
 					break;
 				case "reenableInput":
+					// This might be sent if the webview detects it got stuck
 					this.postMessageToWebview({ type: "reenableInput" });
 					break;
 				default:
@@ -742,708 +2042,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	// Retry Logic (Unchanged)
-	public async _generateWithRetry(
-		prompt: string,
-		initialApiKey: string,
-		modelName: string,
-		history: HistoryEntry[] | undefined,
-		requestType: string = "request"
-	): Promise<string> {
-		let currentApiKey = initialApiKey;
-		const triedKeys = new Set<string>();
-		const maxRetries = this._apiKeyList.length;
-		let attempts = 0;
-		while (attempts < maxRetries) {
-			attempts++;
-			console.log(
-				`[RetryWrapper] Attempt ${attempts}/${maxRetries} for ${requestType} with key ...${currentApiKey.slice(
-					-4
-				)}`
-			);
-			const result = await generateContent(
-				currentApiKey,
-				modelName,
-				prompt,
-				history
-			);
-			if (result === ERROR_QUOTA_EXCEEDED) {
-				console.warn(
-					`[RetryWrapper] Quota/Rate limit hit for key ...${currentApiKey.slice(
-						-4
-					)} on attempt ${attempts}.`
-				);
-				triedKeys.add(currentApiKey);
-				const availableKeysCount = this._apiKeyList.length;
-				if (availableKeysCount <= 1 || triedKeys.size >= availableKeysCount) {
-					const finalErrorMsg = `API quota or rate limit exceeded for model ${modelName}. All ${availableKeysCount} API key(s) failed or were rate-limited. Please try again later or check your Gemini usage.`;
-					return finalErrorMsg;
-				}
-				let nextKeyFound = false;
-				let originalIndex = this._activeKeyIndex;
-				let nextIndex = originalIndex;
-				for (let i = 0; i < availableKeysCount; i++) {
-					nextIndex = (originalIndex + i + 1) % availableKeysCount;
-					const potentialNextKey = this._apiKeyList[nextIndex];
-					if (!triedKeys.has(potentialNextKey)) {
-						this.postMessageToWebview({
-							type: "statusUpdate",
-							value: `Quota limit hit. Retrying ${requestType} with next key...`,
-						});
-						this._activeKeyIndex = nextIndex;
-						await this._saveKeysToStorage();
-						currentApiKey = this._apiKeyList[this._activeKeyIndex];
-						this.postMessageToWebview({
-							type: "apiKeyStatus",
-							value: `Switched to key ...${currentApiKey.slice(-4)} for retry.`,
-						});
-						nextKeyFound = true;
-						break;
-					}
-				}
-				if (!nextKeyFound) {
-					const finalErrorMsg = `API quota or rate limit exceeded for model ${modelName}. All available API keys have been tried for this request cycle. Please try again later.`;
-					return finalErrorMsg;
-				}
-			} else {
-				return result;
-			}
-		}
-		const finalErrorMsg = `API quota or rate limit exceeded for model ${modelName}. Failed after trying ${attempts} keys. Please try again later.`;
-		return finalErrorMsg;
-	}
-
-	// --- NEW: Prompt for Textual Plan Explanation ---
-	private _createInitialPlanningExplanationPrompt(
-		projectContext: string,
-		userRequest?: string, // For chat-initiated /plan
-		editorContext?: {
-			// For editor-initiated actions
-			instruction: string;
-			selectedText: string;
-			fullText: string;
-			languageId: string;
-			filePath: string;
-		},
-		diagnosticsString?: string
-	): string {
-		let specificContextPrompt = "";
-		let mainInstructions = "";
-
-		if (editorContext) {
-			const instructionType =
-				editorContext.instruction.toLowerCase() === "/fix"
-					? `The user triggered the '/fix' command on the selected code.`
-					: `The user provided the custom instruction: "${editorContext.instruction}".`;
-
-			specificContextPrompt = `
---- Specific User Request Context from Editor ---
-File Path: ${editorContext.filePath}
-Language: ${editorContext.languageId}
-${instructionType}
-
---- Selected Code in Editor ---
-\`\`\`${editorContext.languageId}
-${editorContext.selectedText}
-\`\`\`
---- End Selected Code ---
-
-${
-	diagnosticsString
-		? `\n--- Relevant Diagnostics in Selection ---\n${diagnosticsString}\n--- End Relevant Diagnostics ---\n`
-		: ""
-}
-
---- Full Content of Affected File (${editorContext.filePath}) ---
-\`\`\`${editorContext.languageId}
-${editorContext.fullText}
-\`\`\`
---- End Full Content ---`;
-			mainInstructions = `Based on the user's request from the editor (${
-				editorContext.instruction.toLowerCase() === "/fix"
-					? "'/fix' command"
-					: "custom instruction"
-			}) and the provided file/selection context, explain your step-by-step plan to fulfill the request. For '/fix', the plan should clearly address the 'Relevant Diagnostics' listed. For custom instructions, interpret the request in the context of the selected code and any diagnostics.`;
-		} else if (userRequest) {
-			specificContextPrompt = `
---- User Request from Chat ---
-${userRequest}
---- End User Request ---`;
-			mainInstructions = `Based on the user's request from the chat ("${userRequest}"), explain your step-by-step plan to fulfill it.`;
-		}
-
-		return `
-You are an expert AI programmer assisting within VS Code. Your task is to explain your plan to fulfill the user's request.
-
-**Goal:** Provide a clear, human-readable, step-by-step explanation of your plan. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
-
-**Instructions for Plan Explanation:**
-1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
-			editorContext && diagnosticsString
-				? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your textual plan describes how you will address them for '/fix' requests.**"
-				: ""
-		}
-2.  **Be Comprehensive:** Your explanation should cover all necessary steps to achieve the user's goal.
-3.  Clarity: Make the plan easy for a developer to understand. Briefly describe what each step will do (e.g., "Create a new file named 'utils.ts'", "Modify 'main.ts' to import the new utility function", "Install the 'axios' package using npm").
-4.  No JSON: **Do NOT output any JSON for this initial explanation.** Your entire response should be human-readable text.
-5.  Never Aussume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
-
-${specificContextPrompt}
-
-*** Broader Project Context (Reference Only) ***
-${projectContext}
-*** End Broader Project Context ***
-
---- Plan Explanation (Text with Markdown) ---
-`;
-	}
-	// --- END NEW PROMPT ---
-
-	// --- MODIFIED: Stage 1 of /plan - Request Textual Explanation ---
-	private async _handleInitialPlanRequest(
-		userRequest: string,
-		apiKey: string,
-		modelName: string
-	): Promise<void> {
-		try {
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Minovative Mind (${modelName}) is formulating a plan explanation...`,
-				isLoading: true,
-			});
-			this._pendingPlanGenerationContext = null; // Clear any previous pending context
-
-			const projectContext = await this._buildProjectContext();
-			if (projectContext.startsWith("[Error")) {
-				this.postMessageToWebview({
-					type: "aiResponse",
-					value: `Error generating plan explanation: Failed to build project context. ${projectContext}`,
-					isLoading: false,
-					isError: true,
-				});
-				this._addHistoryEntry(
-					"model",
-					`Error: Failed to build project context for plan explanation.`
-				);
-				this.postMessageToWebview({ type: "reenableInput" });
-				return;
-			}
-
-			const textualPlanPrompt = this._createInitialPlanningExplanationPrompt(
-				projectContext,
-				userRequest,
-				undefined, // No editor context for /plan from chat
-				undefined // No diagnostics for /plan from chat
-			);
-
-			const textualPlanResponse = await this._generateWithRetry(
-				textualPlanPrompt,
-				apiKey,
-				modelName,
-				undefined,
-				"initial plan explanation"
-			);
-
-			if (
-				textualPlanResponse.toLowerCase().startsWith("error:") ||
-				textualPlanResponse === ERROR_QUOTA_EXCEEDED
-			) {
-				throw new Error(textualPlanResponse);
-			}
-
-			// Store context needed for generating the structured JSON plan later
-			this._pendingPlanGenerationContext = {
-				type: "chat",
-				originalUserRequest: userRequest,
-				projectContext,
-				initialApiKey: apiKey,
-				modelName,
-			};
-
-			this._addHistoryEntry("model", textualPlanResponse); // Add textual plan to history
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: textualPlanResponse,
-				isLoading: false,
-				requiresConfirmation: true,
-				// planData can now be simpler, e.g., the original request or a flag,
-				// as the main context is stored in _pendingPlanGenerationContext.
-				// For simplicity, let's pass the original user request.
-				planData: { originalRequest: userRequest, type: "textualPlanPending" },
-			});
-			// Input remains disabled by webview until confirm/cancel.
-		} catch (error) {
-			console.error("Error in _handleInitialPlanRequest:", error);
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Error generating plan explanation: ${errorMsg}`,
-				isLoading: false,
-				isError: true,
-			});
-			this._addHistoryEntry(
-				"model",
-				`Error generating plan explanation: ${errorMsg}`
-			);
-			this.postMessageToWebview({ type: "reenableInput" });
-		}
-	}
-	// --- END MODIFIED ---
-
-	// --- MODIFIED: Stage 1 for Editor Actions - Request Textual Explanation ---
-	public async initiatePlanFromEditorAction(
-		instruction: string,
-		selectedText: string,
-		fullText: string,
-		languageId: string,
-		documentUri: vscode.Uri,
-		selection: vscode.Range
-	) {
-		console.log(
-			`[SidebarProvider] Received editor action: "${instruction}" for textual plan.`
-		);
-		const activeKey = this.getActiveApiKey();
-		const modelName = this.getSelectedModelName();
-
-		if (!activeKey || !modelName) {
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: "Error: No active API Key or Model set for planning.",
-				isError: true,
-			});
-			this.postMessageToWebview({ type: "reenableInput" });
-			return;
-		}
-		if (this._pendingPlanGenerationContext) {
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: "Error: Another plan is already pending confirmation.",
-				isError: true,
-			});
-			this.postMessageToWebview({ type: "reenableInput" });
-			return;
-		}
-
-		try {
-			this._addHistoryEntry(
-				"model",
-				`Received request from editor: "${instruction}". Generating plan explanation...`
-			);
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Minovative Mind (${modelName}) received '${instruction}' from editor. Generating plan explanation...`,
-				isLoading: true,
-			});
-			this._pendingPlanGenerationContext = null;
-
-			const projectContext = await this._buildProjectContext();
-			if (projectContext.startsWith("[Error")) {
-				throw new Error(
-					`Failed to build project context for editor action. ${projectContext}`
-				);
-			}
-
-			let relativeFilePath = documentUri.fsPath;
-			const workspaceFolders = vscode.workspace.workspaceFolders;
-			if (workspaceFolders && workspaceFolders.length > 0) {
-				relativeFilePath = path.relative(
-					workspaceFolders[0].uri.fsPath,
-					documentUri.fsPath
-				);
-			}
-
-			let diagnosticsString = "";
-			try {
-				const allDiagnostics = vscode.languages.getDiagnostics(documentUri);
-				const relevantDiagnostics = allDiagnostics.filter((diag) =>
-					diag.range.intersection(selection)
-				);
-				if (relevantDiagnostics.length > 0) {
-					relevantDiagnostics.sort((a, b) => {
-						if (a.range.start.line !== b.range.start.line) {
-							return a.range.start.line - b.range.start.line;
-						}
-						return a.severity - b.severity;
-					});
-					diagnosticsString = relevantDiagnostics
-						.map(
-							(d) =>
-								`- ${vscode.DiagnosticSeverity[d.severity]} (Line ${
-									d.range.start.line + 1
-								}): ${d.message}`
-						)
-						.join("\n");
-				}
-			} catch (diagError) {
-				console.error("Error retrieving diagnostics:", diagError);
-				diagnosticsString = "[Could not retrieve diagnostics]";
-			}
-
-			const editorCtx = {
-				instruction,
-				selectedText,
-				fullText,
-				languageId,
-				filePath: relativeFilePath,
-				documentUri, // Keep original URI too
-				selection,
-			};
-
-			const textualPlanPrompt = this._createInitialPlanningExplanationPrompt(
-				projectContext,
-				undefined, // No userRequest string for editor actions
-				editorCtx,
-				diagnosticsString
-			);
-
-			const textualPlanResponse = await this._generateWithRetry(
-				textualPlanPrompt,
-				activeKey,
-				modelName,
-				undefined,
-				"editor action plan explanation"
-			);
-
-			if (
-				textualPlanResponse.toLowerCase().startsWith("error:") ||
-				textualPlanResponse === ERROR_QUOTA_EXCEEDED
-			) {
-				throw new Error(textualPlanResponse);
-			}
-
-			this._pendingPlanGenerationContext = {
-				type: "editor",
-				editorContext: editorCtx,
-				projectContext,
-				diagnosticsString,
-				initialApiKey: activeKey,
-				modelName,
-			};
-
-			this._addHistoryEntry("model", textualPlanResponse);
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: textualPlanResponse,
-				isLoading: false,
-				requiresConfirmation: true,
-				planData: {
-					originalInstruction: instruction,
-					type: "textualPlanPending",
-				},
-			});
-		} catch (error) {
-			console.error("Error in initiatePlanFromEditorAction:", error);
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Error during editor action plan explanation: ${errorMsg}`,
-				isLoading: false,
-				isError: true,
-			});
-			this._addHistoryEntry(
-				"model",
-				`Error generating plan explanation for editor action: ${errorMsg}`
-			);
-			this.postMessageToWebview({ type: "reenableInput" });
-		}
-	}
-	// --- END MODIFIED ---
-
-	// --- NEW: Stage 2 - Generate and Execute Structured JSON Plan ---
-	private async _generateAndExecuteStructuredPlan(
-		planContext: PlanGenerationContext
-	): Promise<void> {
-		this.postMessageToWebview({
-			type: "statusUpdate",
-			value: `Minovative Mind (${planContext.modelName}) is generating the detailed execution plan...`,
-		});
-		this._addHistoryEntry(
-			"model",
-			"User confirmed. Generating detailed execution plan..."
-		);
-
-		let structuredPlanJsonString = "";
-		try {
-			// Create the prompt that asks for JSON
-			const jsonPlanningPrompt = this._createPlanningPrompt(
-				// This is the original JSON-requesting prompt
-				planContext.originalUserRequest,
-				planContext.projectContext,
-				planContext.editorContext
-					? {
-							instruction: planContext.editorContext.instruction,
-							selectedText: planContext.editorContext.selectedText,
-							fullText: planContext.editorContext.fullText,
-							languageId: planContext.editorContext.languageId,
-							filePath: planContext.editorContext.filePath, // Ensure this is relative for the prompt
-					  }
-					: undefined,
-				planContext.diagnosticsString
-			);
-
-			structuredPlanJsonString = await this._generateWithRetry(
-				jsonPlanningPrompt,
-				planContext.initialApiKey, // Use the key from the initial stage
-				planContext.modelName,
-				undefined,
-				"structured plan generation"
-			);
-
-			if (
-				structuredPlanJsonString.toLowerCase().startsWith("error:") ||
-				structuredPlanJsonString === ERROR_QUOTA_EXCEEDED
-			) {
-				throw new Error(
-					`AI failed to generate structured plan: ${structuredPlanJsonString}`
-				);
-			}
-
-			structuredPlanJsonString = structuredPlanJsonString
-				.replace(/^```json\n?/, "")
-				.replace(/^```\n?/, "")
-				.replace(/\n?```$/, "")
-				.trim();
-
-			if (
-				!structuredPlanJsonString.startsWith("{") ||
-				!structuredPlanJsonString.endsWith("}") ||
-				structuredPlanJsonString.length < 10
-			) {
-				throw new Error(
-					"AI did not return a valid JSON for the structured plan.\nRaw Response:\n" +
-						structuredPlanJsonString.substring(0, 500) +
-						(structuredPlanJsonString.length > 500 ? "..." : "")
-				);
-			}
-
-			const executablePlan: ExecutionPlan | null = parseAndValidatePlan(
-				structuredPlanJsonString
-			);
-
-			if (!executablePlan) {
-				const errorDetail =
-					"Failed to parse or validate the structured JSON plan from AI.";
-				console.error(errorDetail, "Raw JSON:", structuredPlanJsonString);
-				this._addHistoryEntry(
-					"model",
-					`Error: Failed to parse/validate structured plan.\nRaw JSON:\n\`\`\`json\n${structuredPlanJsonString}\n\`\`\``
-				);
-				throw new Error(errorDetail);
-			}
-
-			// If JSON plan is valid, proceed to execute
-			// Use the API key and model from the stored planContext for execution consistency
-			await this._executePlan(
-				executablePlan,
-				planContext.initialApiKey,
-				planContext.modelName
-			);
-		} catch (error) {
-			console.error("Error in _generateAndExecuteStructuredPlan:", error);
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			this.postMessageToWebview({
-				type: "statusUpdate", // Using statusUpdate as aiResponse implies a direct chat bubble
-				value: `Error generating or executing structured plan: ${errorMsg}`,
-				isError: true,
-			});
-			this._addHistoryEntry(
-				"model",
-				`Error generating or executing structured plan: ${errorMsg}`
-			);
-			this.postMessageToWebview({ type: "reenableInput" }); // Ensure input is re-enabled on failure
-		} finally {
-			this._pendingPlanGenerationContext = null; // Clear context after attempt
-		}
-	}
-	// --- END NEW ---
-
-	// _createPlanningPrompt: This is the ORIGINAL prompt that asks for JSON
-	// It's now used in the SECOND stage of plan generation.
-	private _createPlanningPrompt(
-		userRequest: string | undefined, // Made optional as editor context provides instruction
-		projectContext: string,
-		editorContext?: {
-			instruction: string;
-			selectedText: string;
-			fullText: string;
-			languageId: string;
-			filePath: string; // Relative path
-		},
-		diagnosticsString?: string
-	): string {
-		const jsonFormatDescription = `
-		{
-			"planDescription": "Brief summary of the overall goal.",
-			"steps": [
-				{
-					"step": 1,
-					"action": "create_directory | create_file | modify_file | run_command",
-					"description": "What this step does.",
-					"path": "relative/path/to/target", // Required for file/dir ops
-					"content": "...", // For create_file with direct content
-					"generate_prompt": "...", // For create_file, AI to generate content
-					"modification_prompt": "...", // For modify_file, AI to generate changes
-					"command": "..." // For run_command
-				}
-				// ... more steps
-			]
-		}`;
-
-		let specificContextPrompt = "";
-		let mainInstructions = "";
-
-		if (editorContext) {
-			const instructionType =
-				editorContext.instruction.toLowerCase() === "/fix"
-					? `The user triggered the '/fix' command on the selected code.`
-					: `The user provided the custom instruction: "${editorContext.instruction}".`;
-
-			specificContextPrompt = `
-		--- Specific User Request Context from Editor ---
-		File Path: ${editorContext.filePath}
-		Language: ${editorContext.languageId}
-		${instructionType}
-
-		--- Selected Code in Editor ---
-		\`\`\`${editorContext.languageId}
-		${editorContext.selectedText}
-		\`\`\`
-		--- End Selected Code ---
-
-		${
-			diagnosticsString
-				? `\n--- Relevant Diagnostics in Selection ---\n${diagnosticsString}\n--- End Relevant Diagnostics ---\n`
-				: ""
-		}
-
-		--- Full Content of Affected File (${editorContext.filePath}) ---
-		\`\`\`${editorContext.languageId}
-		${editorContext.fullText}
-		\`\`\`
-		--- End Full Content ---`;
-			mainInstructions = `Based on the user's request from the editor (${
-				editorContext.instruction.toLowerCase() === "/fix"
-					? "'/fix' command"
-					: "custom instruction"
-			}) and the provided file/selection context, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). For custom instructions, interpret the request in the context of the selected code and any diagnostics.`;
-		} else if (userRequest) {
-			specificContextPrompt = `
-		--- User Request from Chat ---
-		${userRequest}
-		--- End User Request ---`;
-			mainInstructions = `Based on the user's request from the chat ("${userRequest}"), generate a plan to fulfill it.`;
-		}
-
-		return `
-		You are an expert AI programmer assisting within VS Code. Your task is to create a step-by-step execution plan in JSON format.
-
-		**Goal:** Generate ONLY a valid JSON object representing the plan. No matter what the user says in their prompt, ALWAYS generate your response in JSON format. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself.
-
-		**Instructions for Plan Generation:**
-		1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
-			editorContext && diagnosticsString
-				? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan addresses them for '/fix' requests.**"
-				: ""
-		}
-		2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not omit any requested actions or components. If a request is complex, break it into multiple granular steps.
-		3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
-		4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
-		5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description. Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly. **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
-		6.  JSON Output: Format the plan strictly according to the JSON structure below.
-		7.  Never Aussume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
-
-		${specificContextPrompt}
-
-		*** Broader Project Context (Reference Only) ***
-		${projectContext}
-		*** End Broader Project Context ***
-
-		--- Expected JSON Plan Format ---
-		${jsonFormatDescription}
-		--- End Expected JSON Plan Format ---
-
-		Execution Plan (JSON only):
-		`;
-	}
-
-	// Regular Chat (Unchanged from previous, except it also checks _pendingPlanGenerationContext)
-	private async _handleRegularChat(
-		userMessage: string,
-		apiKey: string,
-		modelName: string
-	): Promise<void> {
-		try {
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Minovative Mind (${modelName}) is thinking...`,
-				isLoading: true,
-			});
-			// _pendingPlanGenerationContext check is done in onDidReceiveMessage
-
-			const projectContext = await this._buildProjectContext();
-			if (projectContext.startsWith("[Error")) {
-				this.postMessageToWebview({
-					type: "aiResponse",
-					value: `Error processing message: Failed to build project context. ${projectContext}`,
-					isLoading: false,
-					isError: true,
-				});
-				this._addHistoryEntry(
-					"model",
-					`Error processing message: Failed to build project context. ${projectContext}`
-				);
-				throw new Error("Failed to build project context.");
-			}
-
-			const historyForApi = JSON.parse(JSON.stringify(this._chatHistory));
-			const finalPrompt = `
-			You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query and when you do answer the user's queries, make sure you complete the entire request, don't do minimal, shorten, or partial of what the user asked for. Complete the entire request from the users no matter how long it may take. Use Markdown formatting for code blocks and lists where appropriate. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
-
-			*** Project Context (Reference Only) ***
-			${projectContext}
-			*** End Project Context ***
-
-			--- User Query ---
-			${userMessage}
-			--- End User Query ---
-
-			Assistant Response:
-	`;
-			const aiResponseText = await this._generateWithRetry(
-				finalPrompt,
-				apiKey,
-				modelName,
-				historyForApi,
-				"chat"
-			);
-			const isErrorResponse =
-				aiResponseText.toLowerCase().startsWith("error:") ||
-				aiResponseText === ERROR_QUOTA_EXCEEDED;
-			this._addHistoryEntry("model", aiResponseText);
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: aiResponseText,
-				isLoading: false,
-				isError: isErrorResponse,
-			});
-		} catch (error) {
-			console.error("Error in _handleRegularChat:", error);
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Error during chat: ${errorMsg}`,
-				isLoading: false,
-				isError: true,
-			});
-			if (!errorMsg.includes("Failed to build project context")) {
-				this._addHistoryEntry("model", `Error during chat: ${errorMsg}`);
-			}
-		} finally {
-			console.log("[_handleRegularChat] Chat request finished. Cleaning up.");
-			this.postMessageToWebview({ type: "reenableInput" });
-		}
-	}
-
 	// Build Project Context (Unchanged)
 	private async _buildProjectContext(): Promise<string> {
 		try {
@@ -1471,512 +2069,6 @@ ${projectContext}
 		}
 	}
 
-	// Plan Execution Logic (Unchanged from previous, uses VS Code progress cancellation)
-	private async _executePlan(
-		plan: ExecutionPlan,
-		apiKey: string,
-		modelName: string
-	): Promise<void> {
-		let executionOk = true;
-		try {
-			this.postMessageToWebview({
-				type: "statusUpdate",
-				value: `Starting execution: ${plan.planDescription || "Unnamed Plan"}`,
-			});
-			this._addHistoryEntry("model", "Initiating plan execution...");
-			// _pendingPlanGenerationContext is cleared by the caller of _executePlan
-
-			const workspaceFolders = vscode.workspace.workspaceFolders;
-			if (!workspaceFolders || workspaceFolders.length === 0) {
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value: "Error: Cannot execute plan - no workspace folder open.",
-					isError: true,
-				});
-				this._addHistoryEntry(
-					"model",
-					"Execution Failed: No workspace folder open."
-				);
-				executionOk = false;
-				throw new Error("No workspace folder open.");
-			}
-			const rootUri = workspaceFolders[0].uri;
-			let currentApiKeyForExecution = apiKey;
-
-			await vscode.window.withProgress(
-				{
-					location: vscode.ProgressLocation.Notification,
-					title: `Minovative Mind: Executing Plan - ${
-						plan.planDescription || "Processing..."
-					}`,
-					cancellable: true,
-				},
-				async (progress, progressToken) => {
-					const totalSteps = plan.steps ? plan.steps.length : 0;
-					if (totalSteps === 0) {
-						progress.report({ message: "Plan has no steps.", increment: 100 });
-						this.postMessageToWebview({
-							type: "statusUpdate",
-							value: "Plan has no steps. Execution finished.",
-						});
-						this._addHistoryEntry(
-							"model",
-							"Plan execution finished (no steps)."
-						);
-						executionOk = true;
-						return;
-					}
-
-					for (const [index, step] of plan.steps!.entries()) {
-						if (progressToken.isCancellationRequested) {
-							console.log(
-								`Plan execution cancelled by VS Code progress UI before step ${
-									index + 1
-								}.`
-							);
-							this.postMessageToWebview({
-								type: "statusUpdate",
-								value: `Plan execution cancelled by user.`,
-							});
-							this._addHistoryEntry(
-								"model",
-								"Plan execution cancelled by user."
-							);
-							executionOk = false;
-							return;
-						}
-
-						const stepNumber = index + 1;
-						const stepMessageTitle = `Step ${stepNumber}/${totalSteps}: ${
-							step.description || step.action.replace(/_/g, " ")
-						}`;
-						progress.report({
-							message: `${stepMessageTitle}...`,
-							increment: (1 / totalSteps) * 100,
-						});
-						const stepPath = step.path || "";
-						const stepCommand = step.command || "";
-
-						this.postMessageToWebview({
-							type: "statusUpdate",
-							value: `Executing ${stepMessageTitle} ${
-								step.action === PlanStepAction.RunCommand
-									? `- '${stepCommand}'`
-									: stepPath
-									? `- \`${stepPath}\``
-									: ""
-							}`,
-						});
-
-						try {
-							currentApiKeyForExecution =
-								this.getActiveApiKey() || currentApiKeyForExecution;
-							if (!currentApiKeyForExecution) {
-								throw new Error(
-									"No active API key available during plan execution step."
-								);
-							}
-
-							switch (step.action) {
-								case PlanStepAction.CreateDirectory:
-									if (isCreateDirectoryStep(step)) {
-										const dirUri = vscode.Uri.joinPath(rootUri, step.path);
-										await vscode.workspace.fs.createDirectory(dirUri);
-										console.log(`${step.action} OK: ${step.path}`);
-										this._addHistoryEntry(
-											"model",
-											`Step ${stepNumber} OK: Created directory \`${step.path}\``
-										);
-									} else {
-										throw new Error(`Invalid ${step.action} structure.`);
-									}
-									break;
-								case PlanStepAction.CreateFile:
-									if (isCreateFileStep(step)) {
-										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
-										let contentToWrite = "";
-										if (step.content !== undefined) {
-											contentToWrite = step.content;
-										} else if (step.generate_prompt) {
-											this.postMessageToWebview({
-												type: "statusUpdate",
-												value: `Step ${stepNumber}/${totalSteps}: Generating content for ${step.path}...`,
-											});
-											const generationPrompt = `
-											You are an AI programmer tasked with generating file content.
-											**Critical Instruction:** Generate the **complete and comprehensive** file content based *fully* on the user's instructions below. Do **not** provide a minimal, placeholder, or incomplete implementation unless the instructions *specifically* ask for it. Fulfill the entire request.
-											**Output Format:** Provide ONLY the raw code or text for the file. Do NOT include any explanations, or markdown formatting like backticks. Add comments in the code to help the user understand the code and the entire response MUST be only the final file content. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
-
-											File Path: ${step.path}
-											Instructions: ${step.generate_prompt}
-
-											Complete File Content:
-											`;
-											contentToWrite = await this._generateWithRetry(
-												generationPrompt,
-												currentApiKeyForExecution,
-												modelName,
-												undefined,
-												`plan step ${stepNumber} (create file)`
-											);
-											currentApiKeyForExecution =
-												this.getActiveApiKey() || currentApiKeyForExecution;
-											if (
-												!currentApiKeyForExecution ||
-												contentToWrite.toLowerCase().startsWith("error:") ||
-												contentToWrite === ERROR_QUOTA_EXCEEDED
-											) {
-												throw new Error(
-													`AI content generation failed: ${
-														contentToWrite || "No API Key available"
-													}`
-												);
-											}
-											contentToWrite = contentToWrite
-												.replace(/^```[a-z]*\n?/, "")
-												.replace(/\n?```$/, "")
-												.trim();
-										} else {
-											throw new Error(
-												"CreateFileStep must have 'content' or 'generate_prompt'."
-											);
-										}
-										await vscode.workspace.fs.writeFile(
-											fileUri,
-											Buffer.from(contentToWrite, "utf-8")
-										);
-										console.log(`${step.action} OK: ${step.path}`);
-										this._addHistoryEntry(
-											"model",
-											`Step ${stepNumber} OK: Created file \`${step.path}\``
-										);
-									} else {
-										throw new Error(`Invalid ${step.action} structure.`);
-									}
-									break;
-								case PlanStepAction.ModifyFile:
-									if (isModifyFileStep(step)) {
-										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
-										let existingContent = "";
-										try {
-											const contentBytes = await vscode.workspace.fs.readFile(
-												fileUri
-											);
-											existingContent =
-												Buffer.from(contentBytes).toString("utf-8");
-										} catch (readError: any) {
-											if (
-												readError instanceof vscode.FileSystemError &&
-												readError.code === "FileNotFound"
-											) {
-												throw new Error(
-													`File to modify not found: \`${step.path}\``
-												);
-											}
-											throw readError;
-										}
-										this.postMessageToWebview({
-											type: "statusUpdate",
-											value: `Step ${stepNumber}/${totalSteps}: Generating modifications for ${step.path}...`,
-										});
-										const modificationPrompt = `
-										You are an AI programmer tasked with modifying an existing file.
-										**Critical Instruction:** Modify the code based *fully* on the user's instructions below. Ensure the modifications are **complete and comprehensive**, addressing the entire request. Do **not** make partial changes or leave placeholders unless the instructions *specifically* ask for it.
-										**Output Format:** Provide ONLY the complete, raw, modified code for the **entire file**. Do NOT include explanations, or markdown formatting. Add comments in the code to help the user understand the code and the entire response MUST be the final, complete file content after applying all requested modifications.
-
-										File Path: ${step.path}
-										Modification Instructions: ${step.modification_prompt}
-
-										--- Existing File Content ---
-										\`\`\`
-										${existingContent}
-										\`\`\`
-										--- End Existing File Content ---
-
-										Complete Modified File Content:
-										`;
-										let modifiedContent = await this._generateWithRetry(
-											modificationPrompt,
-											currentApiKeyForExecution,
-											modelName,
-											undefined,
-											`plan step ${stepNumber} (modify file)`
-										);
-										currentApiKeyForExecution =
-											this.getActiveApiKey() || currentApiKeyForExecution;
-										if (
-											!currentApiKeyForExecution ||
-											modifiedContent.toLowerCase().startsWith("error:") ||
-											modifiedContent === ERROR_QUOTA_EXCEEDED
-										) {
-											throw new Error(
-												`AI modification failed: ${
-													modifiedContent || "No API Key available"
-												}`
-											);
-										}
-										modifiedContent = modifiedContent
-											.replace(/^```[a-z]*\n?/, "")
-											.replace(/\n?```$/, "")
-											.trim();
-										if (modifiedContent !== existingContent) {
-											const edit = new vscode.WorkspaceEdit();
-											const document = await vscode.workspace.openTextDocument(
-												fileUri
-											);
-											const fullRange = new vscode.Range(
-												document.positionAt(0),
-												document.positionAt(document.getText().length)
-											);
-											edit.replace(fileUri, fullRange, modifiedContent);
-											const success = await vscode.workspace.applyEdit(edit);
-											if (!success) {
-												throw new Error(
-													`Failed to apply modifications to \`${step.path}\``
-												);
-											}
-											console.log(`${step.action} OK: ${step.path}`);
-											this._addHistoryEntry(
-												"model",
-												`Step ${stepNumber} OK: Modified file \`${step.path}\``
-											);
-										} else {
-											console.log(
-												`Step ${stepNumber}: AI returned identical content for ${step.path}. Skipping write.`
-											);
-											this._addHistoryEntry(
-												"model",
-												`Step ${stepNumber} OK: Modification for \`${step.path}\` resulted in no changes.`
-											);
-										}
-									} else {
-										throw new Error(`Invalid ${step.action} structure.`);
-									}
-									break;
-								case PlanStepAction.RunCommand:
-									if (isRunCommandStep(step)) {
-										const commandToRun = step.command;
-										const userChoice = await vscode.window.showWarningMessage(
-											`The plan wants to run a command in the terminal:\n\n\`${commandToRun}\`\n\nThis could install packages or modify your system. Allow?`,
-											{ modal: true },
-											"Allow Command",
-											"Skip Command"
-										);
-										if (progressToken.isCancellationRequested) {
-											throw new Error("Operation cancelled by user.");
-										}
-										if (userChoice === "Allow Command") {
-											try {
-												const term = vscode.window.createTerminal({
-													name: `Plan Step ${stepNumber}`,
-													cwd: rootUri.fsPath,
-												});
-												term.sendText(commandToRun);
-												term.show();
-												this.postMessageToWebview({
-													type: "statusUpdate",
-													value: `Step ${stepNumber}: Running command '${commandToRun}' in terminal...`,
-												});
-												this._addHistoryEntry(
-													"model",
-													`Step ${stepNumber} OK: User allowed running command \`${commandToRun}\`.`
-												);
-												await new Promise<void>((resolve, reject) => {
-													const timeoutId = setTimeout(resolve, 2000);
-													const cancellationListener =
-														progressToken.onCancellationRequested(() => {
-															clearTimeout(timeoutId);
-															cancellationListener.dispose();
-															reject(new Error("Operation cancelled by user."));
-														});
-													timeoutId.unref();
-													if (progressToken.isCancellationRequested) {
-														// Check again before attaching listener
-														cancellationListener.dispose();
-														reject(new Error("Operation cancelled by user."));
-													}
-												}).catch((err) => {
-													if (err.message === "Operation cancelled by user.") {
-														throw err;
-													}
-													throw new Error(
-														`Internal error during command wait: ${err.message}`
-													);
-												});
-											} catch (termError) {
-												if (
-													termError instanceof Error &&
-													termError.message === "Operation cancelled by user."
-												) {
-													throw termError;
-												}
-												const errorMsg =
-													termError instanceof Error
-														? termError.message
-														: String(termError);
-												throw new Error(
-													`Failed to launch terminal for command '${commandToRun}': ${errorMsg}`
-												);
-											}
-										} else {
-											this.postMessageToWebview({
-												type: "statusUpdate",
-												value: `Step ${stepNumber}: Skipped command '${commandToRun}'.`,
-												isError: false,
-											});
-											this._addHistoryEntry(
-												"model",
-												`Step ${stepNumber} SKIPPED: User did not allow command \`${commandToRun}\`.`
-											);
-										}
-									} else {
-										throw new Error("Invalid RunCommandStep structure.");
-									}
-									break;
-								default:
-									const exhaustiveCheck: never = step.action;
-									console.warn(`Unsupported plan action: ${exhaustiveCheck}`);
-									this.postMessageToWebview({
-										type: "statusUpdate",
-										value: `Step ${stepNumber}: Skipped unsupported action ${step.action}.`,
-										isError: false,
-									});
-									this._addHistoryEntry(
-										"model",
-										`Step ${stepNumber} SKIPPED: Unsupported action ${step.action}`
-									);
-									break;
-							}
-						} catch (error) {
-							executionOk = false;
-							const errorMsg =
-								error instanceof Error ? error.message : String(error);
-							console.error(
-								`Error executing step ${stepNumber} (${step.action}, ${
-									stepPath || stepCommand
-								}):`,
-								error
-							);
-							const isCancellationError =
-								errorMsg === "Operation cancelled by user.";
-							const displayMsg = isCancellationError
-								? "Plan execution cancelled by user."
-								: `Error on Step ${stepNumber}: ${errorMsg}`;
-							const historyMsg = isCancellationError
-								? "Plan execution cancelled by user."
-								: `Step ${stepNumber} FAILED: ${errorMsg}`;
-							this.postMessageToWebview({
-								type: "statusUpdate",
-								value: displayMsg,
-								isError: !isCancellationError,
-							});
-							this._addHistoryEntry("model", historyMsg);
-							if (isCancellationError) {
-								return;
-							} else {
-								break;
-							}
-						}
-						if (progressToken.isCancellationRequested) {
-							console.log(
-								`Plan execution cancelled by VS Code progress UI after step ${
-									index + 1
-								}.`
-							);
-							this.postMessageToWebview({
-								type: "statusUpdate",
-								value: `Plan execution cancelled by user.`,
-							});
-							executionOk = false;
-							return;
-						}
-					} // End loop
-					progress.report({
-						message: executionOk
-							? "Execution complete."
-							: "Execution stopped (failed or cancelled).",
-						increment: 100,
-					});
-				} // End async progress callback
-			); // End vscode.window.withProgress
-		} catch (error) {
-			executionOk = false;
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			console.error("Unexpected error during plan execution:", error);
-			const isCancellationError = errorMsg === "Operation cancelled by user.";
-			const displayMsg = isCancellationError
-				? "Plan execution cancelled by user."
-				: `Plan execution failed unexpectedly: ${errorMsg}`;
-			const historyMsg = isCancellationError
-				? "Plan execution cancelled by user."
-				: `Plan execution FAILED unexpectedly: ${errorMsg}`;
-			this.postMessageToWebview({
-				type: "statusUpdate",
-				value: displayMsg,
-				isError: !isCancellationError,
-			});
-			const lastHistoryText =
-				this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
-			if (
-				lastHistoryText !== historyMsg &&
-				!lastHistoryText?.startsWith("Step ") &&
-				lastHistoryText !== "Plan execution cancelled by user."
-			) {
-				this._addHistoryEntry("model", historyMsg);
-			}
-		} finally {
-			console.log(
-				"Plan execution finished, failed, or cancelled. Cleaning up."
-			);
-			const lastHistoryText =
-				this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
-			if (executionOk) {
-				if (
-					lastHistoryText !== "Plan execution finished successfully." &&
-					lastHistoryText !== "Plan execution finished (no steps)."
-				) {
-					this.postMessageToWebview({
-						type: "statusUpdate",
-						value: "Plan execution completed successfully.",
-					});
-					this._addHistoryEntry(
-						"model",
-						"Plan execution finished successfully."
-					);
-				} else {
-					this.postMessageToWebview({
-						type: "statusUpdate",
-						value: lastHistoryText,
-					});
-				}
-			} else if (
-				lastHistoryText !== "Plan execution cancelled by user." &&
-				!lastHistoryText?.startsWith("Step ")
-			) {
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value:
-						"Plan execution stopped due to failure. Check chat for details.",
-					isError: true,
-				});
-			} else if (lastHistoryText === "Plan execution cancelled by user.") {
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value: "Plan execution cancelled by user.",
-					isError: false,
-				});
-			} else {
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value:
-						"Plan execution stopped due to step failure. Check chat for details.",
-					isError: true,
-				});
-			}
-			this.postMessageToWebview({ type: "reenableInput" });
-		}
-	}
-
 	// Utility Methods
 	public postMessageToWebview(message: any) {
 		if (this._view) {
@@ -2000,6 +2092,7 @@ ${projectContext}
 			)
 		);
 		const nonce = getNonce();
+		// Ensure model options reflect the current available models and selection
 		const modelOptionsHtml = AVAILABLE_GEMINI_MODELS.map(
 			(modelName) =>
 				`<option value="${modelName}" ${
@@ -2063,4 +2156,4 @@ ${projectContext}
 		 </body>
 		</html>`;
 	}
-}
+} // End class SidebarProvider
