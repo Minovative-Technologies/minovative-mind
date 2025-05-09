@@ -1,11 +1,7 @@
 // src/extension.ts
 import * as vscode from "vscode";
 import { SidebarProvider } from "./sidebar/SidebarProvider";
-import {
-	generateContent,
-	ERROR_QUOTA_EXCEEDED,
-	resetClient,
-} from "./ai/gemini"; // Import necessary items
+import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
 // Removed: scanWorkspace - not directly used here
 // Removed: buildContextString - not directly used here
 

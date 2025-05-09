@@ -3,7 +3,7 @@
 import * as vscode from "vscode";
 import { getNonce } from "../utilities/nonce";
 import {
-	generateContent,
+	generateContentStream,
 	resetClient,
 	ERROR_QUOTA_EXCEEDED,
 } from "../ai/gemini";
@@ -119,13 +119,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		console.log("SidebarProvider initialization complete.");
 	}
 
+	// MODIFIED: Logic to handle async generator from generateContentStream
 	public async _generateWithRetry(
 		prompt: string,
 		initialApiKey: string,
 		modelName: string,
 		history: HistoryEntry[] | undefined,
 		requestType: string = "request",
-		generationConfig?: GenerationConfig
+		generationConfig?: GenerationConfig,
+		streamCallbacks?: { onChunk: (chunk: string) => void } // Optional parameter for streaming
 	): Promise<string> {
 		let currentApiKey = initialApiKey;
 		const triedKeys = new Set<string>();
@@ -138,12 +140,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"[RetryWrapper] Initial API key was undefined, but keys exist. Using the first available key."
 			);
 			currentApiKey = this._apiKeyList[0];
-			this._activeKeyIndex = 0; // Assume the first key is active if none was provided
-			await this._saveKeysToStorage(); // Update storage if we had to guess
+			this._activeKeyIndex = 0;
+			await this._saveKeysToStorage();
 		} else if (!currentApiKey) {
 			console.error("[RetryWrapper] No API key available for the request.");
 			return "Error: No API Key available for the request.";
 		}
+
+		let result = ""; // This will be populated by the streaming logic or error handling
 
 		while (attempts < maxRetries) {
 			attempts++;
@@ -154,14 +158,48 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				generationConfig || "(default)"
 			);
 
-			const result = await generateContent(
-				currentApiKey,
-				modelName,
-				prompt,
-				history,
-				generationConfig, // Pass the config
-				undefined // Pass cancellation token if needed later
-			);
+			// --- START OF MODIFIED SECTION FOR ASYNC GENERATOR ---
+			let accumulatedResult = ""; // Initialize an empty string to store the full response
+			try {
+				// Call generateContentStream with the appropriate arguments
+				// generateContentStream returns an async iterable (async generator)
+				const stream = generateContentStream(
+					currentApiKey,
+					modelName,
+					prompt,
+					history,
+					generationConfig
+				);
+
+				// Use a for await...of loop to iterate over the chunks yielded by generateContentStream
+				for await (const chunk of stream) {
+					accumulatedResult += chunk; // Append the current chunk to accumulatedResult
+
+					// If streamCallbacks is provided and streamCallbacks.onChunk is a function, call it
+					if (
+						streamCallbacks &&
+						typeof streamCallbacks.onChunk === "function"
+					) {
+						streamCallbacks.onChunk(chunk);
+					}
+				}
+				result = accumulatedResult; // After the loop, the accumulatedResult is the final result string
+			} catch (error: any) {
+				// Adapt the error handling for generateContentStream
+				// generateContentStream throws an Error for issues
+				if (error.message === ERROR_QUOTA_EXCEEDED) {
+					result = ERROR_QUOTA_EXCEEDED; // If error.message is ERROR_QUOTA_EXCEEDED, set result accordingly
+				} else {
+					// For other errors, set result to an appropriate error message string
+					result = `Error: ${error.message}`;
+					// Log the error for better debugging, as the generic message might hide details
+					console.error(
+						`[RetryWrapper] Error during generateContentStream for ${requestType}:`,
+						error
+					);
+				}
+			}
+			// --- END OF MODIFIED SECTION FOR ASYNC GENERATOR ---
 
 			if (result === ERROR_QUOTA_EXCEEDED) {
 				console.warn(
@@ -191,7 +229,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						});
 						this._activeKeyIndex = nextIndex;
 						await this._saveKeysToStorage();
-						currentApiKey = this._apiKeyList[this._activeKeyIndex]; // Update currentApiKey for the next loop iteration
+						currentApiKey = this._apiKeyList[this._activeKeyIndex];
 						this.postMessageToWebview({
 							type: "apiKeyStatus",
 							value: `Switched to key ...${currentApiKey.slice(-4)} for retry.`,
@@ -207,7 +245,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				}
 				// Continue to the next iteration of the while loop with the new key
 			} else {
-				// If it's not a quota error, return the result (success or other error)
+				// If it's not a quota error, return the result (success, other error, or accumulated string from stream)
 				return result;
 			}
 		} // End while loop
@@ -301,33 +339,32 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 `;
 	}
 
+	// MODIFIED: _handleInitialPlanRequest to stream textual plan explanation
 	private async _handleInitialPlanRequest(
 		userRequest: string,
 		apiKey: string,
 		modelName: string
 	): Promise<void> {
+		// The initial "Minovative Mind (...) is formulating a plan explanation..." isLoading:true message
+		// is posted by the caller in onDidReceiveMessage.
+
+		// Post aiResponseStart before the stream begins
+		this.postMessageToWebview({
+			type: "aiResponseStart",
+			value: { modelName: modelName },
+		});
+
+		let success = false;
+		let textualPlanResponse: string | null = null; // Will hold the full successful plan
+		let finalErrorForDisplay: string | null = null;
+
 		try {
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Minovative Mind (${modelName}) is formulating a plan explanation...`,
-				isLoading: true,
-			});
 			this._pendingPlanGenerationContext = null; // Clear any previous pending context
 
 			const projectContext = await this._buildProjectContext();
 			if (projectContext.startsWith("[Error")) {
-				this.postMessageToWebview({
-					type: "aiResponse",
-					value: `Error generating plan explanation: Failed to build project context. ${projectContext}`,
-					isLoading: false,
-					isError: true,
-				});
-				this._addHistoryEntry(
-					"model",
-					`Error: Failed to build project context for plan explanation.`
-				);
-				this.postMessageToWebview({ type: "reenableInput" });
-				return;
+				// This error will be caught by the catch block below
+				throw new Error(`Failed to build project context. ${projectContext}`);
 			}
 
 			const textualPlanPrompt = this._createInitialPlanningExplanationPrompt(
@@ -337,21 +374,37 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				undefined // No diagnostics for /plan from chat
 			);
 
-			const textualPlanResponse = await this._generateWithRetry(
+			// Define stream callbacks
+			const streamCallbacks = {
+				onChunk: (chunk: string) => {
+					this.postMessageToWebview({
+						type: "aiResponseChunk",
+						value: chunk,
+					});
+				},
+			};
+
+			// _generateWithRetry will call onChunk for each piece and return the full response
+			textualPlanResponse = await this._generateWithRetry(
 				textualPlanPrompt,
 				apiKey,
 				modelName,
-				undefined,
-				"initial plan explanation"
-				// No generationConfig needed for textual explanation
+				undefined, // History not used for initial plan explanation
+				"initial plan explanation",
+				undefined, // No specific generationConfig for textual explanation
+				streamCallbacks // Pass the callbacks for streaming
 			);
 
 			if (
 				textualPlanResponse.toLowerCase().startsWith("error:") ||
 				textualPlanResponse === ERROR_QUOTA_EXCEEDED
 			) {
+				// Convert API/retry errors into thrown errors to be handled by the catch block
 				throw new Error(textualPlanResponse);
 			}
+
+			// If we reach here, plan generation was successful
+			success = true;
 
 			// Store context needed for generating the structured JSON plan later
 			this._pendingPlanGenerationContext = {
@@ -363,28 +416,55 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			};
 
 			this._addHistoryEntry("model", textualPlanResponse); // Add textual plan to history
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: textualPlanResponse,
-				isLoading: false,
-				requiresConfirmation: true,
-				planData: { originalRequest: userRequest, type: "textualPlanPending" },
-			});
-			// Input remains disabled by webview until confirm/cancel.
 		} catch (error) {
 			console.error("Error in _handleInitialPlanRequest:", error);
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Error generating plan explanation: ${errorMsg}`,
-				isLoading: false,
-				isError: true,
-			});
+			finalErrorForDisplay =
+				error instanceof Error ? error.message : String(error);
+			// Add error to history here as it's a failure path for the operation
 			this._addHistoryEntry(
 				"model",
-				`Error generating plan explanation: ${errorMsg}`
+				`Error generating plan explanation: ${finalErrorForDisplay}`
 			);
-			this.postMessageToWebview({ type: "reenableInput" });
+			// success remains false
+		} finally {
+			// Send aiResponseEnd to signal completion of the stream (success or failure)
+			// MODIFICATION 1: Changed structure of aiResponseEnd message to be flat and include isPlanResponse and planData.
+			this.postMessageToWebview({
+				type: "aiResponseEnd",
+				success: success,
+				error: finalErrorForDisplay,
+				isPlanResponse: success,
+				planData: success
+					? { originalRequest: userRequest, type: "textualPlanPending" }
+					: null,
+			});
+
+			if (success && textualPlanResponse) {
+				// Post the message containing the accumulated textualPlanResponse
+				// MODIFICATION 2: Set requiresConfirmation: false, planData: null, and ensure isError: false for this aiResponse message.
+				this.postMessageToWebview({
+					type: "aiResponse",
+					value: textualPlanResponse,
+					isLoading: false,
+					requiresConfirmation: false, // Changed from true
+					planData: null, // Changed from populated object
+					isError: false, // Ensured
+				});
+				// Input remains disabled by webview until confirm/cancel is handled by the webview based on aiResponseEnd.
+			} else {
+				// This implies !success
+				// Error occurred, post the main error message
+				// MODIFICATION 3: Ensure isLoading: false and isError: true for the error aiResponse message.
+				this.postMessageToWebview({
+					type: "aiResponse",
+					value: `Error generating plan explanation: ${
+						finalErrorForDisplay || "Unknown error"
+					}`,
+					isLoading: false, // Ensured (was already false)
+					isError: true, // Ensured (was already true)
+				});
+				this.postMessageToWebview({ type: "reenableInput" });
+			}
 		}
 	}
 
@@ -493,6 +573,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				diagnosticsString
 			);
 
+			// NOTE: Streaming for textual plan from editor action was not requested.
+			// If it were, this call to _generateWithRetry would need streamCallbacks similar to _handleInitialPlanRequest.
 			const textualPlanResponse = await this._generateWithRetry(
 				textualPlanPrompt,
 				activeKey,
@@ -519,16 +601,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			};
 
 			this._addHistoryEntry("model", textualPlanResponse);
+
+			// START OF MODIFICATION: Create planDataForConfirmation and update postMessageToWebview
+			// 1. Before posting the aiResponse message for a successful textual plan, create a planDataForConfirmation object.
+			const planDataForConfirmation = {
+				originalInstruction: instruction,
+				type: "textualPlanPending" as const, // Ensure type safety for the literal string
+			};
+
+			// 2. Modify the postMessageToWebview call for the aiResponse message.
 			this.postMessageToWebview({
 				type: "aiResponse",
-				value: textualPlanResponse,
-				isLoading: false,
-				requiresConfirmation: true,
-				planData: {
-					originalInstruction: instruction,
-					type: "textualPlanPending",
-				},
+				value: textualPlanResponse, // value: textualPlanResponse
+				isLoading: false, // isLoading: false
+				requiresConfirmation: true, // requiresConfirmation: true
+				isPlanResponse: true, // isPlanResponse: true (add this flag)
+				planData: planDataForConfirmation, // planData: planDataForConfirmation
 			});
+			// END OF MODIFICATION
 		} catch (error) {
 			console.error("Error in initiatePlanFromEditorAction:", error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
@@ -586,6 +676,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 
 			// --- Call _generateWithRetry with JSON config ---
+			// No streaming callbacks needed here as this is for JSON plan, not user-visible content stream.
 			structuredPlanJsonString = await this._generateWithRetry(
 				jsonPlanningPrompt,
 				planContext.initialApiKey,
@@ -593,6 +684,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				undefined, // History not typically needed for the JSON plan generation itself
 				"structured plan generation",
 				jsonGenerationConfig // <-- Pass the config here
+				// No streamCallbacks for JSON plan generation
 			);
 			// --- End Call ---
 
@@ -695,7 +787,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	// --- MODIFIED: _createPlanningPrompt to include few-shot examples ---
+	// --- MODIFIED: _createPlanningPrompt to include few-shot examples and updated instructions ---
 	private _createPlanningPrompt(
 		userRequest: string | undefined,
 		projectContext: string,
@@ -708,6 +800,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		},
 		diagnosticsString?: string
 	): string {
+		// MODIFICATION 1: Modify the comment for the "description" field.
 		const jsonFormatDescription = `
 		{
 			"planDescription": "Brief summary of the overall goal.",
@@ -715,7 +808,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				{
 					"step": 1,
 					"action": "create_directory | create_file | modify_file | run_command",
-					"description": "What this step does.",
+					"description": "What this step does. **This field is ALWAYS required for every step no matter what.**",
 					"path": "relative/path/to/target", // Required for file/dir ops. Relative to workspace root. No leading '/'. Use forward slashes. Safe paths only (no '..').
 					"content": "...", // For create_file with direct content (string). Use ONLY this OR generate_prompt.
 					"generate_prompt": "...", // For create_file, AI instruction to generate content (string). Use ONLY this OR content.
@@ -826,7 +919,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not omit any requested actions or components. If a request is complex, break it into multiple granular steps.
 		3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
 		4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
-		5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
+		5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. **Crucially, the 'description' field MUST be included and populated for EVERY step, regardless of the action type.** Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
 		6.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
 		7.  Never Assume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
 
@@ -889,6 +982,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			Assistant Response:
 	`;
+			// For regular chat, no streaming to webview chunks is specified, so no streamCallbacks
 			const aiResponseText = await this._generateWithRetry(
 				finalPrompt,
 				apiKey,
@@ -896,6 +990,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				historyForApi,
 				"chat"
 				// No specific generationConfig for regular chat unless needed
+				// No streamCallbacks for regular chat
 			);
 			const isErrorResponse =
 				aiResponseText.toLowerCase().startsWith("error:") ||
@@ -925,6 +1020,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
+	// MODIFIED: _executePlan for CreateFileStep and ModifyFileStep streaming content generation
 	private async _executePlan(
 		plan: ExecutionPlan,
 		apiKey: string, // API key used for plan generation/confirmation stage
@@ -1050,7 +1146,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									}
 									break;
 								case PlanStepAction.CreateFile:
-									// ... (existing logic for CreateFile)
 									if (isCreateFileStep(step)) {
 										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 										let contentToWrite = "";
@@ -1058,9 +1153,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											contentToWrite = step.content;
 										} else if (step.generate_prompt) {
 											this.postMessageToWebview({
+												// General status update
 												type: "statusUpdate",
-												value: `Step ${stepNumber}/${totalSteps}: Generating content for ${step.path}...`,
+												value: `Step ${stepNumber}/${totalSteps}: Preparing to generate content for ${step.path}...`,
 											});
+											progress.report({
+												message: `Step ${stepNumber}: Generating content for ${step.path} (preparing)...`,
+											}); // Progress update
+
 											const generationPrompt = `
 											You are an AI programmer tasked with generating file content.
 											**Critical Instruction:** Generate the **complete and comprehensive** file content based *fully* on the user's instructions below. Do **not** provide a minimal, placeholder, or incomplete implementation unless the instructions *specifically* ask for it. Fulfill the entire request.
@@ -1071,22 +1171,37 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 											Complete File Content:
 											`;
+
+											// Define stream callbacks for progress update
+											const streamCallbacks = {
+												onChunk: (_chunk: string) => {
+													// Do NOT send chunks to webview for internal generations
+													progress.report({
+														message: `Step ${stepNumber}: Generating file content for ${step.path} (streaming)...`,
+													});
+												},
+											};
+
 											contentToWrite = await this._generateWithRetry(
 												generationPrompt,
 												currentApiKeyForExecution,
 												modelName,
 												undefined,
-												`plan step ${stepNumber} (create file)`
+												`plan step ${stepNumber} (create file)`,
+												undefined, // genConfig
+												streamCallbacks // Pass callbacks
 											);
-											currentApiKeyForExecution =
+
+											currentApiKeyForExecution = // Re-fetch active key in case it changed during a long generation
 												this.getActiveApiKey() || currentApiKeyForExecution;
+
 											if (
 												!currentApiKeyForExecution ||
 												contentToWrite.toLowerCase().startsWith("error:") ||
 												contentToWrite === ERROR_QUOTA_EXCEEDED
 											) {
 												throw new Error(
-													`AI content generation failed: ${
+													`AI content generation failed for ${step.path}: ${
 														contentToWrite || "No API Key available"
 													}`
 												);
@@ -1114,7 +1229,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									}
 									break;
 								case PlanStepAction.ModifyFile:
-									// ... (existing logic for ModifyFile)
 									if (isModifyFileStep(step)) {
 										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 										let existingContent = "";
@@ -1135,10 +1249,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											}
 											throw readError;
 										}
+
 										this.postMessageToWebview({
+											// General status update
 											type: "statusUpdate",
-											value: `Step ${stepNumber}/${totalSteps}: Generating modifications for ${step.path}...`,
+											value: `Step ${stepNumber}/${totalSteps}: Preparing to generate modifications for ${step.path}...`,
 										});
+										progress.report({
+											message: `Step ${stepNumber}: Generating modifications for ${step.path} (preparing)...`,
+										}); // Progress update
+
 										const modificationPrompt = `
 										You are an AI programmer tasked with modifying an existing file.
 										**Critical Instruction:** Modify the code based *fully* on the user's instructions below. Ensure the modifications are **complete and comprehensive**, addressing the entire request. Do **not** make partial changes or leave placeholders unless the instructions *specifically* ask for it.
@@ -1155,22 +1275,37 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 										Complete Modified File Content:
 										`;
+
+										// Define stream callbacks for progress update
+										const streamCallbacks = {
+											onChunk: (_chunk: string) => {
+												// Do NOT send chunks to webview for internal generations
+												progress.report({
+													message: `Step ${stepNumber}: Generating file modifications for ${step.path} (streaming)...`,
+												});
+											},
+										};
+
 										let modifiedContent = await this._generateWithRetry(
 											modificationPrompt,
 											currentApiKeyForExecution,
 											modelName,
 											undefined,
-											`plan step ${stepNumber} (modify file)`
+											`plan step ${stepNumber} (modify file)`,
+											undefined, // genConfig
+											streamCallbacks // Pass callbacks
 										);
-										currentApiKeyForExecution =
+
+										currentApiKeyForExecution = // Re-fetch active key
 											this.getActiveApiKey() || currentApiKeyForExecution;
+
 										if (
 											!currentApiKeyForExecution ||
 											modifiedContent.toLowerCase().startsWith("error:") ||
 											modifiedContent === ERROR_QUOTA_EXCEEDED
 										) {
 											throw new Error(
-												`AI modification failed: ${
+												`AI modification failed for ${step.path}: ${
 													modifiedContent || "No API Key available"
 												}`
 											);
@@ -1642,12 +1777,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			Commit Message:`;
 
+			// No streaming callbacks for commit message generation
 			let commitMessage = await this._generateWithRetry(
 				commitMessagePrompt,
 				apiKey,
 				modelName,
 				undefined, // No history for this specific generation
 				"commit message generation"
+				// No streamCallbacks
 			);
 
 			if (
@@ -2170,6 +2307,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						break;
 					}
 					this._addHistoryEntry("user", `/plan ${userRequest}`);
+					// This initial message will be shown, then _handleInitialPlanRequest will send streaming updates.
+					this.postMessageToWebview({
+						type: "aiResponse",
+						value: `Minovative Mind (${selectedModel}) is formulating a plan explanation...`,
+						isLoading: true,
+					});
 					await this._handleInitialPlanRequest(
 						userRequest,
 						activeKey,
@@ -2247,7 +2390,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					// Check for /commit command
 					if (userMessage.trim().toLowerCase() === "/commit") {
 						// This specific call to _handleCommitCommand was moved to the "commitRequest" case
-						// However, we'll keep the history entry here for now if the user types /commit directly.
+						// However, we'll keep the history entry here if the user types /commit directly.
 						// The webview should ideally send "commitRequest" for the button.
 						// If typed, it will be handled here.
 						this._addHistoryEntry("user", userMessage); // Add user message to history
