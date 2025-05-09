@@ -19,7 +19,7 @@ import {
 	parseAndValidatePlan,
 } from "../ai/workflowPlanner";
 import { Content, GenerationConfig } from "@google/generative-ai";
-import path = require("path");
+import path = require("path"); // path is already imported here, which is fine.
 import { exec } from "child_process"; // Added import for exec
 
 // Secret storage keys
@@ -127,7 +127,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		history: HistoryEntry[] | undefined,
 		requestType: string = "request",
 		generationConfig?: GenerationConfig,
-		streamCallbacks?: { onChunk: (chunk: string) => void } // Optional parameter for streaming
+		streamCallbacks?: { onChunk: (chunk: string) => Promise<void> | void } // Optional parameter for streaming, onChunk can be async
 	): Promise<string> {
 		let currentApiKey = initialApiKey;
 		const triedKeys = new Set<string>();
@@ -180,7 +180,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						streamCallbacks &&
 						typeof streamCallbacks.onChunk === "function"
 					) {
-						streamCallbacks.onChunk(chunk);
+						await streamCallbacks.onChunk(chunk); // Await if onChunk is async
 					}
 				}
 				result = accumulatedResult; // After the loop, the accumulatedResult is the final result string
@@ -377,6 +377,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			// Define stream callbacks
 			const streamCallbacks = {
 				onChunk: (chunk: string) => {
+					// onChunk does not need to be async here as it's just posting to webview
 					this.postMessageToWebview({
 						type: "aiResponseChunk",
 						value: chunk,
@@ -597,6 +598,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				// 2. When calling _generateWithRetry, provide a streamCallbacks object.
 				const streamCallbacks = {
 					onChunk: (chunk: string) => {
+						// onChunk does not need to be async here
 						this.postMessageToWebview({
 							type: "aiResponseChunk",
 							value: chunk,
@@ -1034,6 +1036,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			// Instruction 3: Define streamCallbacks object
 			const streamCallbacks = {
 				onChunk: (chunk: string) => {
+					// onChunk does not need to be async here
 					this.postMessageToWebview({
 						type: "aiResponseChunk",
 						value: chunk,
@@ -1104,6 +1107,46 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		} finally {
 			console.log("[_handleRegularChat] Chat request finished. Cleaning up.");
 			this.postMessageToWebview({ type: "reenableInput" });
+		}
+	}
+
+	// New private helper method for typing content into an editor
+	private async _typeContentIntoEditor(
+		editor: vscode.TextEditor,
+		content: string,
+		token: vscode.CancellationToken,
+		progress?: vscode.Progress<{ message?: string; increment?: number }>
+	) {
+		const chunkSize = 5; // Characters per "type" operation
+		const delayMs = 30; // Delay between chunks (reduced for faster typing)
+
+		for (let i = 0; i < content.length; i += chunkSize) {
+			if (token.isCancellationRequested) {
+				console.log("Typing animation cancelled.");
+				throw new Error("Operation cancelled by user.");
+			}
+			const chunk = content.substring(
+				i,
+				Math.min(i + chunkSize, content.length)
+			);
+			await editor.edit((editBuilder) => {
+				const endPosition = editor.document.positionAt(
+					editor.document.getText().length
+				);
+				editBuilder.insert(endPosition, chunk);
+			});
+			// Ensure the latest typed content is visible
+			const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
+			editor.revealRange(lastLine.range, vscode.TextEditorRevealType.Default);
+
+			if (progress) {
+				progress.report({
+					message: `Typing content into ${path.basename(
+						editor.document.fileName
+					)}...`,
+				});
+			}
+			await new Promise((resolve) => setTimeout(resolve, delayMs));
 		}
 	}
 
@@ -1235,18 +1278,53 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								case PlanStepAction.CreateFile:
 									if (isCreateFileStep(step)) {
 										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
-										let contentToWrite = "";
+
+										// Ensure file exists and is empty
+										await vscode.workspace.fs.writeFile(
+											fileUri,
+											Buffer.from("", "utf-8")
+										);
+
+										// Open document and get editor instance
+										const document = await vscode.workspace.openTextDocument(
+											fileUri
+										);
+										const editor = await vscode.window.showTextDocument(
+											document,
+											{
+												preview: false,
+												viewColumn: vscode.ViewColumn.Active,
+												preserveFocus: false,
+											}
+										);
+
 										if (step.content !== undefined) {
-											contentToWrite = step.content;
+											progress.report({
+												message: `Step ${stepNumber}: Typing content into ${path.basename(
+													step.path
+												)}...`,
+											});
+											await this._typeContentIntoEditor(
+												editor,
+												step.content,
+												progressToken,
+												progress
+											);
+											console.log(
+												`${step.action} OK: Typed content into ${step.path}`
+											);
+											this._addHistoryEntry(
+												"model",
+												`Step ${stepNumber} OK: Typed content into new file \`${step.path}\``
+											);
 										} else if (step.generate_prompt) {
 											this.postMessageToWebview({
-												// General status update
 												type: "statusUpdate",
-												value: `Step ${stepNumber}/${totalSteps}: Preparing to generate content for ${step.path}...`,
+												value: `Step ${stepNumber}/${totalSteps}: Generating content for ${step.path}...`,
 											});
 											progress.report({
 												message: `Step ${stepNumber}: Generating content for ${step.path} (preparing)...`,
-											}); // Progress update
+											});
 
 											const generationPrompt = `
 											You are an AI programmer tasked with generating file content.
@@ -1259,58 +1337,95 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											Complete File Content:
 											`;
 
-											// Define stream callbacks for progress update
+											// START MODIFICATION: Instructions for step.generate_prompt block
+											// Instruction 3: Remove fullGeneratedContentAccumulator declaration
+											// let fullGeneratedContentAccumulator = ""; // Removed
+
 											const streamCallbacks = {
-												onChunk: (_chunk: string) => {
-													// Do NOT send chunks to webview for internal generations
+												// Instruction 1: Modify streamCallbacks.onChunk
+												onChunk: async (_chunk: string) => {
+													// chunk parameter is not directly used for insertion here
+													if (progressToken.isCancellationRequested) {
+														console.log(
+															"AI content generation streaming cancelled during chunk processing."
+														);
+														throw new Error("Operation cancelled by user.");
+													}
+													// Instruction 1a: Remove fullGeneratedContentAccumulator += chunk;
+													// Instruction 1b: Remove await editor.edit(...) block
+													// Instruction 1c: Ensure progress.report call remains and is updated
 													progress.report({
-														message: `Step ${stepNumber}: Generating file content for ${step.path} (streaming)...`,
+														message: `Streaming content for ${path.basename(
+															step.path
+														)}...`,
 													});
 												},
 											};
 
-											contentToWrite = await this._generateWithRetry(
-												generationPrompt,
-												currentApiKeyForExecution,
-												modelName,
-												undefined,
-												`plan step ${stepNumber} (create file)`,
-												undefined, // genConfig
-												streamCallbacks // Pass callbacks
-											);
+											const generatedContentFromAI =
+												await this._generateWithRetry(
+													generationPrompt,
+													currentApiKeyForExecution,
+													modelName,
+													undefined,
+													`plan step ${stepNumber} (create file content)`,
+													undefined, // genConfig
+													streamCallbacks
+												);
 
-											currentApiKeyForExecution = // Re-fetch active key in case it changed during a long generation
+											// Instruction 2: After await this._generateWithRetry(...)
+											// 2a. Declare cleanedGeneratedContent
+											// 2b. Assign cleanedGeneratedContent the result of cleaning generatedContentFromAI
+											const cleanedGeneratedContent = generatedContentFromAI
+												.replace(/^```[a-z]*\n?/, "") // Remove leading markdown code block fences
+												.replace(/\n?```$/, "") // Remove trailing markdown code block fences
+												.trim(); // Trim whitespace
+
+											progress.report({
+												// Update progress before typing
+												message: `Step ${stepNumber}: Typing generated content into ${path.basename(
+													step.path
+												)}...`,
+											});
+											// 2c. Call await this._typeContentIntoEditor(...)
+											await this._typeContentIntoEditor(
+												editor,
+												cleanedGeneratedContent,
+												progressToken,
+												progress
+											);
+											// END MODIFICATION
+
+											currentApiKeyForExecution =
 												this.getActiveApiKey() || currentApiKeyForExecution;
 
 											if (
 												!currentApiKeyForExecution ||
-												contentToWrite.toLowerCase().startsWith("error:") ||
-												contentToWrite === ERROR_QUOTA_EXCEEDED
+												generatedContentFromAI // Check the raw AI output for errors
+													.toLowerCase()
+													.startsWith("error:") ||
+												generatedContentFromAI === ERROR_QUOTA_EXCEEDED
 											) {
 												throw new Error(
 													`AI content generation failed for ${step.path}: ${
-														contentToWrite || "No API Key available"
+														generatedContentFromAI || "No API Key available"
 													}`
 												);
 											}
-											contentToWrite = contentToWrite
-												.replace(/^```[a-z]*\n?/, "")
-												.replace(/\n?```$/, "")
-												.trim();
+
+											console.log(
+												`${step.action} OK: Generated and typed AI content into ${step.path}`
+											);
+											this._addHistoryEntry(
+												"model",
+												`Step ${stepNumber} OK: Generated and typed AI content into new file \`${step.path}\``
+											);
 										} else {
 											throw new Error(
 												"CreateFileStep must have 'content' or 'generate_prompt'."
 											);
 										}
-										await vscode.workspace.fs.writeFile(
-											fileUri,
-											Buffer.from(contentToWrite, "utf-8")
-										);
-										console.log(`${step.action} OK: ${step.path}`);
-										this._addHistoryEntry(
-											"model",
-											`Step ${stepNumber} OK: Created file \`${step.path}\``
-										);
+										// No vscode.workspace.fs.writeFile(...) here, file is dirty in editor.
 									} else {
 										throw new Error(`Invalid ${step.action} structure.`);
 									}
@@ -1318,6 +1433,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								case PlanStepAction.ModifyFile:
 									if (isModifyFileStep(step)) {
 										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
+										// Ensure the file is active in the editor before generating/applying changes.
+										await vscode.window.showTextDocument(fileUri, {
+											preview: false,
+											viewColumn: vscode.ViewColumn.Active,
+										});
 										let existingContent = "";
 										try {
 											const contentBytes = await vscode.workspace.fs.readFile(
@@ -1366,6 +1486,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 										// Define stream callbacks for progress update
 										const streamCallbacks = {
 											onChunk: (_chunk: string) => {
+												// onChunk does not need to be async here for ModifyFile
 												// Do NOT send chunks to webview for internal generations
 												progress.report({
 													message: `Step ${stepNumber}: Generating file modifications for ${step.path} (streaming)...`,
@@ -1548,7 +1669,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								error
 							);
 							const isCancellationError =
-								errorMsg === "Operation cancelled by user.";
+								errorMsg === "Operation cancelled by user." ||
+								errorMsg.includes("Operation cancelled by user."); // Make cancellation check more robust
 
 							if (isCancellationError) {
 								this._currentExecutionOutcome = "cancelled";
@@ -1558,7 +1680,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							}
 
 							const displayMsg = isCancellationError
-								? "Plan execution cancelled by user." // Already handled by outer check generally
+								? "Plan execution cancelled by user."
 								: `Error on Step ${stepNumber}: ${errorMsg}`;
 							const historyMsg = isCancellationError
 								? "Plan execution cancelled by user."
@@ -1629,7 +1751,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			console.error("Unexpected error during plan execution:", error);
 
-			const isCancellationError = errorMsg === "Operation cancelled by user.";
+			const isCancellationError =
+				errorMsg === "Operation cancelled by user." ||
+				errorMsg.includes("Operation cancelled by user.");
 			if (isCancellationError) {
 				if (this._currentExecutionOutcome === "pending") {
 					this._currentExecutionOutcome = "cancelled";
@@ -1714,42 +1838,25 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						this.postMessageToWebview({
 							type: "statusUpdate",
 							value:
-								"Plan execution cancelled by user. Changes are being reverted.",
+								"Plan execution cancelled by user. Changes are being reverted.", // Or "Changes were not applied due to cancellation." if no revert implemented
 							isError: false, // Cancellation is not an error
 						});
 					}
-					// REVIEW COMMENT:
-					// If an actual `_revertChanges` method were implemented to undo plan steps,
-					// it would be called around here. That method would be responsible for
-					// posting its own detailed status updates during the revert process
-					// (e.g., 'Reverting file X...', 'Revert successful/failed for file X').
-					// The `postMessageToWebview` above serves as an initial notification.
-					// The `_addHistoryEntry` below serves as a final summary in the chat log
-					// after the (hypothetical) revert attempt.
 					this._addHistoryEntry(
 						"model",
-						"Changes reverted due to cancellation."
+						"Changes reverted due to cancellation." // Or "No changes applied due to cancellation."
 					);
 					break;
 				case "failed":
 					// Specific error details should have been logged earlier.
-					// This status message indicates the start of the revert process.
 					if (this.postMessageToWebview) {
 						this.postMessageToWebview({
 							type: "statusUpdate",
-							value: "Plan execution failed. Changes are being reverted.",
+							value: "Plan execution failed. Changes are being reverted.", // Or "Changes were not applied due to failure."
 							isError: true,
 						});
 					}
-					// REVIEW COMMENT:
-					// If an actual `_revertChanges` method were implemented to undo plan steps,
-					// it would be called around here. That method would be responsible for
-					// posting its own detailed status updates during the revert process
-					// (e.g., 'Reverting file X...', 'Revert successful/failed for file X').
-					// The `postMessageToWebview` above serves as an initial notification.
-					// The `_addHistoryEntry` below serves as a final summary in the chat log
-					// after the (hypothetical) revert attempt.
-					this._addHistoryEntry("model", "Changes reverted due to failure.");
+					this._addHistoryEntry("model", "Changes reverted due to failure."); // Or "No changes applied due to failure."
 					break;
 			}
 

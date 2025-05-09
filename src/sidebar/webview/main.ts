@@ -289,7 +289,11 @@ if (
 					!currentAiMessageContentElement && // Check if not already actively streaming an AI response
 					!chatContainer?.querySelector(".loading-message") // And if a loading message isn't already present
 				) {
-					appendMessage("Model", "Creating...", "loading-message");
+					appendMessage(
+						"Model",
+						"Creating...Don't change file view while `/plan` process is active",
+						"loading-message"
+					);
 				}
 			} else {
 				// Point 4.b (from review instructions): If loading is set to false, ensure any "Creating..." message is removed.
