@@ -1007,27 +1007,39 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		modelName: string
 	): Promise<void> {
 		try {
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Minovative Mind (${modelName}) is thinking...`,
-				isLoading: true,
-			});
+			// Instruction 1: Removed initial thinking message.
 			// _pendingPlanGenerationContext check is done in onDidReceiveMessage
 
 			const projectContext = await this._buildProjectContext();
 			if (projectContext.startsWith("[Error")) {
+				// Instruction 9: Handle project context build failure
+				const errorMsg = `Error processing message: Failed to build project context. ${projectContext}`;
 				this.postMessageToWebview({
-					type: "aiResponse",
-					value: `Error processing message: Failed to build project context. ${projectContext}`,
-					isLoading: false,
-					isError: true,
+					type: "aiResponseEnd",
+					success: false,
+					error: errorMsg,
+					isPlanResponse: false,
+					planData: null,
 				});
-				this._addHistoryEntry(
-					"model",
-					`Error processing message: Failed to build project context. ${projectContext}`
-				);
-				throw new Error("Failed to build project context.");
+				this._addHistoryEntry("model", errorMsg);
+				return; // Exit early, finally will reenableInput
 			}
+
+			// Instruction 2: Post aiResponseStart message
+			this.postMessageToWebview({
+				type: "aiResponseStart",
+				value: { modelName: modelName },
+			});
+
+			// Instruction 3: Define streamCallbacks object
+			const streamCallbacks = {
+				onChunk: (chunk: string) => {
+					this.postMessageToWebview({
+						type: "aiResponseChunk",
+						value: chunk,
+					});
+				},
+			};
 
 			const historyForApi = JSON.parse(JSON.stringify(this._chatHistory));
 			const finalPrompt = `
@@ -1043,35 +1055,49 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			Assistant Response:
 	`;
-			// For regular chat, no streaming to webview chunks is specified, so no streamCallbacks
+			// Instruction 4: Pass streamCallbacks to _generateWithRetry call
 			const aiResponseText = await this._generateWithRetry(
 				finalPrompt,
 				apiKey,
 				modelName,
 				historyForApi,
-				"chat"
-				// No specific generationConfig for regular chat unless needed
-				// No streamCallbacks for regular chat
+				"chat",
+				undefined, // No specific generationConfig for regular chat
+				streamCallbacks // Pass streamCallbacks
 			);
+
+			// Instruction 5: Determine if it's an error response
 			const isErrorResponse =
 				aiResponseText.toLowerCase().startsWith("error:") ||
 				aiResponseText === ERROR_QUOTA_EXCEEDED;
+
+			// Instruction 6: Add the full aiResponseText to history
 			this._addHistoryEntry("model", aiResponseText);
+
+			// Instruction 7: Post an aiResponseEnd message
 			this.postMessageToWebview({
-				type: "aiResponse",
-				value: aiResponseText,
-				isLoading: false,
-				isError: isErrorResponse,
+				type: "aiResponseEnd",
+				success: !isErrorResponse,
+				error: isErrorResponse ? aiResponseText : null,
+				isPlanResponse: false,
+				planData: null,
 			});
+
+			// Instruction 8: Removed the existing aiResponse message that was here.
 		} catch (error) {
+			// Instruction 10: Main catch block handling
 			console.error("Error in _handleRegularChat:", error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
+
 			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Error during chat: ${errorMsg}`,
-				isLoading: false,
-				isError: true,
+				type: "aiResponseEnd",
+				success: false,
+				error: errorMsg,
+				isPlanResponse: false,
+				planData: null,
 			});
+
+			// Add to history if not already added (e.g., by project context failure, though that path now returns early)
 			if (!errorMsg.includes("Failed to build project context")) {
 				this._addHistoryEntry("model", `Error during chat: ${errorMsg}`);
 			}
@@ -2431,7 +2457,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					const selectedModel = this.getSelectedModelName();
 					if (!activeKey || !selectedModel) {
 						this.postMessageToWebview({
-							type: "aiResponse",
+							type: "aiResponse", // For consistency, this could be aiResponseEnd too, but current instruction is for _handleRegularChat
 							value: "Error: API Key or Model not set.",
 							isError: true,
 						});
@@ -2440,7 +2466,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					}
 					if (this._pendingPlanGenerationContext) {
 						this.postMessageToWebview({
-							type: "aiResponse",
+							type: "aiResponse", // Same as above, could be aiResponseEnd
 							value:
 								"Error: A plan is pending confirmation. Confirm or cancel first.",
 							isError: true,
@@ -2455,7 +2481,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						// However, we'll keep the history entry here if the user types /commit directly.
 						// The webview should ideally send "commitRequest" for the button.
 						// If typed, it will be handled here.
-						this._addHistoryEntry("user", userMessage); // Add user message to history
+						// _addHistoryEntry("user", userMessage); // _handleCommitCommand adds this
 						await this._handleCommitCommand(activeKey, selectedModel);
 						break;
 					}

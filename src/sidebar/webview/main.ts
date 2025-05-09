@@ -164,6 +164,8 @@ if (
 			// If sender is 'Model' and this is the start of a stream (empty text from aiResponseStart)
 			// capture the span for future updates and initialize accumulated text.
 			if (sender === "Model" && className === "ai-message" && text === "") {
+				// Point 1.a (from review instructions): currentAiMessageContentElement and currentAccumulatedText are reset/initialized here
+				// when appendMessage is called by aiResponseStart.
 				currentAiMessageContentElement = textElement;
 				currentAccumulatedText = ""; // text is already empty string from aiResponseStart
 				textElement.innerHTML = md.render(currentAccumulatedText); // Render initially empty
@@ -279,17 +281,18 @@ if (
 			modelSelect.disabled = !enableSendControls; // Also disable model select when loading
 
 			if (loading) {
-				// Add loading message ONLY if not already actively streaming an AI response
-				// and if a loading message isn't already present.
+				// Point 4.a (from review instructions): When loading is true, append "Creating..." message if appropriate.
+				// This is for the initial user send, before the AI stream begins.
+				// Point 4.c (from review instructions): The aiResponseStart handler will reliably remove this "Creating..."
+				// message when the actual AI stream begins.
 				if (
-					!currentAiMessageContentElement &&
-					!chatContainer?.querySelector(".loading-message")
+					!currentAiMessageContentElement && // Check if not already actively streaming an AI response
+					!chatContainer?.querySelector(".loading-message") // And if a loading message isn't already present
 				) {
 					appendMessage("Model", "Creating...", "loading-message");
 				}
 			} else {
-				// If loading is set to false (e.g., by aiResponseEnd or error),
-				// ensure any "Creating..." message is removed.
+				// Point 4.b (from review instructions): If loading is set to false, ensure any "Creating..." message is removed.
 				const loadingMsg = chatContainer?.querySelector(".loading-message");
 				if (loadingMsg) {
 					loadingMsg.remove();
@@ -517,13 +520,15 @@ if (
 
 			// --- New handlers for streamed responses ---
 			case "aiResponseStart": {
-				// Remove any general "Creating..." loading message from chatContainer
+				// Point 1.c (from review instructions): Ensure any generic "Creating..." or similar loading message is removed.
 				const loadingMsg = chatContainer?.querySelector(".loading-message");
 				if (loadingMsg) {
 					loadingMsg.remove();
 				}
-				// Call appendMessage to set up the structure for the AI's response.
-				// Empty text indicates it's the start of a stream.
+				// Point 1.b (from review instructions): Ensure appendMessage("Model", "", "ai-message") is called.
+				// This call also handles Point 1.a:
+				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
+				// within the appendMessage function (see its definition) for a new AI stream.
 				appendMessage("Model", "", "ai-message");
 				// setLoadingState(true) was called when the user sent the message.
 				// We are now in the process of receiving the response, so loading is still active.
@@ -532,11 +537,14 @@ if (
 			}
 			case "aiResponseChunk": {
 				if (currentAiMessageContentElement && message.value !== undefined) {
+					// Point 2.a (from review instructions): Correctly appends message.value to currentAccumulatedText.
 					currentAccumulatedText += message.value;
+					// Point 2.b (from review instructions): Updates currentAiMessageContentElement.innerHTML with rendered markdown.
 					currentAiMessageContentElement.innerHTML = md.render(
 						currentAccumulatedText
 					);
 					if (chatContainer) {
+						// Point 2.c (from review instructions): chatContainer.scrollTop = chatContainer.scrollHeight is called.
 						chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to keep latest content visible
 					}
 				}
@@ -547,7 +555,7 @@ if (
 				let planConfirmationWasShown = false;
 				// MODIFICATION END
 
-				// Handle error display if the stream ended unsuccessfully.
+				// Point 3.a (from review instructions): Verify error display if !message.success && message.error.
 				// Condition changed to use !message.success and message.error.
 				if (!message.success && message.error) {
 					const errorMessageContent =
@@ -555,7 +563,7 @@ if (
 							? message.error
 							: "Unknown error from AI response end.";
 					if (currentAiMessageContentElement) {
-						// Append error to the (potentially partially) streamed message content.
+						// Appends error to the (potentially partially) streamed message content.
 						const errorHtml = `<br><p style="color: var(--vscode-errorForeground);"><strong>Error:</strong> ${md.renderInline(
 							errorMessageContent
 						)}</p>`;
@@ -612,16 +620,16 @@ if (
 				}
 
 				// MODIFICATION START: Conditionally call setLoadingState(false)
-				// If plan confirmation UI was shown, do not call setLoadingState(false) here.
-				// The plan confirmation UI's confirm/cancel handlers will manage setLoadingState.
-				// If it was a regular stream or plan stream that failed before confirmation,
-				// then call setLoadingState(false) as before.
+				// Point 3.b (from review instructions): Crucially, ensure that if !planConfirmationWasShown, setLoadingState(false) is called.
+				// This re-enables inputs if it's a regular chat stream or a plan stream that didn't lead to confirmation UI.
+				// The logic for this is in place with the `if (!planConfirmationWasShown)` condition.
 				if (!planConfirmationWasShown) {
 					setLoadingState(false);
 				}
 				// MODIFICATION END
 
-				// Always reset streaming state variables for the next response.
+				// Point 3.c (from review instructions): Confirm that currentAiMessageContentElement = null; and currentAccumulatedText = ""; are always called
+				// to reset state for the next stream.
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
 				break;
