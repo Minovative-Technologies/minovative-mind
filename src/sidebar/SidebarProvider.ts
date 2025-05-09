@@ -442,26 +442,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			if (success && textualPlanResponse) {
 				// Post the message containing the accumulated textualPlanResponse
 				// MODIFICATION 2: Set requiresConfirmation: false, planData: null, and ensure isError: false for this aiResponse message.
+				// This aiResponse after aiResponseEnd is for displaying the full text if needed by the webview,
+				// but the confirmation trigger is now via aiResponseEnd.planData.
+				// We might not even need this explicit aiResponse anymore if webview accumulates chunks and uses aiResponseEnd.
+				// However, for compatibility or if webview doesn't accumulate, keeping it but without confirmation aspect.
 				this.postMessageToWebview({
 					type: "aiResponse",
 					value: textualPlanResponse,
 					isLoading: false,
-					requiresConfirmation: false, // Changed from true
-					planData: null, // Changed from populated object
-					isError: false, // Ensured
+					requiresConfirmation: false,
+					planData: null,
+					isError: false,
 				});
 				// Input remains disabled by webview until confirm/cancel is handled by the webview based on aiResponseEnd.
 			} else {
 				// This implies !success
 				// Error occurred, post the main error message
 				// MODIFICATION 3: Ensure isLoading: false and isError: true for the error aiResponse message.
+				// This message is for general error display if the stream ended in error.
 				this.postMessageToWebview({
 					type: "aiResponse",
 					value: `Error generating plan explanation: ${
 						finalErrorForDisplay || "Unknown error"
 					}`,
-					isLoading: false, // Ensured (was already false)
-					isError: true, // Ensured (was already true)
+					isLoading: false,
+					isError: true,
 				});
 				this.postMessageToWebview({ type: "reenableInput" });
 			}
@@ -501,17 +506,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
+		// Variables for streaming results
+		let textualPlanResponse: string = ""; // Will hold the full textual plan if successful
+		let successStreaming = false;
+		let errorStreaming: string | null = null;
+		let planDataForConfirmation: {
+			originalInstruction: string;
+			type: "textualPlanPending";
+		} | null = null;
+		let editorCtx: PlanGenerationContext["editorContext"] | undefined; // To store editor context for pending plan
+
 		try {
+			// Outer try for setup errors (e.g., project context build)
 			this._addHistoryEntry(
 				"model",
 				`Received request from editor: "${instruction}". Generating plan explanation...`
 			);
+
+			// 1. Replace initial aiResponse message with aiResponseStart
 			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Minovative Mind (${modelName}) received '${instruction}' from editor. Generating plan explanation...`,
-				isLoading: true,
+				type: "aiResponseStart",
+				value: { modelName: modelName },
 			});
-			this._pendingPlanGenerationContext = null;
+
+			this._pendingPlanGenerationContext = null; // Clear any previous pending context
 
 			const projectContext = await this._buildProjectContext();
 			if (projectContext.startsWith("[Error")) {
@@ -556,82 +574,125 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				diagnosticsString = "[Could not retrieve diagnostics]";
 			}
 
-			const editorCtx = {
+			editorCtx = {
+				// Define editorCtx here to be available in both try and finally
 				instruction,
 				selectedText,
 				fullText,
 				languageId,
 				filePath: relativeFilePath,
-				documentUri, // Keep original URI too
+				documentUri,
 				selection,
 			};
 
 			const textualPlanPrompt = this._createInitialPlanningExplanationPrompt(
 				projectContext,
-				undefined, // No userRequest string for editor actions
+				undefined,
 				editorCtx,
 				diagnosticsString
 			);
 
-			// NOTE: Streaming for textual plan from editor action was not requested.
-			// If it were, this call to _generateWithRetry would need streamCallbacks similar to _handleInitialPlanRequest.
-			const textualPlanResponse = await this._generateWithRetry(
-				textualPlanPrompt,
-				activeKey,
-				modelName,
-				undefined,
-				"editor action plan explanation"
-				// No generationConfig needed for textual explanation
-			);
+			try {
+				// Inner try-catch for the _generateWithRetry call and stream processing
+				// 2. When calling _generateWithRetry, provide a streamCallbacks object.
+				const streamCallbacks = {
+					onChunk: (chunk: string) => {
+						this.postMessageToWebview({
+							type: "aiResponseChunk",
+							value: chunk,
+						});
+					},
+				};
 
-			if (
-				textualPlanResponse.toLowerCase().startsWith("error:") ||
-				textualPlanResponse === ERROR_QUOTA_EXCEEDED
-			) {
-				throw new Error(textualPlanResponse);
+				textualPlanResponse = await this._generateWithRetry(
+					textualPlanPrompt,
+					activeKey,
+					modelName,
+					undefined,
+					"editor action plan explanation",
+					undefined, // No specific generationConfig for textual explanation
+					streamCallbacks // Pass callbacks
+				);
+
+				// 3. Capture success status and any error message.
+				if (
+					textualPlanResponse.toLowerCase().startsWith("error:") ||
+					textualPlanResponse === ERROR_QUOTA_EXCEEDED
+				) {
+					errorStreaming = textualPlanResponse;
+					successStreaming = false;
+					// 7. Add error to history for generation failure
+					this._addHistoryEntry(
+						"model",
+						`Error generating plan explanation for editor action: ${errorStreaming}`
+					);
+				} else {
+					successStreaming = true;
+					// 4. Construct planDataForConfirmation if successful.
+					planDataForConfirmation = {
+						originalInstruction: instruction,
+						type: "textualPlanPending" as const,
+					};
+
+					// Store context for generating the structured JSON plan later
+					this._pendingPlanGenerationContext = {
+						type: "editor",
+						editorContext: editorCtx,
+						projectContext,
+						diagnosticsString,
+						initialApiKey: activeKey,
+						modelName,
+					};
+
+					// 7. Ensure _addHistoryEntry is called with the fully accumulated textualPlanResponse if successful.
+					this._addHistoryEntry("model", textualPlanResponse);
+				}
+			} catch (genError) {
+				// Catch errors if _generateWithRetry itself throws
+				console.error(
+					"Error during textual plan generation stream for editor action:",
+					genError
+				);
+				errorStreaming =
+					genError instanceof Error ? genError.message : String(genError);
+				successStreaming = false;
+				// 7. Add error to history
+				this._addHistoryEntry(
+					"model",
+					`Error generating plan explanation for editor action: ${errorStreaming}`
+				);
+			} finally {
+				// 5. Send an aiResponseEnd message to the webview.
+				this.postMessageToWebview({
+					type: "aiResponseEnd",
+					success: successStreaming,
+					error: errorStreaming,
+					isPlanResponse: successStreaming,
+					planData: successStreaming ? planDataForConfirmation : null,
+				});
+				// 6. The existing postMessageToWebview call that sends a single aiResponse message is removed.
+				// The aiResponseEnd message handles triggering the plan confirmation UI via planData.
+				// If successStreaming is false, the webview should re-enable input.
 			}
-
-			this._pendingPlanGenerationContext = {
-				type: "editor",
-				editorContext: editorCtx,
-				projectContext,
-				diagnosticsString,
-				initialApiKey: activeKey,
-				modelName,
-			};
-
-			this._addHistoryEntry("model", textualPlanResponse);
-
-			// START OF MODIFICATION: Create planDataForConfirmation and update postMessageToWebview
-			// 1. Before posting the aiResponse message for a successful textual plan, create a planDataForConfirmation object.
-			const planDataForConfirmation = {
-				originalInstruction: instruction,
-				type: "textualPlanPending" as const, // Ensure type safety for the literal string
-			};
-
-			// 2. Modify the postMessageToWebview call for the aiResponse message.
+		} catch (setupError) {
+			// Outer catch: handles errors *before* streaming starts
+			console.error(
+				"Error in initiatePlanFromEditorAction (setup phase):",
+				setupError
+			);
+			const errorMsg =
+				setupError instanceof Error ? setupError.message : String(setupError);
 			this.postMessageToWebview({
-				type: "aiResponse",
-				value: textualPlanResponse, // value: textualPlanResponse
-				isLoading: false, // isLoading: false
-				requiresConfirmation: true, // requiresConfirmation: true
-				isPlanResponse: true, // isPlanResponse: true (add this flag)
-				planData: planDataForConfirmation, // planData: planDataForConfirmation
-			});
-			// END OF MODIFICATION
-		} catch (error) {
-			console.error("Error in initiatePlanFromEditorAction:", error);
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Error during editor action plan explanation: ${errorMsg}`,
-				isLoading: false,
+				type: "aiResponse", // General error message for setup failures
+				value: `Error preparing editor action plan: ${errorMsg}`,
+				isLoading: false, // No loading if setup failed
 				isError: true,
 			});
 			this._addHistoryEntry(
 				"model",
-				`Error generating plan explanation for editor action: ${errorMsg}`
+				`Error preparing plan explanation for editor action: ${errorMsg}`
 			);
+			// 8. Ensure the outer catch block still calls reenableInput
 			this.postMessageToWebview({ type: "reenableInput" });
 		}
 	}
@@ -2308,10 +2369,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					}
 					this._addHistoryEntry("user", `/plan ${userRequest}`);
 					// This initial message will be shown, then _handleInitialPlanRequest will send streaming updates.
+					// Note: _handleInitialPlanRequest itself sends an aiResponseStart, this is a general status.
 					this.postMessageToWebview({
-						type: "aiResponse",
+						type: "aiResponse", // This could be a statusUpdate or a more specific "thinking" message.
 						value: `Minovative Mind (${selectedModel}) is formulating a plan explanation...`,
-						isLoading: true,
+						isLoading: true, // The webview should show loading based on this
 					});
 					await this._handleInitialPlanRequest(
 						userRequest,

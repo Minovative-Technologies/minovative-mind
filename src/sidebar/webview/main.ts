@@ -543,6 +543,10 @@ if (
 				break;
 			}
 			case "aiResponseEnd": {
+				// MODIFICATION START: Introduce planConfirmationWasShown flag
+				let planConfirmationWasShown = false;
+				// MODIFICATION END
+
 				// Handle error display if the stream ended unsuccessfully.
 				// Condition changed to use !message.success and message.error.
 				if (!message.success && message.error) {
@@ -592,26 +596,30 @@ if (
 						if (modelSelect) {
 							modelSelect.disabled = true;
 						}
-						// setLoadingState(false) will be called at the end of this case regardless,
-						// so inputs will be re-enabled then if the user doesn't act on the plan confirmation.
-						// This behavior change means the loading state is always set to false after aiResponseEnd.
+						// MODIFICATION START: Set planConfirmationWasShown to true
+						planConfirmationWasShown = true;
+						// MODIFICATION END
+						// setLoadingState(false) is no longer unconditionally called at the end of this case.
+						// Input enabling/disabling is now managed by plan confirmation UI or the conditional logic below.
 					} else {
 						// Fallback if UI creation failed.
 						console.error(
 							"Plan confirmation container failed to create or find!"
 						);
 						updateStatus("Error: UI for plan confirmation is missing.", true);
-						// setLoadingState(false) will still be called at the end.
+						// planConfirmationWasShown remains false, so setLoadingState(false) will be called below.
 					}
 				}
 
-				// Always call setLoadingState(false) at the end of this case.
-				// This ensures that after any stream ends (successfully, with error, or with a plan),
-				// the loading indicators are turned off and inputs are re-enabled (unless plan confirmation UI is active and keeps them disabled).
-				// If plan confirmation UI was shown, this setLoadingState(false) call will effectively re-enable inputs
-				// if the user does not interact with the confirmation buttons, which might be overridden by plan confirmation logic (e.g., on cancel/confirm).
-				// The current plan confirmation click handlers explicitly call setLoadingState.
-				setLoadingState(false);
+				// MODIFICATION START: Conditionally call setLoadingState(false)
+				// If plan confirmation UI was shown, do not call setLoadingState(false) here.
+				// The plan confirmation UI's confirm/cancel handlers will manage setLoadingState.
+				// If it was a regular stream or plan stream that failed before confirmation,
+				// then call setLoadingState(false) as before.
+				if (!planConfirmationWasShown) {
+					setLoadingState(false);
+				}
+				// MODIFICATION END
 
 				// Always reset streaming state variables for the next response.
 				currentAiMessageContentElement = null;
