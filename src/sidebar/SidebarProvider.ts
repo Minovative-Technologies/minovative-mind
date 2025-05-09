@@ -2457,7 +2457,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	// VS Code Provider Methods
-	public resolveWebviewView(
+	// MODIFICATION: Made resolveWebviewView async
+	public async resolveWebviewView(
 		webviewView: vscode.WebviewView,
 		_context: vscode.WebviewViewResolveContext,
 		_token: vscode.CancellationToken
@@ -2468,10 +2469,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			localResourceRoots: [
 				vscode.Uri.joinPath(this._extensionUri, "dist"),
 				vscode.Uri.joinPath(this._extensionUri, "media"),
-				vscode.Uri.joinPath(this._extensionUri, "src", "sidebar", "webview"),
+				vscode.Uri.joinPath(this._extensionUri, "src", "sidebar", "webview"), // Added localResourceRoots for webview HTML file
 			],
 		};
-		webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+		// MODIFICATION: Await the call to _getHtmlForWebview
+		webviewView.webview.html = await this._getHtmlForWebview(
+			webviewView.webview
+		);
 
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			console.log(`[Provider] Message received: ${data.type}`);
@@ -2768,7 +2772,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	private _getHtmlForWebview(webview: vscode.Webview): string {
+	// MODIFICATION: Method is now async and reads HTML from a file.
+	private async _getHtmlForWebview(webview: vscode.Webview): Promise<string> {
+		// Define URIs for webview resources
 		const scriptUri = webview.asWebviewUri(
 			vscode.Uri.joinPath(this._extensionUri, "dist", "webview.js")
 		);
@@ -2781,8 +2787,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"style.css"
 			)
 		);
+
+		// Generate a nonce for security
 		const nonce = getNonce();
-		// Ensure model options reflect the current available models and selection
+
+		// Prepare model options HTML
 		const modelOptionsHtml = AVAILABLE_GEMINI_MODELS.map(
 			(modelName) =>
 				`<option value="${modelName}" ${
@@ -2790,60 +2799,32 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				}>${modelName}</option>`
 		).join("");
 
-		return `<!DOCTYPE html>
-		<html lang="en">
-		<head>
-				<meta charset="UTF-8">
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-				<meta http-equiv="Content-Security-Policy" content="
-						default-src 'none';
-						style-src ${webview.cspSource} 'unsafe-inline';
-						img-src ${webview.cspSource} https: data:;
-						font-src ${webview.cspSource};
-						script-src 'nonce-${nonce}';
-						connect-src 'none';
-				">
-				<link href="${stylesUri}" rel="stylesheet">
-				<title>Minovative Mind Chat (BETA)</title>
-		</head>
-		<body>
-				<div class="chat-controls">
-					 <h1>Minovative Mind (BETA)</h1>
-						<div class="button-group">
-								<button id="save-chat-button" title="Save Chat">S</button>
-								<button id="load-chat-button" title="Load Chat">L</button>
-								<button id="clear-chat-button" title="Clear Chat">C</button>
-						</div>
-				</div>
-				<div id="status-area"></div>
-				<div id="chat-container"></div>
-				<div id="input-container">
-					<textarea id="chat-input" rows="3" placeholder="Enter message or /plan [request]..."></textarea>
-					<button id="send-button" title="Send Message">S</button>
-				</div>
-				<div class="section model-selection-section">
-					<h2>AI Model Selection</h2>
-					<div class="model-select-container">
-						<select id="model-select" title="Select AI Model">${modelOptionsHtml}</select>
-					</div>
-				</div>
-				<div class="section api-key-section">
-						<h2>API Key Management</h2>
-						<div class="key-management-controls">
-								<span id="current-key-display">No keys stored</span>
-								<button id="prev-key-button" title="Previous Key" disabled>&lt;</button>
-								<button id="next-key-button" title="Next Key" disabled>&gt;</button>
-								<button id="delete-key-button" title="Delete Current Key" disabled>Del</button>
-						</div>
-						<div class="add-key-container">
-							<input type="password" id="add-key-input" placeholder="Add new Gemini API Key">
-							<button id="add-key-button" title="Add API Key">Add</button>
-						</div>
-						<div id="api-key-status"></div>
-						<p><small>Keys are stored securely using VS Code SecretStorage.</small></p>
-				</div>
-				<script type="module" nonce="${nonce}" src="${scriptUri}"></script>
-		 </body>
-		</html>`;
+		// Construct the URI to the webview's HTML file
+		const htmlFileUri = vscode.Uri.joinPath(
+			this._extensionUri,
+			"src",
+			"sidebar",
+			"webview",
+			"index.html"
+		);
+
+		// Read the HTML file content
+		const fileContentBytes = await vscode.workspace.fs.readFile(htmlFileUri);
+		let htmlContent = Buffer.from(fileContentBytes).toString("utf-8");
+
+		// Replace placeholders in the HTML content
+		// Note: Using global replace (regex with 'g' flag) for __CSP_SOURCE__ and __NONCE__ as they might appear multiple times
+		// or in script tags as well as meta tags. For others, simple replace is fine if they appear once.
+		// Using global replace for all for consistency and safety.
+		htmlContent = htmlContent.replace(/__CSP_SOURCE__/g, webview.cspSource);
+		htmlContent = htmlContent.replace(/__NONCE__/g, nonce);
+		htmlContent = htmlContent.replace(/__STYLES_URI__/g, stylesUri.toString());
+		htmlContent = htmlContent.replace(
+			/__MODEL_OPTIONS_HTML__/g,
+			modelOptionsHtml
+		);
+		htmlContent = htmlContent.replace(/__SCRIPT_URI__/g, scriptUri.toString());
+
+		return htmlContent;
 	}
 } // End class SidebarProvider

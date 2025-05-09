@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="
+                default-src 'none';
+                style-src __CSP_SOURCE__ 'unsafe-inline';
+                img-src __CSP_SOURCE__ https: data:;
+                font-src __CSP_SOURCE__;
+                script-src 'nonce-__NONCE__';
+                connect-src 'none';
+        ">
+  <link href="__STYLES_URI__" rel="stylesheet">
+  <title>Minovative Mind Chat (BETA)</title>
+</head>
+
+<body>
+  <div class="chat-controls">
+    <h1>Minovative Mind (BETA)</h1>
+    <div class="button-group">
+      <button id="save-chat-button" title="Save Chat">S</button>
+      <button id="load-chat-button" title="Load Chat">L</button>
+      <button id="clear-chat-button" title="Clear Chat">C</button>
+    </div>
+  </div>
+  <div id="status-area"></div>
+  <div id="chat-container"></div>
+  <div id="input-container">
+    <textarea id="chat-input" rows="3" placeholder="Enter message or /plan [request]..."></textarea>
+    <button id="send-button" title="Send Message">S</button>
+  </div>
+  <div class="section model-selection-section">
+    <h2>AI Model Selection</h2>
+    <div class="model-select-container">
+      <select id="model-select" title="Select AI Model">__MODEL_OPTIONS_HTML__</select>
+    </div>
+  </div>
+  <div class="section api-key-section">
+    <h2>API Key Management</h2>
+    <div class="key-management-controls">
+      <span id="current-key-display">No keys stored</span>
+      <button id="prev-key-button" title="Previous Key" disabled>&lt;</button>
+      <button id="next-key-button" title="Next Key" disabled>&gt;</button>
+      <button id="delete-key-button" title="Delete Current Key" disabled>Del</button>
+    </div>
+    <div class="add-key-container">
+      <input type="password" id="add-key-input" placeholder="Add new Gemini API Key">
+      <button id="add-key-button" title="Add API Key">Add</button>
+    </div>
+    <div id="api-key-status"></div>
+    <p><small>Keys are stored securely using VS Code SecretStorage.</small></p>
+  </div>
+  <script type="module" nonce="__NONCE__" src="__SCRIPT_URI__"></script>
+</body>
+
+</html>

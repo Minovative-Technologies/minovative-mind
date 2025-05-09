@@ -168,7 +168,9 @@ if (
 				// when appendMessage is called by aiResponseStart.
 				currentAiMessageContentElement = textElement;
 				currentAccumulatedText = ""; // text is already empty string from aiResponseStart
-				textElement.innerHTML = md.render(currentAccumulatedText); // Render initially empty
+				// MODIFICATION 1: Set initial HTML to the loading indicator
+				textElement.innerHTML =
+					'<span class="loading-text">Loading<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
 			} else {
 				// For user messages, system messages, or complete non-streamed AI messages
 				const renderedHtml = md.render(text);
@@ -533,7 +535,7 @@ if (
 				// This call also handles Point 1.a:
 				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
 				// within the appendMessage function (see its definition) for a new AI stream.
-				appendMessage("Model", "", "ai-message");
+				appendMessage("Model", "", "ai-message"); // This will now show the loading indicator due to changes in appendMessage
 				// setLoadingState(true) was called when the user sent the message.
 				// We are now in the process of receiving the response, so loading is still active.
 				// No need to call setLoadingState(false) here.
@@ -566,12 +568,19 @@ if (
 						typeof message.error === "string"
 							? message.error
 							: "Unknown error from AI response end.";
+
+					// MODIFICATION 2: Updated error handling logic for currentAiMessageContentElement
 					if (currentAiMessageContentElement) {
-						// Appends error to the (potentially partially) streamed message content.
-						const errorHtml = `<br><p style="color: var(--vscode-errorForeground);"><strong>Error:</strong> ${md.renderInline(
+						const errorHtml = `<p style="color: var(--vscode-errorForeground);"><strong>Error:</strong> ${md.renderInline(
 							errorMessageContent
 						)}</p>`;
-						currentAiMessageContentElement.innerHTML += errorHtml;
+						if (currentAccumulatedText.trim() === "") {
+							// No actual content received, loading indicator was showing
+							currentAiMessageContentElement.innerHTML = errorHtml; // Replace loading indicator with error
+						} else {
+							// Some content was received, append error after it
+							currentAiMessageContentElement.innerHTML += `<br>${errorHtml}`;
+						}
 					} else {
 						// If no stream was active or element is gone, append as a new system error message.
 						appendMessage(

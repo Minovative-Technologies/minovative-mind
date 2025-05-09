@@ -837,3 +837,42 @@ h2 {
 	height: 1em; /* Ensure consistent height */
 	vertical-align: -0.125em; /* Adjust alignment */
 }
+
+/* --- Loading Indicator Styles --- */
+.loading-text {
+	display: inline-block; /* Ensures the text "Thinking" and dots are on the same line if used together */
+	font-style: italic; /* Matches style of system-message */
+	color: var(
+		--vscode-descriptionForeground
+	); /* Matches color of system-message */
+}
+
+.loading-text .dot {
+	animation: blink 1.4s infinite both; /* 'both' fills forwards and backwards, ensures dot starts invisible if animation hasn't started */
+	display: inline-block; /* Ensure dots are on the same line */
+}
+
+/* Animation delay for each dot to create a sequence */
+.loading-text .dot:nth-child(1) {
+	animation-delay: 0s;
+}
+
+.loading-text .dot:nth-child(2) {
+	animation-delay: 0.2s;
+}
+
+.loading-text .dot:nth-child(3) {
+	animation-delay: 0.4s;
+}
+
+/* Keyframes for the blinking animation */
+@keyframes blink {
+	0%,
+	80%,
+	100% {
+		opacity: 0;
+	} /* Dot is invisible at the start, for a period, and at the end of the cycle */
+	40% {
+		opacity: 1;
+	} /* Dot is visible in the middle of the cycle */
+}
