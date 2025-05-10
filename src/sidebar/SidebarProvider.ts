@@ -17,6 +17,8 @@ import {
 	isModifyFileStep,
 	isRunCommandStep,
 	parseAndValidatePlan,
+	ParsedPlanResult, // Added ParsedPlanResult type import as per instructions
+	CreateFileStep, // Import CreateFileStep for type checking
 } from "../ai/workflowPlanner";
 import { Content, GenerationConfig } from "@google/generative-ai";
 import path = require("path"); // path is already imported here, which is fine.
@@ -692,9 +694,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	// --- MODIFIED: Stage 2 - Generate and Execute Structured JSON Plan ---
+	// planContext is guaranteed non-null by the callers in onDidReceiveMessage.
 	private async _generateAndExecuteStructuredPlan(
-		planContext: PlanGenerationContext // planContext.initialApiKey is the key active when plan explanation was confirmed.
-		// _generateWithRetry will now use its own logic to get the current active key.
+		planContext: PlanGenerationContext
 	): Promise<void> {
 		this.postMessageToWebview({
 			type: "statusUpdate",
@@ -713,26 +715,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			};
 
 			const jsonPlanningPrompt = this._createPlanningPrompt(
-				planContext.originalUserRequest,
-				planContext.projectContext,
-				planContext.editorContext
-					? {
-							instruction: planContext.editorContext.instruction,
-							selectedText: planContext.editorContext.selectedText,
-							fullText: planContext.editorContext.fullText,
-							languageId: planContext.editorContext.languageId,
-							filePath: planContext.editorContext.filePath,
-					  }
+				planContext.type === "chat"
+					? planContext.originalUserRequest
 					: undefined,
+				planContext.projectContext,
+				planContext.type === "editor" ? planContext.editorContext : undefined,
 				planContext.diagnosticsString
 			);
 
-			await this.switchToNextApiKey(); // MODIFIED: Proactively switch API key
+			await this.switchToNextApiKey();
 
-			// MODIFIED: Call to _generateWithRetry - removed planContext.initialApiKey argument (2nd arg)
 			structuredPlanJsonString = await this._generateWithRetry(
 				jsonPlanningPrompt,
-				planContext.modelName,
+				planContext.modelName, // Use the model from the context that generated the explanation
 				undefined,
 				"structured plan generation",
 				jsonGenerationConfig
@@ -753,39 +748,45 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				.replace(/\n?```$/, "")
 				.trim();
 
-			if (
-				!structuredPlanJsonString.startsWith("{") ||
-				!structuredPlanJsonString.endsWith("}")
-			) {
-				console.error(
-					"AI response did not start/end with {}. Raw response:\n",
-					structuredPlanJsonString.substring(0, 500) +
-						(structuredPlanJsonString.length > 500 ? "..." : "")
-				);
-				throw new Error(
-					"AI did not return a valid JSON structure (missing braces)."
-				);
-			}
-
-			const executablePlan: ExecutionPlan | null = parseAndValidatePlan(
+			// Call parseAndValidatePlan and handle ParsedPlanResult
+			const parsedPlanResult: ParsedPlanResult = parseAndValidatePlan(
 				structuredPlanJsonString
 			);
+			const executablePlan: ExecutionPlan | null = parsedPlanResult.plan;
 
 			if (!executablePlan) {
+				// Use error from parsedPlanResult
 				const errorDetail =
+					parsedPlanResult.error ||
 					"Failed to parse or validate the structured JSON plan from AI.";
 				console.error(errorDetail, "Raw JSON:", structuredPlanJsonString);
 				this._addHistoryEntry(
 					"model",
 					`Error: Failed to parse/validate structured plan.\nRaw JSON from AI:\n\`\`\`json\n${structuredPlanJsonString}\n\`\`\``
 				);
-				throw new Error(errorDetail);
+
+				// Keep the context for retry
+				this.postMessageToWebview({
+					type: "structuredPlanParseFailed", // Use the new message type
+					value: {
+						error: errorDetail,
+						failedJson: structuredPlanJsonString, // Send raw JSON for display
+						// Pass back the original request details for the retry button context (handled by webview logic)
+					},
+				});
+				this._currentExecutionOutcome = "failed"; // Mark as failed because this attempt failed
+				// Do NOT clear _pendingPlanGenerationContext here; webview needs it for retry.
+				// Input will be re-enabled by the webview handling 'structuredPlanParseFailed'
+				return; // Stop further processing for this attempt
 			}
+
+			// If parsing is successful, clear the context as we are proceeding to execution.
+			this._pendingPlanGenerationContext = null; // Clear it as we are moving to execution phase
 
 			await this._executePlan(
 				executablePlan,
-				planContext.initialApiKey, // This API key is passed for context/logging but not directly to _generateWithRetry from _executePlan anymore for content generation steps.
-				planContext.modelName
+				planContext.initialApiKey, // Pass the initial API key from the context (may be undefined)
+				planContext.modelName // Pass the model name from the context (should be string)
 			);
 		} catch (error) {
 			console.error("Error in _generateAndExecuteStructuredPlan:", error);
@@ -795,24 +796,67 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				value: `Error generating or executing structured plan: ${errorMsg}`,
 				isError: true,
 			});
+			// Add history entry unless it's a parse error already handled above
 			if (
 				!errorMsg.includes(
 					"Failed to parse or validate the structured JSON plan"
-				)
+				) &&
+				!errorMsg.includes(
+					"AI did not return a valid JSON structure (missing braces)."
+				) &&
+				!errorMsg.includes("Error parsing plan JSON") // Added check for parsing errors caught by try/catch
 			) {
 				this._addHistoryEntry(
 					"model",
 					`Error generating or executing structured plan: ${errorMsg}`
 				);
 			}
-		} finally {
-			this._pendingPlanGenerationContext = null;
-			const wasExecutePlanCalled =
-				this._currentExecutionOutcome !== "pending" &&
-				structuredPlanJsonString.length > 0;
-			if (!wasExecutePlanCalled) {
-				// this.postMessageToWebview({ type: "reenableInput" }); // _executePlan should handle this if called
+			// If an error occurs here (not a parse error handled above that keeps context), clear the context
+			// as the flow won't naturally lead to a retry from the webview for this error type.
+			// This is crucial. If we failed *after* parsing but before execution, or during the generateWithRetry call itself (not a parse error),
+			// we want to clear the pending context so the user can start fresh.
+			if (
+				this._pendingPlanGenerationContext !== null &&
+				!structuredPlanJsonString // If JSON was generated but failed parsing, context remains. If JSON wasn't even generated, clear context.
+			) {
+				// This case covers errors during _generateWithRetry *before* JSON string is obtained.
+				this._pendingPlanGenerationContext = null;
+				console.log(
+					"[generateAndExecuteStructuredPlan] Clearing pending context due to early generation error."
+				);
+			} else {
+				// This covers errors during _executePlan itself, or unexpected states.
+				// If executePlan was called, context was already cleared.
+				// If pending context still exists here unexpectedly, clear it as a fallback.
+				if (this._pendingPlanGenerationContext !== null) {
+					console.warn(
+						"[generateAndExecuteStructuredPlan] Clearing pending context in catch/finally as a fallback."
+					);
+					this._pendingPlanGenerationContext = null;
+				}
 			}
+
+			// Re-enable input on errors not handled by the structuredPlanParseFailed flow
+			// The webview handles re-enabling input after 'structuredPlanParseFailed'.
+			// We only need to explicitly re-enable here for other types of errors.
+			if (this._pendingPlanGenerationContext === null) {
+				// If context was cleared, we assume it's not a parse-retry scenario.
+				this.postMessageToWebview({ type: "reenableInput" });
+			}
+		} finally {
+			// The re-enable input logic in this finally block is potentially redundant
+			// or conflicting with the specific error handling paths above.
+			// Let's simplify this. Re-enable input should happen when:
+			// 1. Plan execution finishes successfully/cancelled/failed.
+			// 2. Structured plan generation fails in a way that allows retry (webview handles re-enable).
+			// 3. Structured plan generation or execution setup fails in a way that *doesn't* allow retry.
+
+			// The current logic for emitting 'reenableInput' within specific catch blocks and the success path
+			// in _executePlan.finally is more targeted. Let's rely on that.
+			// This final block can be primarily for logging cleanup.
+			console.log(
+				"[_generateAndExecuteStructuredPlan.finally] Finished structured plan generation/execution attempt."
+			);
 		}
 	}
 
@@ -1064,7 +1108,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		--- Expected JSON Plan Format ---
 		${jsonFormatDescription}
-		--- End Expected JSON Plan Format ---
+		--- End Expected JSON Format ---
 
 		--- Few Examples ---
 		${fewShotExamples}
@@ -1206,10 +1250,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
+	// apiKey parameter is here for context about the key active when the plan explanation was confirmed,
+	// but AI calls within steps will use the currently active API key obtained via this.getActiveApiKey().
+	// modelName parameter is here for context about which model generated the plan.
 	private async _executePlan(
 		plan: ExecutionPlan,
-		apiKey: string, // API key from planContext (active when plan explanation was confirmed)
-		// For AI content generation steps, _generateWithRetry will use its own current active key.
+		initialApiKey: string, // API key from planContext (active when plan explanation was confirmed)
 		modelName: string
 	): Promise<void> {
 		this._currentExecutionOutcome = "pending";
@@ -1221,6 +1267,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				value: `Starting execution: ${plan.planDescription || "Unnamed Plan"}`,
 			});
 			this._addHistoryEntry("model", "Initiating plan execution...");
+			console.log(
+				`Executing plan generated by ${modelName} (Initial key: ${
+					initialApiKey ? "..." + initialApiKey.slice(-4) : "None"
+				})`
+			);
 
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders || workspaceFolders.length === 0) {
@@ -1238,7 +1289,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				throw new Error("No workspace folder open.");
 			}
 			const rootUri = workspaceFolders[0].uri;
-			let currentApiKeyForExecution = apiKey; // Initialize with the key from plan context for checks.
 
 			await vscode.window.withProgress(
 				{
@@ -1285,8 +1335,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						}
 
 						const stepNumber = index + 1;
+						// Use step.action directly for messages as it's a string
+						const stepActionName = step.action.replace(/_/g, " ");
 						const stepMessageTitle = `Step ${stepNumber}/${totalSteps}: ${
-							step.description || step.action.replace(/_/g, " ")
+							step.description || stepActionName
 						}`;
 						progress.report({
 							message: `${stepMessageTitle}...`,
@@ -1307,77 +1359,75 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						});
 
 						try {
-							// Update currentApiKeyForExecution for pre-check, though _generateWithRetry handles its own key logic.
-							currentApiKeyForExecution =
-								this.getActiveApiKey() || currentApiKeyForExecution;
-							if (!currentApiKeyForExecution) {
+							// Check for active key *before* any potential AI calls in this step,
+							// although _generateWithRetry will also handle this.
+							const currentActiveKey = this.getActiveApiKey();
+							// Check if the step requires AI generation AND no key is active
+							if (
+								!currentActiveKey &&
+								((step.action === PlanStepAction.CreateFile &&
+									(step as CreateFileStep).generate_prompt) ||
+									step.action === PlanStepAction.ModifyFile)
+							) {
+								// AI generation is required for this step, but no key is active.
 								throw new Error(
-									"No active API key available during plan execution step (pre-check)."
+									"No active API key available for AI generation step."
 								);
 							}
 
-							switch (step.action) {
-								case PlanStepAction.CreateDirectory:
-									if (isCreateDirectoryStep(step)) {
-										const dirUri = vscode.Uri.joinPath(rootUri, step.path);
-										await vscode.workspace.fs.createDirectory(dirUri);
-										console.log(`${step.action} OK: ${step.path}`);
-										this._addHistoryEntry(
-											"model",
-											`Step ${stepNumber} OK: Created directory \`${step.path}\``
-										);
-									} else {
-										throw new Error(`Invalid ${step.action} structure.`);
-									}
-									break;
-								case PlanStepAction.CreateFile:
-									if (isCreateFileStep(step)) {
-										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
-										await vscode.workspace.fs.writeFile(
-											fileUri,
-											Buffer.from("", "utf-8")
-										);
-										const document = await vscode.workspace.openTextDocument(
-											fileUri
-										);
-										const editor = await vscode.window.showTextDocument(
-											document,
-											{
-												preview: false,
-												viewColumn: vscode.ViewColumn.Active,
-												preserveFocus: false,
-											}
-										);
+							// *** START MODIFIED SECTION: Replace switch with if/else if ***
+							if (isCreateDirectoryStep(step)) {
+								const dirUri = vscode.Uri.joinPath(rootUri, step.path);
+								await vscode.workspace.fs.createDirectory(dirUri);
+								console.log(`${step.action} OK: ${step.path}`);
+								this._addHistoryEntry(
+									"model",
+									`Step ${stepNumber} OK: Created directory \`${step.path}\``
+								);
+							} else if (isCreateFileStep(step)) {
+								const fileUri = vscode.Uri.joinPath(rootUri, step.path);
+								await vscode.workspace.fs.writeFile(
+									fileUri,
+									Buffer.from("", "utf-8")
+								);
+								const document = await vscode.workspace.openTextDocument(
+									fileUri
+								);
+								const editor = await vscode.window.showTextDocument(document, {
+									preview: false,
+									viewColumn: vscode.ViewColumn.Active,
+									preserveFocus: false,
+								});
 
-										if (step.content !== undefined) {
-											progress.report({
-												message: `Step ${stepNumber}: Typing content into ${path.basename(
-													step.path
-												)}...`,
-											});
-											await this._typeContentIntoEditor(
-												editor,
-												step.content,
-												progressToken,
-												progress
-											);
-											console.log(
-												`${step.action} OK: Typed content into ${step.path}`
-											);
-											this._addHistoryEntry(
-												"model",
-												`Step ${stepNumber} OK: Typed content into new file \`${step.path}\``
-											);
-										} else if (step.generate_prompt) {
-											this.postMessageToWebview({
-												type: "statusUpdate",
-												value: `Step ${stepNumber}/${totalSteps}: Generating content for ${step.path}...`,
-											});
-											progress.report({
-												message: `Step ${stepNumber}: Generating content for ${step.path} (preparing)...`,
-											});
+								if (step.content !== undefined) {
+									progress.report({
+										message: `Step ${stepNumber}: Typing content into ${path.basename(
+											step.path
+										)}...`,
+									});
+									await this._typeContentIntoEditor(
+										editor,
+										step.content,
+										progressToken,
+										progress
+									);
+									console.log(
+										`${step.action} OK: Typed content into ${step.path}`
+									);
+									this._addHistoryEntry(
+										"model",
+										`Step ${stepNumber} OK: Typed content into new file \`${step.path}\``
+									);
+								} else if (step.generate_prompt) {
+									this.postMessageToWebview({
+										type: "statusUpdate",
+										value: `Step ${stepNumber}/${totalSteps}: Generating content for ${step.path}...`,
+									});
+									progress.report({
+										message: `Step ${stepNumber}: Generating content for ${step.path} (preparing)...`,
+									});
 
-											const generationPrompt = `
+									const generationPrompt = `
 											You are an AI programmer tasked with generating file content.
 											**Critical Instruction:** Generate the **complete and comprehensive** file content based *fully* on the user's instructions below. Do **not** provide a minimal, placeholder, or incomplete implementation unless the instructions *specifically* ask for it. Fulfill the entire request.
 											**Output Format:** Provide ONLY the raw code or text for the file. Do NOT include any explanations, or markdown formatting like backticks. Add comments in the code to help the user understand the code and the entire response MUST be only the final file content. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
@@ -1388,115 +1438,105 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											Complete File Content:
 											`;
 
-											await this.switchToNextApiKey(); // MODIFIED: Proactively switch API key
+									await this.switchToNextApiKey(); // Proactively switch API key before AI call
 
-											const streamCallbacks = {
-												onChunk: async (_chunk: string) => {
-													if (progressToken.isCancellationRequested) {
-														console.log(
-															"AI content generation streaming cancelled during chunk processing."
-														);
-														throw new Error("Operation cancelled by user.");
-													}
-													progress.report({
-														message: `Streaming content for ${path.basename(
-															step.path
-														)}...`,
-													});
-												},
-											};
-
-											// MODIFIED: Call to _generateWithRetry - removed currentApiKeyForExecution argument (2nd arg)
-											const generatedContentFromAI =
-												await this._generateWithRetry(
-													generationPrompt,
-													modelName,
-													undefined,
-													`plan step ${stepNumber} (create file content)`,
-													undefined,
-													streamCallbacks
+									const streamCallbacks = {
+										onChunk: async (_chunk: string) => {
+											if (progressToken.isCancellationRequested) {
+												console.log(
+													"AI content generation streaming cancelled during chunk processing."
 												);
-
-											const cleanedGeneratedContent = generatedContentFromAI
-												.replace(/^```[a-z]*\n?/, "")
-												.replace(/\n?```$/, "")
-												.trim();
-
+												throw new Error("Operation cancelled by user.");
+											}
 											progress.report({
-												message: `Step ${stepNumber}: Typing generated content into ${path.basename(
+												message: `Streaming content for ${path.basename(
 													step.path
 												)}...`,
 											});
-											await this._typeContentIntoEditor(
-												editor,
-												cleanedGeneratedContent,
-												progressToken,
-												progress
-											);
+										},
+									};
 
-											// Error check after generation (e.g. if _generateWithRetry itself returned an error string)
-											if (
-												generatedContentFromAI
-													.toLowerCase()
-													.startsWith("error:") ||
-												generatedContentFromAI === ERROR_QUOTA_EXCEEDED
-											) {
-												throw new Error(
-													`AI content generation failed for ${step.path}: ${generatedContentFromAI}`
-												);
-											}
+									const generatedContentFromAI = await this._generateWithRetry(
+										generationPrompt,
+										this.getSelectedModelName(), // Use the currently selected model
+										undefined,
+										`plan step ${stepNumber} (create file content)`,
+										undefined,
+										streamCallbacks
+									);
 
-											console.log(
-												`${step.action} OK: Generated and typed AI content into ${step.path}`
-											);
-											this._addHistoryEntry(
-												"model",
-												`Step ${stepNumber} OK: Generated and typed AI content into new file \`${step.path}\``
-											);
-										} else {
-											throw new Error(
-												"CreateFileStep must have 'content' or 'generate_prompt'."
-											);
-										}
-									} else {
-										throw new Error(`Invalid ${step.action} structure.`);
+									const cleanedGeneratedContent = generatedContentFromAI
+										.replace(/^```[a-z]*\n?/, "")
+										.replace(/\n?```$/, "")
+										.trim();
+
+									// Error check after generation (e.g. if _generateWithRetry itself returned an error string)
+									if (
+										generatedContentFromAI.toLowerCase().startsWith("error:") ||
+										generatedContentFromAI === ERROR_QUOTA_EXCEEDED
+									) {
+										throw new Error(
+											`AI content generation failed for ${step.path}: ${generatedContentFromAI}`
+										);
 									}
-									break;
-								case PlanStepAction.ModifyFile:
-									if (isModifyFileStep(step)) {
-										const fileUri = vscode.Uri.joinPath(rootUri, step.path);
-										await vscode.window.showTextDocument(fileUri, {
-											preview: false,
-											viewColumn: vscode.ViewColumn.Active,
-										});
-										let existingContent = "";
-										try {
-											const contentBytes = await vscode.workspace.fs.readFile(
-												fileUri
-											);
-											existingContent =
-												Buffer.from(contentBytes).toString("utf-8");
-										} catch (readError: any) {
-											if (
-												readError instanceof vscode.FileSystemError &&
-												readError.code === "FileNotFound"
-											) {
-												throw new Error(
-													`File to modify not found: \`${step.path}\``
-												);
-											}
-											throw readError;
-										}
 
-										this.postMessageToWebview({
-											type: "statusUpdate",
-											value: `Step ${stepNumber}/${totalSteps}: Preparing to generate modifications for ${step.path}...`,
-										});
-										progress.report({
-											message: `Step ${stepNumber}: Generating modifications for ${step.path} (preparing)...`,
-										});
+									progress.report({
+										message: `Step ${stepNumber}: Typing generated content into ${path.basename(
+											step.path
+										)}...`,
+									});
+									await this._typeContentIntoEditor(
+										editor,
+										cleanedGeneratedContent,
+										progressToken,
+										progress
+									);
 
-										const modificationPrompt = `
+									console.log(
+										`${step.action} OK: Generated and typed AI content into ${step.path}`
+									);
+									this._addHistoryEntry(
+										"model",
+										`Step ${stepNumber} OK: Generated and typed AI content into new file \`${step.path}\``
+									);
+								} else {
+									throw new Error(
+										"CreateFileStep must have 'content' or 'generate_prompt'."
+									);
+								}
+							} else if (isModifyFileStep(step)) {
+								const fileUri = vscode.Uri.joinPath(rootUri, step.path);
+								await vscode.window.showTextDocument(fileUri, {
+									preview: false,
+									viewColumn: vscode.ViewColumn.Active,
+								});
+								let existingContent = "";
+								try {
+									const contentBytes = await vscode.workspace.fs.readFile(
+										fileUri
+									);
+									existingContent = Buffer.from(contentBytes).toString("utf-8");
+								} catch (readError: any) {
+									if (
+										readError instanceof vscode.FileSystemError &&
+										readError.code === "FileNotFound"
+									) {
+										throw new Error(
+											`File to modify not found: \`${step.path}\``
+										);
+									}
+									throw readError;
+								}
+
+								this.postMessageToWebview({
+									type: "statusUpdate",
+									value: `Step ${stepNumber}/${totalSteps}: Preparing to generate modifications for ${step.path}...`,
+								});
+								progress.report({
+									message: `Step ${stepNumber}: Generating modifications for ${step.path} (preparing)...`,
+								});
+
+								const modificationPrompt = `
 										You are an AI programmer tasked with modifying an existing file.
 										**Critical Instruction:** Modify the code based *fully* on the user's instructions below. Ensure the modifications are **complete and comprehensive**, addressing the entire request. Do **not** make partial changes or leave placeholders unless the instructions *specifically* ask for it.
 										**Output Format:** Provide ONLY the complete, raw, modified code for the **entire file**. Do NOT include explanations, or markdown formatting. Add comments in the code to help the user understand the code and the entire response MUST be the final, complete file content after applying all requested modifications.
@@ -1513,172 +1553,165 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 										Complete Modified File Content:
 										`;
 
-										await this.switchToNextApiKey(); // MODIFIED: Proactively switch API key
+								await this.switchToNextApiKey(); // Proactively switch API key before AI call
 
-										const streamCallbacks = {
-											onChunk: (_chunk: string) => {
-												progress.report({
-													message: `Step ${stepNumber}: Generating file modifications for ${step.path} (streaming)...`,
-												});
-											},
-										};
+								const streamCallbacks = {
+									onChunk: (_chunk: string) => {
+										progress.report({
+											message: `Step ${stepNumber}: Generating file modifications for ${step.path} (streaming)...`,
+										});
+									},
+								};
 
-										// MODIFIED: Call to _generateWithRetry - removed currentApiKeyForExecution argument (2nd arg)
-										let modifiedContent = await this._generateWithRetry(
-											modificationPrompt,
-											modelName,
-											undefined,
-											`plan step ${stepNumber} (modify file)`,
-											undefined,
-											streamCallbacks
+								let modifiedContent = await this._generateWithRetry(
+									modificationPrompt,
+									this.getSelectedModelName(), // Use the currently selected model
+									undefined,
+									`plan step ${stepNumber} (modify file)`,
+									undefined,
+									streamCallbacks
+								);
+
+								if (
+									modifiedContent.toLowerCase().startsWith("error:") ||
+									modifiedContent === ERROR_QUOTA_EXCEEDED
+								) {
+									throw new Error(
+										`AI modification failed for ${step.path}: ${modifiedContent}`
+									);
+								}
+								modifiedContent = modifiedContent
+									.replace(/^```[a-z]*\n?/, "")
+									.replace(/\n?```$/, "")
+									.trim();
+								if (modifiedContent !== existingContent) {
+									const edit = new vscode.WorkspaceEdit();
+									const document = await vscode.workspace.openTextDocument(
+										fileUri
+									);
+									const fullRange = new vscode.Range(
+										document.positionAt(0),
+										document.positionAt(document.getText().length)
+									);
+									edit.replace(fileUri, fullRange, modifiedContent);
+									const success = await vscode.workspace.applyEdit(edit);
+									if (!success) {
+										throw new Error(
+											`Failed to apply modifications to \`${step.path}\``
 										);
-
-										if (
-											modifiedContent.toLowerCase().startsWith("error:") ||
-											modifiedContent === ERROR_QUOTA_EXCEEDED
-										) {
+									}
+									console.log(`${step.action} OK: ${step.path}`);
+									this._addHistoryEntry(
+										"model",
+										`Step ${stepNumber} OK: Modified file \`${step.path}\``
+									);
+								} else {
+									console.log(
+										`Step ${stepNumber}: AI returned identical content for ${step.path}. Skipping write.`
+									);
+									this._addHistoryEntry(
+										"model",
+										`Step ${stepNumber} OK: Modification for \`${step.path}\` resulted in no changes.`
+									);
+								}
+							} else if (isRunCommandStep(step)) {
+								const commandToRun = step.command;
+								const userChoice = await vscode.window.showWarningMessage(
+									`The plan wants to run a command in the terminal:\n\n\`${commandToRun}\`\n\nThis could install packages or modify your system. Allow?`,
+									{ modal: true },
+									"Allow Command",
+									"Skip Command"
+								);
+								if (progressToken.isCancellationRequested) {
+									throw new Error("Operation cancelled by user.");
+								}
+								if (userChoice === "Allow Command") {
+									try {
+										const term = vscode.window.createTerminal({
+											name: `Plan Step ${stepNumber}`,
+											cwd: rootUri.fsPath,
+										});
+										term.sendText(commandToRun);
+										term.show();
+										this.postMessageToWebview({
+											type: "statusUpdate",
+											value: `Step ${stepNumber}: Running command '${commandToRun}' in terminal...`,
+										});
+										this._addHistoryEntry(
+											"model",
+											`Step ${stepNumber} OK: User allowed running command \`${commandToRun}\`.`
+										);
+										await new Promise<void>((resolve, reject) => {
+											const timeoutId = setTimeout(resolve, 2000);
+											const cancellationListener =
+												progressToken.onCancellationRequested(() => {
+													clearTimeout(timeoutId);
+													cancellationListener.dispose();
+													reject(new Error("Operation cancelled by user."));
+												});
+											timeoutId.unref();
+											if (progressToken.isCancellationRequested) {
+												clearTimeout(timeoutId);
+												cancellationListener.dispose();
+												reject(new Error("Operation cancelled by user."));
+											}
+										}).catch((err) => {
+											if (
+												err instanceof Error &&
+												err.message === "Operation cancelled by user."
+											) {
+												throw err;
+											}
+											console.error("Error during command wait:", err);
 											throw new Error(
-												`AI modification failed for ${step.path}: ${modifiedContent}`
+												`Internal error during command wait: ${err}`
 											);
+										});
+									} catch (termError) {
+										if (
+											termError instanceof Error &&
+											termError.message === "Operation cancelled by user."
+										) {
+											throw termError;
 										}
-										modifiedContent = modifiedContent
-											.replace(/^```[a-z]*\n?/, "")
-											.replace(/\n?```$/, "")
-											.trim();
-										if (modifiedContent !== existingContent) {
-											const edit = new vscode.WorkspaceEdit();
-											const document = await vscode.workspace.openTextDocument(
-												fileUri
-											);
-											const fullRange = new vscode.Range(
-												document.positionAt(0),
-												document.positionAt(document.getText().length)
-											);
-											edit.replace(fileUri, fullRange, modifiedContent);
-											const success = await vscode.workspace.applyEdit(edit);
-											if (!success) {
-												throw new Error(
-													`Failed to apply modifications to \`${step.path}\``
-												);
-											}
-											console.log(`${step.action} OK: ${step.path}`);
-											this._addHistoryEntry(
-												"model",
-												`Step ${stepNumber} OK: Modified file \`${step.path}\``
-											);
-										} else {
-											console.log(
-												`Step ${stepNumber}: AI returned identical content for ${step.path}. Skipping write.`
-											);
-											this._addHistoryEntry(
-												"model",
-												`Step ${stepNumber} OK: Modification for \`${step.path}\` resulted in no changes.`
-											);
-										}
-									} else {
-										throw new Error(`Invalid ${step.action} structure.`);
-									}
-									break;
-								case PlanStepAction.RunCommand:
-									if (isRunCommandStep(step)) {
-										const commandToRun = step.command;
-										const userChoice = await vscode.window.showWarningMessage(
-											`The plan wants to run a command in the terminal:\n\n\`${commandToRun}\`\n\nThis could install packages or modify your system. Allow?`,
-											{ modal: true },
-											"Allow Command",
-											"Skip Command"
+										const errorMsg =
+											termError instanceof Error
+												? termError.message
+												: String(termError);
+										throw new Error(
+											`Failed to launch or wait for terminal for command '${commandToRun}': ${errorMsg}`
 										);
-										if (progressToken.isCancellationRequested) {
-											throw new Error("Operation cancelled by user.");
-										}
-										if (userChoice === "Allow Command") {
-											try {
-												const term = vscode.window.createTerminal({
-													name: `Plan Step ${stepNumber}`,
-													cwd: rootUri.fsPath,
-												});
-												term.sendText(commandToRun);
-												term.show();
-												this.postMessageToWebview({
-													type: "statusUpdate",
-													value: `Step ${stepNumber}: Running command '${commandToRun}' in terminal...`,
-												});
-												this._addHistoryEntry(
-													"model",
-													`Step ${stepNumber} OK: User allowed running command \`${commandToRun}\`.`
-												);
-												await new Promise<void>((resolve, reject) => {
-													const timeoutId = setTimeout(resolve, 2000);
-													const cancellationListener =
-														progressToken.onCancellationRequested(() => {
-															clearTimeout(timeoutId);
-															cancellationListener.dispose();
-															reject(new Error("Operation cancelled by user."));
-														});
-													timeoutId.unref();
-													if (progressToken.isCancellationRequested) {
-														clearTimeout(timeoutId);
-														cancellationListener.dispose();
-														reject(new Error("Operation cancelled by user."));
-													}
-												}).catch((err) => {
-													if (
-														err instanceof Error &&
-														err.message === "Operation cancelled by user."
-													) {
-														throw err;
-													}
-													console.error("Error during command wait:", err);
-													throw new Error(
-														`Internal error during command wait: ${err}`
-													);
-												});
-											} catch (termError) {
-												if (
-													termError instanceof Error &&
-													termError.message === "Operation cancelled by user."
-												) {
-													throw termError;
-												}
-												const errorMsg =
-													termError instanceof Error
-														? termError.message
-														: String(termError);
-												throw new Error(
-													`Failed to launch or wait for terminal for command '${commandToRun}': ${errorMsg}`
-												);
-											}
-										} else {
-											this.postMessageToWebview({
-												type: "statusUpdate",
-												value: `Step ${stepNumber}: Skipped command '${commandToRun}'.`,
-												isError: false,
-											});
-											this._addHistoryEntry(
-												"model",
-												`Step ${stepNumber} SKIPPED: User did not allow command \`${commandToRun}\`.`
-											);
-										}
-									} else {
-										throw new Error("Invalid RunCommandStep structure.");
 									}
-									break;
-								default:
-									const exhaustiveCheck: never = step.action;
-									console.warn(`Unsupported plan action: ${exhaustiveCheck}`);
+								} else {
 									this.postMessageToWebview({
 										type: "statusUpdate",
-										value: `Step ${stepNumber}: Skipped unsupported action ${step.action}.`,
+										value: `Step ${stepNumber}: Skipped command '${commandToRun}'.`,
 										isError: false,
 									});
 									this._addHistoryEntry(
 										"model",
-										`Step ${stepNumber} SKIPPED: Unsupported action ${step.action}`
+										`Step ${stepNumber} SKIPPED: User did not allow command \`${commandToRun}\`.`
 									);
-									break;
+								}
 							}
+							// Check if it's any other unexpected action type not covered by type guards
+							else {
+								const exhaustiveCheck: any = step.action; // This will catch any PlanStepAction member not explicitly handled above
+								console.warn(`Unsupported plan action: ${exhaustiveCheck}`);
+								this.postMessageToWebview({
+									type: "statusUpdate",
+									value: `Step ${stepNumber}: Skipped unsupported action ${step.action}.`,
+									isError: false, // Not an error, just skipped
+								});
+								this._addHistoryEntry(
+									"model",
+									`Step ${stepNumber} SKIPPED: Unsupported action ${step.action}`
+								);
+							}
+							// *** END MODIFIED SECTION: Replace switch with if/else if ***
 						} catch (error) {
-							executionOk = false;
+							// Error specific to this step
+							executionOk = false; // Mark overall execution as not OK
 							const errorMsg =
 								error instanceof Error ? error.message : String(error);
 							console.error(
@@ -1691,32 +1724,45 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								errorMsg === "Operation cancelled by user." ||
 								errorMsg.includes("Operation cancelled by user.");
 
+							// Update overall execution outcome only if not already set by a cancellation
 							if (isCancellationError) {
-								this._currentExecutionOutcome = "cancelled";
-							} else if (this._currentExecutionOutcome === "pending") {
-								this._currentExecutionOutcome = "failed";
+								if (this._currentExecutionOutcome === "pending") {
+									this._currentExecutionOutcome = "cancelled";
+								}
+							} else {
+								if (this._currentExecutionOutcome === "pending") {
+									this._currentExecutionOutcome = "failed";
+								}
 							}
 
 							const displayMsg = isCancellationError
-								? "Plan execution cancelled by user."
-								: `Error on Step ${stepNumber}: ${errorMsg}`;
+								? "Plan execution cancelled by user." // User-facing message for cancellation
+								: `Error on Step ${stepNumber}: ${errorMsg}`; // User-facing message for other errors
 							const historyMsg = isCancellationError
-								? "Plan execution cancelled by user."
-								: `Step ${stepNumber} FAILED: ${errorMsg}`;
+								? "Plan execution cancelled by user." // History message for cancellation
+								: `Step ${stepNumber} FAILED: ${errorMsg}`; // History message for step failure
 
 							this.postMessageToWebview({
 								type: "statusUpdate",
 								value: displayMsg,
-								isError: !isCancellationError,
+								isError: !isCancellationError, // Show as error if not cancelled
 							});
-							this._addHistoryEntry("model", historyMsg);
 
+							// Avoid adding duplicate cancellation message to history if already added by the progress token listener
+							// Add history message for failure
+							if (!isCancellationError) {
+								this._addHistoryEntry("model", historyMsg);
+							}
+
+							// Stop the progress loop and the entire plan execution on error or cancellation
 							if (isCancellationError) {
-								return;
+								return; // Exit the async progress function
 							} else {
-								break;
+								break; // Exit the step loop, then the progress function will complete
 							}
 						}
+
+						// Check for cancellation *after* the step completes but before the next iteration
 						if (progressToken.isCancellationRequested) {
 							console.log(
 								`Plan execution cancelled by VS Code progress UI after step ${
@@ -1730,13 +1776,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							this._addHistoryEntry(
 								"model",
 								"Plan execution cancelled by user."
-							);
-							this._currentExecutionOutcome = "cancelled";
+							); // Add history entry for cancellation
+							this._currentExecutionOutcome = "cancelled"; // Set outcome
 							executionOk = false;
-							return;
+							return; // Exit the async progress function
 						}
 					}
 
+					// If the loop completes without hitting a 'break' or 'return' due to error/cancellation
 					if (executionOk && this._currentExecutionOutcome === "pending") {
 						this._currentExecutionOutcome = "success";
 					}
@@ -1752,23 +1799,32 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				}
 			);
 
+			// This block is outside the progress function. It will be reached after the progress
+			// function resolves (either by completing all steps, breaking, or returning early).
+			// The outcome should already be set within the progress function.
+			// This check ensures the outcome is *definitely* set if the progress function somehow
+			// finished without setting it (shouldn't happen with the current logic, but defensive).
 			if (this._currentExecutionOutcome === "pending" && executionOk) {
 				this._currentExecutionOutcome = "success";
 			}
 		} catch (error) {
-			executionOk = false;
+			// This catches unexpected errors that happen *outside* the per-step loop within the progress function,
+			// e.g., errors during progress initialization or setup phase.
+			executionOk = false; // Mark overall execution as not OK
 			const errorMsg = error instanceof Error ? error.message : String(error);
-			console.error("Unexpected error during plan execution:", error);
+			console.error("Unexpected error during plan execution setup:", error); // Changed log message
 
 			const isCancellationError =
 				errorMsg === "Operation cancelled by user." ||
 				errorMsg.includes("Operation cancelled by user.");
 			if (isCancellationError) {
 				if (this._currentExecutionOutcome === "pending") {
+					// Only set if not already set
 					this._currentExecutionOutcome = "cancelled";
 				}
 			} else {
 				if (this._currentExecutionOutcome === "pending") {
+					// Only set if not already set
 					this._currentExecutionOutcome = "failed";
 				}
 			}
@@ -1785,20 +1841,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				value: displayMsg,
 				isError: !isCancellationError,
 			});
+			// Add history entry if it's not a cancellation message potentially duplicated
 			const lastHistoryText =
 				this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
 			if (
 				lastHistoryText !== historyMsg &&
-				!lastHistoryText?.startsWith("Step ") &&
+				!lastHistoryText?.startsWith("Step ") && // Avoid adding 'failed' right after a step fails message
 				lastHistoryText !== "Plan execution cancelled by user."
 			) {
 				this._addHistoryEntry("model", historyMsg);
 			}
 		} finally {
+			// This finally block runs after the try/catch block completes or exits early.
+			// It ensures final status updates and input re-enabling happen.
 			console.log(
 				"Plan execution finished. Outcome: ",
 				this._currentExecutionOutcome
 			);
+			// Final fallback check for outcome
 			if (this._currentExecutionOutcome === "pending") {
 				console.warn(
 					"Execution outcome was still 'pending' in finally. Defaulting based on executionOk."
@@ -1806,24 +1866,23 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				this._currentExecutionOutcome = executionOk ? "success" : "failed";
 			}
 
+			// Post final status message based on the determined outcome.
 			switch (this._currentExecutionOutcome) {
 				case "success":
+					// Check if the last history entry already reports successful completion (e.g., no steps plan)
 					const lastHistoryForSuccess =
 						this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
 					if (lastHistoryForSuccess === "Plan execution finished (no steps).") {
-						if (this.postMessageToWebview) {
-							this.postMessageToWebview({
-								type: "statusUpdate",
-								value: "Plan has no steps. Execution finished.",
-							});
-						}
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: "Plan has no steps. Execution finished.",
+						});
 					} else {
-						if (this.postMessageToWebview) {
-							this.postMessageToWebview({
-								type: "statusUpdate",
-								value: "Plan execution completed successfully.",
-							});
-						}
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: "Plan execution completed successfully.",
+						});
+						// Avoid adding duplicate history entry
 						if (
 							lastHistoryForSuccess !== "Plan execution finished successfully."
 						) {
@@ -1835,34 +1894,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					}
 					break;
 				case "cancelled":
-					if (this.postMessageToWebview) {
-						this.postMessageToWebview({
-							type: "statusUpdate",
-							value:
-								"Plan execution cancelled by user. Changes are being reverted.",
-							isError: false,
-						});
-					}
-					this._addHistoryEntry(
-						"model",
-						"Changes reverted due to cancellation."
-					);
+					// Status update and history entry for cancellation are handled within the progress cancellation path.
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value:
+							"Plan execution cancelled by user. Changes are being reverted.",
+						isError: false, // Cancellation is user intent, not an "error" state technically
+					});
 					break;
 				case "failed":
-					if (this.postMessageToWebview) {
-						this.postMessageToWebview({
-							type: "statusUpdate",
-							value: "Plan execution failed. Changes are being reverted.",
-							isError: true,
-						});
-					}
-					this._addHistoryEntry("model", "Changes reverted due to failure.");
+					// Status update and history entry for failure are handled within the step error catch or outer catch.
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Plan execution failed. Changes are being reverted.",
+						isError: true,
+					});
 					break;
 			}
 
-			if (this.postMessageToWebview) {
-				this.postMessageToWebview({ type: "reenableInput" });
-			}
+			// Re-enable input regardless of outcome, as the plan execution flow is now complete.
+			// This happens after all status updates.
+			this.postMessageToWebview({ type: "reenableInput" });
 		}
 	}
 
@@ -1880,7 +1932,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					reject(
 						new Error(
 							`Failed to execute 'git diff --staged': ${error.message}${
-								stderr ? `\\nStderr: ${stderr}` : ""
+								stderr ? `\nStderr: ${stderr}` : ""
 							}`
 						)
 					);
@@ -2570,22 +2622,61 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					// _pendingPlanGenerationContext contains initialApiKey and modelName
 					// These are passed to _generateAndExecuteStructuredPlan
 					if (this._pendingPlanGenerationContext) {
-						await this._generateAndExecuteStructuredPlan(
-							this._pendingPlanGenerationContext
-						);
+						// Make a copy of the context before calling, as the call might clear it.
+						const contextForExecution = {
+							...this._pendingPlanGenerationContext,
+						};
+						await this._generateAndExecuteStructuredPlan(contextForExecution);
 					} else {
 						console.error(
 							"Received confirmPlanExecution but _pendingPlanGenerationContext was missing."
 						);
 						this.postMessageToWebview({
 							type: "statusUpdate",
-							value: "Error: Failed to confirm plan - context missing.",
+							value:
+								"Error: Failed to confirm plan - context missing. Please try initiating the plan again.",
 							isError: true,
 						});
 						this.postMessageToWebview({ type: "reenableInput" });
 					}
 					break;
 				}
+				// START MODIFICATION: Add case for retryStructuredPlanGeneration
+				case "retryStructuredPlanGeneration": {
+					if (this._pendingPlanGenerationContext) {
+						// If retry data (like attempt count or previous error) is sent from webview,
+						// it should be part of data.value and used to update this._pendingPlanGenerationContext.diagnosticsString
+						// For now, we assume _pendingPlanGenerationContext.diagnosticsString might have been updated by webview if needed.
+						// Example: if (data.value && data.value.retryAttemptInfo) {
+						//   this._pendingPlanGenerationContext.diagnosticsString = `${this._pendingPlanGenerationContext.diagnosticsString || ''} '(Attempt ${data.value.retryAttemptInfo})'`;
+						// }
+
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: "Retrying structured plan generation...",
+						});
+						this._addHistoryEntry(
+							"model", // System/Model action
+							"User requested retry of structured plan generation due to parse error."
+						);
+						// Make a copy of the context before calling, as the call might clear it.
+						const contextForRetry = { ...this._pendingPlanGenerationContext };
+						await this._generateAndExecuteStructuredPlan(contextForRetry);
+					} else {
+						console.error(
+							"Received retryStructuredPlanGeneration but _pendingPlanGenerationContext was missing."
+						);
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value:
+								"Error: Failed to retry plan generation - context missing. Please try initiating the plan again.",
+							isError: true,
+						});
+						this.postMessageToWebview({ type: "reenableInput" });
+					}
+					break;
+				}
+				// END MODIFICATION
 				case "cancelPlanExecution": {
 					this._pendingPlanGenerationContext = null;
 					this.postMessageToWebview({
@@ -2709,16 +2800,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								"[SidebarProvider] WebviewReady: _pendingPlanGenerationContext was present but could not form planDataForRestore.",
 								planContext
 							);
+							// If context is malformed on restore, clear it and re-enable input
+							this._pendingPlanGenerationContext = null;
+							this.postMessageToWebview({ type: "reenableInput" });
 						}
-					}
-
-					// Conditionally re-enable general input in the webview.
-					// Only re-enable if there isn't a pending plan that needs user confirmation.
-					// If a plan is being restored for confirmation, the webview UI should handle input state accordingly.
-					if (!this._pendingPlanGenerationContext) {
+					} else {
 						this.postMessageToWebview({ type: "reenableInput" });
 					}
-					// END MODIFIED SECTION FOR webviewReady
 					break;
 				case "reenableInput":
 					this.postMessageToWebview({ type: "reenableInput" });

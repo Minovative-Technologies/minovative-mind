@@ -31,6 +31,14 @@
     <textarea id="chat-input" rows="3" placeholder="Enter message or /plan [request]..."></textarea>
     <button id="send-button" title="Send Message">S</button>
   </div>
+  <!-- Added plan-parse-error-container as per instructions -->
+  <div id="plan-parse-error-container" style="display: none;">
+    <h3>Plan Generation Failed</h3>
+    <p id="plan-parse-error-display" class="error-message-text"></p>
+    <h4>Failed JSON (previous attempt):</h4>
+    <pre><code id="failed-json-display"></code></pre>
+    <button id="retry-generation-button">Retry Generation</button>
+  </div>
   <div class="section model-selection-section">
     <h2>AI Model Selection</h2>
     <div class="model-select-container">

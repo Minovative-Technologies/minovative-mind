@@ -810,6 +810,101 @@ h2 {
 	/* Visibility is ensured by color inherited from button. */
 }
 
+/* --- Plan Parse Error Display --- */
+/* Styles for the container that shows up when plan parsing fails. */
+#plan-parse-error-container {
+	/* Styled similar to #plan-confirmation-container for visual consistency in UI sections. */
+	border: 1px solid
+		var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder)); /* Uses active/focus border like confirmation */
+	background-color: var(
+		--vscode-inputOption-activeBackground
+	); /* Uses active background like confirmation */
+	padding: var(--container-padding);
+	margin: var(--element-spacing) 0;
+	text-align: center; /* Center align contents (like buttons) */
+	border-radius: var(--border-radius);
+	flex-shrink: 0; /* Prevent container from shrinking in flex layouts */
+}
+
+/* Styles for the actual error message text within the parse error container. */
+#plan-parse-error-display {
+	color: var(
+		--vscode-errorForeground
+	); /* Standard VS Code error text color for high visibility. */
+	font-weight: 500; /* Slightly bolder text for emphasis. */
+	margin-bottom: var(--element-spacing); /* Spacing below the error message. */
+	text-align: left; /* Left-align text for better readability of potentially multi-line error messages. */
+	white-space: pre-wrap; /* Allow wrapping of long error messages while preserving line breaks. */
+}
+
+/* Styles for displaying the failed JSON content, assuming #failed-json-display is the ID on a <pre> element. */
+#failed-json-display {
+	max-height: 200px; /* Limit the height to prevent the block from becoming too large. */
+	overflow-y: auto; /* Add a scrollbar if the JSON content exceeds max-height. */
+	background-color: var(
+		--vscode-textCodeBlock-background,
+		rgba(0, 0, 0, 0.1)
+	); /* Use standard code block background. */
+	border: 1px solid var(--vscode-editorWidget-border, var(--border-color)); /* Standard border for code blocks. */
+	border-radius: var(--border-radius);
+	padding: 10px; /* Padding inside the <pre> block. */
+	margin-top: var(--element-spacing); /* Space above this block. */
+	margin-bottom: var(--element-spacing); /* Space below this block. */
+	text-align: left; /* Ensure JSON content is left-aligned. */
+}
+
+/* Styles for the <code> element within the #failed-json-display <pre> block. */
+#failed-json-display code {
+	font-family: var(
+		--vscode-editor-font-family,
+		"Courier New",
+		Courier,
+		monospace
+	); /* Monospace font for code. */
+	font-size: 0.9em; /* Slightly smaller font size for code. */
+	color: var(--vscode-editor-foreground); /* Standard editor text color. */
+	padding: 0; /* No padding for the <code> element itself; <pre> handles it. */
+	background: none; /* No background for the <code> element; <pre> handles it. */
+	white-space: pre-wrap; /* Wrap lines within the code block for readability. */
+	word-break: break-all; /* Break long strings/words to prevent horizontal overflow. */
+}
+
+/* Styles for the "Retry Generation" button, making it look like a primary action button. */
+#retry-generation-button {
+	margin-top: var(
+		--element-spacing
+	); /* Add space above the button, separating it from content above. */
+	padding: 5px 12px; /* Standard padding for primary buttons. */
+	height: var(
+		--input-height
+	); /* Consistent height with other input elements/buttons. */
+	min-width: 80px; /* Minimum width to ensure good clickability. */
+	background-color: var(
+		--vscode-button-background
+	); /* Primary button background color. */
+	color: var(--vscode-button-foreground); /* Primary button text color. */
+	border: 1px solid var(--vscode-button-border, transparent); /* Standard button border. */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out; /* Smooth transitions for hover/focus. */
+	display: inline-flex; /* Allows vertical alignment of content (e.g., icons and text). */
+	align-items: center;
+	justify-content: center;
+	font-size: inherit; /* Use the parent's font size. */
+	outline: none; /* Remove default outline; custom focus style is applied below. */
+}
+
+#retry-generation-button:hover {
+	background-color: var(
+		--vscode-button-hoverBackground
+	); /* Standard hover background for primary buttons. */
+}
+
+#retry-generation-button:focus {
+	border-color: var(--vscode-focusBorder); /* Highlight border on focus. */
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder); /* Add a shadow outline for focus, consistent with inputs. */
+}
+
 /* --- Scrollbar Styling --- */
 ::-webkit-scrollbar {
 	width: 6px;

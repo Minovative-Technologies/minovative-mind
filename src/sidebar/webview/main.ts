@@ -10,6 +10,7 @@ import {
 	faPlus,
 	faCheck,
 	faTimes,
+	faRedo, // Added for retry button
 } from "@fortawesome/free-solid-svg-icons";
 import MarkdownIt from "markdown-it";
 
@@ -22,7 +23,8 @@ library.add(
 	faChevronRight,
 	faPlus,
 	faCheck,
-	faTimes
+	faTimes,
+	faRedo // Added new icon to library
 );
 // --- End Font Awesome Imports ---
 
@@ -92,6 +94,21 @@ let planConfirmationContainer: HTMLDivElement | null = null;
 let confirmPlanButton: HTMLButtonElement | null = null;
 let cancelPlanButton: HTMLButtonElement | null = null; // User Request: cancelPlanButton (HTMLButtonElement)
 
+// START MODIFICATION: Declare new DOM element variables for the parse error UI
+const planParseErrorContainer = document.getElementById(
+	"plan-parse-error-container"
+) as HTMLDivElement | null;
+const planParseErrorDisplay = document.getElementById(
+	"plan-parse-error-display"
+) as HTMLParagraphElement | null;
+const failedJsonDisplay = document.getElementById(
+	"failed-json-display"
+) as HTMLElement | null;
+const retryGenerationButton = document.getElementById(
+	"retry-generation-button"
+) as HTMLButtonElement | null;
+// END MODIFICATION: Declare new DOM element variables for the parse error UI
+
 // State
 let isApiKeySet = false;
 let isLoading = false;
@@ -106,6 +123,7 @@ let pendingPlanData: {
 
 console.log("Webview script loaded.");
 
+// START MODIFICATION: Add new DOM elements to the critical elements null check
 if (
 	!sendButton ||
 	!chatInput ||
@@ -121,8 +139,13 @@ if (
 	!saveChatButton ||
 	!loadChatButton ||
 	!clearChatButton ||
-	!statusArea
+	!statusArea ||
+	!planParseErrorContainer || // Added
+	!planParseErrorDisplay || // Added
+	!failedJsonDisplay || // Added
+	!retryGenerationButton // Added
 ) {
+	// END MODIFICATION: Add new DOM elements to the critical elements null check
 	console.error("Required DOM elements not found!");
 	const body = document.querySelector("body");
 	if (body) {
@@ -249,6 +272,7 @@ if (
 			return;
 		}
 
+		// setLoadingState(true) will be called, which now handles hiding planParseErrorContainer
 		if (fullMessage.toLowerCase().startsWith("/plan ")) {
 			const planRequest = fullMessage.substring(6).trim();
 			if (!planRequest) {
@@ -318,6 +342,24 @@ if (
 				"New request initiated, pending plan confirmation cancelled."
 			);
 		}
+
+		// START MODIFICATION: Hide planParseErrorContainer if a new message is sent (loading becomes true)
+		if (
+			loading &&
+			planParseErrorContainer &&
+			planParseErrorContainer.style.display !== "none"
+		) {
+			planParseErrorContainer.style.display = "none";
+			if (planParseErrorDisplay) {
+				planParseErrorDisplay.textContent = "";
+			}
+			if (failedJsonDisplay) {
+				failedJsonDisplay.textContent = "";
+			}
+			// Optionally provide a status update
+			updateStatus("New request initiated, parse error UI hidden.");
+		}
+		// END MODIFICATION
 	}
 
 	function createPlanConfirmationUI() {
@@ -456,6 +498,28 @@ if (
 		vscode.postMessage({ type: "loadChatRequest" });
 		updateStatus("Requesting chat load...");
 	});
+
+	// START MODIFICATION: Add event listener for retryGenerationButton
+	if (retryGenerationButton) {
+		retryGenerationButton.addEventListener("click", () => {
+			// Hide the error container
+			if (planParseErrorContainer) {
+				planParseErrorContainer.style.display = "none";
+			}
+			// Send message to extension to retry generation
+			vscode.postMessage({ type: "retryStructuredPlanGeneration" });
+			// Set loading state to true as a new generation attempt is starting
+			setLoadingState(true);
+			// Clear the error display fields
+			if (planParseErrorDisplay) {
+				planParseErrorDisplay.textContent = "";
+			}
+			if (failedJsonDisplay) {
+				failedJsonDisplay.textContent = "";
+			}
+		});
+	}
+	// END MODIFICATION
 
 	window.addEventListener("message", (event: MessageEvent) => {
 		const message = event.data;
@@ -649,6 +713,57 @@ if (
 			}
 			// --- End new handlers for streamed responses ---
 
+			// START MODIFICATION: Add new case for 'structuredPlanParseFailed'
+			case "structuredPlanParseFailed": {
+				const { error, failedJson } = message.value;
+
+				if (
+					planParseErrorContainer &&
+					planParseErrorDisplay &&
+					failedJsonDisplay &&
+					retryGenerationButton
+				) {
+					// Display the error and the failed JSON
+					planParseErrorDisplay.textContent = error;
+					failedJsonDisplay.textContent = failedJson; // Full JSON for potential copy/debug
+
+					// Show the error container
+					planParseErrorContainer.style.display = "block"; // Or "flex" depending on its CSS
+
+					// AI generation is done, awaiting user action (retry or new plan)
+					setLoadingState(false);
+
+					// Ensure general chat inputs remain disabled to guide user to retry or new plan
+					if (chatInput) {
+						chatInput.disabled = true;
+					}
+					if (sendButton) {
+						sendButton.disabled = true;
+					}
+					if (modelSelect) {
+						modelSelect.disabled = true;
+					}
+
+					updateStatus(
+						"Structured plan parsing failed. Review error and retry.",
+						true
+					);
+				} else {
+					// Fallback if UI elements are missing
+					console.error(
+						"Parse error UI elements not found. Cannot display structured plan parse failure."
+					);
+					appendMessage(
+						"System",
+						`Structured plan parsing failed: ${error}. Failed JSON: ${failedJson}. Error UI missing.`,
+						"error-message"
+					);
+					setLoadingState(false); // Still set loading to false
+				}
+				break;
+			}
+			// END MODIFICATION
+
 			// START MODIFICATION: Add new case for 'restorePendingPlanConfirmation'
 			case "restorePendingPlanConfirmation":
 				if (message.value) {
@@ -744,12 +859,14 @@ if (
 					deleteKeyButton!.disabled = updateData.activeIndex === -1;
 
 					// Re-evaluate input states based on API key status, only if not currently loading/streaming
-					// and no plan confirmation is active.
+					// and no plan confirmation is active, and no parse error UI is active.
 					if (
 						!isLoading &&
 						!currentAiMessageContentElement &&
 						(!planConfirmationContainer ||
-							planConfirmationContainer.style.display === "none")
+							planConfirmationContainer.style.display === "none") &&
+						(!planParseErrorContainer || // Added check for parse error UI
+							planParseErrorContainer.style.display === "none")
 					) {
 						const enableSendControls = isApiKeySet;
 						chatInput!.disabled = !enableSendControls;
@@ -810,6 +927,19 @@ if (
 					planConfirmationContainer.style.display = "none";
 					pendingPlanData = null;
 				}
+				// If plan parse error UI was active, hide it
+				if (
+					planParseErrorContainer &&
+					planParseErrorContainer.style.display !== "none"
+				) {
+					planParseErrorContainer.style.display = "none";
+					if (planParseErrorDisplay) {
+						planParseErrorDisplay.textContent = "";
+					}
+					if (failedJsonDisplay) {
+						failedJsonDisplay.textContent = "";
+					}
+				}
 				break;
 			}
 			case "restoreHistory": {
@@ -848,6 +978,19 @@ if (
 					planConfirmationContainer.style.display = "none";
 					pendingPlanData = null;
 				}
+				// If plan parse error UI was active, hide it
+				if (
+					planParseErrorContainer &&
+					planParseErrorContainer.style.display !== "none"
+				) {
+					planParseErrorContainer.style.display = "none";
+					if (planParseErrorDisplay) {
+						planParseErrorDisplay.textContent = "";
+					}
+					if (failedJsonDisplay) {
+						failedJsonDisplay.textContent = "";
+					}
+				}
 				break;
 			}
 			// START MODIFICATION: Modify 'reenableInput' handler
@@ -884,8 +1027,16 @@ if (
 						"Input re-enable for general chat controls skipped: Plan confirmation UI is active and keeping inputs disabled."
 					);
 					// The plan confirmation is not cancelled by this path; it remains the active state.
+				} else if (
+					// Also check if parse error UI is active
+					planParseErrorContainer &&
+					planParseErrorContainer.style.display !== "none"
+				) {
+					console.log(
+						"Input re-enable for general chat controls skipped: Plan parse error UI is active and keeping inputs disabled."
+					);
 				} else {
-					// No plan confirmation UI is active (or it's hidden).
+					// No plan confirmation UI or parse error UI is active (or it's hidden).
 					// Proceed with re-enabling general inputs based on API key status.
 					if (sendButton && chatInput && modelSelect) {
 						const enableSendControls = isApiKeySet; // Re-enable based on API key status (isLoading is false)
@@ -941,9 +1092,14 @@ if (
 		setIconForButton(nextKeyButton, faChevronRight);
 		setIconForButton(deleteKeyButton, faTrashCan);
 		setIconForButton(addKeyButton, faPlus);
+		// START MODIFICATION: Set icon for retryGenerationButton
+		setIconForButton(retryGenerationButton, faRedo); // faRedo imported for this
+		// END MODIFICATION
 
 		// Create plan confirmation UI elements (initially hidden)
 		createPlanConfirmationUI();
+		// Note: Plan parse error UI elements are expected to be in the HTML.
+		// Their container (planParseErrorContainer) should be initially hidden via CSS (e.g., style="display: none;").
 	}
 
 	initializeWebview();

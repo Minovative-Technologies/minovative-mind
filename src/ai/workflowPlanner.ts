@@ -104,13 +104,22 @@ export function isRunCommandStep(step: PlanStep): step is RunCommandStep {
 		step.command.trim() !== ""
 	);
 }
+
+/**
+ * Represents the result of parsing and validating an execution plan.
+ */
+export interface ParsedPlanResult {
+	plan: ExecutionPlan | null;
+	error?: string;
+}
+
 /**
  * Parses a JSON string into an ExecutionPlan and performs basic validation.
  *
  * @param jsonString The JSON string received from the AI.
- * @returns The validated ExecutionPlan object or null if parsing/validation fails.
+ * @returns An object containing the validated ExecutionPlan or an error message.
  */
-export function parseAndValidatePlan(jsonString: string): ExecutionPlan | null {
+export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 	try {
 		const potentialPlan = JSON.parse(jsonString);
 
@@ -121,10 +130,10 @@ export function parseAndValidatePlan(jsonString: string): ExecutionPlan | null {
 			typeof potentialPlan.planDescription !== "string" ||
 			!Array.isArray(potentialPlan.steps)
 		) {
-			console.error(
-				"Plan validation failed: Missing top-level fields or steps array."
-			);
-			return null;
+			const errorMsg =
+				"Plan validation failed: Missing top-level fields (planDescription, steps array) or plan is not an object.";
+			console.error(errorMsg, potentialPlan);
+			return { plan: null, error: errorMsg };
 		}
 
 		// Validate each step
@@ -139,11 +148,11 @@ export function parseAndValidatePlan(jsonString: string): ExecutionPlan | null {
 				!Object.values(PlanStepAction).includes(step.action) ||
 				typeof step.description !== "string"
 			) {
-				console.error(
-					`Plan validation failed: Invalid base step structure or numbering at index ${i}.`,
-					step
-				);
-				return null;
+				const errorMsg = `Plan validation failed: Invalid base step structure or numbering at index ${i}. Expected step number ${
+					i + 1
+				}.`;
+				console.error(errorMsg, step);
+				return { plan: null, error: errorMsg };
 			}
 
 			// --- Property Checks based on Action ---
@@ -157,32 +166,30 @@ export function parseAndValidatePlan(jsonString: string): ExecutionPlan | null {
 			// Validate path presence/absence and safety
 			if (actionsRequiringPath.includes(step.action)) {
 				if (typeof step.path !== "string" || step.path.trim() === "") {
-					console.error(
-						`Plan validation failed: Missing or empty path for required step ${step.step} (${step.action}).`,
-						step
-					);
-					return null;
+					const errorMsg = `Plan validation failed: Missing or empty path for required step ${step.step} (${step.action}).`;
+					console.error(errorMsg, step);
+					return { plan: null, error: errorMsg };
 				}
 				if (path.isAbsolute(step.path) || step.path.includes("..")) {
-					console.error(
-						`Plan validation failed: Invalid path (absolute or traversal) for step ${step.step}: ${step.path}`
-					);
-					return null;
+					const errorMsg = `Plan validation failed: Invalid path (absolute or traversal) for step ${step.step}: ${step.path}`;
+					console.error(errorMsg);
+					return { plan: null, error: errorMsg };
 				}
 				if (typeof step.command !== "undefined") {
+					// This is a warning, not a fatal error for parsing, but good to log.
+					// Depending on strictness, could be an error. For now, warning.
 					console.warn(
 						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'command'.`
 					);
 				}
 			} else if (actionsRequiringCommand.includes(step.action)) {
 				if (typeof step.command !== "string" || step.command.trim() === "") {
-					console.error(
-						`Plan validation failed: Missing or empty command for step ${step.step} (${step.action}).`,
-						step
-					);
-					return null;
+					const errorMsg = `Plan validation failed: Missing or empty command for step ${step.step} (${step.action}).`;
+					console.error(errorMsg, step);
+					return { plan: null, error: errorMsg };
 				}
 				if (typeof step.path !== "undefined") {
+					// Similar to above, path is not expected for command.
 					console.warn(
 						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'path'.`
 					);
@@ -202,57 +209,54 @@ export function parseAndValidatePlan(jsonString: string): ExecutionPlan | null {
 			}
 
 			// Action-specific validation using type guards
+			let actionSpecificError: string | null = null;
 			switch (step.action) {
 				case PlanStepAction.CreateDirectory:
 					if (!isCreateDirectoryStep(step)) {
-						console.error(
-							`Plan validation failed: Invalid CreateDirectoryStep at index ${i}.`,
-							step
-						);
-						return null;
+						actionSpecificError = `Invalid CreateDirectoryStep at index ${i}. Must have a non-empty 'path'.`;
 					}
 					break;
 				case PlanStepAction.CreateFile:
 					if (!isCreateFileStep(step)) {
-						console.error(
-							`Plan validation failed: Invalid CreateFileStep at index ${i}.`,
-							step
-						);
-						return null;
+						actionSpecificError = `Invalid CreateFileStep at index ${i}. Must have a non-empty 'path' and either 'content' or 'generate_prompt'.`;
 					}
 					break;
 				case PlanStepAction.ModifyFile:
 					if (!isModifyFileStep(step)) {
-						console.error(
-							`Plan validation failed: Invalid ModifyFileStep at index ${i}.`,
-							step
-						);
-						return null;
+						actionSpecificError = `Invalid ModifyFileStep at index ${i}. Must have a non-empty 'path' and a non-empty 'modification_prompt'.`;
 					}
 					break;
 				case PlanStepAction.RunCommand:
 					if (!isRunCommandStep(step)) {
-						console.error(
-							`Plan validation failed: Invalid RunCommandStep at index ${i}.`,
-							step
-						);
-						return null;
+						actionSpecificError = `Invalid RunCommandStep at index ${i}. Must have a non-empty 'command'.`;
 					}
 					break;
-				// Removed: InstallDependencies case
 				default:
+					// This case should ideally not be reached if Object.values(PlanStepAction).includes(step.action) passed.
+					// However, it's good for exhaustiveness.
 					const exhaustiveCheck: any = step.action;
-					console.warn(
-						`Unhandled valid PlanStepAction during validation: ${exhaustiveCheck}`
-					);
+					actionSpecificError = `Unhandled PlanStepAction during validation: ${exhaustiveCheck}`;
+					console.warn(actionSpecificError); // Log as warning, as base validation passed.
+					// Decide if this should be a fatal error. If the action is in PlanStepAction enum,
+					// but has no specific validation, it might be okay if it doesn't need extra fields.
+					// For now, let's treat unhandled *known* actions as non-fatal if they pass base checks.
+					// If it was an *unknown* action, the earlier check `!Object.values(PlanStepAction).includes(step.action)` would have caught it.
 					break;
+			}
+
+			if (actionSpecificError) {
+				console.error(`Plan validation failed: ${actionSpecificError}`, step);
+				return { plan: null, error: actionSpecificError };
 			}
 		}
 
 		console.log("Plan validation successful.");
-		return potentialPlan as ExecutionPlan;
-	} catch (error) {
-		console.error("Error parsing plan JSON:", error);
-		return null;
+		return { plan: potentialPlan as ExecutionPlan };
+	} catch (error: any) {
+		const errorMsg = `Error parsing plan JSON: ${
+			error.message || "Unknown JSON parsing error"
+		}`;
+		console.error(errorMsg, error);
+		return { plan: null, error: errorMsg };
 	}
 }
