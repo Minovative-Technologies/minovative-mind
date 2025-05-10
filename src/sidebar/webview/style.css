@@ -162,9 +162,12 @@ h2 {
 	border: 1px solid transparent; /* Base border */
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle shadow */
 }
-.message strong {
+/* MODIFIED: Target only the direct <strong> child of .message (e.g., "User:", "Model:") */
+/* This ensures that <strong> tags from markdown *within* the message content (not direct children) */
+/* retain their default display: inline style and do not cause new lines. */
+.message > strong {
 	/* Sender label */
-	display: block;
+	display: block; /* Ensure the sender label (e.g., "User:", "Model:") takes its own line */
 	margin-bottom: 4px;
 	font-weight: 600;
 	font-size: 0.9em;
