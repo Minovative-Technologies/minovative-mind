@@ -202,6 +202,7 @@ export async function activate(context: vscode.ExtensionContext) {
 							increment: 30,
 							message: "Building docs prompt...",
 						});
+						// MODIFICATION START: Added new instruction to the modificationPrompt
 						const modificationPrompt = `
 							You are an expert AI programmer tasked with generating documentation using the ${selectedModel} model.
 							Language: ${languageId}
@@ -220,9 +221,11 @@ export async function activate(context: vscode.ExtensionContext) {
 							1. Generate appropriate documentation (e.g., JSDoc, Python docstrings, comments based on language ${languageId}) for the provided code selection.
 							2. Provide ONLY the documentation block followed immediately by the original code selection block on the next lines.
 							3. Do not add any extra explanations, comments about the code, or markdown formatting around the result. The output should be suitable for directly replacing the original selection.
+							4. ALWAYS keep in mind of Modularization for everything you create.
 
 							Documentation Block + Original Code:
 							`;
+						// MODIFICATION END
 
 						progress.report({
 							increment: 40,

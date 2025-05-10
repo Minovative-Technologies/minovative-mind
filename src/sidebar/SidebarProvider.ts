@@ -1099,6 +1099,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. **Crucially, the 'description' field MUST be included and populated for EVERY step, regardless of the action type.** Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
 		6.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
 		7.  Never Assume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
+		8.  ALWAYS keep in mind of Modularization for everything you create
 
 		${specificContextPrompt}
 
@@ -1156,7 +1157,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			const historyForApi = JSON.parse(JSON.stringify(this._chatHistory));
 			const finalPrompt = `
-			You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query and when you do answer the user's queries, make sure you complete the entire request, don't do minimal, shorten, or partial of what the user asked for. Complete the entire request from the users no matter how long it may take. Use Markdown formatting for code blocks and lists where appropriate. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
+			You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query and when you do answer the user's queries, make sure you complete the entire request, don't do minimal, shorten, or partial of what the user asked for. Complete the entire request from the users no matter how long it may take. Use Markdown formatting for code blocks and lists where appropriate. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING. ALWAYS keep in mind of Modularization for everything you create
 
 			*** Project Context (Reference Only) ***
 			${projectContext}
@@ -1430,7 +1431,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									const generationPrompt = `
 											You are an AI programmer tasked with generating file content.
 											**Critical Instruction:** Generate the **complete and comprehensive** file content based *fully* on the user's instructions below. Do **not** provide a minimal, placeholder, or incomplete implementation unless the instructions *specifically* ask for it. Fulfill the entire request.
-											**Output Format:** Provide ONLY the raw code or text for the file. Do NOT include any explanations, or markdown formatting like backticks. Add comments in the code to help the user understand the code and the entire response MUST be only the final file content. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
+											**Output Format:** Provide ONLY the raw code or text for the file. Do NOT include any explanations, or markdown formatting like backticks. Add comments in the code to help the user understand the code and the entire response MUST be only the final file content. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING. ALWAYS keep in mind of Modularization for everything you create
 
 											File Path: ${step.path}
 											Instructions: ${step.generate_prompt}
@@ -1539,7 +1540,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								const modificationPrompt = `
 										You are an AI programmer tasked with modifying an existing file.
 										**Critical Instruction:** Modify the code based *fully* on the user's instructions below. Ensure the modifications are **complete and comprehensive**, addressing the entire request. Do **not** make partial changes or leave placeholders unless the instructions *specifically* ask for it.
-										**Output Format:** Provide ONLY the complete, raw, modified code for the **entire file**. Do NOT include explanations, or markdown formatting. Add comments in the code to help the user understand the code and the entire response MUST be the final, complete file content after applying all requested modifications.
+										**Output Format:** Provide ONLY the complete, raw, modified code for the **entire file**. Do NOT include explanations, or markdown formatting. Add comments in the code to help the user understand the code and the entire response MUST be the final, complete file content after applying all requested modifications. ALWAYS keep in mind of Modularization for everything you create
 
 										File Path: ${step.path}
 										Modification Instructions: ${step.modification_prompt}
@@ -2641,16 +2642,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					}
 					break;
 				}
-				// START MODIFICATION: Add case for retryStructuredPlanGeneration
 				case "retryStructuredPlanGeneration": {
 					if (this._pendingPlanGenerationContext) {
-						// If retry data (like attempt count or previous error) is sent from webview,
-						// it should be part of data.value and used to update this._pendingPlanGenerationContext.diagnosticsString
-						// For now, we assume _pendingPlanGenerationContext.diagnosticsString might have been updated by webview if needed.
-						// Example: if (data.value && data.value.retryAttemptInfo) {
-						//   this._pendingPlanGenerationContext.diagnosticsString = `${this._pendingPlanGenerationContext.diagnosticsString || ''} '(Attempt ${data.value.retryAttemptInfo})'`;
-						// }
-
 						this.postMessageToWebview({
 							type: "statusUpdate",
 							value: "Retrying structured plan generation...",
