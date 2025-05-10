@@ -2667,7 +2667,58 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					this._updateWebviewKeyList();
 					this._updateWebviewModelList();
 					this._restoreChatHistoryToWebview();
-					this.postMessageToWebview({ type: "reenableInput" });
+
+					// START MODIFIED SECTION FOR webviewReady
+					// Check if there's a pending plan generation context that needs to be restored to the webview for confirmation
+					if (this._pendingPlanGenerationContext) {
+						const planContext = this._pendingPlanGenerationContext;
+						let planDataForRestore: {
+							originalRequest?: string;
+							originalInstruction?: string;
+							type: "textualPlanPending";
+						} | null = null;
+
+						// Construct the planDataForRestore object based on the type of the pending plan
+						if (
+							planContext.type === "chat" &&
+							planContext.originalUserRequest
+						) {
+							planDataForRestore = {
+								originalRequest: planContext.originalUserRequest,
+								type: "textualPlanPending",
+							};
+						} else if (
+							planContext.type === "editor" &&
+							planContext.editorContext
+						) {
+							planDataForRestore = {
+								originalInstruction: planContext.editorContext.instruction,
+								type: "textualPlanPending",
+							};
+						}
+
+						if (planDataForRestore) {
+							// Post a message to the webview to restore the pending plan confirmation state
+							this.postMessageToWebview({
+								type: "restorePendingPlanConfirmation",
+								value: planDataForRestore,
+							});
+						} else {
+							// Log a warning if the context was present but data couldn't be formed (should be rare)
+							console.warn(
+								"[SidebarProvider] WebviewReady: _pendingPlanGenerationContext was present but could not form planDataForRestore.",
+								planContext
+							);
+						}
+					}
+
+					// Conditionally re-enable general input in the webview.
+					// Only re-enable if there isn't a pending plan that needs user confirmation.
+					// If a plan is being restored for confirmation, the webview UI should handle input state accordingly.
+					if (!this._pendingPlanGenerationContext) {
+						this.postMessageToWebview({ type: "reenableInput" });
+					}
+					// END MODIFIED SECTION FOR webviewReady
 					break;
 				case "reenableInput":
 					this.postMessageToWebview({ type: "reenableInput" });

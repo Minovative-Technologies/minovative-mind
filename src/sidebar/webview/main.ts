@@ -649,6 +649,64 @@ if (
 			}
 			// --- End new handlers for streamed responses ---
 
+			// START MODIFICATION: Add new case for 'restorePendingPlanConfirmation'
+			case "restorePendingPlanConfirmation":
+				if (message.value) {
+					pendingPlanData = message.value as {
+						// Cast to expected type
+						type: string;
+						originalRequest?: string;
+						originalInstruction?: string;
+					};
+
+					createPlanConfirmationUI(); // Ensure UI elements are created
+
+					if (planConfirmationContainer) {
+						planConfirmationContainer.style.display = "flex"; // Show the confirmation UI
+						updateStatus(
+							"Pending plan confirmation restored. Review and confirm to proceed."
+						);
+
+						// Disable general chat inputs while plan confirmation is active
+						if (chatInput) {
+							chatInput.disabled = true;
+						}
+						if (sendButton) {
+							sendButton.disabled = true;
+						}
+						if (modelSelect) {
+							modelSelect.disabled = true;
+						}
+						isLoading = false; // Ensure loading indicator is not active
+					} else {
+						// Fallback if UI creation or finding failed
+						console.error(
+							"Error: Plan confirmation container not found during restore. Cannot display pending plan."
+						);
+						updateStatus(
+							"Error: Failed to restore pending plan UI. Inputs re-enabled.",
+							true
+						);
+						pendingPlanData = null; // Clear data as it cannot be confirmed
+						isLoading = false; // Ensure loading state is false
+						// Re-enable inputs based on API key status as a fallback
+						if (sendButton && chatInput && modelSelect) {
+							const enableSendControls = isApiKeySet;
+							sendButton.disabled = !enableSendControls;
+							chatInput.disabled = !enableSendControls;
+							modelSelect.disabled = !enableSendControls;
+						}
+					}
+				} else {
+					console.warn(
+						"restorePendingPlanConfirmation received without message.value. No action taken."
+					);
+					// Optionally, ensure inputs are in a sensible state if this happens unexpectedly
+					setLoadingState(false);
+				}
+				break;
+			// END MODIFICATION: Add new case for 'restorePendingPlanConfirmation'
+
 			case "apiKeyStatus": {
 				if (typeof message.value === "string") {
 					updateApiKeyStatus(message.value);
@@ -792,11 +850,20 @@ if (
 				}
 				break;
 			}
+			// START MODIFICATION: Modify 'reenableInput' handler
 			case "reenableInput": {
 				console.log("Received reenableInput request from provider.");
-				// This message might be sent if an operation was cancelled on the extension side
-				// or an error occurred that requires input to be re-enabled.
-				setLoadingState(false);
+				// This message signals an operation was cancelled or an error occurred requiring input re-enabling.
+
+				// Always set isLoading to false, as the operation that was loading is now considered finished or cancelled.
+				isLoading = false;
+
+				// Remove any general "Creating..." or "Loading..." message from chat, similar to setLoadingState(false).
+				const loadingMsg = chatContainer?.querySelector(".loading-message");
+				if (loadingMsg) {
+					loadingMsg.remove();
+				}
+
 				// Ensure streaming state is also reset if this happens unexpectedly mid-stream
 				if (currentAiMessageContentElement) {
 					console.warn(
@@ -805,17 +872,42 @@ if (
 					currentAiMessageContentElement = null;
 					currentAccumulatedText = "";
 				}
-				// If plan confirmation was active, it should also be hidden as the flow is interrupted.
+
+				// Check if plan confirmation UI is currently active and visible
 				if (
 					planConfirmationContainer &&
 					planConfirmationContainer.style.display !== "none"
 				) {
-					planConfirmationContainer.style.display = "none";
-					pendingPlanData = null;
-					updateStatus("Input re-enabled, pending plan cancelled.");
+					// If plan confirmation is active, do *not* re-enable the general inputs.
+					// The plan confirmation UI itself is responsible for keeping them disabled, and it should remain visible.
+					console.log(
+						"Input re-enable for general chat controls skipped: Plan confirmation UI is active and keeping inputs disabled."
+					);
+					// The plan confirmation is not cancelled by this path; it remains the active state.
+				} else {
+					// No plan confirmation UI is active (or it's hidden).
+					// Proceed with re-enabling general inputs based on API key status.
+					if (sendButton && chatInput && modelSelect) {
+						const enableSendControls = isApiKeySet; // Re-enable based on API key status (isLoading is false)
+						sendButton.disabled = !enableSendControls;
+						chatInput.disabled = !enableSendControls;
+						modelSelect.disabled = !enableSendControls;
+					}
+
+					// If plan confirmation UI is not active, but there was pendingPlanData (e.g., from a cancelled flow before UI showed),
+					// clear it as `reenableInput` implies a reset to a normal interactive state.
+					if (pendingPlanData) {
+						pendingPlanData = null;
+						updateStatus(
+							"Inputs re-enabled; any non-visible pending plan confirmation has been cleared."
+						);
+					} else {
+						updateStatus("Inputs re-enabled."); // Generic message if no plan data was involved or already cleared.
+					}
 				}
 				break;
 			}
+			// END MODIFICATION: Modify 'reenableInput' handler
 			default:
 				console.warn(
 					"[Webview] Received unknown message type from extension:",
