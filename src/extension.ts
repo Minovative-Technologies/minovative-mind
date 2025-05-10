@@ -29,10 +29,11 @@ async function executeExplainAction(
 	const languageId = editor.document.languageId;
 	const fileName = editor.document.fileName;
 
-	const activeApiKey = sidebarProvider.getActiveApiKey();
+	const activeApiKey = sidebarProvider.getActiveApiKey(); // Still needed for the initial check
 	const selectedModel = sidebarProvider.getSelectedModelName();
 
 	if (!activeApiKey) {
+		// Keep this check as it's user-facing before the call
 		return {
 			success: false,
 			error: "No active API Key set. Please configure it in the sidebar.",
@@ -78,14 +79,15 @@ async function executeExplainAction(
 
 	try {
 		// Use the retry wrapper from the provider for consistency
-		// Ensure arguments match the _generateWithRetry signature: (prompt, initialApiKey, modelName, history, requestType)
-		// Pass undefined for history (4th arg) and "explain selection" for requestType (5th arg).
+		// MODIFIED: Removed activeApiKey (second argument) from the call
+		// Signature: _generateWithRetry(prompt, modelName, history, requestType)
+		await sidebarProvider.switchToNextApiKey(); // Added as per instruction
 		const result = await sidebarProvider._generateWithRetry(
 			prompt, // 1st arg: prompt
-			activeApiKey, // 2nd arg: apiKey
-			selectedModel, // 3rd arg: modelName
-			undefined, // 4th arg: history (not needed for explain)
-			"explain selection" // 5th arg: requestType
+			// activeApiKey, // Removed 2nd arg: apiKey
+			selectedModel, // Now 2nd arg: modelName (was 3rd)
+			undefined, // Now 3rd arg: history (not needed for explain) (was 4th)
+			"explain selection" // Now 4th arg: requestType (was 5th)
 		);
 
 		if (
@@ -155,10 +157,11 @@ export async function activate(context: vscode.ExtensionContext) {
 			const languageId = editor.document.languageId;
 			const documentUri = editor.document.uri;
 
-			const activeApiKey = sidebarProvider.getActiveApiKey();
+			const activeApiKey = sidebarProvider.getActiveApiKey(); // Still needed for initial check
 			const selectedModel = sidebarProvider.getSelectedModelName();
 
 			if (!activeApiKey) {
+				// Keep this check
 				vscode.window.showErrorMessage(
 					"Minovative Mind: No active API Key set. Please add one via the sidebar."
 				);
@@ -233,13 +236,15 @@ export async function activate(context: vscode.ExtensionContext) {
 						let responseContent = "";
 						try {
 							// Call _generateWithRetry for /docs
-							// Signature: _generateWithRetry(prompt, initialApiKey, modelName, history, requestType)
+							// MODIFIED: Removed activeApiKey (second argument) from the call
+							// Signature: _generateWithRetry(prompt, modelName, history, requestType)
+							await sidebarProvider.switchToNextApiKey(); // Added as per instruction
 							responseContent = await sidebarProvider._generateWithRetry(
 								modificationPrompt, // 1st arg: prompt
-								activeApiKey, // 2nd arg: apiKey
-								selectedModel, // 3rd arg: modelName
-								undefined, // 4th arg: history (not needed)
-								"/docs generation" // 5th arg: requestType
+								// activeApiKey, // Removed 2nd arg: apiKey
+								selectedModel, // Now 2nd arg: modelName (was 3rd)
+								undefined, // Now 3rd arg: history (not needed) (was 4th)
+								"/docs generation" // Now 4th arg: requestType (was 5th)
 							);
 
 							if (
