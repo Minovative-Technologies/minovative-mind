@@ -1914,18 +1914,51 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			}
 			const rootPath = workspaceFolders[0].uri.fsPath;
 
+			// 5. The existing terminal object and terminal.show() call should be preserved for the subsequent git commit command.
 			const terminal = vscode.window.createTerminal({
 				name: "Minovative Mind Git Operations",
 				cwd: rootPath,
 			});
 			terminal.show();
 
+			// 3. Ensure the this.postMessageToWebview call for "Staging all changes..." remains before the exec call.
 			this.postMessageToWebview({
 				type: "statusUpdate",
 				value: "Staging all changes (git add .)...",
 			});
-			terminal.sendText("git add .");
-			await new Promise((resolve) => setTimeout(resolve, 1500));
+
+			// 1. Locate the section responsible for staging changes: `terminal.sendText("git add .");` followed by `await new Promise((resolve) => setTimeout(resolve, 1500));`.
+			// 2. Replace this section with an awaited call to child_process.exec("git add .", { cwd: rootPath }, callback).
+			await new Promise<void>((resolve, reject) => {
+				exec("git add .", { cwd: rootPath }, (error, stdout, stderr) => {
+					if (error) {
+						// 2.b. Reject the promise if error occurs, including error.message and stderr in the rejection error message.
+						// This will allow the main try-catch block of _handleCommitCommand to handle the failure.
+						const errorMessage = `Failed to stage changes (git add .): ${
+							error.message
+						}${stderr ? `\nStderr: ${stderr}` : ""}`;
+						console.error(errorMessage); // Log for debugging
+						reject(new Error(errorMessage));
+						return;
+					}
+					// 2.a. Resolve the promise on successful execution. Log stdout and any stderr (as warnings for git add .).
+					if (stdout) {
+						console.log(`'git add .' stdout:\n${stdout}`);
+					}
+					if (stderr) {
+						// git add . often produces stderr for unmodified files or warnings, which are not necessarily errors for staging.
+						console.warn(`'git add .' stderr (non-fatal):\n${stderr}`);
+					}
+
+					// 4. Add a this.postMessageToWebview call like value: "Changes staged successfully." after the git add . command successfully completes
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Changes staged successfully.",
+					});
+					resolve();
+				});
+			});
+			// The main try-catch block of _handleCommitCommand will catch rejections from the above promise.
 
 			this.postMessageToWebview({
 				type: "statusUpdate",
@@ -1996,9 +2029,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				value: `Executing: ${gitCommitCommand}`,
 			});
 
-			terminal.sendText(gitCommitCommand);
+			terminal.sendText(gitCommitCommand); // Using the preserved terminal object
 
-			await new Promise((resolve) => setTimeout(resolve, 1500));
+			await new Promise((resolve) => setTimeout(resolve, 1500)); // Existing delay for commit execution
 
 			this.postMessageToWebview({
 				type: "aiResponse",
