@@ -711,7 +711,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		try {
 			const jsonGenerationConfig: GenerationConfig = {
 				responseMimeType: "application/json",
-				temperature: 0.2,
+				temperature: 0,
 			};
 
 			const jsonPlanningPrompt = this._createPlanningPrompt(
