@@ -840,10 +840,12 @@ h2 {
 	white-space: pre-wrap; /* Allow wrapping of long error messages while preserving line breaks. */
 }
 
-/* Styles for displaying the failed JSON content, assuming #failed-json-display is the ID on a <pre> element. */
-#failed-json-display {
+/* Styles for the parent <pre> element that wraps the <code id="failed-json-display">. */
+/* This rule targets the <pre> tag when it has a direct child <code> with id "failed-json-display". */
+pre:has(> code#failed-json-display) {
 	max-height: 200px; /* Limit the height to prevent the block from becoming too large. */
-	overflow-y: auto; /* Add a scrollbar if the JSON content exceeds max-height. */
+	overflow-y: auto; /* Add a vertical scrollbar if the JSON content exceeds max-height. */
+	overflow-x: auto; /* Add a horizontal scrollbar if the JSON content exceeds available width. */
 	background-color: var(
 		--vscode-textCodeBlock-background,
 		rgba(0, 0, 0, 0.1)
@@ -854,10 +856,13 @@ h2 {
 	margin-top: var(--element-spacing); /* Space above this block. */
 	margin-bottom: var(--element-spacing); /* Space below this block. */
 	text-align: left; /* Ensure JSON content is left-aligned. */
+	/* Text-specific styles like font-family and white-space (for the pre itself) are generally handled by browser defaults for <pre> or inherited. */
 }
 
-/* Styles for the <code> element within the #failed-json-display <pre> block. */
-#failed-json-display code {
+/* Styles for the <code id="failed-json-display"> element itself. */
+/* This rule targets the <code> tag with the id "failed-json-display". */
+code#failed-json-display {
+	display: block; /* Ensure the code block fills the parent <pre> for proper layout of its content. */
 	font-family: var(
 		--vscode-editor-font-family,
 		"Courier New",
@@ -866,10 +871,16 @@ h2 {
 	); /* Monospace font for code. */
 	font-size: 0.9em; /* Slightly smaller font size for code. */
 	color: var(--vscode-editor-foreground); /* Standard editor text color. */
-	padding: 0; /* No padding for the <code> element itself; <pre> handles it. */
-	background: none; /* No background for the <code> element; <pre> handles it. */
-	white-space: pre-wrap; /* Wrap lines within the code block for readability. */
-	word-break: break-all; /* Break long strings/words to prevent horizontal overflow. */
+	white-space: pre-wrap; /* Wrap lines within the code block for readability, but preserve spaces and line breaks. */
+	overflow-wrap: break-word; /* Break long strings/words to prevent horizontal overflow and fit within the pre. */
+
+	/* Explicitly reset/remove block-level styles that are now handled by the parent <pre> element. */
+	padding: 0;
+	background: none;
+	border: none;
+	margin: 0;
+	max-height: none; /* The code element itself should not have a max-height. */
+	overflow: visible; /* Let the parent <pre> handle scrolling. */
 }
 
 /* Styles for the "Retry Generation" button, making it look like a primary action button. */
