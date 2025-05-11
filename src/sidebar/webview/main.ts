@@ -321,7 +321,7 @@ if (
 				) {
 					appendMessage(
 						"Model",
-						"Creating...Don't change file view while `/plan` process is active",
+						"Creating...Don't change the file view while plan execution is in progress...Sit tight while Minovative Mind work for you",
 						"loading-message"
 					);
 				}
