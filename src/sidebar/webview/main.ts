@@ -362,6 +362,18 @@ if (
 			}
 			// Optionally provide a status update
 			updateStatus("New request initiated, parse error UI hidden.");
+
+			// --- START USER REQUESTED MODIFICATION ---
+			// Restore load/clear chat buttons if a new chat action preempts the parse error UI.
+			// This ensures the buttons are restored to their normal operational conditions.
+			if (loadChatButton) {
+				loadChatButton.disabled = false; // loadChatButton is generally enabled.
+			}
+			if (clearChatButton && chatContainer) {
+				// clearChatButton is enabled if there are messages in the chat.
+				clearChatButton.disabled = chatContainer.childElementCount === 0;
+			}
+			// --- END USER REQUESTED MODIFICATION ---
 		}
 		// END MODIFICATION
 	}
