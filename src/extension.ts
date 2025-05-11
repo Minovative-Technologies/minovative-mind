@@ -329,7 +329,10 @@ export async function activate(context: vscode.ExtensionContext) {
 						4000
 					);
 
-					// --- Call provider with the selection range ---
+					// Create a CancellationTokenSource
+					const cancellationTokenSource = new vscode.CancellationTokenSource();
+
+					// --- Call provider with the selection range and cancellation token ---
 					await sidebarProvider.initiatePlanFromEditorAction(
 						instruction,
 						selectedText,
@@ -338,6 +341,10 @@ export async function activate(context: vscode.ExtensionContext) {
 						documentUri,
 						selectionRange // Pass the range
 					);
+					// Optional: Dispose the token source if the operation is fully complete
+					// and no further cancellation is possible or needed for this specific action.
+					// For long-running operations managed by the sidebar, the sidebar itself might handle disposal.
+					// cancellationTokenSource.dispose();
 					// --- End updated call ---
 				} catch (error) {
 					console.error("Error redirecting modification to sidebar:", error);
