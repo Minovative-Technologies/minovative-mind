@@ -131,7 +131,7 @@ export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 			!Array.isArray(potentialPlan.steps)
 		) {
 			const errorMsg =
-				"Plan validation failed: Missing top-level fields (planDescription, steps array) or plan is not an object.";
+				"Plan validation failed: Missing top-level fields (planDescription, steps array) or plan is not an object. Please Retry.";
 			console.error(errorMsg, potentialPlan);
 			return { plan: null, error: errorMsg };
 		}
@@ -150,7 +150,7 @@ export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 			) {
 				const errorMsg = `Plan validation failed: Invalid base step structure or numbering at index ${i}. Expected step number ${
 					i + 1
-				}.`;
+				}. Please Retry.`;
 				console.error(errorMsg, step);
 				return { plan: null, error: errorMsg };
 			}
@@ -166,12 +166,12 @@ export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 			// Validate path presence/absence and safety
 			if (actionsRequiringPath.includes(step.action)) {
 				if (typeof step.path !== "string" || step.path.trim() === "") {
-					const errorMsg = `Plan validation failed: Missing or empty path for required step ${step.step} (${step.action}).`;
+					const errorMsg = `Plan validation failed: Missing or empty path for required step ${step.step} (${step.action}). Please Retry. Please Retry.`;
 					console.error(errorMsg, step);
 					return { plan: null, error: errorMsg };
 				}
 				if (path.isAbsolute(step.path) || step.path.includes("..")) {
-					const errorMsg = `Plan validation failed: Invalid path (absolute or traversal) for step ${step.step}: ${step.path}`;
+					const errorMsg = `Plan validation failed: Invalid path (absolute or traversal) for step ${step.step}: ${step.path}. Please Retry. Please Retry.`;
 					console.error(errorMsg);
 					return { plan: null, error: errorMsg };
 				}
@@ -179,31 +179,31 @@ export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 					// This is a warning, not a fatal error for parsing, but good to log.
 					// Depending on strictness, could be an error. For now, warning.
 					console.warn(
-						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'command'.`
+						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'command'. Please Retry.`
 					);
 				}
 			} else if (actionsRequiringCommand.includes(step.action)) {
 				if (typeof step.command !== "string" || step.command.trim() === "") {
-					const errorMsg = `Plan validation failed: Missing or empty command for step ${step.step} (${step.action}).`;
+					const errorMsg = `Plan validation failed: Missing or empty command for step ${step.step} (${step.action}). Please Retry. Please Retry.`;
 					console.error(errorMsg, step);
 					return { plan: null, error: errorMsg };
 				}
 				if (typeof step.path !== "undefined") {
 					// Similar to above, path is not expected for command.
 					console.warn(
-						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'path'.`
+						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'path'. Please Retry.`
 					);
 				}
 			} else {
 				// Actions that require neither (if any added later)
 				if (typeof step.path !== "undefined") {
 					console.warn(
-						`Plan validation warning: Step ${step.step} (${step.action}) has unexpected 'path'.`
+						`Plan validation warning: Step ${step.step} (${step.action}) has unexpected 'path'. Please Retry.`
 					);
 				}
 				if (typeof step.command !== "undefined") {
 					console.warn(
-						`Plan validation warning: Step ${step.step} (${step.action}) has unexpected 'command'.`
+						`Plan validation warning: Step ${step.step} (${step.action}) has unexpected 'command'. Please Retry.`
 					);
 				}
 			}
@@ -213,22 +213,22 @@ export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 			switch (step.action) {
 				case PlanStepAction.CreateDirectory:
 					if (!isCreateDirectoryStep(step)) {
-						actionSpecificError = `Invalid CreateDirectoryStep at index ${i}. Must have a non-empty 'path'.`;
+						actionSpecificError = `Invalid CreateDirectoryStep at index ${i}. Must have a non-empty 'path'. Please Retry.`;
 					}
 					break;
 				case PlanStepAction.CreateFile:
 					if (!isCreateFileStep(step)) {
-						actionSpecificError = `Invalid CreateFileStep at index ${i}. Must have a non-empty 'path' and either 'content' or 'generate_prompt'.`;
+						actionSpecificError = `Invalid CreateFileStep at index ${i}. Must have a non-empty 'path' and either 'content' or 'generate_prompt'. Please Retry.`;
 					}
 					break;
 				case PlanStepAction.ModifyFile:
 					if (!isModifyFileStep(step)) {
-						actionSpecificError = `Invalid ModifyFileStep at index ${i}. Must have a non-empty 'path' and a non-empty 'modification_prompt'.`;
+						actionSpecificError = `Invalid ModifyFileStep at index ${i}. Must have a non-empty 'path' and a non-empty 'modification_prompt'. Please Retry.`;
 					}
 					break;
 				case PlanStepAction.RunCommand:
 					if (!isRunCommandStep(step)) {
-						actionSpecificError = `Invalid RunCommandStep at index ${i}. Must have a non-empty 'command'.`;
+						actionSpecificError = `Invalid RunCommandStep at index ${i}. Must have a non-empty 'command'. Please Retry.`;
 					}
 					break;
 				default:
