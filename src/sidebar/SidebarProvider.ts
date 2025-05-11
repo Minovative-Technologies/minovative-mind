@@ -409,14 +409,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				},
 			};
 
-			// MODIFIED: Call to _generateWithRetry - removed apiKey argument (2nd arg)
+			// MODIFIED: Call to _generateWithRetry - Added 'initial plan explanation' as requestType (4th arg), removed token (6th arg)
+			// The signature of _generateWithRetry is: (prompt, modelName, history, requestType, generationConfig, streamCallbacks)
 			textualPlanResponse = await this._generateWithRetry(
-				textualPlanPrompt,
-				modelName,
-				undefined, // History not used for initial plan explanation
-				"initial plan explanation",
-				undefined, // No specific generationConfig for textual explanation
-				streamCallbacks // Pass the callbacks for streaming
+				textualPlanPrompt, // prompt (1st arg)
+				modelName, // modelName (2nd arg)
+				undefined, // history (3rd arg)
+				"initial plan explanation", // requestType (4th arg) - MODIFIED
+				undefined, // generationConfig (5th arg)
+				streamCallbacks // streamCallbacks (6th arg)
 			);
 
 			if (
@@ -2442,18 +2443,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		if (this._chatHistory.length > MAX_HISTORY_ITEMS) {
 			this._chatHistory.splice(0, this._chatHistory.length - MAX_HISTORY_ITEMS);
 		}
-
-		// MODIFICATION START: Send model messages to the webview for real-time display.
-		// This allows the webview to append model responses, system messages, and plan steps
-		// as they are added to the history, without waiting for a full "aiResponseEnd" or similar.
-		// User messages are handled by the webview when they are initially sent.
-		if (role === "model") {
-			this.postMessageToWebview({
-				type: "appendRealtimeModelMessage",
-				value: { text: text },
-			});
-		}
-		// MODIFICATION END
 	}
 
 	private async _clearChat() {
