@@ -884,10 +884,9 @@ code#failed-json-display {
 }
 
 /* Styles for the "Retry Generation" button, making it look like a primary action button. */
+/* This general style applies if the button is used outside the new plan-parse-error-buttons-wrapper. */
 #retry-generation-button {
-	margin-top: var(
-		--element-spacing
-	); /* Add space above the button, separating it from content above. */
+	/* margin-top: var(--element-spacing); -- MODIFICATION: Removed as per instruction */
 	padding: 5px 12px; /* Standard padding for primary buttons. */
 	height: var(
 		--input-height
@@ -917,6 +916,61 @@ code#failed-json-display {
 #retry-generation-button:focus {
 	border-color: var(--vscode-focusBorder); /* Highlight border on focus. */
 	box-shadow: 0 0 0 1px var(--vscode-focusBorder); /* Add a shadow outline for focus, consistent with inputs. */
+}
+
+/* --- Plan Parse Error Action Buttons --- */
+/* New rule for the buttons wrapper */
+#plan-parse-error-buttons-wrapper {
+	display: flex;
+	justify-content: center;
+	gap: 10px; /* Space between buttons */
+	margin-top: var(--element-spacing); /* Space above the button group */
+}
+
+/* New general style for buttons within this wrapper */
+#plan-parse-error-buttons-wrapper button {
+	padding: 0;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: inherit;
+	outline: none;
+}
+
+/* Styles for #retry-generation-button within the wrapper (primary button appearance) */
+#plan-parse-error-buttons-wrapper #retry-generation-button {
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: 1px solid var(--vscode-button-border, transparent);
+}
+#plan-parse-error-buttons-wrapper #retry-generation-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+/* New style for the #cancel-parse-error-button (secondary appearance) */
+#plan-parse-error-buttons-wrapper #cancel-parse-error-button {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-button-border, var(--border-color));
+}
+#plan-parse-error-buttons-wrapper #cancel-parse-error-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* New focus style for both buttons in the wrapper */
+#plan-parse-error-buttons-wrapper button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+/* New style for icons within these buttons */
+#plan-parse-error-buttons-wrapper button .fa-icon {
+	font-size: 1em; /* Note: icon size relative to button font size */
 }
 
 /* --- Scrollbar Styling --- */

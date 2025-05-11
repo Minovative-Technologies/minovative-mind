@@ -107,6 +107,9 @@ const failedJsonDisplay = document.getElementById(
 const retryGenerationButton = document.getElementById(
 	"retry-generation-button"
 ) as HTMLButtonElement | null;
+const cancelParseErrorButton = document.getElementById(
+	"cancel-parse-error-button"
+) as HTMLButtonElement | null; // Added cancel button for parse error
 // END MODIFICATION: Declare new DOM element variables for the parse error UI
 
 // State
@@ -143,7 +146,8 @@ if (
 	!planParseErrorContainer || // Added
 	!planParseErrorDisplay || // Added
 	!failedJsonDisplay || // Added
-	!retryGenerationButton // Added
+	!retryGenerationButton || // Added
+	!cancelParseErrorButton // Added cancelParseErrorButton to critical elements check
 ) {
 	// END MODIFICATION: Add new DOM elements to the critical elements null check
 	console.error("Required DOM elements not found!");
@@ -1092,9 +1096,30 @@ if (
 		setIconForButton(nextKeyButton, faChevronRight);
 		setIconForButton(deleteKeyButton, faTrashCan);
 		setIconForButton(addKeyButton, faPlus);
-		// START MODIFICATION: Set icon for retryGenerationButton
 		setIconForButton(retryGenerationButton, faRedo); // faRedo imported for this
-		// END MODIFICATION
+		setIconForButton(cancelParseErrorButton, faTimes); // Set icon for the cancel parse error button (faTimes imported)
+
+		// Event listener for the cancel parse error button
+		if (cancelParseErrorButton) {
+			cancelParseErrorButton.addEventListener("click", () => {
+				// Hide the parse error container
+				if (planParseErrorContainer) {
+					planParseErrorContainer.style.display = "none";
+				}
+				// Inform the extension that the plan execution (and thus retry) is cancelled
+				vscode.postMessage({ type: "cancelPlanExecution" }); // This message type already handles necessary provider-side cleanup
+				updateStatus("Plan generation retry cancelled.");
+				// Clear the error display fields
+				if (planParseErrorDisplay) {
+					planParseErrorDisplay.textContent = "";
+				}
+				if (failedJsonDisplay) {
+					failedJsonDisplay.textContent = "";
+				}
+				// Re-enable general inputs if appropriate (e.g., if API key is set)
+				setLoadingState(false); // This will re-enable general inputs if appropriate
+			});
+		}
 
 		// Create plan confirmation UI elements (initially hidden)
 		createPlanConfirmationUI();
