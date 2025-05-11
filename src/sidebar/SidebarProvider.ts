@@ -1109,7 +1109,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		--- Expected JSON Plan Format ---
 		${jsonFormatDescription}
-		--- End Expected JSON Format ---
+		--- End Expected Format ---
 
 		--- Few Examples ---
 		${fewShotExamples}
