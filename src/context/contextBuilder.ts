@@ -12,9 +12,8 @@ interface ContextConfig {
 
 // Default configuration - Adjusted for ~1M token models
 const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
-	// maxFiles: 500, // Removed - rely on total length primarily
-	maxFileLength: 200 * 1024, // Approx 200KB in characters
-	maxTotalLength: 1 * 1024 * 1024, // Approx 1MB in characters
+	maxFileLength: 2 * 1024 * 1024, // Approx 2MB in characters
+	maxTotalLength: 5 * 1024 * 1024, // Approx 5MB in characters
 };
 
 /**

@@ -2421,6 +2421,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	private _addHistoryEntry(role: "user" | "model", text: string) {
+		// Existing logic for managing chat history and preventing duplicates
 		if (this._chatHistory.length > 0) {
 			const lastEntry = this._chatHistory[this._chatHistory.length - 1];
 			if (lastEntry.role === role && lastEntry.parts[0]?.text === text) {
@@ -2441,6 +2442,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		if (this._chatHistory.length > MAX_HISTORY_ITEMS) {
 			this._chatHistory.splice(0, this._chatHistory.length - MAX_HISTORY_ITEMS);
 		}
+
+		// MODIFICATION START: Send model messages to the webview for real-time display.
+		// This allows the webview to append model responses, system messages, and plan steps
+		// as they are added to the history, without waiting for a full "aiResponseEnd" or similar.
+		// User messages are handled by the webview when they are initially sent.
+		if (role === "model") {
+			this.postMessageToWebview({
+				type: "appendRealtimeModelMessage",
+				value: { text: text },
+			});
+		}
+		// MODIFICATION END
 	}
 
 	private async _clearChat() {

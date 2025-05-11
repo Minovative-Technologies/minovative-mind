@@ -838,6 +838,21 @@ if (
 				break;
 			// END MODIFICATION: Add new case for 'restorePendingPlanConfirmation'
 
+			// START MODIFICATION: Add new case for 'appendRealtimeModelMessage'
+			case "appendRealtimeModelMessage":
+				// This case handles messages that should be directly appended to the chat as if they were from the Model.
+				// It's intended for real-time updates or messages from the model that are not part of a typical streaming response.
+				if (message.value && typeof message.value.text === "string") {
+					appendMessage("Model", message.value.text, "ai-message");
+				} else {
+					console.warn(
+						"Received 'appendRealtimeModelMessage' with invalid value:",
+						message.value
+					);
+				}
+				break;
+			// END MODIFICATION
+
 			case "apiKeyStatus": {
 				if (typeof message.value === "string") {
 					updateApiKeyStatus(message.value);
