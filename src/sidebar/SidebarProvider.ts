@@ -2064,41 +2064,97 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				);
 			}
 
-			commitMessage = commitMessage.trim();
+			// --- START MODIFIED COMMIT MESSAGE CLEANING AND COMMAND CONSTRUCTION ---
+			let cleanedCommitMessage = commitMessage.trim();
+
+			// Remove potential leading/trailing markdown code blocks (robust regex)
+			// Using 's' flag for '.' to match newlines, and non-greedy '.*?'
+			// Added \r? for potential Windows line endings (\r\n)
+			cleanedCommitMessage = cleanedCommitMessage
+				.replace(/^```.*?(\r?\n|$)/s, "")
+				.replace(/(\r?\n|^)```$/s, "")
+				.trim();
+
+			// Remove outer quotes if AI included them (keeps existing logic)
 			if (
-				(commitMessage.startsWith('"') && commitMessage.endsWith('"')) ||
-				(commitMessage.startsWith("'") && commitMessage.endsWith("'"))
+				(cleanedCommitMessage.startsWith('"') &&
+					cleanedCommitMessage.endsWith('"')) ||
+				(cleanedCommitMessage.startsWith("'") &&
+					cleanedCommitMessage.endsWith("'"))
 			) {
-				commitMessage = commitMessage.substring(1, commitMessage.length - 1);
-			}
-			commitMessage = commitMessage.split("\n").join(" ");
-
-			if (!commitMessage) {
-				throw new Error("AI generated an empty commit message.");
+				cleanedCommitMessage = cleanedCommitMessage.substring(
+					1,
+					cleanedCommitMessage.length - 1
+				);
 			}
 
-			const gitCommitCommand = `git commit -m "${commitMessage.replace(
-				/"/g,
-				'\\"'
-			)}"`;
+			// Ensure resulting string is still not empty after cleaning
+			if (!cleanedCommitMessage) {
+				throw new Error("AI generated an empty commit message after cleaning.");
+			}
+
+			// --- START NEW GIT COMMAND CONSTRUCTION LOGIC ---
+			// Split into subject and body (if body exists, separated by \n\n)
+			// Use a limit for split (2) to correctly separate subject from the rest of the body,
+			// even if the body itself contains \n\n.
+			const messageParts = cleanedCommitMessage.split(/\r?\n\r?\n/, 2);
+
+			let subject = messageParts[0]
+				.replace(/"/g, '\\"') // Escape double quotes in subject
+				.replace(/\r?\n/g, " ") // Replace any newlines in subject with spaces
+				.trim(); // Trim the subject
+
+			if (!subject) {
+				// If, after processing, the subject is empty, this is an error.
+				throw new Error(
+					"AI generated an empty commit message subject after cleaning and processing."
+				);
+			}
+
+			let gitCommitCommand = `git commit -m "${subject}"`;
+			let fullMessageForDisplay = subject; // For webview display
+
+			if (messageParts.length > 1) {
+				// If there was a second part (body)
+				let body = messageParts[1]
+					.replace(/"/g, '\\"') // Escape double quotes in body
+					.trim(); // Trim the body
+
+				// Newlines (\n) are preserved within the body string for Git to interpret.
+				if (body) {
+					// Only add the body -m flag if the body is not empty after trimming
+					gitCommitCommand += ` -m "${body}"`;
+					fullMessageForDisplay += `\n\n${body}`; // For webview display, re-add \n\n
+				}
+			}
+			// --- END NEW GIT COMMAND CONSTRUCTION LOGIC ---
+
+			// Send the command to the terminal
 			this.postMessageToWebview({
 				type: "statusUpdate",
-				value: `Executing: ${gitCommitCommand}`,
+				value: `Executing: ${gitCommitCommand.substring(0, 100)}${
+					gitCommitCommand.length > 100 ? "..." : ""
+				}`,
 			});
 
 			terminal.sendText(gitCommitCommand); // Using the preserved terminal object
 
-			await new Promise((resolve) => setTimeout(resolve, 1500)); // Existing delay for commit execution
-
-			this.postMessageToWebview({
-				type: "aiResponse",
-				value: `Git commit command sent to terminal with message: "${commitMessage}"\n(Check terminal for actual commit status).`,
-				isLoading: false,
-			});
+			// Add history entry showing the actual message content.
 			this._addHistoryEntry(
 				"model",
-				`Attempted commit with message: "${commitMessage}".`
+				`Attempting commit with message:\n---\n${fullMessageForDisplay}\n---` // Use fullMessageForDisplay
 			);
+
+			// Keep the delay to allow terminal command to start and potentially show initial output
+			await new Promise((resolve) => setTimeout(resolve, 1500));
+
+			// Final webview response indicating the command was sent and where to check results.
+			// Show the full cleaned message (subject and body) in the webview.
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value: `Git commit command sent to terminal.\n\nCommit Message Used:\n\`\`\`\n${fullMessageForDisplay}\n\`\`\`\n\nCheck the **TERMINAL** tab for the actual commit outcome and any errors.`,
+				isLoading: false,
+			});
 		} catch (error: any) {
 			console.error("Error in _handleCommitCommand:", error);
 			const errorMsg = error.message || String(error);
@@ -2110,6 +2166,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			});
 			this._addHistoryEntry("model", `Commit failed: ${errorMsg}`);
 		} finally {
+			// Ensure input is re-enabled after the process finishes (success or failure, unless no changes were staged).
+			// The check for no changes staged already handles reenableInput.
+			// So, reenableInput is needed here for the error path and success path where a commit command *was* sent.
 			this.postMessageToWebview({ type: "reenableInput" });
 		}
 	}
