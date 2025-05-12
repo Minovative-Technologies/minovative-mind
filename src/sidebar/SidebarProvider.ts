@@ -74,6 +74,7 @@ interface PlanGenerationContext {
 	diagnosticsString?: string; // This might be the field that will hold combinedDiagnosticsAndRetryString in the future
 	initialApiKey: string; // This key was used for initial plan explanation; for structured plan, _generateWithRetry will use current active.
 	modelName: string;
+	chatHistory?: HistoryEntry[]; // MODIFIED: Added chatHistory to store conversation context for planning
 }
 
 // Type for execution outcome
@@ -439,6 +440,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				projectContext,
 				initialApiKey: apiKey, // Storing the key that was active at this stage
 				modelName,
+				chatHistory: [...this._chatHistory], // MODIFIED: Store a copy of the current chat history
 			};
 
 			this._addHistoryEntry("model", textualPlanResponse); // Add textual plan to history
@@ -649,6 +651,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						diagnosticsString,
 						initialApiKey: activeKeyForContext, // Storing the key active at this stage
 						modelName,
+						chatHistory: [...this._chatHistory], // MODIFIED: Store a copy of the current chat history
 					};
 					this._addHistoryEntry("model", textualPlanResponse);
 				}
@@ -715,13 +718,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				temperature: 0,
 			};
 
+			// MODIFIED: Retrieve chatHistory from planContext
+			const chatHistory = planContext.chatHistory;
+
+			// MODIFIED: Pass chatHistory to _createPlanningPrompt
 			const jsonPlanningPrompt = this._createPlanningPrompt(
 				planContext.type === "chat"
 					? planContext.originalUserRequest
 					: undefined,
 				planContext.projectContext,
 				planContext.type === "editor" ? planContext.editorContext : undefined,
-				planContext.diagnosticsString
+				planContext.diagnosticsString,
+				chatHistory // Pass the retrieved chat history
 			);
 
 			await this.switchToNextApiKey();
@@ -729,7 +737,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			structuredPlanJsonString = await this._generateWithRetry(
 				jsonPlanningPrompt,
 				planContext.modelName, // Use the model from the context that generated the explanation
-				undefined,
+				undefined, // History is now part of the jsonPlanningPrompt itself, not passed as separate arg here
 				"structured plan generation",
 				jsonGenerationConfig
 			);
@@ -861,6 +869,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
+	// MODIFIED: Added chatHistory parameter and incorporated it into the prompt
 	private _createPlanningPrompt(
 		userRequest: string | undefined,
 		projectContext: string,
@@ -871,7 +880,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			languageId: string;
 			filePath: string;
 		},
-		combinedDiagnosticsAndRetryString?: string
+		combinedDiagnosticsAndRetryString?: string,
+		chatHistory?: HistoryEntry[] // New parameter for chat history
 	): string {
 		let actualDiagnosticsString: string | undefined = undefined;
 		let extractedRetryInstruction: string | undefined = undefined;
@@ -1032,6 +1042,23 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		--- End Valid JSON Output Examples ---
 `;
 
+		// MODIFIED: Construct chat history string for the prompt if available
+		// This makes the chat history available to the AI when generating the structured plan.
+		const chatHistoryForPrompt =
+			chatHistory && chatHistory.length > 0
+				? `
+		--- Recent Chat History (for additional context on user's train of thought and previous interactions) ---
+		${chatHistory
+			.map(
+				(entry) =>
+					`Role: ${entry.role}\nContent:\n${entry.parts
+						.map((p) => p.text)
+						.join("\n")}`
+			)
+			.join("\n---\n")}
+		--- End Recent Chat History ---`
+				: "";
+
 		let specificContextPrompt = "";
 		let mainInstructions = "";
 
@@ -1068,13 +1095,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				editorContext.instruction.toLowerCase() === "/fix"
 					? "'/fix' command"
 					: "custom instruction"
-			}) and the provided file/selection context, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). For custom instructions, interpret the request in the context of the selected code and any diagnostics.`;
+			}), the provided file/selection context, and any relevant chat history, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
 		} else if (userRequest) {
 			specificContextPrompt = `
 			--- User Request from Chat ---
 			${userRequest}
 			--- End User Request ---`;
-			mainInstructions = `Based on the user's request from the chat ("${userRequest}"), generate a plan to fulfill it.`;
+			mainInstructions = `Based on the user's request from the chat ("${userRequest}") and any relevant chat history, generate a plan to fulfill it.`;
 		}
 
 		return `
@@ -1093,7 +1120,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			editorContext && actualDiagnosticsString
 				? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan addresses them for '/fix' requests.**"
 				: ""
-		}
+		} Also consider the 'Recent Chat History' if provided, as it may contain clarifications or prior discussion related to the current request.
 		2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not omit any requested actions or components. If a request is complex, break it into multiple granular steps.
 		3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
 		4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
@@ -1103,6 +1130,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		8.  ALWAYS keep in mind of Modularization for everything you create
 
 		${specificContextPrompt}
+
+		${chatHistoryForPrompt} {/* MODIFIED: Injected chat history string here */}
 
 		--- Broader Project Context (Reference Only) ---
 		${projectContext}
