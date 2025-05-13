@@ -11,6 +11,7 @@ import {
 	faCheck,
 	faTimes,
 	faRedo, // Added for retry button
+	faStop, // Added for cancel generation button
 } from "@fortawesome/free-solid-svg-icons";
 import MarkdownIt from "markdown-it";
 
@@ -24,7 +25,8 @@ library.add(
 	faPlus,
 	faCheck,
 	faTimes,
-	faRedo // Added new icon to library
+	faRedo, // Added new icon to library
+	faStop // Added new icon to library
 );
 // --- End Font Awesome Imports ---
 
@@ -89,10 +91,15 @@ const clearChatButton = document.getElementById(
 const statusArea = document.getElementById(
 	"status-area"
 ) as HTMLDivElement | null;
+// START MODIFICATION: Get reference to the new #cancel-generation-button
+const cancelGenerationButton = document.getElementById(
+	"cancel-generation-button"
+) as HTMLButtonElement | null;
+// END MODIFICATION
 
 let planConfirmationContainer: HTMLDivElement | null = null;
 let confirmPlanButton: HTMLButtonElement | null = null;
-let cancelPlanButton: HTMLButtonElement | null = null; // User Request: cancelPlanButton (HTMLButtonElement)
+let cancelPlanButton: HTMLButtonElement | null = null;
 
 // START MODIFICATION: Declare new DOM element variables for the parse error UI
 const planParseErrorContainer = document.getElementById(
@@ -143,10 +150,11 @@ if (
 	!loadChatButton ||
 	!clearChatButton ||
 	!statusArea ||
-	!planParseErrorContainer || // Added
-	!planParseErrorDisplay || // Added
-	!failedJsonDisplay || // Added
-	!retryGenerationButton || // Added
+	!cancelGenerationButton || // Added cancelGenerationButton to critical elements check
+	!planParseErrorContainer || // Added planParseErrorContainer to critical elements check
+	!planParseErrorDisplay || // Added planParseErrorDisplay to critical elements check
+	!failedJsonDisplay || // Added failedJsonDisplay to critical elements check
+	!retryGenerationButton || // Added retryGenerationButton to critical elements check
 	!cancelParseErrorButton // Added cancelParseErrorButton to critical elements check
 ) {
 	// END MODIFICATION: Add new DOM elements to the critical elements null check
@@ -304,11 +312,41 @@ if (
 	// Modified setLoadingState
 	function setLoadingState(loading: boolean) {
 		isLoading = loading; // Keep track of overall loading state
+
+		// START MODIFICATION: Manage cancel generation button visibility
+		if (cancelGenerationButton) {
+			// Button should be visible only when loading is true AND neither
+			// plan confirmation nor plan parse error UI is currently active.
+			const planConfirmationVisible =
+				planConfirmationContainer &&
+				planConfirmationContainer.style.display !== "none";
+			const planParseErrorVisible =
+				planParseErrorContainer &&
+				planParseErrorContainer.style.display !== "none";
+
+			if (loading && !planConfirmationVisible && !planParseErrorVisible) {
+				// Show the cancel button
+				cancelGenerationButton.style.display = "inline-flex"; // Or 'block' depending on desired layout
+			} else {
+				// Hide the cancel button if not loading, or if a specific UI block is active
+				cancelGenerationButton.style.display = "none";
+			}
+		}
+		// END MODIFICATION
+
 		if (sendButton && chatInput && modelSelect) {
-			const enableSendControls = !loading && isApiKeySet;
+			// Only enable controls if not loading AND API key is set AND no plan confirmation/parse error is blocking
+			const enableSendControls =
+				!loading &&
+				isApiKeySet &&
+				(!planConfirmationContainer ||
+					planConfirmationContainer.style.display === "none") &&
+				(!planParseErrorContainer ||
+					planParseErrorContainer.style.display === "none");
+
 			sendButton.disabled = !enableSendControls;
 			chatInput.disabled = !enableSendControls;
-			modelSelect.disabled = !enableSendControls; // Also disable model select when loading
+			modelSelect.disabled = !enableSendControls;
 
 			if (loading) {
 				// Point 4.a (from review instructions): When loading is true, append "Creating..." message if appropriate.
@@ -363,7 +401,6 @@ if (
 			// Optionally provide a status update
 			updateStatus("New request initiated, parse error UI hidden.");
 
-			// --- START USER REQUESTED MODIFICATION ---
 			// Restore load/clear chat buttons if a new chat action preempts the parse error UI.
 			// This ensures the buttons are restored to their normal operational conditions.
 			if (loadChatButton) {
@@ -373,7 +410,6 @@ if (
 				// clearChatButton is enabled if there are messages in the chat.
 				clearChatButton.disabled = chatContainer.childElementCount === 0;
 			}
-			// --- END USER REQUESTED MODIFICATION ---
 		}
 		// END MODIFICATION
 	}
@@ -385,7 +421,7 @@ if (
 			planConfirmationContainer.style.display = "none"; // Initially hidden
 
 			const textElement = document.createElement("p");
-			textElement.textContent = "Confirm to proceed with the outlined plan?";
+			textElement.textContent = "Review plan and confirm to proceed?"; // Modified text for clarity
 
 			confirmPlanButton = document.createElement("button");
 			confirmPlanButton.id = "confirm-plan-button";
@@ -407,6 +443,7 @@ if (
 			setIconForButton(confirmPlanButton, faCheck);
 			setIconForButton(cancelPlanButton, faTimes);
 
+			// Review Point 3: Verify this listener setup.
 			planConfirmationContainer.addEventListener(
 				"click",
 				(event: MouseEvent) => {
@@ -421,21 +458,29 @@ if (
 								value: pendingPlanData,
 							});
 							updateStatus("Requesting plan execution...");
+							// Correctly hides the confirmation UI
 							planConfirmationContainer!.style.display = "none";
+							// Correctly clears pending plan data
 							pendingPlanData = null;
-							setLoadingState(true); // Set loading while structured plan is generated/executed
+							// Correctly sets loading state while structured plan is generated/executed
+							setLoadingState(true);
 						} else {
 							updateStatus("Error: No pending plan data to confirm.", true);
 						}
 					} else if (
+						// This is the #cancel-plan-button logic being reviewed
 						target.id === "cancel-plan-button" ||
 						target.closest("#cancel-plan-button")
 					) {
+						// Correctly sends the cancel message
 						vscode.postMessage({ type: "cancelPlanExecution" });
 						updateStatus("Plan cancelled.");
+						// Correctly hides the confirmation UI
 						planConfirmationContainer!.style.display = "none";
+						// Correctly clears pending plan data
 						pendingPlanData = null;
-						setLoadingState(false); // Re-enable inputs as plan flow is cancelled
+						// Correctly re-enables inputs as plan flow is cancelled
+						setLoadingState(false);
 					}
 				}
 			);
@@ -463,6 +508,9 @@ if (
 	}
 
 	// --- Event Listeners ---
+	// Note: Placing general listeners here, and specific UI listeners (like cancel buttons) within initializeWebview
+	// ensures they are set up after DOM checks and UI creation (if any).
+
 	sendButton.addEventListener("click", sendMessage);
 	chatInput.addEventListener("keydown", (e) => {
 		if (e.key === "Enter" && !e.shiftKey) {
@@ -533,6 +581,19 @@ if (
 			if (failedJsonDisplay) {
 				failedJsonDisplay.textContent = "";
 			}
+			updateStatus("Retrying structured plan generation...");
+
+			// --- START USER REQUESTED MODIFICATION ---
+			// Restore load/clear chat buttons when retry is clicked.
+			// This ensures the buttons are restored to their normal operational conditions.
+			if (loadChatButton) {
+				loadChatButton.disabled = false; // loadChatButton is generally enabled.
+			}
+			if (clearChatButton && chatContainer) {
+				// clearChatButton is enabled if there are messages in the chat.
+				clearChatButton.disabled = chatContainer.childElementCount === 0;
+			}
+			// --- END USER REQUESTED MODIFICATION ---
 		});
 	}
 	// END MODIFICATION
@@ -583,6 +644,12 @@ if (
 						if (modelSelect) {
 							modelSelect.disabled = true;
 						}
+						// START MODIFICATION: Hide cancel button when plan confirmation shows
+						if (cancelGenerationButton) {
+							cancelGenerationButton.style.display = "none";
+						}
+						// END MODIFICATION
+
 						// setLoadingState is not called to false here, as per instruction,
 						// to keep the UI disabled until the user confirms or cancels the plan.
 					} else {
@@ -682,6 +749,7 @@ if (
 							originalRequest?: string;
 							originalInstruction?: string;
 						};
+
 						planConfirmationContainer.style.display = "flex"; // Show confirmation UI.
 						updateStatus(
 							"Textual plan generated. Review and confirm to proceed."
@@ -697,6 +765,11 @@ if (
 						if (modelSelect) {
 							modelSelect.disabled = true;
 						}
+						// MODIFICATION START: Hide cancel button when plan confirmation shows
+						if (cancelGenerationButton) {
+							cancelGenerationButton.style.display = "none";
+						}
+						// MODIFICATION END
 						// MODIFICATION START: Set planConfirmationWasShown to true
 						planConfirmationWasShown = true;
 						// MODIFICATION END
@@ -717,7 +790,7 @@ if (
 				// This re-enables inputs if it's a regular chat stream or a plan stream that didn't lead to confirmation UI.
 				// The logic for this is in place with the `if (!planConfirmationWasShown)` condition.
 				if (!planConfirmationWasShown) {
-					setLoadingState(false);
+					setLoadingState(false); // This will also hide the cancel button if it was shown
 				}
 				// MODIFICATION END
 
@@ -747,9 +820,11 @@ if (
 					planParseErrorContainer.style.display = "block"; // Or "flex" depending on its CSS
 
 					// AI generation is done, awaiting user action (retry or new plan)
-					setLoadingState(false);
+					setLoadingState(false); // This will remove the chat loading message and re-enable buttons if no UI block
+					// It also hides the cancel generation button via the setLoadingState logic
 
-					// Ensure general chat inputs remain disabled to guide user to retry or new plan
+					// Ensure general chat inputs remain disabled to guide user to retry or new plan,
+					// AS the parse error UI IS now visible, blocking them.
 					if (chatInput) {
 						chatInput.disabled = true;
 					}
@@ -761,9 +836,21 @@ if (
 					}
 
 					updateStatus(
-						"Structured plan parsing failed. Review error and retry.",
+						"Structured plan parsing failed. Review error and retry or cancel.",
 						true
 					);
+
+					// --- START USER REQUESTED MODIFICATION ---
+					// Restore load/clear chat buttons when retry is clicked.
+					// This ensures the buttons are restored to their normal operational conditions.
+					if (loadChatButton) {
+						loadChatButton.disabled = false; // loadChatButton is generally enabled.
+					}
+					if (clearChatButton && chatContainer) {
+						// clearChatButton is enabled if there are messages in the chat.
+						clearChatButton.disabled = chatContainer.childElementCount === 0;
+					}
+					// --- END USER REQUESTED MODIFICATION ---
 				} else {
 					// Fallback if UI elements are missing
 					console.error(
@@ -808,6 +895,11 @@ if (
 						if (modelSelect) {
 							modelSelect.disabled = true;
 						}
+						// START MODIFICATION: Hide cancel button when plan confirmation shows on restore
+						if (cancelGenerationButton) {
+							cancelGenerationButton.style.display = "none";
+						}
+						// END MODIFICATION
 						isLoading = false; // Ensure loading indicator is not active
 					} else {
 						// Fallback if UI creation or finding failed
@@ -896,7 +988,7 @@ if (
 						!currentAiMessageContentElement &&
 						(!planConfirmationContainer ||
 							planConfirmationContainer.style.display === "none") &&
-						(!planParseErrorContainer || // Added check for parse error UI
+						(!planParseErrorContainer || // Added check for parse error UI visibility
 							planParseErrorContainer.style.display === "none")
 					) {
 						const enableSendControls = isApiKeySet;
@@ -1047,30 +1139,37 @@ if (
 					currentAccumulatedText = "";
 				}
 
-				// Check if plan confirmation UI is currently active and visible
-				if (
+				// Check if either plan confirmation UI OR parse error UI is currently active and visible.
+				// If either is visible, general chat inputs should *not* be re-enabled,
+				// as the user needs to interact with the specific UI element.
+				const planConfirmationActive =
 					planConfirmationContainer &&
-					planConfirmationContainer.style.display !== "none"
-				) {
-					// If plan confirmation is active, do *not* re-enable the general inputs.
-					// The plan confirmation UI itself is responsible for keeping them disabled, and it should remain visible.
+					planConfirmationContainer.style.display !== "none";
+				const parseErrorActive =
+					planParseErrorContainer &&
+					planParseErrorContainer.style.display !== "none";
+
+				// START MODIFICATION: Ensure cancel button is hidden if reenableInput is called
+				if (cancelGenerationButton) {
+					cancelGenerationButton.style.display = "none";
+				}
+				// END MODIFICATION
+
+				if (planConfirmationActive) {
 					console.log(
 						"Input re-enable for general chat controls skipped: Plan confirmation UI is active and keeping inputs disabled."
 					);
 					// The plan confirmation is not cancelled by this path; it remains the active state.
-				} else if (
-					// Also check if parse error UI is active
-					planParseErrorContainer &&
-					planParseErrorContainer.style.display !== "none"
-				) {
+				} else if (parseErrorActive) {
+					// Review Point 4: Added check for parse error UI state.
 					console.log(
 						"Input re-enable for general chat controls skipped: Plan parse error UI is active and keeping inputs disabled."
 					);
 				} else {
-					// No plan confirmation UI or parse error UI is active (or it's hidden).
-					// Proceed with re-enabling general inputs based on API key status.
+					// Neither special UI is active (or they are hidden).
+					// Proceed with re-enabling general inputs based on API key status (since isLoading is now false).
 					if (sendButton && chatInput && modelSelect) {
-						const enableSendControls = isApiKeySet; // Re-enable based on API key status (isLoading is false)
+						const enableSendControls = isApiKeySet; // Re-enable based on API key status
 						sendButton.disabled = !enableSendControls;
 						chatInput.disabled = !enableSendControls;
 						modelSelect.disabled = !enableSendControls;
@@ -1114,6 +1213,12 @@ if (
 		saveChatButton!.disabled = true; // Disabled until there are messages
 		loadChatButton!.disabled = false; // Always enabled
 
+		// START MODIFICATION: Set initial display state for the cancel button
+		if (cancelGenerationButton) {
+			cancelGenerationButton.style.display = "none";
+		}
+		// END MODIFICATION
+
 		// Set icons for buttons
 		setIconForButton(sendButton, faPaperPlane);
 		setIconForButton(saveChatButton, faFloppyDisk);
@@ -1125,28 +1230,51 @@ if (
 		setIconForButton(addKeyButton, faPlus);
 		setIconForButton(retryGenerationButton, faRedo); // faRedo imported for this
 		setIconForButton(cancelParseErrorButton, faTimes); // Set icon for the cancel parse error button (faTimes imported)
+		// START MODIFICATION: Set icon for the cancel generation button
+		setIconForButton(cancelGenerationButton, faStop); // faStop imported for this
+		// END MODIFICATION
 
-		// Event listener for the cancel parse error button
+		// START MODIFICATION: Add click event listener for cancelParseErrorButton as requested
+		// This listener is added within initializeWebview as part of UI setup.
 		if (cancelParseErrorButton) {
 			cancelParseErrorButton.addEventListener("click", () => {
-				// Hide the parse error container
+				console.log("Cancel Parse Error button clicked.");
+				// 2a. Hide the error container
 				if (planParseErrorContainer) {
 					planParseErrorContainer.style.display = "none";
 				}
-				// Inform the extension that the plan execution (and thus retry) is cancelled
-				vscode.postMessage({ type: "cancelPlanExecution" }); // This message type already handles necessary provider-side cleanup
-				updateStatus("Plan generation retry cancelled.");
-				// Clear the error display fields
+				// 2b. Clear the error display fields
 				if (planParseErrorDisplay) {
 					planParseErrorDisplay.textContent = "";
 				}
 				if (failedJsonDisplay) {
 					failedJsonDisplay.textContent = "";
 				}
-				// Re-enable general inputs if appropriate (e.g., if API key is set)
-				setLoadingState(false); // This will re-enable general inputs if appropriate
+				// 2c. Inform the extension that the plan execution (and thus retry) is cancelled
+				vscode.postMessage({ type: "cancelPlanExecution" }); // This message type already handles necessary provider-side cleanup
+				updateStatus("Plan generation retry cancelled.");
+				// 2d. Re-enable general inputs if appropriate (e.g., if API key is set)
+				// Calling setLoadingState(false) handles re-enabling based on API key status
+				// and ensures the chat loading message is removed if present.
+				setLoadingState(false); // This will also hide the cancel generation button
 			});
 		}
+		// END MODIFICATION: Add click event listener for cancelParseErrorButton
+
+		// START MODIFICATION: Add click event listener for cancelGenerationButton
+		if (cancelGenerationButton) {
+			cancelGenerationButton.addEventListener("click", () => {
+				console.log("Cancel Generation button clicked.");
+				// 1. Hide the button immediately
+				cancelGenerationButton.style.display = "none";
+				// 2. Send message to extension to cancel
+				vscode.postMessage({ type: "cancelGeneration" });
+				// 3. Call setLoadingState(false) to re-enable other inputs and clean up loading state
+				setLoadingState(false); // This will also hide the button (redundant but safe) and remove the chat loading message
+				updateStatus("Generation cancelled.");
+			});
+		}
+		// END MODIFICATION: Add click event listener for cancelGenerationButton
 
 		// Create plan confirmation UI elements (initially hidden)
 		createPlanConfirmationUI();

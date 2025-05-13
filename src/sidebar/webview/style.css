@@ -483,7 +483,7 @@ h2 {
 /* --- Input Area --- */
 #input-container {
 	display: flex;
-	align-items: flex-end;
+	align-items: flex-end; /* Align items to the bottom */
 	margin-bottom: var(--element-spacing);
 	flex-shrink: 0;
 	border: 1px solid var(--border-color);
@@ -491,6 +491,9 @@ h2 {
 	background-color: var(--vscode-input-background);
 	transition: border-color 0.1s ease-in-out;
 	padding: 2px; /* Small padding around */
+	gap: var(
+		--element-spacing
+	); /* Space between input, send, and cancel buttons */
 }
 #input-container:focus-within {
 	border-color: var(--vscode-focusBorder);
@@ -509,14 +512,21 @@ h2 {
 	min-height: calc(var(--input-height));
 	max-height: 150px;
 	line-height: 1.4;
+	/* Remove default margin or padding that might affect flex layout */
+	margin: 0;
+	padding-top: 6px; /* Re-add specific padding if needed */
+	padding-bottom: 6px;
+	padding-left: 8px;
+	padding-right: 8px;
 }
 #chat-input::placeholder {
 	color: var(--vscode-input-placeholderForeground);
 }
+
+/* Style for the send button */
 #input-container button#send-button {
 	flex-shrink: 0;
-	margin: 0; /* Remove margin, rely on container padding */
-	padding: 0; /* Remove padding */
+	padding: 0; /* Remove internal padding */
 	height: var(--input-height);
 	width: calc(var(--input-height) + 10px);
 	background-color: var(--vscode-button-background);
@@ -525,9 +535,10 @@ h2 {
 	border-radius: var(--border-radius);
 	cursor: pointer;
 	transition: background-color 0.1s ease-in-out;
-	display: inline-flex;
+	display: inline-flex; /* Use flexbox for centering icon */
 	align-items: center;
 	justify-content: center;
+	margin: 0; /* Ensure no extra margin */
 }
 #input-container button#send-button:hover {
 	background-color: var(--vscode-button-hoverBackground);
@@ -541,6 +552,41 @@ h2 {
 #input-container button#send-button .fa-icon {
 	/* Send Icon */
 	font-size: 1.1em;
+}
+
+/* Style for the cancel generation button */
+#input-container button#cancel-generation-button {
+	flex-shrink: 0;
+	display: none; /* Initially hidden */
+	padding: 0;
+	height: var(--input-height);
+	width: calc(var(--input-height) + 10px); /* Match size of send button */
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Secondary style background */
+	color: var(
+		--vscode-button-secondaryForeground
+	); /* Secondary style text color */
+	border: 1px solid var(--vscode-button-border, var(--border-color)); /* Add border for secondary style */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
+	/* When visible, it should be display: inline-flex */
+	align-items: center;
+	justify-content: center;
+	margin: 0; /* Ensure no extra margin */
+	/* Will be shown dynamically by JS, typically by setting display: inline-flex; */
+}
+#input-container button#cancel-generation-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+#input-container button#cancel-generation-button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+#input-container button#cancel-generation-button .fa-icon {
+	/* Cancel Icon */
+	font-size: 1.1em; /* Match size of send icon */
 }
 
 /* --- Model/API Key Sections --- */
@@ -709,107 +755,83 @@ h2 {
 }
 
 /* --- Plan Confirmation Container --- */
-/*
-    Review of #plan-confirmation-container button#cancel-plan-button and related styles:
-    1. Distinct Styling:
-       - The #cancel-plan-button uses `var(--vscode-button-secondaryBackground)` and 
-         `var(--vscode-button-secondaryForeground)`, which provides clear differentiation
-         from the primary confirm button.
-       - Border is consistent with the primary button, relying on background for distinction.
-       - Confirmed: Appropriate.
-
-    2. Hover and Focus States:
-       - Hover state for #cancel-plan-button uses `var(--vscode-button-secondaryHoverBackground)`,
-         providing clear feedback.
-       - A general focus state is added below for ALL buttons within this container 
-         (including #cancel-plan-button) using `border-color` and `box-shadow` with 
-         `var(--vscode-focusBorder)` for clear and consistent visual feedback.
-       - Confirmed: Met (with added focus style).
-
-    3. Font Awesome Icon:
-       - Icons (`.fa-icon`) within these buttons are styled by `#plan-confirmation-container button .fa-icon`.
-       - `font-size: 0.9em;` provides appropriate sizing.
-       - `margin-right: 6px;` ensures good spacing if text is present.
-       - Alignment is handled by the button's `display: inline-flex; align-items: center;`.
-       - Visibility is ensured by inheriting the button's color.
-       - Confirmed: Correctly sized, aligned, and visible.
-
-    4. Dimensions and Padding:
-       - General button styles in this container (`#plan-confirmation-container button`) define
-         `height: var(--input-height);`, `min-width: 80px;`, and `padding: 5px 12px;`.
-       - These dimensions are consistent with other UI elements (e.g., input fields, other buttons)
-         and provide a good, easily clickable target.
-       - Confirmed: Consistent and provides a good click target.
-*/
+/* Styles for the container that appears when a plan is generated and needs confirmation. */
 #plan-confirmation-container {
 	border: 1px solid
-		var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
-	background-color: var(--vscode-inputOption-activeBackground);
+		var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder)); /* Border color from theme */
+	background-color: var(
+		--vscode-inputOption-activeBackground
+	); /* Background color from theme */
 	padding: var(--container-padding);
-	margin: var(--element-spacing) 0;
-	text-align: center;
+	margin: var(--element-spacing) 0; /* Spacing above and below the container */
+	text-align: center; /* Center align text and inline children like buttons */
 	border-radius: var(--border-radius);
-	flex-shrink: 0;
+	flex-shrink: 0; /* Prevent container from shrinking in flex layouts */
 }
+/* Styles for the text message within the confirmation container. */
 #plan-confirmation-container p {
-	margin-top: 0;
-	margin-bottom: var(--element-spacing);
-	color: var(--vscode-inputOption-activeForeground);
-	font-weight: 500;
+	margin-top: 0; /* Remove top margin if it's the first element */
+	margin-bottom: var(--element-spacing); /* Spacing below the text */
+	color: var(
+		--vscode-inputOption-activeForeground
+	); /* Text color from theme, contrasts with background */
+	font-weight: 500; /* Slightly bolder text */
 }
+/* General styles for all buttons within the confirmation container. */
 #plan-confirmation-container button {
-	margin: 0 5px;
-	padding: 5px 12px; /* Point 4: Padding provides good click target area */
-	height: var(--input-height); /* Point 4: Consistent height */
-	min-width: 80px; /* Point 4: Ensures a minimum clickable width */
+	margin: 0 5px; /* Horizontal margin between buttons */
+	padding: 5px 12px; /* Padding inside buttons */
+	height: var(--input-height); /* Consistent height */
+	min-width: 80px; /* Minimum width for clickability */
 	background-color: var(
 		--vscode-button-background
-	); /* Default for primary/confirm button */
-	color: var(--vscode-button-foreground);
-	border: 1px solid var(--vscode-button-border, transparent); /* Point 1: Base border for buttons */
+	); /* Default primary button background */
+	color: var(
+		--vscode-button-foreground
+	); /* Default primary button text color */
+	border: 1px solid var(--vscode-button-border, transparent); /* Standard button border (can be transparent) */
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	/* Point 2: Transition updated to include border-color for focus state */
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
-	display: inline-flex; /* Point 3: Assists with icon alignment */
-	align-items: center; /* Point 3: Assists with icon alignment */
+	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out; /* Smooth transitions */
+	display: inline-flex; /* Use flexbox for content alignment (especially icons) */
+	align-items: center; /* Vertically align icon/text */
 	justify-content: center;
-	font-size: inherit;
-	outline: none; /* Point 2: Remove default outline to use custom box-shadow/border for focus */
+	font-size: inherit; /* Inherit font size from parent */
+	outline: none; /* Remove default outline */
 }
-/* Point 2: General hover state for primary/confirm button */
+/* Hover state for primary/confirm button */
 #plan-confirmation-container button:hover {
 	background-color: var(--vscode-button-hoverBackground);
 }
-/* Point 2: General focus state for all buttons in this container */
+/* Focus state for all buttons in this container, providing visual feedback */
 #plan-confirmation-container button:focus {
-	border-color: var(--vscode-focusBorder); /* Clear visual feedback for focus */
-	box-shadow: 0 0 0 1px var(--vscode-focusBorder); /* Additional emphasis consistent with inputs */
+	border-color: var(--vscode-focusBorder); /* Use focus border color */
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder); /* Add an outline shadow */
 }
 
-/* Point 1: Distinct styling for the cancel button */
+/* Specific styles for the cancel button within the confirmation container (Secondary Appearance - Step 1) */
 #plan-confirmation-container button#cancel-plan-button {
 	background-color: var(
 		--vscode-button-secondaryBackground
-	); /* Differentiates from confirm button */
-	color: var(--vscode-button-secondaryForeground);
-	/* Border is inherited from general button style, which is fine as background provides distinction */
+	); /* Use secondary background color */
+	color: var(
+		--vscode-button-secondaryForeground
+	); /* Use secondary text color */
+	/* Border is inherited from the general button style, which is appropriate. */
 }
-/* Point 2: Hover state for the cancel button */
+/* Hover state for the cancel button (Step 3) */
 #plan-confirmation-container button#cancel-plan-button:hover {
 	background-color: var(
 		--vscode-button-secondaryHoverBackground
-	); /* Clear hover feedback */
+	); /* Use secondary hover background color */
 }
-/* Focus for cancel button is handled by the general `#plan-confirmation-container button:focus` rule,
-   maintaining its secondary background/foreground colors while gaining the focus border/shadow. */
+/* Focus state for cancel button is handled by the general `#plan-confirmation-container button:focus` rule above. */
 
-/* Point 3: Styling for Font Awesome icons within any button in this container */
+/* Styling for Font Awesome icons within any button in this container */
 #plan-confirmation-container button .fa-icon {
 	margin-right: 6px; /* Spacing between icon and text */
-	font-size: 0.9em; /* Icon size relative to button font size, appropriate for visibility */
-	/* Alignment is handled by parent button's flex properties (`display: inline-flex; align-items: center;`)
-	   and global .fa-icon styles (`vertical-align`). */
+	font-size: 0.9em; /* Icon size relative to button font size */
+	/* Alignment is handled by parent button's flex properties and global .fa-icon styles. */
 	/* Visibility is ensured by color inherited from button. */
 }
 
@@ -886,7 +908,6 @@ code#failed-json-display {
 /* Styles for the "Retry Generation" button, making it look like a primary action button. */
 /* This general style applies if the button is used outside the new plan-parse-error-buttons-wrapper. */
 #retry-generation-button {
-	/* margin-top: var(--element-spacing); -- MODIFICATION: Removed as per instruction */
 	padding: 5px 12px; /* Standard padding for primary buttons. */
 	height: var(
 		--input-height
@@ -919,89 +940,112 @@ code#failed-json-display {
 }
 
 /* --- Plan Parse Error Action Buttons --- */
-/* New rule for the buttons wrapper */
+/* Wrapper for the buttons when a plan parse error occurs */
 #plan-parse-error-buttons-wrapper {
 	display: flex;
-	justify-content: center;
+	justify-content: center; /* Center the button group horizontally */
 	gap: 10px; /* Space between buttons */
 	margin-top: var(--element-spacing); /* Space above the button group */
 }
 
-/* New general style for buttons within this wrapper */
+/* General styles for buttons within the error buttons wrapper */
 #plan-parse-error-buttons-wrapper button {
-	padding: 0;
-	width: var(--icon-button-size);
-	height: var(--icon-button-size);
+	padding: 0; /* No internal padding, size is controlled by width/height */
+	width: var(--icon-button-size); /* Fixed size for square buttons */
+	height: var(--icon-button-size); /* Fixed size for square buttons */
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	font-size: inherit;
-	outline: none;
+	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out; /* Smooth transitions */
+	display: inline-flex; /* Use flexbox for content alignment (especially icons) */
+	align-items: center; /* Vertically align icon */
+	justify-content: center; /* Center icon horizontally */
+	font-size: inherit; /* Inherit font size */
+	outline: none; /* Remove default outline */
 }
 
-/* Styles for #retry-generation-button within the wrapper (primary button appearance) */
+/* Styles for #retry-generation-button within the wrapper (Primary button appearance) */
 #plan-parse-error-buttons-wrapper #retry-generation-button {
-	background-color: var(--vscode-button-background);
-	color: var(--vscode-button-foreground);
-	border: 1px solid var(--vscode-button-border, transparent);
+	background-color: var(
+		--vscode-button-background
+	); /* Primary background color */
+	color: var(--vscode-button-foreground); /* Primary text color */
+	border: 1px solid var(--vscode-button-border, transparent); /* Standard primary button border */
 }
+/* Hover state for the retry button */
 #plan-parse-error-buttons-wrapper #retry-generation-button:hover {
-	background-color: var(--vscode-button-hoverBackground);
+	background-color: var(
+		--vscode-button-hoverBackground
+	); /* Primary hover background */
 }
 
-/* New style for the #cancel-parse-error-button (secondary appearance) */
+/* Styles for the #cancel-parse-error-button (Secondary appearance - Step 2) */
 #plan-parse-error-buttons-wrapper #cancel-parse-error-button {
-	background-color: var(--vscode-button-secondaryBackground);
-	color: var(--vscode-button-secondaryForeground);
-	border: 1px solid var(--vscode-button-border, var(--border-color));
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Secondary background color */
+	color: var(--vscode-button-secondaryForeground); /* Secondary text color */
+	border: 1px solid var(--vscode-button-border, var(--border-color)); /* Add a border for better distinction */
 }
+/* Hover state for the cancel button (Step 3) */
 #plan-parse-error-buttons-wrapper #cancel-parse-error-button:hover {
-	background-color: var(--vscode-button-secondaryHoverBackground);
+	background-color: var(
+		--vscode-button-secondaryHoverBackground
+	); /* Secondary hover background color */
 }
 
-/* New focus style for both buttons in the wrapper */
+/* Focus style for both buttons in the wrapper (Step 3) */
 #plan-parse-error-buttons-wrapper button:focus {
-	border-color: var(--vscode-focusBorder);
-	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+	border-color: var(--vscode-focusBorder); /* Highlight border on focus */
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder); /* Add an outline shadow */
 }
 
-/* New style for icons within these buttons */
+/* Style for icons within these buttons */
 #plan-parse-error-buttons-wrapper button .fa-icon {
-	font-size: 1em; /* Note: icon size relative to button font size */
+	font-size: 1em; /* Icon size relative to button font size */
 }
 
 /* --- Scrollbar Styling --- */
+/* Styles for the scrollbar itself */
 ::-webkit-scrollbar {
-	width: 6px;
-	height: 6px;
+	width: 6px; /* Width for vertical scrollbars */
+	height: 6px; /* Height for horizontal scrollbars */
 }
+/* Styles for the scrollbar track (the area the thumb moves in) */
 ::-webkit-scrollbar-track {
 	background: transparent; /* Make track transparent */
 }
+/* Styles for the scrollbar thumb (the movable handle) */
 ::-webkit-scrollbar-thumb {
-	background: var(--vscode-scrollbarSlider-background);
-	border-radius: 3px;
-	border: none;
+	background: var(
+		--vscode-scrollbarSlider-background
+	); /* Background color from theme */
+	border-radius: 3px; /* Rounded corners */
+	border: none; /* No border */
 }
+/* Hover state for the scrollbar thumb */
 ::-webkit-scrollbar-thumb:hover {
-	background: var(--vscode-scrollbarSlider-hoverBackground);
+	background: var(
+		--vscode-scrollbarSlider-hoverBackground
+	); /* Hover background color from theme */
 }
+/* Active state for the scrollbar thumb (when being dragged) */
 ::-webkit-scrollbar-thumb:active {
-	background: var(--vscode-scrollbarSlider-activeBackground);
+	background: var(
+		--vscode-scrollbarSlider-activeBackground
+	); /* Active background color from theme */
 }
 
 /* --- FontAwesome Icon Base --- */
+/* Base styles for FontAwesome icons */
 .fa-icon {
-	display: inline-block;
-	width: 1em; /* Ensure consistent width */
-	height: 1em; /* Ensure consistent height */
-	vertical-align: -0.125em; /* Adjust alignment */
+	display: inline-block; /* Allows setting width/height and alignment */
+	width: 1em; /* Ensure consistent width based on parent font size */
+	height: 1em; /* Ensure consistent height based on parent font size */
+	vertical-align: -0.125em; /* Adjust alignment slightly to center with text */
 }
 
 /* --- Loading Indicator Styles --- */
+/* Style for the text part of the loading indicator */
 .loading-text {
 	display: inline-block; /* Ensures the text "Thinking" and dots are on the same line if used together */
 	font-style: italic; /* Matches style of system-message */
@@ -1010,12 +1054,13 @@ code#failed-json-display {
 	); /* Matches color of system-message */
 }
 
+/* Style for each individual dot in the loading indicator */
 .loading-text .dot {
-	animation: blink 1.4s infinite both; /* 'both' fills forwards and backwards, ensures dot starts invisible if animation hasn't started */
+	animation: blink 1.4s infinite both; /* Apply blink animation */
 	display: inline-block; /* Ensure dots are on the same line */
 }
 
-/* Animation delay for each dot to create a sequence */
+/* Animation delay for each dot to create a sequential blinking effect */
 .loading-text .dot:nth-child(1) {
 	animation-delay: 0s;
 }

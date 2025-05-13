@@ -9,6 +9,8 @@ import {
 } from "@google/generative-ai";
 
 export const ERROR_QUOTA_EXCEEDED = "ERROR_GEMINI_QUOTA_EXCEEDED";
+// Define a specific error message constant for cancellation
+export const ERROR_OPERATION_CANCELLED = "Operation cancelled by user.";
 
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
@@ -86,7 +88,8 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
  * @param generationConfig Optional configuration for this generation request (e.g., for JSON mode).
  * @param token Optional cancellation token from VS Code.
  * @returns An AsyncIterableIterator yielding generated text chunks.
- * @throws Will throw an error if initialization fails, the request is blocked before yielding any content,
+ * @throws Will throw `ERROR_OPERATION_CANCELLED` if the operation is cancelled by the user.
+ *         Will throw an error if initialization fails, the request is blocked before yielding any content,
  *         or a critical API error occurs. Quota errors throw `new Error(ERROR_QUOTA_EXCEEDED)`.
  */
 export async function* generateContentStream(
@@ -95,14 +98,15 @@ export async function* generateContentStream(
 	prompt: string,
 	history?: Content[],
 	generationConfig?: GenerationConfig,
-	token?: vscode.CancellationToken
+	token?: vscode.CancellationToken // Added optional cancellation token parameter
 ): AsyncIterableIterator<string> {
 	// 1. Initial cancellation check (before any significant work)
 	if (token?.isCancellationRequested) {
 		console.log(
 			"Gemini: Cancellation requested before starting stream generation."
 		);
-		return; // Stop the generator
+		// Throw the specific cancellation error
+		throw new Error(ERROR_OPERATION_CANCELLED);
 	}
 
 	// 2. Initialize AI client and model
@@ -151,10 +155,11 @@ export async function* generateContentStream(
 
 		// 5. Stream content chunks from result.stream
 		for await (const chunk of result.stream) {
-			// Check for cancellation before processing and yielding each chunk
+			// Check for cancellation *before* processing/yielding the chunk
 			if (token?.isCancellationRequested) {
 				console.log("Gemini: Cancellation requested during streaming.");
-				return; // Stop the generator if cancellation is detected
+				// Throw the specific cancellation error
+				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 
 			const text = chunk.text(); // Extract text from the current chunk
@@ -229,12 +234,12 @@ export async function* generateContentStream(
 		// 7. Handle errors from API calls, network issues, or other exceptions during the process.
 
 		// Log if cancellation was requested around the time of the error.
-		// The primary error (API error, etc.) will be processed and thrown.
-		if (token?.isCancellationRequested) {
-			console.log(
-				"Gemini: Operation was cancelled by user around the time an error occurred. Error message:",
-				error?.message
-			);
+		// If the error itself is the cancellation error, re-throw it.
+		// Otherwise, process other errors.
+		if (error instanceof Error && error.message === ERROR_OPERATION_CANCELLED) {
+			console.log("Gemini: Caught specific cancellation error, re-throwing.");
+			// Re-throw the specific cancellation error so callers can distinguish it.
+			throw error;
 		}
 
 		console.error(
