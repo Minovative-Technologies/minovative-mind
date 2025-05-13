@@ -170,16 +170,20 @@ if (
 	// Modified appendMessage to handle stream initialization and add copy button for AI messages
 	function appendMessage(sender: string, text: string, className: string = "") {
 		if (chatContainer) {
-			// If this call is to add a "loading-message"
+			// Handle the "Creating..." loading message
 			if (className === "loading-message") {
 				if (chatContainer.querySelector(".loading-message")) {
-					// If one already exists
-					return; // Don't add another
+					// If one already exists, update it or just skip if content is identical
+					const existingLoadingMsg = chatContainer.querySelector(
+						".loading-message"
+					) as HTMLDivElement;
+					if (existingLoadingMsg && existingLoadingMsg.textContent !== text) {
+						existingLoadingMsg.textContent = text;
+					}
+					return; // Don't add another loading message
 				}
 			} else {
-				// If this is any other message (not a loading message itself),
-				// remove any existing general "loading-message".
-				// This is also handled by aiResponseStart specifically for AI streams.
+				// If this is any other message, remove any existing general "loading-message".
 				const loadingMsg = chatContainer.querySelector(".loading-message");
 				if (loadingMsg) {
 					loadingMsg.remove();
@@ -201,29 +205,49 @@ if (
 
 			let copyButton: HTMLButtonElement | null = null;
 
-			// START MODIFICATION: Add copy button for AI messages
-			if (sender === "Model" && className === "ai-message") {
+			// START MODIFICATION: Add copy button for AI messages and handle streaming state
+			if (sender === "Model" && className.includes("ai-message")) {
+				// Ensure the class is specifically ai-message or includes it (e.g., 'ai-message error-message')
 				copyButton = document.createElement("button");
 				copyButton.classList.add("copy-button");
 				copyButton.title = "Copy Message";
 				messageElement.appendChild(copyButton); // Append button after the text element
 				setIconForButton(copyButton, faCopy); // Set the initial copy icon
 
-				if (text === "") {
-					// This is the start of a stream (called by aiResponseStart)
+				// Check if this is the start of a new stream by checking if text is empty.
+				// aiResponseStart sends { type: "aiResponseStart", value: { modelName: modelName } }
+				// followed by appendMessage("Model", "", "ai-message") to signal the beginning.
+				if (text === "" && className === "ai-message") {
+					// This is the start of a stream
+					console.log("Appending start of AI stream message.");
 					currentAiMessageContentElement = textElement;
-					currentAccumulatedText = ""; // text is already empty string from aiResponseStart
-					// Set initial HTML to the loading indicator
+					currentAccumulatedText = ""; // Initialize accumulated text
+
+					// Add a loading indicator within the text element
 					textElement.innerHTML =
-						'<span class="loading-text">Loading<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+						'<span class="loading-text">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+
 					// Disable copy button while content is loading/streaming
-					copyButton.disabled = true;
+					if (copyButton) {
+						copyButton.disabled = true;
+						copyButton.style.opacity = "0"; // Keep hidden initially
+						copyButton.style.pointerEvents = "none";
+					}
 				} else {
-					// This is a complete non-streamed AI message
+					// This is a complete non-streamed AI message OR a specific error/status message
+					// Mark streaming as finished if it was active
+					currentAiMessageContentElement = null;
+					currentAccumulatedText = "";
+
 					const renderedHtml = md.render(text);
 					textElement.innerHTML = renderedHtml;
-					// For non-streaming AI message, button is enabled immediately (assuming appendMessage is called after content is ready)
-					copyButton.disabled = false;
+					// For non-streaming AI message, button is enabled immediately and made visible
+					if (copyButton) {
+						copyButton.disabled = false;
+						// Make button visible immediately for static messages, but still allow mouseover hide/show
+						copyButton.style.opacity = "1";
+						copyButton.style.pointerEvents = "auto";
+					}
 				}
 			} else {
 				// For user messages, system messages, etc.
@@ -235,20 +259,6 @@ if (
 
 			chatContainer.appendChild(messageElement);
 			chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to bottom
-
-			// The button states related to chat content count are now managed primarily by setLoadingState
-			// and potentially during history restoration, but this simple check here is still helpful
-			// immediately after a message is added to potentially enable them if they were previously disabled
-			// due to an empty chat *and* the UI is not blocked.
-			// However, relying solely on setLoadingState(false) calls after operations finish is more robust.
-			// Let's remove this redundant update here and rely on explicit setLoadingState calls.
-			/*
-			const hasMessages = chatContainer.childElementCount > 0;
-			if (clearChatButton && saveChatButton) {
-				clearChatButton.disabled = !hasMessages;
-				saveChatButton.disabled = !hasMessages;
-			}
-			*/
 		}
 	}
 
@@ -285,18 +295,47 @@ if (
 			statusArea.style.color = isError
 				? "var(--vscode-errorForeground)"
 				: "var(--vscode-descriptionForeground)";
-			setTimeout(() => {
-				if (statusArea.textContent === sanitizedText) {
-					statusArea.textContent = "";
-				}
-			}, 5000);
+			// Clear after a delay unless it's an error
+			if (!isError) {
+				setTimeout(() => {
+					if (statusArea.textContent === sanitizedText) {
+						statusArea.textContent = "";
+					}
+				}, 5000);
+			} else {
+				// For errors, clear only if another status message replaces it
+				// The statusArea text will stay until updated again
+			}
 		}
 	}
 
 	function sendMessage() {
-		if (isLoading || !chatInput || !sendButton) {
+		// Allow sending only if not currently loading and no blocking UI is visible
+		const planConfirmationVisible =
+			planConfirmationContainer &&
+			planConfirmationContainer.style.display !== "none";
+		const planParseErrorVisible =
+			planParseErrorContainer &&
+			planParseErrorContainer.style.display !== "none";
+
+		if (
+			isLoading ||
+			planConfirmationVisible ||
+			planParseErrorVisible ||
+			!chatInput ||
+			!sendButton
+		) {
+			console.log(
+				"Send button disabled: isLoading",
+				isLoading,
+				"planConfirmationVisible",
+				planConfirmationVisible,
+				"planParseErrorVisible",
+				planParseErrorVisible
+			);
 			return;
 		}
+
 		const fullMessage = chatInput.value.trim();
 		chatInput.value = "";
 		if (!fullMessage) {
@@ -312,10 +351,16 @@ if (
 			return;
 		}
 
-		// setLoadingState(true) will be called, which now handles hiding planParseErrorContainer
-		if (fullMessage.toLowerCase().startsWith("/plan ")) {
+		// Set loading state to true immediately upon sending
+		setLoadingState(true);
+
+		// Check for commands first
+		const lowerMessage = fullMessage.toLowerCase();
+		if (lowerMessage.startsWith("/plan ")) {
 			const planRequest = fullMessage.substring(6).trim();
 			if (!planRequest) {
+				// If command is invalid, re-enable input
+				setLoadingState(false);
 				appendMessage(
 					"System",
 					"Please provide a description for the plan after /plan.",
@@ -325,21 +370,20 @@ if (
 			}
 			appendMessage("You", fullMessage, "user-message");
 			vscode.postMessage({ type: "planRequest", value: planRequest });
-			setLoadingState(true);
-		} else if (fullMessage.toLowerCase().startsWith("/commit")) {
+		} else if (lowerMessage === "/commit") {
 			appendMessage("You", fullMessage, "user-message");
 			vscode.postMessage({ type: "commitRequest" });
-			setLoadingState(true);
 		} else {
+			// Regular chat message
 			appendMessage("You", fullMessage, "user-message");
 			vscode.postMessage({ type: "chatMessage", value: fullMessage });
-			setLoadingState(true);
 		}
 	}
 
 	// Modified setLoadingState to control button states based on loading and UI visibility
 	function setLoadingState(loading: boolean) {
 		isLoading = loading; // Keep track of overall loading state
+		console.log("setLoadingState:", loading);
 
 		// Check visibility of blocking UI elements
 		const planConfirmationVisible =
@@ -363,8 +407,31 @@ if (
 		if (chatInput) {
 			chatInput.disabled = !enableSendControls;
 		}
+		// Model selection should also be disabled while any operation is running or UI is blocked
 		if (modelSelect) {
-			modelSelect.disabled = !enableSendControls;
+			modelSelect.disabled =
+				!!isLoading || !!planConfirmationVisible || !!planParseErrorVisible;
+		}
+		// API key management buttons should also be disabled while any operation is running or UI is blocked
+		const enableApiKeyControls =
+			!isLoading &&
+			!planConfirmationVisible &&
+			!planParseErrorVisible &&
+			totalKeys > 0;
+		if (prevKeyButton) {
+			prevKeyButton.disabled = !enableApiKeyControls || totalKeys <= 1;
+		}
+		if (nextKeyButton) {
+			nextKeyButton.disabled = !enableApiKeyControls || totalKeys <= 1;
+		}
+		if (deleteKeyButton) {
+			deleteKeyButton.disabled = !enableApiKeyControls || !isApiKeySet;
+		}
+		if (addKeyInput) {
+			addKeyInput.disabled = !enableApiKeyControls;
+		}
+		if (addKeyButton) {
+			addKeyButton.disabled = !enableApiKeyControls;
 		}
 
 		// START USER REQUESTED MODIFICATION: Control load/save/clear buttons
@@ -375,7 +442,8 @@ if (
 
 		// Determine if there are messages in the chat container
 		const hasMessages = chatContainer
-			? chatContainer.childElementCount > 0
+			? chatContainer.childElementCount > 0 &&
+				!chatContainer.querySelector(".loading-message") // Don't count the loading message as content
 			: false;
 
 		if (loadChatButton) {
@@ -413,9 +481,10 @@ if (
 			// This is for the initial user send, before the AI stream begins.
 			// Point 4.c (from review instructions): The aiResponseStart handler will reliably remove this "Creating..."
 			// message when the actual AI stream begins.
+			// Only add a general loading message if we are not currently receiving a stream AND no other loading message is present.
 			if (
-				!currentAiMessageContentElement && // Check if not already actively streaming an AI response
-				!chatContainer?.querySelector(".loading-message") // And if a loading message isn't already present
+				!currentAiMessageContentElement &&
+				!chatContainer?.querySelector(".loading-message")
 			) {
 				appendMessage(
 					"Model",
@@ -581,6 +650,54 @@ if (
 		}
 	});
 	modelSelect.addEventListener("change", () => {
+		// Disable controls temporarily while switch is requested
+		// These will be re-enabled by updateModelList + setLoadingState
+		const enableSendControls =
+			!isLoading &&
+			isApiKeySet &&
+			!(
+				planConfirmationContainer &&
+				planConfirmationContainer.style.display !== "none"
+			) &&
+			!(
+				planParseErrorContainer &&
+				planParseErrorContainer.style.display !== "none"
+			);
+
+		if (sendButton) {
+			sendButton.disabled = true;
+		}
+		if (chatInput) {
+			chatInput.disabled = true;
+		}
+		if (modelSelect) {
+			modelSelect.disabled = true;
+		}
+		if (prevKeyButton) {
+			prevKeyButton.disabled = true;
+		}
+		if (nextKeyButton) {
+			nextKeyButton.disabled = true;
+		}
+		if (deleteKeyButton) {
+			deleteKeyButton.disabled = true;
+		}
+		if (addKeyInput) {
+			addKeyInput.disabled = true;
+		}
+		if (addKeyButton) {
+			addKeyButton.disabled = true;
+		}
+		if (loadChatButton) {
+			loadChatButton.disabled = true;
+		}
+		if (saveChatButton) {
+			saveChatButton.disabled = true;
+		}
+		if (clearChatButton) {
+			clearChatButton.disabled = true;
+		}
+
 		const selectedModel = modelSelect.value;
 		vscode.postMessage({ type: "selectModel", value: selectedModel });
 		updateStatus(`Requesting switch to model: ${selectedModel}...`);
@@ -588,6 +705,53 @@ if (
 	addKeyButton.addEventListener("click", () => {
 		const apiKey = addKeyInput!.value.trim();
 		if (apiKey) {
+			// Disable controls temporarily while adding/switching is requested
+			const enableSendControls =
+				!isLoading &&
+				isApiKeySet &&
+				!(
+					planConfirmationContainer &&
+					planConfirmationContainer.style.display !== "none"
+				) &&
+				!(
+					planParseErrorContainer &&
+					planParseErrorContainer.style.display !== "none"
+				);
+
+			if (sendButton) {
+				sendButton.disabled = true;
+			}
+			if (chatInput) {
+				chatInput.disabled = true;
+			}
+			if (modelSelect) {
+				modelSelect.disabled = true;
+			}
+			if (prevKeyButton) {
+				prevKeyButton.disabled = true;
+			}
+			if (nextKeyButton) {
+				nextKeyButton.disabled = true;
+			}
+			if (deleteKeyButton) {
+				deleteKeyButton.disabled = true;
+			}
+			if (addKeyInput) {
+				addKeyInput.disabled = true;
+			} // Disable the input itself
+			if (addKeyButton) {
+				addKeyButton.disabled = true;
+			} // Disable the add button
+			if (loadChatButton) {
+				loadChatButton.disabled = true;
+			}
+			if (saveChatButton) {
+				saveChatButton.disabled = true;
+			}
+			if (clearChatButton) {
+				clearChatButton.disabled = true;
+			}
+
 			vscode.postMessage({ type: "addApiKey", value: apiKey });
 			addKeyInput!.value = "";
 			updateApiKeyStatus("Adding key...");
@@ -602,14 +766,155 @@ if (
 		}
 	});
 	prevKeyButton.addEventListener("click", () => {
+		// Disable controls temporarily while switching is requested
+		const enableSendControls =
+			!isLoading &&
+			isApiKeySet &&
+			!(
+				planConfirmationContainer &&
+				planConfirmationContainer.style.display !== "none"
+			) &&
+			!(
+				planParseErrorContainer &&
+				planParseErrorContainer.style.display !== "none"
+			);
+
+		if (sendButton) {
+			sendButton.disabled = true;
+		}
+		if (chatInput) {
+			chatInput.disabled = true;
+		}
+		if (modelSelect) {
+			modelSelect.disabled = true;
+		}
+		if (prevKeyButton) {
+			prevKeyButton.disabled = true;
+		} // Disable the button that was clicked
+		if (nextKeyButton) {
+			nextKeyButton.disabled = true;
+		}
+		if (deleteKeyButton) {
+			deleteKeyButton.disabled = true;
+		}
+		if (addKeyInput) {
+			addKeyInput.disabled = true;
+		}
+		if (addKeyButton) {
+			addKeyButton.disabled = true;
+		}
+		if (loadChatButton) {
+			loadChatButton.disabled = true;
+		}
+		if (saveChatButton) {
+			saveChatButton.disabled = true;
+		}
+		if (clearChatButton) {
+			clearChatButton.disabled = true;
+		}
+
 		vscode.postMessage({ type: "switchToPrevKey" });
 		updateApiKeyStatus("Switching key...");
 	});
 	nextKeyButton.addEventListener("click", () => {
+		// Disable controls temporarily while switching is requested
+		const enableSendControls =
+			!isLoading &&
+			isApiKeySet &&
+			!(
+				planConfirmationContainer &&
+				planConfirmationContainer.style.display !== "none"
+			) &&
+			!(
+				planParseErrorContainer &&
+				planParseErrorContainer.style.display !== "none"
+			);
+
+		if (sendButton) {
+			sendButton.disabled = true;
+		}
+		if (chatInput) {
+			chatInput.disabled = true;
+		}
+		if (modelSelect) {
+			modelSelect.disabled = true;
+		}
+		if (prevKeyButton) {
+			prevKeyButton.disabled = true;
+		}
+		if (nextKeyButton) {
+			nextKeyButton.disabled = true;
+		} // Disable the button that was clicked
+		if (deleteKeyButton) {
+			deleteKeyButton.disabled = true;
+		}
+		if (addKeyInput) {
+			addKeyInput.disabled = true;
+		}
+		if (addKeyButton) {
+			addKeyButton.disabled = true;
+		}
+		if (loadChatButton) {
+			loadChatButton.disabled = true;
+		}
+		if (saveChatButton) {
+			saveChatButton.disabled = true;
+		}
+		if (clearChatButton) {
+			clearChatButton.disabled = true;
+		}
+
 		vscode.postMessage({ type: "switchToNextKey" });
 		updateApiKeyStatus("Switching key...");
 	});
 	deleteKeyButton.addEventListener("click", () => {
+		// Disable controls temporarily while action is pending confirmation
+		const enableSendControls =
+			!isLoading &&
+			isApiKeySet &&
+			!(
+				planConfirmationContainer &&
+				planConfirmationContainer.style.display !== "none"
+			) &&
+			!(
+				planParseErrorContainer &&
+				planParseErrorContainer.style.display !== "none"
+			);
+
+		if (sendButton) {
+			sendButton.disabled = true;
+		}
+		if (chatInput) {
+			chatInput.disabled = true;
+		}
+		if (modelSelect) {
+			modelSelect.disabled = true;
+		}
+		if (prevKeyButton) {
+			prevKeyButton.disabled = true;
+		}
+		if (nextKeyButton) {
+			nextKeyButton.disabled = true;
+		}
+		if (deleteKeyButton) {
+			deleteKeyButton.disabled = true;
+		} // Disable the button that was clicked
+		if (addKeyInput) {
+			addKeyInput.disabled = true;
+		}
+		if (addKeyButton) {
+			addKeyButton.disabled = true;
+		}
+		if (loadChatButton) {
+			loadChatButton.disabled = true;
+		}
+		if (saveChatButton) {
+			saveChatButton.disabled = true;
+		}
+		if (clearChatButton) {
+			clearChatButton.disabled = true;
+		}
+
 		vscode.postMessage({ type: "requestDeleteConfirmation" });
 		updateApiKeyStatus("Waiting for delete confirmation...");
 	});
@@ -662,73 +967,61 @@ if (
 			// Case for non-streamed, complete AI responses.
 			// Can also handle plans that require confirmation if message includes relevant flags.
 			case "aiResponse": {
-				// First, append the message content from the AI.
-				// Assumes message.value contains the textual content to display.
+				// This message type is now primarily used for final non-streamed responses or error messages.
+				// Streamed responses use aiResponseStart, aiResponseChunk, aiResponseEnd.
+				// Ensure the message is appended and handle error state if provided.
+				// The copy button logic for 'ai-message' is handled inside appendMessage.
 				appendMessage(
 					"Model",
 					message.value,
-					message.isError ? "error-message" : "ai-message"
+					message.isError ? "ai-message error-message" : "ai-message" // Add ai-message class explicitly
 				);
 
-				// Then, handle plan confirmation or loading state.
+				// Handle plan confirmation if this non-streamed message requires it.
+				// Note: Plan confirmation UI is typically triggered by aiResponseEnd for streamed plans,
+				// but this might still be used for non-streamed plan explanations if that flow is re-introduced.
 				if (
 					message.isPlanResponse &&
 					message.requiresConfirmation &&
 					message.planData
 				) {
-					// This part handles non-streamed AI responses that are plans requiring user confirmation.
-					createPlanConfirmationUI(); // Ensure UI elements for confirmation are ready.
+					createPlanConfirmationUI();
 					if (planConfirmationContainer) {
 						pendingPlanData = message.planData as {
-							// Store the plan data for later execution.
 							type: string;
 							originalRequest?: string;
 							originalInstruction?: string;
 						};
-						planConfirmationContainer.style.display = "flex"; // Show the confirmation UI.
+						planConfirmationContainer.style.display = "flex";
 						updateStatus(
 							"Textual plan generated. Review and confirm to proceed."
 						);
 
-						// Disable chat inputs while plan confirmation is visible.
-						// These will be disabled by the setLoadingState call in the confirm/cancel listeners,
-						// but explicitly setting them here ensures they are disabled immediately upon showing the plan confirmation UI.
-						// Also, setLoadingState is *not* called with false here, so global state remains "not loading" but UI is blocked.
-						if (chatInput) {
-							chatInput.disabled = true;
-						}
-						if (sendButton) {
-							sendButton.disabled = true;
-						}
-						if (modelSelect) {
-							modelSelect.disabled = true;
-						}
+						// Disable chat inputs and other controls while plan confirmation is visible.
+						setLoadingState(false); // This will trigger setLoadingState(false) which then sees planConfirmationVisible and disables accordingly.
 						// START MODIFICATION: Hide cancel button when plan confirmation shows
 						if (cancelGenerationButton) {
 							cancelGenerationButton.style.display = "none";
 						}
 						// END MODIFICATION
-						// Button states for save/load/clear will be correctly disabled because planConfirmationVisible is true.
 					} else {
-						// Fallback if UI creation failed.
 						console.error(
 							"Plan confirmation container failed to create or find for non-streamed plan!"
 						);
 						updateStatus("Error: UI for plan confirmation is missing.", true);
-						setLoadingState(false); // Set loading to false as plan confirmation cannot be shown. This will also manage buttons.
+						setLoadingState(false); // Fallback to re-enable if UI failed to show.
 					}
 				} else if (message.isLoading === false) {
-					// This handles regular non-streamed messages or non-confirmable parts of plans.
-					// If message.isLoading is explicitly false, it means the AI operation is complete.
-					setLoadingState(false); // This call now correctly manages all button states
+					// If this is a regular non-streamed message and isLoading is explicitly false, operation is complete.
+					setLoadingState(false); // This call now correctly manages all button states.
 				}
-				// If message.isLoading is true (or not provided) and it's not a confirmable plan,
-				// setLoadingState is NOT called, meaning loading state persists (or wasn't set true initially).
+				// If isLoading is true (or not specified) and it's not a confirmable plan, loading state persists.
 				break;
 			}
 
 			// --- New handlers for streamed responses ---
 			case "aiResponseStart": {
+				console.log("Received aiResponseStart. Starting stream.");
 				// Point 1.c (from review instructions): Ensure any generic "Creating..." or similar loading message is removed.
 				const loadingMsg = chatContainer?.querySelector(".loading-message");
 				if (loadingMsg) {
@@ -738,37 +1031,32 @@ if (
 				// This call also handles Point 1.a:
 				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
 				// within the appendMessage function (see its definition) for a new AI stream.
-				// START MODIFICATION: appendMessage now adds a disabled copy button for streaming messages
 				appendMessage("Model", "", "ai-message");
-				// END MODIFICATION
 				// setLoadingState(true) was called when the user sent the message.
 				// We are now in the process of receiving the response, so loading is still active.
 				// No need to call setLoadingState(false) here. Button states are already handled by the initial setLoadingState(true).
 				break;
 			}
 			case "aiResponseChunk": {
+				// Point 2.a, 2.b, 2.c (from review instructions) are handled within appendMessage now.
+				// This message type is only for streaming content chunks.
 				if (currentAiMessageContentElement && message.value !== undefined) {
-					// Point 2.a (from review instructions): Correctly appends message.value to currentAccumulatedText.
 					currentAccumulatedText += message.value;
-					// Point 2.b (from review instructions): Updates currentAiMessageContentElement.innerHTML with rendered markdown.
+					// Update the HTML content of the current AI message element
 					currentAiMessageContentElement.innerHTML = md.render(
 						currentAccumulatedText
 					);
 					if (chatContainer) {
-						// Point 2.c (from review instructions): chatContainer.scrollTop = chatContainer.scrollHeight is called.
 						chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to keep latest content visible
 					}
 				}
 				break;
 			}
 			case "aiResponseEnd": {
-				// MODIFICATION START: Introduce planConfirmationWasShown flag
-				let planConfirmationWasShown = false;
-				// MODIFICATION END
-
+				console.log("Received aiResponseEnd. Stream finished.");
 				// After stream ends, finalize the message content and handle UI updates
 				if (currentAiMessageContentElement) {
-					// Finalize the content in the DOM
+					// Finalize the content in the DOM using the accumulated text
 					const renderedHtml = md.render(currentAccumulatedText);
 					currentAiMessageContentElement.innerHTML = renderedHtml;
 
@@ -780,48 +1068,38 @@ if (
 						) as HTMLButtonElement | null;
 						if (copyButton) {
 							copyButton.disabled = false; // Enable the copy button
+							// Make the copy button fully opaque and clickable now that the message is complete
+							copyButton.style.opacity = "1";
+							copyButton.style.pointerEvents = "auto";
 						}
 					}
+				} else {
+					// Handle cases where stream ended but we somehow lost the element reference
+					console.warn(
+						"aiResponseEnd received but currentAiMessageContentElement is null."
+					);
 				}
 
-				// Point 3.a (from review instructions): Verify error display if !message.success && message.error.
-				// Condition changed to use !message.success and message.error.
+				// Point 3.c (from review instructions): Confirm that currentAiMessageContentElement = null; and currentAccumulatedText = ""; are always called
+				// to reset state for the next stream.
+				currentAiMessageContentElement = null;
+				currentAccumulatedText = "";
+
+				// Handle error display if !message.success && message.error.
 				if (!message.success && message.error) {
 					const errorMessageContent =
 						typeof message.error === "string"
 							? message.error
-							: "Unknown error from AI response end.";
-
-					// MODIFICATION 2: Updated error handling logic for currentAiMessageContentElement
-					// If there was an active stream, append error to it. Otherwise, add a new system message.
-					if (
-						currentAiMessageContentElement &&
-						currentAiMessageContentElement.parentElement
-					) {
-						const errorHtml = `<p style="color: var(--vscode-errorForeground);"><strong>Error:</strong> ${md.renderInline(
-							errorMessageContent
-						)}</p>`;
-						// Always append error if stream element exists, regardless of text length,
-						// as the loading spinner was replaced by the final content just above.
-						currentAiMessageContentElement.innerHTML += `<br>${errorHtml}`;
-					} else {
-						// If no stream was active or element is gone, append as a new system error message.
-						appendMessage(
-							"System",
-							`Error during response: ${errorMessageContent}`,
-							"error-message"
-						);
-					}
-					// If there was an error, we should definitely set loading to false and re-enable inputs.
-					setLoadingState(false); // This call now correctly manages all button states
+							: "Unknown error occurred during AI response streaming.";
+					// Append the error message as a new system message or update status
+					updateStatus(`AI Stream Error: ${errorMessageContent}`, true);
+					// We could also append it to the chat history as a system message if preferred.
+					// The provider's finally block often adds a history entry for errors.
 				}
+
 				// Handle plan confirmation if the stream was successful and resulted in a plan.
-				// Condition changed to use message.success.
-				else if (
-					message.success &&
-					message.isPlanResponse &&
-					message.planData
-				) {
+				if (message.success && message.isPlanResponse && message.planData) {
+					console.log("aiResponseEnd indicates confirmable plan.");
 					createPlanConfirmationUI(); // Ensure UI elements for confirmation are ready.
 					if (planConfirmationContainer) {
 						pendingPlanData = message.planData as {
@@ -837,49 +1115,32 @@ if (
 						);
 
 						// Disable chat inputs while plan confirmation is visible.
-						// As in aiResponse, these are explicitly disabled here upon showing the UI.
-						if (chatInput) {
-							chatInput.disabled = true;
-						}
-						if (sendButton) {
-							sendButton.disabled = true;
-						}
-						if (modelSelect) {
-							modelSelect.disabled = true;
-						}
-						// MODIFICATION START: Hide cancel button when plan confirmation shows
+						// Call setLoadingState(false) which will disable inputs because planConfirmationVisible is true.
+						setLoadingState(false);
+						// START MODIFICATION: Hide cancel button when plan confirmation shows
 						if (cancelGenerationButton) {
 							cancelGenerationButton.style.display = "none";
 						}
-						// MODIFICATION END
-						// MODIFICATION START: Set planConfirmationWasShown to true
-						planConfirmationWasShown = true;
-						// MODIFICATION END
-						// Button states for save/load/clear will be correctly disabled because planConfirmationVisible is true.
-						// setLoadingState(false) is *not* called here, as the state is now awaiting confirmation.
+						// END MODIFICATION
 					} else {
 						// Fallback if UI creation failed.
 						console.error(
 							"Plan confirmation container failed to create or find!"
 						);
 						updateStatus("Error: UI for plan confirmation is missing.", true);
-						// planConfirmationWasShown remains false, so setLoadingState(false) will be called below.
 						setLoadingState(false); // Fallback to re-enable if UI failed to show.
 					}
 				} else if (message.success) {
+					console.log("aiResponseEnd indicates successful chat response.");
 					// This is a successful streamed response that is NOT a plan requiring confirmation.
 					// Inputs should be re-enabled.
 					setLoadingState(false); // This call now correctly manages all button states
+				} else {
+					console.log("aiResponseEnd indicates failed streaming operation.");
+					// If !message.success and message.error was handled above, or if it's a non-plan failure.
+					// Inputs should be re-enabled.
+					setLoadingState(false); // This call handles re-enabling inputs/buttons.
 				}
-				// If !message.success but no message.error (shouldn't happen but defensive),
-				// or if message.success is false and message.error exists (handled above), setLoadingState(false) is called.
-				// If message.success is true and it's a confirmable plan (handled above), setLoadingState(false) is NOT called.
-				// If message.success is true and NOT a confirmable plan (handled above), setLoadingState(false) IS called.
-
-				// Point 3.c (from review instructions): Confirm that currentAiMessageContentElement = null; and currentAccumulatedText = ""; are always called
-				// to reset state for the next stream.
-				currentAiMessageContentElement = null;
-				currentAccumulatedText = "";
 				break;
 			}
 			// --- End new handlers for streamed responses ---
@@ -887,12 +1148,14 @@ if (
 			// START MODIFICATION: Add new case for 'structuredPlanParseFailed'
 			case "structuredPlanParseFailed": {
 				const { error, failedJson } = message.value;
+				console.log("Received structuredPlanParseFailed.");
 
 				if (
 					planParseErrorContainer &&
 					planParseErrorDisplay &&
 					failedJsonDisplay &&
-					retryGenerationButton
+					retryGenerationButton &&
+					cancelParseErrorButton // Added cancel button check
 				) {
 					// Display the error and the failed JSON
 					planParseErrorDisplay.textContent = error;
@@ -922,7 +1185,7 @@ if (
 					);
 					appendMessage(
 						"System",
-						`Structured plan parsing failed: ${error}. Failed JSON: ${failedJson}. Error UI missing.`,
+						`Structured plan parsing failed: ${error}. Failed JSON: \n\`\`\`json\n${failedJson}\n\`\`\`. Error UI missing.`,
 						"error-message"
 					);
 					setLoadingState(false); // Still set loading to false, manages buttons based on no UI block.
@@ -934,6 +1197,7 @@ if (
 			// START MODIFICATION: Add new case for 'restorePendingPlanConfirmation'
 			case "restorePendingPlanConfirmation":
 				if (message.value) {
+					console.log("Received restorePendingPlanConfirmation.");
 					pendingPlanData = message.value as {
 						// Cast to expected type
 						type: string;
@@ -983,12 +1247,19 @@ if (
 			// START MODIFICATION: Add new case for 'appendRealtimeModelMessage'
 			case "appendRealtimeModelMessage":
 				// This case handles messages that should be directly appended to the chat as if they were from the Model.
-				// It's intended for real-time updates or messages from the model that are not part of a typical streaming response.
+				// It's intended for real-time updates or messages from the model that are not part of a typical streaming response (e.g., step OK/FAIL, command output).
 				if (message.value && typeof message.value.text === "string") {
-					appendMessage("Model", message.value.text, "ai-message");
+					// Append the message. The 'ai-message' class includes copy button logic.
+					// If message.value.isError is true, add 'error-message' class as well.
+					appendMessage(
+						"Model",
+						message.value.text,
+						`ai-message ${message.value.isError ? "error-message" : ""}`.trim()
+					);
 					// After adding a message, update button states based on content count, but only if not blocked
 					// Calling setLoadingState(isLoading) re-evaluates button states based on current state and UI visibility
-					setLoadingState(isLoading);
+					// This also ensures save/clear buttons become active if this message is the first content.
+					setLoadingState(isLoading); // Call setLoadingState with its current value to re-trigger UI update
 				} else {
 					console.warn(
 						"Received 'appendRealtimeModelMessage' with invalid value:",
@@ -1001,12 +1272,15 @@ if (
 			case "apiKeyStatus": {
 				if (typeof message.value === "string") {
 					updateApiKeyStatus(message.value);
+					// Re-evaluate input states after API key status update
+					setLoadingState(isLoading); // Call setLoadingState with its current value
 				}
 				break;
 			}
 			case "statusUpdate": {
 				if (typeof message.value === "string") {
 					updateStatus(message.value, message.isError ?? false);
+					// No change to input state here, status updates don't block input flow.
 				}
 				break;
 			}
@@ -1031,9 +1305,10 @@ if (
 						currentKeyDisplay!.textContent = "No Active Key";
 						updateApiKeyStatus("Please add an API key.");
 					}
-					prevKeyButton!.disabled = totalKeys <= 1;
-					nextKeyButton!.disabled = totalKeys <= 1;
-					deleteKeyButton!.disabled = updateData.activeIndex === -1;
+					// Button states are now managed by setLoadingState
+					// prevKeyButton!.disabled = totalKeys <= 1; // Removed
+					// nextKeyButton!.disabled = totalKeys <= 1; // Removed
+					// deleteKeyButton!.disabled = updateData.activeIndex === -1; // Removed
 
 					// Re-evaluate input states based on API key status and current UI state
 					setLoadingState(isLoading); // This call now correctly updates inputs/buttons based on the new isApiKeySet value and existing state.
@@ -1172,6 +1447,22 @@ if (
 					console.warn(
 						"reenableInput received mid-stream. Resetting stream state."
 					);
+					// Finalize the current message with accumulated text before clearing state
+					if (currentAiMessageContentElement) {
+						const renderedHtml = md.render(currentAccumulatedText);
+						currentAiMessageContentElement.innerHTML = renderedHtml;
+						const messageElement = currentAiMessageContentElement.parentElement;
+						if (messageElement) {
+							const copyButton = messageElement.querySelector(
+								".copy-button"
+							) as HTMLButtonElement | null;
+							if (copyButton) {
+								copyButton.disabled = false;
+								copyButton.style.opacity = "1";
+								copyButton.style.pointerEvents = "auto";
+							}
+						}
+					}
 					currentAiMessageContentElement = null;
 					currentAccumulatedText = "";
 				}
@@ -1216,6 +1507,10 @@ if (
 
 		// START USER REQUESTED MODIFICATION: Initial button states
 		// Disabled until API key is confirmed and not loading and no blocking UI
+		// These initial states are now handled by the initial call to setLoadingState(false)
+		// triggered by the 'webviewReady' message handler after receiving updateKeyList/updateModelList.
+		// It's safer to let the state management function handle initialization based on loaded config.
+		// Keep them here as belt-and-suspenders initial DOM state, but main control is setLoadingState.
 		chatInput!.disabled = true;
 		sendButton!.disabled = true;
 		modelSelect!.disabled = true;
@@ -1227,16 +1522,22 @@ if (
 		// Enabled initially as loading history is always possible unless loading/blocked
 		loadChatButton!.disabled = false;
 
-		// Key navigation buttons
+		// Key navigation buttons disabled initially until key list is loaded
 		prevKeyButton!.disabled = true;
 		nextKeyButton!.disabled = true;
 		deleteKeyButton!.disabled = true;
+		addKeyInput!.disabled = true; // Also disable add key input
+		addKeyButton!.disabled = true; // Also disable add key button
 
 		// END USER REQUESTED MODIFICATION
 
 		// START MODIFICATION: Set initial display state for the cancel button
 		if (cancelGenerationButton) {
 			cancelGenerationButton.style.display = "none";
+		}
+		// Ensure parse error container is hidden initially (should also be in CSS)
+		if (planParseErrorContainer) {
+			planParseErrorContainer.style.display = "none";
 		}
 		// END MODIFICATION
 
@@ -1287,12 +1588,19 @@ if (
 			cancelGenerationButton.addEventListener("click", () => {
 				console.log("Cancel Generation button clicked.");
 				// 1. Hide the button immediately (redundant as setLoadingState will hide it, but good for instant feedback)
-				cancelGenerationButton.style.display = "none";
+				// cancelGenerationButton.style.display = "none"; // Removed - setLoadingState(false) handles this
 				// 2. Send message to extension to cancel
 				vscode.postMessage({ type: "cancelGeneration" });
 				// 3. Call setLoadingState(false) to re-enable other inputs and clean up loading state
-				setLoadingState(false); // This will correctly re-enable inputs/buttons based on no longer being isLoading and no blocking UI.
-				updateStatus("Generation cancelled.");
+				// The reenableInput message from the provider is the most reliable signal
+				// that cancellation has been fully processed. Removing this immediate setLoadingState(false)
+				// call here to avoid potential race conditions and rely on the provider's message.
+				// setLoadingState(false); // Removed - Rely on 'reenableInput' message
+
+				// Update status immediately
+				updateStatus("Cancelling operation...");
+				// The 'reenableInput' message from the provider will trigger the final setLoadingState(false)
+				// and the "Operation cancelled by user." chat message and status update.
 			});
 		}
 		// END MODIFICATION: Add click event listener for cancelGenerationButton
@@ -1305,17 +1613,42 @@ if (
 					".copy-button"
 				) as HTMLButtonElement | null;
 
+				// Check if a copy button was clicked and it's enabled
 				if (copyButton && !copyButton.disabled) {
-					// Ensure the button is clickable
 					const messageElement = copyButton.closest(".message");
 					if (messageElement) {
 						// The text content is in the span right before the copy button within the message div
-						// Querying for the first span within the message should get the text element
-						const textElement = messageElement.querySelector("span");
-						// Also ensure the span is not the copy button itself, although querySelector should prevent this
-						if (textElement && textElement !== copyButton) {
-							// Get the raw text content from the span
-							const textToCopy = textElement.textContent || "";
+						// Find the text element (the first span that is not the copy button itself)
+						const textElement = Array.from(
+							messageElement.querySelectorAll("span")
+						).find((span) => span !== copyButton);
+
+						if (textElement) {
+							// Get the rendered HTML content of the text element
+							// This captures markdown formatting like code blocks correctly
+							const textToCopyHTML = textElement.innerHTML;
+
+							// Use a temporary element to convert HTML to plain text while preserving newlines from <br> and block elements
+							const tempDiv = document.createElement("div");
+							tempDiv.innerHTML = textToCopyHTML;
+
+							// Convert block elements and <br> to newlines
+							Array.from(
+								tempDiv.querySelectorAll(
+									"p, pre, ul, ol, li, div, br, h1, h2, h3, h4, h5, h6, blockquote, table, tr"
+								)
+							).forEach((el) => {
+								if (el.tagName === "BR") {
+									el.replaceWith("\n");
+								} else {
+									el.append("\n"); // Add newline after block elements
+								}
+							});
+
+							// Get the text content and clean up extra newlines
+							let textToCopy = tempDiv.textContent || tempDiv.innerText || ""; // Use textContent or innerText
+							textToCopy = textToCopy.replace(/\n{3,}/g, "\n\n"); // Reduce multiple newlines to max two
+							textToCopy = textToCopy.trim(); // Trim leading/trailing whitespace
 
 							try {
 								await navigator.clipboard.writeText(textToCopy);

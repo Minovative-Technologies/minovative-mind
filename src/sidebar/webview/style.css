@@ -99,7 +99,9 @@ h2 {
 	color: var(--vscode-icon-foreground); /* Default icon color */
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+	transition:
+		background-color 0.1s ease-in-out,
+		color 0.1s ease-in-out,
 		border-color 0.1s ease-in-out;
 	display: inline-flex;
 	align-items: center;
@@ -204,6 +206,20 @@ h2 {
 	overflow-x: auto; /* Allow horizontal scrolling for wide content like tables or code blocks */
 	position: relative; /* Ensure .copy-button is positioned relative to this */
 	/* Removed padding-top as requested */
+	/* Allow margin-top and margin-bottom to collapse with preceding/following messages */
+}
+/* Specific styling for AI messages that are error messages */
+.ai-message.error-message {
+	background-color: var(--vscode-inputValidation-errorBackground);
+	color: var(--vscode-errorForeground);
+	border-color: var(--vscode-inputValidation-errorBorder);
+	border-left-width: 4px;
+	padding-left: calc(
+		var(--message-padding) * 1.2
+	); /* Adjust padding due to left border */
+}
+.ai-message.error-message strong {
+	color: var(--vscode-errorForeground);
 }
 
 /* --- Copy Button --- */
@@ -226,8 +242,10 @@ h2 {
 	cursor: pointer;
 	display: inline-flex; /* Use flexbox to center icon */
 	align-items: center; /* Vertically center icon */
-	justify-content: center; /* Horizontally center icon */
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out,
+	justify-content: center;
+	transition:
+		background-color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out,
 		opacity 0.1s ease-in-out; /* Smooth transitions, includes opacity */
 	user-select: none; /* Prevent text selection interference */
 	font-size: 0.8em; /* Make icon slightly smaller if needed */
@@ -279,7 +297,7 @@ h2 {
 .loading-message {
 	font-weight: 500;
 }
-.error-message {
+/* .error-message { // Moved styling into .ai-message.error-message
 	background-color: var(--vscode-inputValidation-errorBackground);
 	color: var(--vscode-errorForeground);
 	border: 1px solid var(--vscode-inputValidation-errorBorder);
@@ -291,7 +309,7 @@ h2 {
 }
 .error-message strong {
 	color: var(--vscode-errorForeground);
-}
+} */
 
 /* --- Markdown Content within Messages --- */
 /* General styling for markdown rendered elements to ensure they fit well within messages */
@@ -640,7 +658,9 @@ h2 {
 	border: 1px solid var(--vscode-button-border, var(--border-color)); /* Add border for secondary style */
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
+	transition:
+		background-color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
 	/* When visible, it should be display: inline-flex */
 	align-items: center;
 	justify-content: center;
@@ -837,6 +857,9 @@ h2 {
 	text-align: center; /* Center align text and inline children like buttons */
 	border-radius: var(--border-radius);
 	flex-shrink: 0; /* Prevent container from shrinking in flex layouts */
+	display: flex; /* Use flexbox for centering content */
+	flex-direction: column; /* Stack children vertically */
+	align-items: center; /* Center children horizontally */
 }
 /* Styles for the text message within the confirmation container. */
 #plan-confirmation-container p {
@@ -846,10 +869,17 @@ h2 {
 		--vscode-inputOption-activeForeground
 	); /* Text color from theme, contrasts with background */
 	font-weight: 500; /* Slightly bolder text */
+	text-align: center; /* Ensure text is centered */
+}
+/* Wrapper for confirmation buttons to apply gap */
+#plan-confirmation-container .button-group {
+	display: flex;
+	gap: 10px; /* Space between confirm and cancel buttons */
+	justify-content: center; /* Center the button group */
 }
 /* General styles for all buttons within the confirmation container. */
 #plan-confirmation-container button {
-	margin: 0 5px; /* Horizontal margin between buttons */
+	margin: 0; /* Remove default margin as gap is handled by wrapper */
 	padding: 5px 12px; /* Padding inside buttons */
 	height: var(--input-height); /* Consistent height */
 	min-width: 80px; /* Minimum width for clickability */
@@ -862,7 +892,9 @@ h2 {
 	border: 1px solid var(--vscode-button-border, transparent); /* Standard button border (can be transparent) */
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out; /* Smooth transitions */
+	transition:
+		background-color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Smooth transitions */
 	display: inline-flex; /* Use flexbox for content alignment (especially icons) */
 	align-items: center; /* Vertically align icon/text */
 	justify-content: center;
@@ -921,6 +953,15 @@ h2 {
 	flex-shrink: 0; /* Prevent container from shrinking in flex layouts */
 }
 
+/* Styles for the header within the error container */
+#plan-parse-error-container h3 {
+	color: var(--vscode-errorForeground); /* Red color for error header */
+	font-size: 1.1em;
+	margin-top: 0;
+	margin-bottom: var(--element-spacing);
+	border-bottom: none; /* Remove border */
+}
+
 /* Styles for the actual error message text within the parse error container. */
 #plan-parse-error-display {
 	color: var(
@@ -975,40 +1016,6 @@ code#failed-json-display {
 	overflow: visible; /* Let the parent <pre> handle scrolling. */
 }
 
-/* Styles for the "Retry Generation" button, making it look like a primary action button. */
-/* This general style applies if the button is used outside the new plan-parse-error-buttons-wrapper. */
-#retry-generation-button {
-	padding: 5px 12px; /* Standard padding for primary buttons. */
-	height: var(
-		--input-height
-	); /* Consistent height with other input elements/buttons. */
-	min-width: 80px; /* Minimum width to ensure good clickability. */
-	background-color: var(
-		--vscode-button-background
-	); /* Primary button background color. */
-	color: var(--vscode-button-foreground); /* Primary button text color. */
-	border: 1px solid var(--vscode-button-border, transparent); /* Standard button border. */
-	border-radius: var(--border-radius);
-	cursor: pointer;
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out; /* Smooth transitions for hover/focus. */
-	display: inline-flex; /* Allows vertical alignment of content (e.g., icons and text). */
-	align-items: center;
-	justify-content: center;
-	font-size: inherit; /* Use the parent's font size. */
-	outline: none; /* Remove default outline; custom focus style is applied below. */
-}
-
-#retry-generation-button:hover {
-	background-color: var(
-		--vscode-button-hoverBackground
-	); /* Standard hover background for primary buttons. */
-}
-
-#retry-generation-button:focus {
-	border-color: var(--vscode-focusBorder); /* Highlight border on focus. */
-	box-shadow: 0 0 0 1px var(--vscode-focusBorder); /* Add a shadow outline for focus, consistent with inputs. */
-}
-
 /* --- Plan Parse Error Action Buttons --- */
 /* Wrapper for the buttons when a plan parse error occurs */
 #plan-parse-error-buttons-wrapper {
@@ -1025,7 +1032,9 @@ code#failed-json-display {
 	height: var(--icon-button-size); /* Fixed size for square buttons */
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out; /* Smooth transitions */
+	transition:
+		background-color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Smooth transitions */
 	display: inline-flex; /* Use flexbox for content alignment (especially icons) */
 	align-items: center; /* Vertically align icon */
 	justify-content: center; /* Center icon horizontally */
