@@ -1626,6 +1626,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 										message: `Step ${stepNumber}: Generating content for ${step.path} (preparing)...`,
 									});
 
+									// Start Modification for generationPrompt
 									const generationPrompt = `
 											You are an AI programmer tasked with generating file content.
 											**Critical Instruction:** Generate the **complete and comprehensive** file content based *fully* on the user's instructions below. Do **not** provide a minimal, placeholder, or incomplete implementation unless the instructions *specifically* ask for it. Fulfill the entire request.
@@ -1636,6 +1637,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 											Complete File Content:
 											`;
+									// End Modification for generationPrompt
 
 									await this.switchToNextApiKey(); // Proactively switch API key before AI call
 
@@ -1746,6 +1748,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									message: `Step ${stepNumber}: Generating modifications for ${step.path} (preparing)...`,
 								});
 
+								// Start Modification for modificationPrompt
 								const modificationPrompt = `
 										You are an AI programmer tasked with modifying an existing file.
 										**Critical Instruction:** Modify the code based *fully* on the user's instructions below. Ensure the modifications are **complete and comprehensive**, addressing the entire request. Do **not** make partial changes or leave placeholders unless the instructions *specifically* ask for it.
@@ -1762,6 +1765,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 										Complete Modified File Content:
 										`;
+								// End Modification for modificationPrompt
 
 								await this.switchToNextApiKey(); // Proactively switch API key before AI call
 
@@ -2971,7 +2975,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								"Error: Another operation is in progress. Please wait or cancel the current one.",
 							isError: true,
 						});
-						this.postMessageToWebview({ type: "reenableInput" });
+						// Don't re-enable input here, as the other operation will handle it
 						break;
 					}
 					this._addHistoryEntry("user", `/plan ${userRequest}`);

@@ -8,10 +8,11 @@ import {
 	faChevronLeft,
 	faChevronRight,
 	faPlus,
-	faCheck,
-	faTimes,
-	faRedo, // Added for retry button
-	faStop, // Added for cancel generation button
+	faCheck, // Already imported for confirmation button, also used for copy feedback
+	faTimes, // Already imported for cancel buttons
+	faRedo, // Already imported for retry button
+	faStop, // Already imported for cancel generation button
+	faCopy, // Added for copy message button
 } from "@fortawesome/free-solid-svg-icons";
 import MarkdownIt from "markdown-it";
 
@@ -26,7 +27,8 @@ library.add(
 	faCheck,
 	faTimes,
 	faRedo, // Added new icon to library
-	faStop // Added new icon to library
+	faStop, // Added new icon to library
+	faCopy // Added copy icon to library
 );
 // --- End Font Awesome Imports ---
 
@@ -165,7 +167,7 @@ if (
 			'<p style="color: var(--vscode-errorForeground); font-weight: bold;">Error initializing webview UI. Please check console (Developer: Open Webview Developer Tools).</p>';
 	}
 } else {
-	// Modified appendMessage to handle stream initialization
+	// Modified appendMessage to handle stream initialization and add copy button for AI messages
 	function appendMessage(sender: string, text: string, className: string = "") {
 		if (chatContainer) {
 			// If this call is to add a "loading-message"
@@ -195,24 +197,42 @@ if (
 			messageElement.appendChild(senderElement);
 
 			const textElement = document.createElement("span");
+			messageElement.appendChild(textElement); // Always append text element
 
-			// If sender is 'Model' and this is the start of a stream (empty text from aiResponseStart)
-			// capture the span for future updates and initialize accumulated text.
-			if (sender === "Model" && className === "ai-message" && text === "") {
-				// Point 1.a (from review instructions): currentAiMessageContentElement and currentAccumulatedText are reset/initialized here
-				// when appendMessage is called by aiResponseStart.
-				currentAiMessageContentElement = textElement;
-				currentAccumulatedText = ""; // text is already empty string from aiResponseStart
-				// MODIFICATION 1: Set initial HTML to the loading indicator
-				textElement.innerHTML =
-					'<span class="loading-text">Loading<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+			let copyButton: HTMLButtonElement | null = null;
+
+			// START MODIFICATION: Add copy button for AI messages
+			if (sender === "Model" && className === "ai-message") {
+				copyButton = document.createElement("button");
+				copyButton.classList.add("copy-button");
+				copyButton.title = "Copy Message";
+				messageElement.appendChild(copyButton); // Append button after the text element
+				setIconForButton(copyButton, faCopy); // Set the initial copy icon
+
+				if (text === "") {
+					// This is the start of a stream (called by aiResponseStart)
+					currentAiMessageContentElement = textElement;
+					currentAccumulatedText = ""; // text is already empty string from aiResponseStart
+					// Set initial HTML to the loading indicator
+					textElement.innerHTML =
+						'<span class="loading-text">Loading<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+					// Disable copy button while content is loading/streaming
+					copyButton.disabled = true;
+				} else {
+					// This is a complete non-streamed AI message
+					const renderedHtml = md.render(text);
+					textElement.innerHTML = renderedHtml;
+					// For non-streaming AI message, button is enabled immediately
+					copyButton.disabled = false;
+				}
 			} else {
-				// For user messages, system messages, or complete non-streamed AI messages
+				// For user messages, system messages, etc.
 				const renderedHtml = md.render(text);
 				textElement.innerHTML = renderedHtml;
+				// No copy button for non-AI messages
 			}
+			// END MODIFICATION: Add copy button for AI messages
 
-			messageElement.appendChild(textElement);
 			chatContainer.appendChild(messageElement);
 			chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to bottom
 
@@ -487,22 +507,32 @@ if (
 		}
 	}
 
+	// Helper function to set Font Awesome icon on a button
 	function setIconForButton(
 		button: HTMLButtonElement | null,
 		iconDefinition: any
 	) {
 		if (button) {
-			const iconHTML = icon(iconDefinition, {
-				classes: ["fa-icon"],
-			}).html[0];
-			if (iconHTML) {
-				button.innerHTML = iconHTML;
-			} else {
-				button.innerHTML = "?"; // Fallback
+			try {
+				const iconHTML = icon(iconDefinition, {
+					classes: ["fa-icon"],
+				}).html[0];
+				if (iconHTML) {
+					button.innerHTML = iconHTML;
+				} else {
+					button.innerHTML = "?"; // Fallback
+					console.error(
+						"Failed to generate Font Awesome icon HTML for:",
+						iconDefinition.iconName
+					);
+				}
+			} catch (e) {
 				console.error(
-					"Failed to generate Font Awesome icon:",
-					iconDefinition.iconName
+					"Error setting Font Awesome icon",
+					iconDefinition.iconName,
+					e
 				);
+				button.innerHTML = "!"; // Fallback on error
 			}
 		}
 	}
@@ -682,7 +712,9 @@ if (
 				// This call also handles Point 1.a:
 				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
 				// within the appendMessage function (see its definition) for a new AI stream.
-				appendMessage("Model", "", "ai-message"); // This will now show the loading indicator due to changes in appendMessage
+				// START MODIFICATION: appendMessage now adds a disabled copy button for streaming messages
+				appendMessage("Model", "", "ai-message");
+				// END MODIFICATION
 				// setLoadingState(true) was called when the user sent the message.
 				// We are now in the process of receiving the response, so loading is still active.
 				// No need to call setLoadingState(false) here.
@@ -708,6 +740,24 @@ if (
 				let planConfirmationWasShown = false;
 				// MODIFICATION END
 
+				// After stream ends, finalize the message content and handle UI updates
+				if (currentAiMessageContentElement) {
+					// Finalize the content in the DOM
+					const renderedHtml = md.render(currentAccumulatedText);
+					currentAiMessageContentElement.innerHTML = renderedHtml;
+
+					// Find the copy button for this message and enable it
+					const messageElement = currentAiMessageContentElement.parentElement;
+					if (messageElement) {
+						const copyButton = messageElement.querySelector(
+							".copy-button"
+						) as HTMLButtonElement | null;
+						if (copyButton) {
+							copyButton.disabled = false; // Enable the copy button
+						}
+					}
+				}
+
 				// Point 3.a (from review instructions): Verify error display if !message.success && message.error.
 				// Condition changed to use !message.success and message.error.
 				if (!message.success && message.error) {
@@ -717,17 +767,17 @@ if (
 							: "Unknown error from AI response end.";
 
 					// MODIFICATION 2: Updated error handling logic for currentAiMessageContentElement
-					if (currentAiMessageContentElement) {
+					// If there was an active stream, append error to it. Otherwise, add a new system message.
+					if (
+						currentAiMessageContentElement &&
+						currentAiMessageContentElement.parentElement
+					) {
 						const errorHtml = `<p style="color: var(--vscode-errorForeground);"><strong>Error:</strong> ${md.renderInline(
 							errorMessageContent
 						)}</p>`;
-						if (currentAccumulatedText.trim() === "") {
-							// No actual content received, loading indicator was showing
-							currentAiMessageContentElement.innerHTML = errorHtml; // Replace loading indicator with error
-						} else {
-							// Some content was received, append error after it
-							currentAiMessageContentElement.innerHTML += `<br>${errorHtml}`;
-						}
+						// Always append error if stream element exists, regardless of text length,
+						// as the loading spinner was replaced by the final content just above.
+						currentAiMessageContentElement.innerHTML += `<br>${errorHtml}`;
 					} else {
 						// If no stream was active or element is gone, append as a new system error message.
 						appendMessage(
@@ -964,6 +1014,7 @@ if (
 						activeIndex: number;
 						totalKeys: number;
 					};
+
 					totalKeys = updateData.totalKeys;
 					isApiKeySet = updateData.activeIndex !== -1;
 
@@ -1075,6 +1126,7 @@ if (
 							typeof msg.text === "string"
 						) {
 							// For restored messages, they are complete, so no streaming logic applies here.
+							// appendMessage will correctly add the copy button for AI messages here
 							appendMessage(msg.sender, msg.text, msg.className || "");
 						}
 					});
@@ -1275,6 +1327,63 @@ if (
 			});
 		}
 		// END MODIFICATION: Add click event listener for cancelGenerationButton
+
+		// START MODIFICATION: Add event delegation listener for copy buttons on chatContainer
+		if (chatContainer) {
+			chatContainer.addEventListener("click", async (event) => {
+				const target = event.target as HTMLElement;
+				const copyButton = target.closest(
+					".copy-button"
+				) as HTMLButtonElement | null;
+
+				if (copyButton && !copyButton.disabled) {
+					// Ensure the button is clickable
+					const messageElement = copyButton.closest(".message");
+					if (messageElement) {
+						// The text content is in the span right before the copy button within the message div
+						// Querying for the first span within the message should get the text element
+						const textElement = messageElement.querySelector("span");
+						// Also ensure the span is not the copy button itself, although querySelector should prevent this
+						if (textElement && textElement !== copyButton) {
+							// Get the raw text content from the span
+							const textToCopy = textElement.textContent || "";
+
+							try {
+								await navigator.clipboard.writeText(textToCopy);
+								console.log("Text copied to clipboard.");
+
+								// Visual feedback: Temporarily change icon
+								const originalIconHTML = copyButton.innerHTML; // Store original icon HTML
+								setIconForButton(copyButton, faCheck); // Change to check icon
+								copyButton.title = "Copied!";
+
+								// Revert icon after a delay
+								setTimeout(() => {
+									copyButton.innerHTML = originalIconHTML; // Restore original icon HTML
+									copyButton.title = "Copy Message"; // Restore tooltip
+								}, 1500); // 1.5 seconds delay
+							} catch (err) {
+								console.error("Failed to copy text: ", err);
+								// Check if clipboard API is supported or permission denied
+								let errorMessage = "Failed to copy text.";
+								if (err instanceof Error && err.message) {
+									errorMessage += ` Details: ${err.message}`;
+								}
+								updateStatus(errorMessage, true);
+							}
+						} else {
+							console.warn("Could not find text span for copy button.");
+							updateStatus("Error: Could not find text to copy.", true);
+						}
+					} else {
+						console.warn(
+							"Copy button clicked, but parent message element not found."
+						);
+					}
+				}
+			});
+		}
+		// END MODIFICATION: Add event delegation listener for copy buttons
 
 		// Create plan confirmation UI elements (initially hidden)
 		createPlanConfirmationUI();

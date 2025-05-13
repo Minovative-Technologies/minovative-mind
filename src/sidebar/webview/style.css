@@ -9,6 +9,18 @@
 	--input-height: 28px; /* Slightly taller inputs/buttons */
 	--icon-button-size: 28px; /* Square icon buttons */
 	--border-color: var(--vscode-contrastBorder, #44444433); /* Softer border */
+
+	/* Copy button specific variables */
+	--copy-button-size: 24px; /* Smaller size for copy button */
+	--copy-button-padding: 4px; /* Padding inside the button */
+	--copy-button-bg: rgba(128, 128, 128, 0.1); /* Subtle background */
+	--copy-button-border: 1px solid rgba(128, 128, 128, 0.2); /* Subtle border */
+	--copy-button-color: var(--vscode-icon-foreground); /* Icon color */
+	--copy-button-hover-bg: var(
+		--vscode-toolbar-hoverBackground
+	); /* Hover background from theme */
+	--copy-button-hover-border: 1px solid var(--vscode-focusBorder); /* Highlight border on hover */
+	--copy-button-active-bg: rgba(128, 128, 128, 0.3); /* Active background */
 }
 
 /* --- Base Styles --- */
@@ -158,7 +170,7 @@ h2 {
 	word-wrap: break-word;
 	line-height: 1.5;
 	max-width: 95%; /* Keep slightly off edge */
-	position: relative;
+	position: relative; /* Needed for absolute positioning of children like .copy-button */
 	border: 1px solid transparent; /* Base border */
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle shadow */
 }
@@ -190,6 +202,64 @@ h2 {
 	margin-right: auto;
 	min-height: fit-content;
 	overflow-x: auto; /* Allow horizontal scrolling for wide content like tables or code blocks */
+	position: relative; /* Ensure .copy-button is positioned relative to this */
+	/* Removed padding-top as requested */
+}
+
+/* --- Copy Button --- */
+/* Style for the copy button positioned in the top-right corner of .ai-message */
+.copy-button {
+	position: absolute;
+	top: calc(
+		var(--copy-button-padding) / 2
+	); /* Position from the top, using padding variable */
+	right: calc(
+		var(--copy-button-padding) / 2
+	); /* Position from the right, using padding variable */
+	padding: var(--copy-button-padding); /* Padding inside the button */
+	width: var(--copy-button-size); /* Fixed width */
+	height: var(--copy-button-size); /* Fixed height */
+	background-color: var(--copy-button-bg); /* Subtle background */
+	border: var(--copy-button-border); /* Subtle border */
+	color: var(--copy-button-color); /* Icon color */
+	border-radius: var(--border-radius); /* Match parent border radius */
+	cursor: pointer;
+	display: inline-flex; /* Use flexbox to center icon */
+	align-items: center; /* Vertically center icon */
+	justify-content: center; /* Horizontally center icon */
+	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out,
+		opacity 0.1s ease-in-out; /* Smooth transitions, includes opacity */
+	user-select: none; /* Prevent text selection interference */
+	font-size: 0.8em; /* Make icon slightly smaller if needed */
+	/* Initially hidden */
+	opacity: 0; /* Changed opacity to 0 */
+	pointer-events: none; /* Added pointer-events: none */
+}
+
+/* Hover state for the copy button when hovering over the AI message */
+.ai-message:hover .copy-button {
+	opacity: 1; /* Fully opaque on hover */
+	pointer-events: auto; /* Allow clicks on hover */
+}
+
+/* Hover state for the copy button itself (when it's already visible) */
+/* This applies *after* the .ai-message:hover rule makes it visible */
+.copy-button:hover {
+	background-color: var(--copy-button-hover-bg);
+	border-color: var(--copy-button-hover-border);
+	/* Opacity is already 1 from the parent hover, no need to set again */
+}
+
+/* Active state for the copy button (while clicked) */
+.copy-button:active {
+	background-color: var(--copy-button-active-bg);
+	border-color: var(--vscode-focusBorder); /* Highlight border on click */
+	opacity: 1; /* Ensure opacity remains 1 */
+}
+
+/* Style for the icon inside the copy button */
+.copy-button .fa-icon {
+	font-size: 1em; /* Icon size relative to button font size */
 }
 
 /* --- System / Loading / Error Messages --- */
