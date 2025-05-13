@@ -222,7 +222,7 @@ if (
 					// This is a complete non-streamed AI message
 					const renderedHtml = md.render(text);
 					textElement.innerHTML = renderedHtml;
-					// For non-streaming AI message, button is enabled immediately
+					// For non-streaming AI message, button is enabled immediately (assuming appendMessage is called after content is ready)
 					copyButton.disabled = false;
 				}
 			} else {
@@ -236,11 +236,19 @@ if (
 			chatContainer.appendChild(messageElement);
 			chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to bottom
 
+			// The button states related to chat content count are now managed primarily by setLoadingState
+			// and potentially during history restoration, but this simple check here is still helpful
+			// immediately after a message is added to potentially enable them if they were previously disabled
+			// due to an empty chat *and* the UI is not blocked.
+			// However, relying solely on setLoadingState(false) calls after operations finish is more robust.
+			// Let's remove this redundant update here and rely on explicit setLoadingState calls.
+			/*
 			const hasMessages = chatContainer.childElementCount > 0;
 			if (clearChatButton && saveChatButton) {
 				clearChatButton.disabled = !hasMessages;
 				saveChatButton.disabled = !hasMessages;
 			}
+			*/
 		}
 	}
 
@@ -329,21 +337,67 @@ if (
 		}
 	}
 
-	// Modified setLoadingState
+	// Modified setLoadingState to control button states based on loading and UI visibility
 	function setLoadingState(loading: boolean) {
 		isLoading = loading; // Keep track of overall loading state
+
+		// Check visibility of blocking UI elements
+		const planConfirmationVisible =
+			planConfirmationContainer &&
+			planConfirmationContainer.style.display !== "none";
+		const planParseErrorVisible =
+			planParseErrorContainer &&
+			planParseErrorContainer.style.display !== "none";
+
+		// Determine if general chat/send controls should be enabled
+		// Enabled only if not loading AND API key is set AND neither blocking UI is visible
+		const enableSendControls =
+			!loading &&
+			isApiKeySet &&
+			!planConfirmationVisible &&
+			!planParseErrorVisible;
+
+		if (sendButton) {
+			sendButton.disabled = !enableSendControls;
+		}
+		if (chatInput) {
+			chatInput.disabled = !enableSendControls;
+		}
+		if (modelSelect) {
+			modelSelect.disabled = !enableSendControls;
+		}
+
+		// START USER REQUESTED MODIFICATION: Control load/save/clear buttons
+		// Determine if chat history buttons can be interacted with
+		// Enabled only if not loading AND neither blocking UI is visible
+		const canInteractWithChatHistoryButtons =
+			!loading && !planConfirmationVisible && !planParseErrorVisible;
+
+		// Determine if there are messages in the chat container
+		const hasMessages = chatContainer
+			? chatContainer.childElementCount > 0
+			: false;
+
+		if (loadChatButton) {
+			// loadChatButton is disabled if loading or a blocking UI is visible. Otherwise, it's enabled.
+			loadChatButton.disabled = !canInteractWithChatHistoryButtons;
+		}
+		if (saveChatButton) {
+			// saveChatButton is disabled if loading or a blocking UI is visible OR there are no messages.
+			saveChatButton.disabled =
+				!canInteractWithChatHistoryButtons || !hasMessages;
+		}
+		if (clearChatButton) {
+			// clearChatButton is disabled if loading or a blocking UI is visible OR there are no messages.
+			clearChatButton.disabled =
+				!canInteractWithChatHistoryButtons || !hasMessages;
+		}
+		// END USER REQUESTED MODIFICATION
 
 		// START MODIFICATION: Manage cancel generation button visibility
 		if (cancelGenerationButton) {
 			// Button should be visible only when loading is true AND neither
 			// plan confirmation nor plan parse error UI is currently active.
-			const planConfirmationVisible =
-				planConfirmationContainer &&
-				planConfirmationContainer.style.display !== "none";
-			const planParseErrorVisible =
-				planParseErrorContainer &&
-				planParseErrorContainer.style.display !== "none";
-
 			if (loading && !planConfirmationVisible && !planParseErrorVisible) {
 				// Show the cancel button
 				cancelGenerationButton.style.display = "inline-flex"; // Or 'block' depending on desired layout
@@ -354,43 +408,29 @@ if (
 		}
 		// END MODIFICATION
 
-		if (sendButton && chatInput && modelSelect) {
-			// Only enable controls if not loading AND API key is set AND no plan confirmation/parse error is blocking
-			const enableSendControls =
-				!loading &&
-				isApiKeySet &&
-				(!planConfirmationContainer ||
-					planConfirmationContainer.style.display === "none") &&
-				(!planParseErrorContainer ||
-					planParseErrorContainer.style.display === "none");
-
-			sendButton.disabled = !enableSendControls;
-			chatInput.disabled = !enableSendControls;
-			modelSelect.disabled = !enableSendControls;
-
-			if (loading) {
-				// Point 4.a (from review instructions): When loading is true, append "Creating..." message if appropriate.
-				// This is for the initial user send, before the AI stream begins.
-				// Point 4.c (from review instructions): The aiResponseStart handler will reliably remove this "Creating..."
-				// message when the actual AI stream begins.
-				if (
-					!currentAiMessageContentElement && // Check if not already actively streaming an AI response
-					!chatContainer?.querySelector(".loading-message") // And if a loading message isn't already present
-				) {
-					appendMessage(
-						"Model",
-						"Creating...Don't change the file view while plan execution is in progress...Sit tight while Minovative Mind work for you",
-						"loading-message"
-					);
-				}
-			} else {
-				// Point 4.b (from review instructions): If loading is set to false, ensure any "Creating..." message is removed.
-				const loadingMsg = chatContainer?.querySelector(".loading-message");
-				if (loadingMsg) {
-					loadingMsg.remove();
-				}
+		if (loading) {
+			// Point 4.a (from review instructions): When loading is true, append "Creating..." message if appropriate.
+			// This is for the initial user send, before the AI stream begins.
+			// Point 4.c (from review instructions): The aiResponseStart handler will reliably remove this "Creating..."
+			// message when the actual AI stream begins.
+			if (
+				!currentAiMessageContentElement && // Check if not already actively streaming an AI response
+				!chatContainer?.querySelector(".loading-message") // And if a loading message isn't already present
+			) {
+				appendMessage(
+					"Model",
+					"Creating...Don't change the file view while plan execution is in progress...Sit tight while Minovative Mind work for you",
+					"loading-message"
+				);
+			}
+		} else {
+			// Point 4.b (from review instructions): If loading is set to false, ensure any "Creating..." message is removed.
+			const loadingMsg = chatContainer?.querySelector(".loading-message");
+			if (loadingMsg) {
+				loadingMsg.remove();
 			}
 		}
+
 		// If a new request starts (setLoadingState(true)) while a plan is awaiting confirmation,
 		// hide the confirmation UI and reset pending plan data.
 		if (
@@ -403,6 +443,7 @@ if (
 			updateStatus(
 				"New request initiated, pending plan confirmation cancelled."
 			);
+			// No need to explicitly re-enable buttons here; setLoadingState(true) will handle disabling them correctly.
 		}
 
 		// START MODIFICATION: Hide planParseErrorContainer if a new message is sent (loading becomes true)
@@ -420,16 +461,7 @@ if (
 			}
 			// Optionally provide a status update
 			updateStatus("New request initiated, parse error UI hidden.");
-
-			// Restore load/clear chat buttons if a new chat action preempts the parse error UI.
-			// This ensures the buttons are restored to their normal operational conditions.
-			if (loadChatButton) {
-				loadChatButton.disabled = false; // loadChatButton is generally enabled.
-			}
-			if (clearChatButton && chatContainer) {
-				// clearChatButton is enabled if there are messages in the chat.
-				clearChatButton.disabled = chatContainer.childElementCount === 0;
-			}
+			// No need to explicitly re-enable buttons here; setLoadingState(true) will handle disabling them correctly.
 		}
 		// END MODIFICATION
 	}
@@ -483,7 +515,7 @@ if (
 							// Correctly clears pending plan data
 							pendingPlanData = null;
 							// Correctly sets loading state while structured plan is generated/executed
-							setLoadingState(true);
+							setLoadingState(true); // This call now correctly manages all button states
 						} else {
 							updateStatus("Error: No pending plan data to confirm.", true);
 						}
@@ -500,7 +532,7 @@ if (
 						// Correctly clears pending plan data
 						pendingPlanData = null;
 						// Correctly re-enables inputs as plan flow is cancelled
-						setLoadingState(false);
+						setLoadingState(false); // This call now correctly manages all button states
 					}
 				}
 			);
@@ -581,6 +613,8 @@ if (
 		vscode.postMessage({ type: "requestDeleteConfirmation" });
 		updateApiKeyStatus("Waiting for delete confirmation...");
 	});
+	// Clear/Save/Load listeners are correct, they trigger actions handled elsewhere.
+	// Button disabled states are managed by setLoadingState.
 	clearChatButton.addEventListener("click", () => {
 		vscode.postMessage({ type: "clearChatRequest" });
 	});
@@ -603,7 +637,7 @@ if (
 			// Send message to extension to retry generation
 			vscode.postMessage({ type: "retryStructuredPlanGeneration" });
 			// Set loading state to true as a new generation attempt is starting
-			setLoadingState(true);
+			setLoadingState(true); // This call now correctly manages all button states
 			// Clear the error display fields
 			if (planParseErrorDisplay) {
 				planParseErrorDisplay.textContent = "";
@@ -614,15 +648,7 @@ if (
 			updateStatus("Retrying structured plan generation...");
 
 			// --- START USER REQUESTED MODIFICATION ---
-			// Restore load/clear chat buttons when retry is clicked.
-			// This ensures the buttons are restored to their normal operational conditions.
-			if (loadChatButton) {
-				loadChatButton.disabled = false; // loadChatButton is generally enabled.
-			}
-			if (clearChatButton && chatContainer) {
-				// clearChatButton is enabled if there are messages in the chat.
-				clearChatButton.disabled = chatContainer.childElementCount === 0;
-			}
+			// These lines are redundant as setLoadingState(true) handles disabling buttons. Removed.
 			// --- END USER REQUESTED MODIFICATION ---
 		});
 	}
@@ -665,6 +691,9 @@ if (
 						);
 
 						// Disable chat inputs while plan confirmation is visible.
+						// These will be disabled by the setLoadingState call in the confirm/cancel listeners,
+						// but explicitly setting them here ensures they are disabled immediately upon showing the plan confirmation UI.
+						// Also, setLoadingState is *not* called with false here, so global state remains "not loading" but UI is blocked.
 						if (chatInput) {
 							chatInput.disabled = true;
 						}
@@ -679,25 +708,22 @@ if (
 							cancelGenerationButton.style.display = "none";
 						}
 						// END MODIFICATION
-
-						// setLoadingState is not called to false here, as per instruction,
-						// to keep the UI disabled until the user confirms or cancels the plan.
+						// Button states for save/load/clear will be correctly disabled because planConfirmationVisible is true.
 					} else {
 						// Fallback if UI creation failed.
 						console.error(
 							"Plan confirmation container failed to create or find for non-streamed plan!"
 						);
 						updateStatus("Error: UI for plan confirmation is missing.", true);
-						setLoadingState(false); // Set loading to false as plan confirmation cannot be shown.
+						setLoadingState(false); // Set loading to false as plan confirmation cannot be shown. This will also manage buttons.
 					}
 				} else if (message.isLoading === false) {
 					// This handles regular non-streamed messages or non-confirmable parts of plans.
 					// If message.isLoading is explicitly false, it means the AI operation is complete.
-					setLoadingState(false);
+					setLoadingState(false); // This call now correctly manages all button states
 				}
 				// If message.isLoading is true (or not provided) and it's not a confirmable plan,
-				// setLoadingState(false) is NOT called, meaning loading state persists.
-				// This might be for multi-part non-streamed responses where intermediate parts are sent.
+				// setLoadingState is NOT called, meaning loading state persists (or wasn't set true initially).
 				break;
 			}
 
@@ -717,7 +743,7 @@ if (
 				// END MODIFICATION
 				// setLoadingState(true) was called when the user sent the message.
 				// We are now in the process of receiving the response, so loading is still active.
-				// No need to call setLoadingState(false) here.
+				// No need to call setLoadingState(false) here. Button states are already handled by the initial setLoadingState(true).
 				break;
 			}
 			case "aiResponseChunk": {
@@ -786,11 +812,16 @@ if (
 							"error-message"
 						);
 					}
+					// If there was an error, we should definitely set loading to false and re-enable inputs.
+					setLoadingState(false); // This call now correctly manages all button states
 				}
-
 				// Handle plan confirmation if the stream was successful and resulted in a plan.
 				// Condition changed to use message.success.
-				if (message.success && message.isPlanResponse && message.planData) {
+				else if (
+					message.success &&
+					message.isPlanResponse &&
+					message.planData
+				) {
 					createPlanConfirmationUI(); // Ensure UI elements for confirmation are ready.
 					if (planConfirmationContainer) {
 						pendingPlanData = message.planData as {
@@ -806,6 +837,7 @@ if (
 						);
 
 						// Disable chat inputs while plan confirmation is visible.
+						// As in aiResponse, these are explicitly disabled here upon showing the UI.
 						if (chatInput) {
 							chatInput.disabled = true;
 						}
@@ -823,8 +855,8 @@ if (
 						// MODIFICATION START: Set planConfirmationWasShown to true
 						planConfirmationWasShown = true;
 						// MODIFICATION END
-						// setLoadingState(false) is no longer unconditionally called at the end of this case.
-						// Input enabling/disabling is now managed by plan confirmation UI or the conditional logic below.
+						// Button states for save/load/clear will be correctly disabled because planConfirmationVisible is true.
+						// setLoadingState(false) is *not* called here, as the state is now awaiting confirmation.
 					} else {
 						// Fallback if UI creation failed.
 						console.error(
@@ -832,17 +864,17 @@ if (
 						);
 						updateStatus("Error: UI for plan confirmation is missing.", true);
 						// planConfirmationWasShown remains false, so setLoadingState(false) will be called below.
+						setLoadingState(false); // Fallback to re-enable if UI failed to show.
 					}
+				} else if (message.success) {
+					// This is a successful streamed response that is NOT a plan requiring confirmation.
+					// Inputs should be re-enabled.
+					setLoadingState(false); // This call now correctly manages all button states
 				}
-
-				// MODIFICATION START: Conditionally call setLoadingState(false)
-				// Point 3.b (from review instructions): Crucially, ensure that if !planConfirmationWasShown, setLoadingState(false) is called.
-				// This re-enables inputs if it's a regular chat stream or a plan stream that didn't lead to confirmation UI.
-				// The logic for this is in place with the `if (!planConfirmationWasShown)` condition.
-				if (!planConfirmationWasShown) {
-					setLoadingState(false); // This will also hide the cancel button if it was shown
-				}
-				// MODIFICATION END
+				// If !message.success but no message.error (shouldn't happen but defensive),
+				// or if message.success is false and message.error exists (handled above), setLoadingState(false) is called.
+				// If message.success is true and it's a confirmable plan (handled above), setLoadingState(false) is NOT called.
+				// If message.success is true and NOT a confirmable plan (handled above), setLoadingState(false) IS called.
 
 				// Point 3.c (from review instructions): Confirm that currentAiMessageContentElement = null; and currentAccumulatedText = ""; are always called
 				// to reset state for the next stream.
@@ -870,20 +902,10 @@ if (
 					planParseErrorContainer.style.display = "block"; // Or "flex" depending on its CSS
 
 					// AI generation is done, awaiting user action (retry or new plan)
-					setLoadingState(false); // This will remove the chat loading message and re-enable buttons if no UI block
-					// It also hides the cancel generation button via the setLoadingState logic
-
-					// Ensure general chat inputs remain disabled to guide user to retry or new plan,
-					// AS the parse error UI IS now visible, blocking them.
-					if (chatInput) {
-						chatInput.disabled = true;
-					}
-					if (sendButton) {
-						sendButton.disabled = true;
-					}
-					if (modelSelect) {
-						modelSelect.disabled = true;
-					}
+					// Set loading state to false. This will remove the chat loading message
+					// and re-evaluate button states based on the now-visible parse error UI.
+					setLoadingState(false); // This call now correctly manages all button states
+					// Input states will be disabled because planParseErrorVisible is true.
 
 					updateStatus(
 						"Structured plan parsing failed. Review error and retry or cancel.",
@@ -891,16 +913,8 @@ if (
 					);
 
 					// --- START USER REQUESTED MODIFICATION ---
-					// Restore load/clear chat buttons when retry is clicked.
-					// This ensures the buttons are restored to their normal operational conditions.
-					if (loadChatButton) {
-						loadChatButton.disabled = false; // loadChatButton is generally enabled.
-					}
-					if (clearChatButton && chatContainer) {
-						// clearChatButton is enabled if there are messages in the chat.
-						clearChatButton.disabled = chatContainer.childElementCount === 0;
-					}
-					// --- END USER REQUESTED MODIFICATION ---
+					// These lines are redundant as setLoadingState(false) handles enabling buttons. Removed.
+					// --- END USER REQUESTATION MODIFICATION ---
 				} else {
 					// Fallback if UI elements are missing
 					console.error(
@@ -911,7 +925,7 @@ if (
 						`Structured plan parsing failed: ${error}. Failed JSON: ${failedJson}. Error UI missing.`,
 						"error-message"
 					);
-					setLoadingState(false); // Still set loading to false
+					setLoadingState(false); // Still set loading to false, manages buttons based on no UI block.
 				}
 				break;
 			}
@@ -935,22 +949,14 @@ if (
 							"Pending plan confirmation restored. Review and confirm to proceed."
 						);
 
-						// Disable general chat inputs while plan confirmation is active
-						if (chatInput) {
-							chatInput.disabled = true;
-						}
-						if (sendButton) {
-							sendButton.disabled = true;
-						}
-						if (modelSelect) {
-							modelSelect.disabled = true;
-						}
 						// START MODIFICATION: Hide cancel button when plan confirmation shows on restore
 						if (cancelGenerationButton) {
 							cancelGenerationButton.style.display = "none";
 						}
 						// END MODIFICATION
 						isLoading = false; // Ensure loading indicator is not active
+						// Call setLoadingState(false) to correctly manage button states based on the now visible plan confirmation UI.
+						setLoadingState(false); // This call will see planConfirmationVisible is true and disable inputs/buttons correctly.
 					} else {
 						// Fallback if UI creation or finding failed
 						console.error(
@@ -961,20 +967,14 @@ if (
 							true
 						);
 						pendingPlanData = null; // Clear data as it cannot be confirmed
-						isLoading = false; // Ensure loading state is false
-						// Re-enable inputs based on API key status as a fallback
-						if (sendButton && chatInput && modelSelect) {
-							const enableSendControls = isApiKeySet;
-							sendButton.disabled = !enableSendControls;
-							chatInput.disabled = !enableSendControls;
-							modelSelect.disabled = !enableSendControls;
-						}
+						// Ensure inputs are re-enabled as a fallback
+						setLoadingState(false); // This call will see no blocking UI and re-enable inputs/buttons based on API key.
 					}
 				} else {
 					console.warn(
 						"restorePendingPlanConfirmation received without message.value. No action taken."
 					);
-					// Optionally, ensure inputs are in a sensible state if this happens unexpectedly
+					// Ensure inputs are in a sensible state if this happens unexpectedly
 					setLoadingState(false);
 				}
 				break;
@@ -986,6 +986,9 @@ if (
 				// It's intended for real-time updates or messages from the model that are not part of a typical streaming response.
 				if (message.value && typeof message.value.text === "string") {
 					appendMessage("Model", message.value.text, "ai-message");
+					// After adding a message, update button states based on content count, but only if not blocked
+					// Calling setLoadingState(isLoading) re-evaluates button states based on current state and UI visibility
+					setLoadingState(isLoading);
 				} else {
 					console.warn(
 						"Received 'appendRealtimeModelMessage' with invalid value:",
@@ -1032,21 +1035,8 @@ if (
 					nextKeyButton!.disabled = totalKeys <= 1;
 					deleteKeyButton!.disabled = updateData.activeIndex === -1;
 
-					// Re-evaluate input states based on API key status, only if not currently loading/streaming
-					// and no plan confirmation is active, and no parse error UI is active.
-					if (
-						!isLoading &&
-						!currentAiMessageContentElement &&
-						(!planConfirmationContainer ||
-							planConfirmationContainer.style.display === "none") &&
-						(!planParseErrorContainer || // Added check for parse error UI visibility
-							planParseErrorContainer.style.display === "none")
-					) {
-						const enableSendControls = isApiKeySet;
-						chatInput!.disabled = !enableSendControls;
-						sendButton!.disabled = !enableSendControls;
-						modelSelect!.disabled = !enableSendControls;
-					}
+					// Re-evaluate input states based on API key status and current UI state
+					setLoadingState(isLoading); // This call now correctly updates inputs/buttons based on the new isApiKeySet value and existing state.
 				} else {
 					console.error("Invalid 'updateKeyList' message received:", message);
 				}
@@ -1074,6 +1064,8 @@ if (
 						"Model list updated in webview. Selected:",
 						selectedModel
 					);
+					// Re-evaluate input states based on current UI state
+					setLoadingState(isLoading); // This call correctly updates inputs/buttons based on existing state.
 				} else {
 					console.error("Invalid 'updateModelList' message received:", message);
 				}
@@ -1083,13 +1075,8 @@ if (
 				if (chatContainer) {
 					chatContainer.innerHTML = "";
 				}
-				if (clearChatButton) {
-					clearChatButton.disabled = true;
-				}
-				if (saveChatButton) {
-					saveChatButton.disabled = true;
-				}
-				setLoadingState(false); // Ensure loading state is reset
+				// setLoadingState(false) will now handle disabling clear/save buttons correctly based on empty chat
+				setLoadingState(false); // Ensure loading state is reset and buttons updated.
 				// Reset streaming globals in case a clear happens mid-stream (unlikely but safe)
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
@@ -1114,6 +1101,8 @@ if (
 						failedJsonDisplay.textContent = "";
 					}
 				}
+				// After potentially hiding UI and setting loading=false, setLoadingState was called,
+				// which correctly updates all button states including save/clear based on the empty chat.
 				break;
 			}
 			case "restoreHistory": {
@@ -1131,20 +1120,14 @@ if (
 						}
 					});
 					updateStatus("Chat history restored.");
-					const hasMessages = chatContainer.childElementCount > 0;
-					if (clearChatButton) {
-						clearChatButton.disabled = !hasMessages;
-					}
-					if (saveChatButton) {
-						saveChatButton.disabled = !hasMessages;
-					}
+					// setLoadingState(false) will now handle enabling/disabling save/clear based on restored messages
 				} else {
 					updateStatus(
 						"Error: Failed to restore chat history due to invalid format.",
 						true
 					);
 				}
-				setLoadingState(false); // Ensure loading state is reset
+				setLoadingState(false); // Ensure loading state is reset and buttons updated based on restored content.
 				// If plan confirmation was active, hide it
 				if (
 					planConfirmationContainer &&
@@ -1166,6 +1149,8 @@ if (
 						failedJsonDisplay.textContent = "";
 					}
 				}
+				// After potentially hiding UI and setting loading=false, setLoadingState was called,
+				// which correctly updates all button states including save/clear based on the restored chat content.
 				break;
 			}
 			// START MODIFICATION: Modify 'reenableInput' handler
@@ -1176,7 +1161,7 @@ if (
 				// Always set isLoading to false, as the operation that was loading is now considered finished or cancelled.
 				isLoading = false;
 
-				// Remove any general "Creating..." or "Loading..." message from chat, similar to setLoadingState(false).
+				// Remove any general "Creating..." or "Loading..." message from chat, similar to setLoadingState(false) logic.
 				const loadingMsg = chatContainer?.querySelector(".loading-message");
 				if (loadingMsg) {
 					loadingMsg.remove();
@@ -1191,53 +1176,28 @@ if (
 					currentAccumulatedText = "";
 				}
 
-				// Check if either plan confirmation UI OR parse error UI is currently active and visible.
-				// If either is visible, general chat inputs should *not* be re-enabled,
-				// as the user needs to interact with the specific UI element.
+				// Call setLoadingState(false) to re-evaluate all input and button states based on the new isLoading=false,
+				// current API key status, and visibility of blocking UI elements.
+				setLoadingState(false); // This call now correctly manages all button states.
+
+				// Check if plan confirmation UI is currently active and visible.
 				const planConfirmationActive =
 					planConfirmationContainer &&
 					planConfirmationContainer.style.display !== "none";
-				const parseErrorActive =
-					planParseErrorContainer &&
-					planParseErrorContainer.style.display !== "none";
 
-				// START MODIFICATION: Ensure cancel button is hidden if reenableInput is called
-				if (cancelGenerationButton) {
-					cancelGenerationButton.style.display = "none";
-				}
-				// END MODIFICATION
-
-				if (planConfirmationActive) {
-					console.log(
-						"Input re-enable for general chat controls skipped: Plan confirmation UI is active and keeping inputs disabled."
+				// If plan confirmation UI is not active, but there was pendingPlanData (e.g., from a cancelled flow before UI showed),
+				// clear it as `reenableInput` implies a reset to a normal interactive state.
+				if (!planConfirmationActive && pendingPlanData) {
+					pendingPlanData = null;
+					updateStatus(
+						"Inputs re-enabled; any non-visible pending plan confirmation has been cleared."
 					);
-					// The plan confirmation is not cancelled by this path; it remains the active state.
-				} else if (parseErrorActive) {
-					// Review Point 4: Added check for parse error UI state.
-					console.log(
-						"Input re-enable for general chat controls skipped: Plan parse error UI is active and keeping inputs disabled."
-					);
-				} else {
-					// Neither special UI is active (or they are hidden).
-					// Proceed with re-enabling general inputs based on API key status (since isLoading is now false).
-					if (sendButton && chatInput && modelSelect) {
-						const enableSendControls = isApiKeySet; // Re-enable based on API key status
-						sendButton.disabled = !enableSendControls;
-						chatInput.disabled = !enableSendControls;
-						modelSelect.disabled = !enableSendControls;
-					}
-
-					// If plan confirmation UI is not active, but there was pendingPlanData (e.g., from a cancelled flow before UI showed),
-					// clear it as `reenableInput` implies a reset to a normal interactive state.
-					if (pendingPlanData) {
-						pendingPlanData = null;
-						updateStatus(
-							"Inputs re-enabled; any non-visible pending plan confirmation has been cleared."
-						);
-					} else {
-						updateStatus("Inputs re-enabled."); // Generic message if no plan data was involved or already cleared.
-					}
+				} else if (!planConfirmationActive) {
+					// If plan confirmation is not active and no pending data was cleared
+					updateStatus("Inputs re-enabled."); // Generic message
 				}
+				// If planConfirmationActive is true, inputs remain disabled by setLoadingState,
+				// and the status message reflects that state or the user interacts with the confirmation UI.
 				break;
 			}
 			// END MODIFICATION: Modify 'reenableInput' handler
@@ -1254,16 +1214,25 @@ if (
 		console.log("Webview sent ready message.");
 		chatInput?.focus();
 
-		// Initial button states
+		// START USER REQUESTED MODIFICATION: Initial button states
+		// Disabled until API key is confirmed and not loading and no blocking UI
+		chatInput!.disabled = true;
+		sendButton!.disabled = true;
+		modelSelect!.disabled = true;
+
+		// Disabled initially because there are no messages
+		clearChatButton!.disabled = true;
+		saveChatButton!.disabled = true;
+
+		// Enabled initially as loading history is always possible unless loading/blocked
+		loadChatButton!.disabled = false;
+
+		// Key navigation buttons
 		prevKeyButton!.disabled = true;
 		nextKeyButton!.disabled = true;
 		deleteKeyButton!.disabled = true;
-		chatInput!.disabled = true; // Disabled until API key is confirmed
-		sendButton!.disabled = true; // Disabled until API key is confirmed
-		modelSelect!.disabled = true; // Disabled until API key is confirmed
-		clearChatButton!.disabled = true; // Disabled until there are messages
-		saveChatButton!.disabled = true; // Disabled until there are messages
-		loadChatButton!.disabled = false; // Always enabled
+
+		// END USER REQUESTED MODIFICATION
 
 		// START MODIFICATION: Set initial display state for the cancel button
 		if (cancelGenerationButton) {
@@ -1305,10 +1274,10 @@ if (
 				// 2c. Inform the extension that the plan execution (and thus retry) is cancelled
 				vscode.postMessage({ type: "cancelPlanExecution" }); // This message type already handles necessary provider-side cleanup
 				updateStatus("Plan generation retry cancelled.");
-				// 2d. Re-enable general inputs if appropriate (e.g., if API key is set)
+				// 2d. Re-enable general inputs and update button states
 				// Calling setLoadingState(false) handles re-enabling based on API key status
 				// and ensures the chat loading message is removed if present.
-				setLoadingState(false); // This will also hide the cancel generation button
+				setLoadingState(false); // This call now correctly manages all button states based on the hidden UI.
 			});
 		}
 		// END MODIFICATION: Add click event listener for cancelParseErrorButton
@@ -1317,12 +1286,12 @@ if (
 		if (cancelGenerationButton) {
 			cancelGenerationButton.addEventListener("click", () => {
 				console.log("Cancel Generation button clicked.");
-				// 1. Hide the button immediately
+				// 1. Hide the button immediately (redundant as setLoadingState will hide it, but good for instant feedback)
 				cancelGenerationButton.style.display = "none";
 				// 2. Send message to extension to cancel
 				vscode.postMessage({ type: "cancelGeneration" });
 				// 3. Call setLoadingState(false) to re-enable other inputs and clean up loading state
-				setLoadingState(false); // This will also hide the button (redundant but safe) and remove the chat loading message
+				setLoadingState(false); // This will correctly re-enable inputs/buttons based on no longer being isLoading and no blocking UI.
 				updateStatus("Generation cancelled.");
 			});
 		}
