@@ -562,7 +562,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	public async initiatePlanFromEditorAction(
+	public initiatePlanFromEditorAction(
 		instruction: string,
 		selectedText: string,
 		fullText: string,
@@ -620,187 +620,213 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			this._pendingPlanGenerationContext = null;
 
-			const projectContext = await this._buildProjectContext();
-			if (projectContext.startsWith("[Error")) {
-				throw new Error(
-					`Failed to build project context for editor action. ${projectContext}`
-				);
-			}
+			const projectContext = this._buildProjectContext();
+			// Handle potential error from _buildProjectContext synchronously if possible, or handle async if it returns a Promise
+			// Assuming _buildProjectContext might return a Promise, let's await it.
+			projectContext
+				.then(async (context) => {
+					if (context.startsWith("[Error")) {
+						throw new Error(
+							`Failed to build project context for editor action. ${context}`
+						);
+					}
+					// Continue processing inside the then block if context build is successful
+					let relativeFilePath = documentUri.fsPath;
+					const workspaceFolders = vscode.workspace.workspaceFolders;
+					if (workspaceFolders && workspaceFolders.length > 0) {
+						relativeFilePath = path.relative(
+							workspaceFolders[0].uri.fsPath,
+							documentUri.fsPath
+						);
+					}
 
-			let relativeFilePath = documentUri.fsPath;
-			const workspaceFolders = vscode.workspace.workspaceFolders;
-			if (workspaceFolders && workspaceFolders.length > 0) {
-				relativeFilePath = path.relative(
-					workspaceFolders[0].uri.fsPath,
-					documentUri.fsPath
-				);
-			}
-
-			let diagnosticsString = "";
-			try {
-				const allDiagnostics = vscode.languages.getDiagnostics(documentUri);
-				const relevantDiagnostics = allDiagnostics.filter((diag) =>
-					diag.range.intersection(selection)
-				);
-				if (relevantDiagnostics.length > 0) {
-					relevantDiagnostics.sort((a, b) => {
-						if (a.range.start.line !== b.range.start.line) {
-							return a.range.start.line - b.range.start.line;
+					let diagnosticsString = "";
+					try {
+						const allDiagnostics = vscode.languages.getDiagnostics(documentUri);
+						const relevantDiagnostics = allDiagnostics.filter((diag) =>
+							diag.range.intersection(selection)
+						);
+						if (relevantDiagnostics.length > 0) {
+							relevantDiagnostics.sort((a, b) => {
+								if (a.range.start.line !== b.range.start.line) {
+									return a.range.start.line - b.range.start.line;
+								}
+								return a.severity - b.severity;
+							});
+							diagnosticsString = relevantDiagnostics
+								.map(
+									(d) =>
+										`- ${vscode.DiagnosticSeverity[d.severity]} (Line ${
+											d.range.start.line + 1
+										}): ${d.message}`
+								)
+								.join("\n");
 						}
-						return a.severity - b.severity;
-					});
-					diagnosticsString = relevantDiagnostics
-						.map(
-							(d) =>
-								`- ${vscode.DiagnosticSeverity[d.severity]} (Line ${
-									d.range.start.line + 1
-								}): ${d.message}`
-						)
-						.join("\n");
-				}
-			} catch (diagError) {
-				console.error("Error retrieving diagnostics:", diagError);
-				diagnosticsString = "[Could not retrieve diagnostics]";
-			}
+					} catch (diagError) {
+						console.error("Error retrieving diagnostics:", diagError);
+						diagnosticsString = "[Could not retrieve diagnostics]";
+					}
 
-			editorCtx = {
-				instruction,
-				selectedText,
-				fullText,
-				languageId,
-				filePath: relativeFilePath,
-				documentUri,
-				selection,
-			};
+					editorCtx = {
+						instruction,
+						selectedText,
+						fullText,
+						languageId,
+						filePath: relativeFilePath,
+						documentUri,
+						selection,
+					};
 
-			const textualPlanPrompt = this._createInitialPlanningExplanationPrompt(
-				projectContext,
-				undefined,
-				editorCtx,
-				diagnosticsString
-			);
+					const textualPlanPrompt =
+						this._createInitialPlanningExplanationPrompt(
+							context, // Use the successfully built context
+							undefined,
+							editorCtx,
+							diagnosticsString
+						);
 
-			try {
-				const streamCallbacks = {
-					onChunk: (chunk: string) => {
+					try {
+						const streamCallbacks = {
+							onChunk: (chunk: string) => {
+								this.postMessageToWebview({
+									type: "aiResponseChunk",
+									value: chunk,
+								});
+							},
+						};
+
+						await this.switchToNextApiKey(); // MODIFIED: Proactively switch API key
+
+						// MODIFIED: Call to _generateWithRetry - added token (7th arg)
+						textualPlanResponse = await this._generateWithRetry(
+							textualPlanPrompt,
+							modelName,
+							undefined,
+							"editor action plan explanation",
+							undefined,
+							streamCallbacks,
+							token // Pass the token - ADDED
+						);
+
+						// Check for cancellation after the stream completes
+						if (token.isCancellationRequested) {
+							throw new Error("Operation cancelled by user.");
+						}
+
+						if (
+							textualPlanResponse.toLowerCase().startsWith("error:") ||
+							textualPlanResponse === ERROR_QUOTA_EXCEEDED
+						) {
+							errorStreaming = textualPlanResponse;
+							successStreaming = false;
+							this._addHistoryEntry(
+								"model",
+								`Error generating plan explanation for editor action: ${errorStreaming}`
+							);
+						} else {
+							successStreaming = true;
+							planDataForConfirmation = {
+								originalInstruction: instruction,
+								type: "textualPlanPending" as const,
+							};
+							this._pendingPlanGenerationContext = {
+								type: "editor",
+								editorContext: editorCtx,
+								projectContext: context, // Store the successful context
+								diagnosticsString,
+								initialApiKey: activeKeyForContext, // Storing the key active at this stage
+								modelName,
+								chatHistory: [...this._chatHistory], // MODIFIED: Store a copy of the current chat history
+							};
+							this._addHistoryEntry("model", textualPlanResponse);
+						}
+					} catch (genError: any) {
+						console.error(
+							"Error during textual plan generation stream for editor action:",
+							genError
+						);
+						errorStreaming =
+							genError instanceof Error ? genError.message : String(genError);
+						successStreaming = false;
+						// Only add error message if it wasn't cancellation
+						if (!errorStreaming.includes("Operation cancelled by user.")) {
+							this._addHistoryEntry(
+								"model",
+								`Error generating plan explanation for editor action: ${errorStreaming}`
+							);
+						}
+					} finally {
+						// Ensure the cancellation token source is disposed and cleared
+						this._cancellationTokenSource?.dispose();
+						this._cancellationTokenSource = undefined;
+						console.log(
+							"[initiatePlanFromEditorAction.finally] Token source disposed."
+						);
+
+						const isCancellation =
+							errorStreaming?.includes("Operation cancelled by user.") || false;
+
 						this.postMessageToWebview({
-							type: "aiResponseChunk",
-							value: chunk,
+							type: "aiResponseEnd",
+							success: successStreaming,
+							error: isCancellation
+								? "Plan generation cancelled by user."
+								: errorStreaming,
+							isPlanResponse: successStreaming,
+							planData: successStreaming ? planDataForConfirmation : null,
 						});
-					},
-				};
 
-				await this.switchToNextApiKey(); // MODIFIED: Proactively switch API key
-
-				// MODIFIED: Call to _generateWithRetry - added token (7th arg)
-				textualPlanResponse = await this._generateWithRetry(
-					textualPlanPrompt,
-					modelName,
-					undefined,
-					"editor action plan explanation",
-					undefined,
-					streamCallbacks,
-					token // Pass the token - ADDED
-				);
-
-				// Check for cancellation after the stream completes
-				if (token.isCancellationRequested) {
-					throw new Error("Operation cancelled by user.");
-				}
-
-				if (
-					textualPlanResponse.toLowerCase().startsWith("error:") ||
-					textualPlanResponse === ERROR_QUOTA_EXCEEDED
-				) {
-					errorStreaming = textualPlanResponse;
-					successStreaming = false;
+						// Re-enable input only if it wasn't a cancellation (which is handled by the cancel handler)
+						if (!successStreaming && !isCancellation) {
+							this.postMessageToWebview({ type: "reenableInput" });
+						}
+					}
+				})
+				.catch((setupError) => {
+					// This catch handles errors from the initial _buildProjectContext or subsequent sync errors
+					console.error(
+						"Error in initiatePlanFromEditorAction (setup phase):",
+						setupError
+					);
+					const errorMsg =
+						setupError instanceof Error
+							? setupError.message
+							: String(setupError);
+					this.postMessageToWebview({
+						type: "aiResponse",
+						value: `Error preparing editor action plan: ${errorMsg}`,
+						isLoading: false,
+						isError: true,
+					});
 					this._addHistoryEntry(
 						"model",
-						`Error generating plan explanation for editor action: ${errorStreaming}`
+						`Error preparing plan explanation for editor action: ${errorMsg}`
 					);
-				} else {
-					successStreaming = true;
-					planDataForConfirmation = {
-						originalInstruction: instruction,
-						type: "textualPlanPending" as const,
-					};
-					this._pendingPlanGenerationContext = {
-						type: "editor",
-						editorContext: editorCtx,
-						projectContext,
-						diagnosticsString,
-						initialApiKey: activeKeyForContext, // Storing the key active at this stage
-						modelName,
-						chatHistory: [...this._chatHistory], // MODIFIED: Store a copy of the current chat history
-					};
-					this._addHistoryEntry("model", textualPlanResponse);
-				}
-			} catch (genError: any) {
-				console.error(
-					"Error during textual plan generation stream for editor action:",
-					genError
-				);
-				errorStreaming =
-					genError instanceof Error ? genError.message : String(genError);
-				successStreaming = false;
-				// Only add error message if it wasn't cancellation
-				if (!errorStreaming.includes("Operation cancelled by user.")) {
-					this._addHistoryEntry(
-						"model",
-						`Error generating plan explanation for editor action: ${errorStreaming}`
-					);
-				}
-			} finally {
-				// Ensure the cancellation token source is disposed and cleared
-				this._cancellationTokenSource?.dispose();
-				this._cancellationTokenSource = undefined;
-				console.log(
-					"[initiatePlanFromEditorAction.finally] Token source disposed."
-				);
-
-				const isCancellation =
-					errorStreaming?.includes("Operation cancelled by user.") || false;
-
-				this.postMessageToWebview({
-					type: "aiResponseEnd",
-					success: successStreaming,
-					error: isCancellation
-						? "Plan generation cancelled by user."
-						: errorStreaming,
-					isPlanResponse: successStreaming,
-					planData: successStreaming ? planDataForConfirmation : null,
-				});
-
-				// Re-enable input only if it wasn't a cancellation (which is handled by the cancel handler)
-				if (!successStreaming && !isCancellation) {
 					this.postMessageToWebview({ type: "reenableInput" });
-				}
-			}
-		} catch (setupError) {
+
+					// Ensure token source is disposed on setup errors too
+					this._cancellationTokenSource?.dispose();
+					this._cancellationTokenSource = undefined;
+					console.log(
+						"[initiatePlanFromEditorAction.catch.setup] Token source disposed."
+					);
+				});
+		} catch (err) {
+			// This outer catch block might only catch immediate synchronous errors
 			console.error(
-				"Error in initiatePlanFromEditorAction (setup phase):",
-				setupError
+				"Unexpected synchronous error in initiatePlanFromEditorAction:",
+				err
 			);
-			const errorMsg =
-				setupError instanceof Error ? setupError.message : String(setupError);
+			const errorMsg = err instanceof Error ? err.message : String(err);
 			this.postMessageToWebview({
 				type: "aiResponse",
-				value: `Error preparing editor action plan: ${errorMsg}`,
+				value: `An unexpected error occurred during plan initiation: ${errorMsg}`,
 				isLoading: false,
 				isError: true,
 			});
-			this._addHistoryEntry(
-				"model",
-				`Error preparing plan explanation for editor action: ${errorMsg}`
-			);
 			this.postMessageToWebview({ type: "reenableInput" });
-
-			// Ensure token source is disposed on setup errors too
 			this._cancellationTokenSource?.dispose();
 			this._cancellationTokenSource = undefined;
-			console.log(
-				"[initiatePlanFromEditorAction.catch.setup] Token source disposed."
-			);
 		}
 	}
 
@@ -1309,6 +1335,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					planData: null,
 				});
 				this._addHistoryEntry("model", errorMsg);
+				// Add error message to VS Code notification as well
+				vscode.window.showErrorMessage(`Minovative Mind: ${errorMsg}`);
 				return;
 			}
 
@@ -1391,6 +1419,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				!errorMsg.includes("Failed to build project context")
 			) {
 				this._addHistoryEntry("model", `Error during chat: ${errorMsg}`);
+			}
+
+			// Add VS Code notifications based on the error type
+			if (isCancellation) {
+				vscode.window.showInformationMessage(
+					"Minovative Mind: Chat generation cancelled."
+				);
+			} else {
+				vscode.window.showErrorMessage(
+					"Minovative Mind: Error during chat: " + errorMsg
+				);
 			}
 		} finally {
 			// Ensure the cancellation token source is disposed and cleared
