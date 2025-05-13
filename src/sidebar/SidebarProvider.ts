@@ -75,6 +75,9 @@ interface PlanGenerationContext {
 	initialApiKey: string; // This key was used for initial plan explanation; for structured plan, _generateWithRetry will use current active.
 	modelName: string;
 	chatHistory?: HistoryEntry[]; // MODIFIED: Added chatHistory to store conversation context for planning
+	// --- START MODIFICATION ---
+	textualPlanExplanation: string; // Added to store the AI's generated textual explanation
+	// --- END MODIFICATION ---
 }
 
 // Type for execution outcome
@@ -388,6 +391,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		3.  Clarity: Make the plan easy for a developer to understand. Briefly describe what each step will do (e.g., "Create a new file named 'utils.ts'", "Modify 'main.ts' to import the new utility function", "Install the 'axios' package using npm").
 		4.  No JSON: **Do NOT output any JSON for this initial explanation.** Your entire response should be human-readable text.
 		5.  Never Aussume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
+		6. ALWAYS keep in mind of Modularization for everything you create.
+
 
 		${specificContextPrompt}
 
@@ -441,10 +446,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			await this.switchToNextApiKey(); // MODIFIED: Proactively switch API key
 
+			let accumulatedTextualResponse = ""; // Accumulate the stream chunks
+
 			// Define stream callbacks
 			const streamCallbacks = {
 				onChunk: (chunk: string) => {
 					// onChunk does not need to be async here as it's just posting to webview
+					accumulatedTextualResponse += chunk; // MODIFICATION: Accumulate chunks here
 					this.postMessageToWebview({
 						type: "aiResponseChunk",
 						value: chunk,
@@ -454,6 +462,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			// MODIFIED: Call to _generateWithRetry - Added token (7th arg)
 			// The signature of _generateWithRetry is: (prompt, modelName, history, requestType, generationConfig, streamCallbacks, token)
+			// The result of _generateWithRetry is now the FULL accumulated response after the stream is done.
 			textualPlanResponse = await this._generateWithRetry(
 				textualPlanPrompt, // prompt (1st arg)
 				modelName, // modelName (2nd arg)
@@ -489,6 +498,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				initialApiKey: apiKey, // Storing the key that was active at this stage
 				modelName,
 				chatHistory: [...this._chatHistory], // MODIFIED: Store a copy of the current chat history
+				textualPlanExplanation: textualPlanResponse, // MODIFICATION: Store the full textual response
 			};
 
 			this._addHistoryEntry("model", textualPlanResponse); // Add textual plan to history
@@ -539,7 +549,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					type: "aiResponse",
 					value: textualPlanResponse,
 					isLoading: false,
-					requiresConfirmation: false,
+					requiresConfirmation: false, // This message is *after* the stream, doesn't need confirmation UI triggered again.
 					planData: null,
 					isError: false,
 				});
@@ -593,6 +603,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			});
 			this.postMessageToWebview({ type: "reenableInput" });
 			return;
+		}
+		// Check if another operation is already running (via cancellation source)
+		if (this._cancellationTokenSource) {
+			this.postMessageToWebview({
+				type: "aiResponse",
+				value:
+					"Error: Another operation is in progress. Please wait or cancel the current one.",
+				isError: true,
+			});
 		}
 
 		let textualPlanResponse: string = "";
@@ -685,9 +704,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							diagnosticsString
 						);
 
+					let accumulatedTextualResponse = ""; // Accumulate the stream chunks
+
 					try {
 						const streamCallbacks = {
 							onChunk: (chunk: string) => {
+								accumulatedTextualResponse += chunk; // MODIFICATION: Accumulate chunks here
 								this.postMessageToWebview({
 									type: "aiResponseChunk",
 									value: chunk,
@@ -698,6 +720,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						await this.switchToNextApiKey(); // MODIFIED: Proactively switch API key
 
 						// MODIFIED: Call to _generateWithRetry - added token (7th arg)
+						// The result of _generateWithRetry is now the FULL accumulated response after the stream is done.
 						textualPlanResponse = await this._generateWithRetry(
 							textualPlanPrompt,
 							modelName,
@@ -729,6 +752,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								originalInstruction: instruction,
 								type: "textualPlanPending" as const,
 							};
+							// MODIFICATION: Store the full textual response in the context
 							this._pendingPlanGenerationContext = {
 								type: "editor",
 								editorContext: editorCtx,
@@ -737,7 +761,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								initialApiKey: activeKeyForContext, // Storing the key active at this stage
 								modelName,
 								chatHistory: [...this._chatHistory], // MODIFIED: Store a copy of the current chat history
+								textualPlanExplanation: textualPlanResponse, // MODIFICATION: Store the full textual response
 							};
+							// END MODIFICATION
 							this._addHistoryEntry("model", textualPlanResponse);
 						}
 					} catch (genError: any) {
@@ -860,6 +886,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			const chatHistory = planContext.chatHistory;
 
 			// MODIFIED: Pass chatHistory to _createPlanningPrompt
+			// Also pass the new textualPlanExplanation
 			const jsonPlanningPrompt = this._createPlanningPrompt(
 				planContext.type === "chat"
 					? planContext.originalUserRequest
@@ -867,7 +894,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				planContext.projectContext,
 				planContext.type === "editor" ? planContext.editorContext : undefined,
 				planContext.diagnosticsString,
-				chatHistory // Pass the retrieved chat history
+				chatHistory, // Pass the retrieved chat history
+				planContext.textualPlanExplanation // MODIFICATION: Pass the textual explanation
 			);
 
 			await this.switchToNextApiKey();
@@ -1035,19 +1063,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	// MODIFIED: Added chatHistory parameter and incorporated it into the prompt
+	// MODIFICATION: Added textualPlanExplanation parameter
 	private _createPlanningPrompt(
 		userRequest: string | undefined,
 		projectContext: string,
-		editorContext?: {
-			instruction: string;
-			selectedText: string;
-			fullText: string;
-			languageId: string;
-			filePath: string;
-		},
-		combinedDiagnosticsAndRetryString?: string,
-		chatHistory?: HistoryEntry[] // New parameter for chat history
+		editorContext:
+			| {
+					instruction: string;
+					selectedText: string;
+					fullText: string;
+					languageId: string;
+					filePath: string;
+			  }
+			| undefined,
+		combinedDiagnosticsAndRetryString: string | undefined,
+		chatHistory: HistoryEntry[] | undefined, // New parameter for chat history
+		textualPlanExplanation: string // MODIFICATION: New parameter for textual explanation
 	): string {
+		// END MODIFICATION: Added textualPlanExplanation parameter
 		let actualDiagnosticsString: string | undefined = undefined;
 		let extractedRetryInstruction: string | undefined = undefined;
 
@@ -1247,7 +1280,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			${
 				actualDiagnosticsString
-					? `\n--- Relevant Diagnostics in Selection ---\n${actualDiagnosticsString}\n--- End Relevant Diagnostics ---\n`
+					? `\n--- Relevant Diagnostics in Selection ---\n${actualDiagnosticsString}\n--- End Relevant Diagnostics ---`
 					: ""
 			}
 
@@ -1268,6 +1301,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			--- End User Request ---`;
 			mainInstructions = `Based on the user's request from the chat ("${userRequest}") and any relevant chat history, generate a plan to fulfill it.`;
 		}
+
+		// MODIFICATION START: Added section for the textual plan explanation and instructions
+		const textualPlanPromptSection = `
+		--- Detailed Textual Plan Explanation (Base your JSON plan on this) ---
+		${textualPlanExplanation}
+		--- End Detailed Textual Plan Explanation ---
+
+		**Strict Instruction:** Your JSON plan MUST be a direct, accurate translation of the detailed steps provided in the "Detailed Textual Plan Explanation" section above. Ensure EVERY action described in the textual plan is represented as a step in the JSON, using the correct 'action', 'path', 'description', and relevant content/prompt/command fields as described in the format section. Do not omit steps or invent new ones not present in the textual explanation.
+`;
+		// MODIFICATION END
 
 		return `
 		You are an expert AI programmer assisting within VS Code. Your task is to create a step-by-step execution plan in JSON format.
@@ -1298,9 +1341,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		${chatHistoryForPrompt} {/* MODIFIED: Injected chat history string here */}
 
-		--- Broader Project Context (Reference Only) ---
+		*** Broader Project Context (Reference Only) ***
 		${projectContext}
-		--- End Broader Project Context ---
+		*** End Broader Project Context ***
+
+		${textualPlanPromptSection} {/* MODIFICATION: Insert textual plan section */}
 
 		--- Expected JSON Plan Format ---
 		${jsonFormatDescription}
@@ -1358,7 +1403,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			const historyForApi = JSON.parse(JSON.stringify(this._chatHistory));
 			const finalPrompt = `
-			You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query and when you do answer the user's queries, make sure you complete the entire request, don't do minimal, shorten, or partial of what the user asked for. Complete the entire request from the users no matter how long it may take. Use Markdown formatting for code blocks and lists where appropriate. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING. ALWAYS keep in mind of Modularization for everything you create
+			You are an AI assistant called Minovative Mind integrated into VS Code. Below is some context about the user's current project. Use this context ONLY as background information to help answer the user's query accurately. Do NOT explicitly mention that you analyzed the context or summarize the project files unless the user specifically asks you to. Focus directly on answering the user's query and when you do answer the user's queries, make sure you complete the entire request, don't do minimal, shorten, or partial of what the user asked for. Complete the entire request from the users no matter how long it may take. Use Markdown formatting for code blocks and lists where appropriate. Never Aussume ANYTHING when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING. ALWAYS keep in mind of Modularization for everything you create.
 
 			*** Project Context (Reference Only) ***
 			${projectContext}
@@ -1579,7 +1624,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						}`;
 						progress.report({
 							message: `${stepMessageTitle}...`,
-							increment: (1 / totalSteps) * 100,
+							increment: (index / totalSteps) * 100, // Increment based on steps completed
 						});
 						const stepPath = step.path || "";
 						const stepCommand = step.command || "";
@@ -1590,8 +1635,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								step.action === PlanStepAction.RunCommand
 									? `- '${stepCommand}'`
 									: stepPath
-									? `- \`${stepPath}\``
-									: ""
+										? `- \`${stepPath}\``
+										: ""
 							}`,
 						});
 
@@ -1627,9 +1672,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									fileUri,
 									Buffer.from("", "utf-8")
 								);
-								const document = await vscode.workspace.openTextDocument(
-									fileUri
-								);
+								const document =
+									await vscode.workspace.openTextDocument(fileUri);
 								const editor = await vscode.window.showTextDocument(document, {
 									preview: false,
 									viewColumn: vscode.ViewColumn.Active,
@@ -1763,9 +1807,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 								});
 								let existingContent = "";
 								try {
-									const contentBytes = await vscode.workspace.fs.readFile(
-										fileUri
-									);
+									const contentBytes =
+										await vscode.workspace.fs.readFile(fileUri);
 									existingContent = Buffer.from(contentBytes).toString("utf-8");
 								} catch (readError: any) {
 									if (
@@ -1847,9 +1890,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									.trim();
 								if (modifiedContent !== existingContent) {
 									const edit = new vscode.WorkspaceEdit();
-									const document = await vscode.workspace.openTextDocument(
-										fileUri
-									);
+									const document =
+										await vscode.workspace.openTextDocument(fileUri);
 									const fullRange = new vscode.Range(
 										document.positionAt(0),
 										document.positionAt(document.getText().length)
@@ -2041,8 +2083,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							this._currentExecutionOutcome === "success"
 								? "Execution complete."
 								: this._currentExecutionOutcome === "cancelled"
-								? "Execution cancelled."
-								: "Execution stopped due to failure.",
+									? "Execution cancelled."
+									: "Execution stopped due to failure.",
 						increment: 100,
 					});
 				}
@@ -2469,7 +2511,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			// Ensure input is re-enabled after the process finishes (success or failure, unless no changes were staged).
 			// The check for no changes staged already handles reenableInput.
 			// So, reenableInput is needed here for the error path and success path where a commit command *was* sent,
-			// unless it was cancelled (handled by cancel handler).
+			// unless it was cancelled (handled by the cancel handler).
 
 			const finalErrorMessage =
 				this._chatHistory[this._chatHistory.length - 1]?.parts[0]?.text;
@@ -2841,7 +2883,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						`minovative-mind-chat-${
 							new Date().toISOString().split("T")[0]
 						}.json`
-				  )
+					)
 				: undefined,
 		};
 		const fileUri = await vscode.window.showSaveDialog(options);
