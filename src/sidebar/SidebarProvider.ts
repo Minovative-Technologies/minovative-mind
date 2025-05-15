@@ -380,6 +380,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this._cancellationTokenSource = undefined;
 			const isCancellation =
 				finalErrorForDisplay?.includes("Operation cancelled by user.") || false;
+
+			// Add the AI's successful textual plan response to chat history
+			if (success && textualPlanResponse !== null) {
+				this.chatHistoryManager.addHistoryEntry("model", textualPlanResponse);
+			}
+
 			this.postMessageToWebview({
 				type: "aiResponseEnd",
 				success: success,
@@ -578,6 +584,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					chatHistory: [...this.chatHistoryManager.getChatHistory()],
 					textualPlanExplanation: textualPlanResponse,
 				};
+				// Add the AI's successful textual plan response to chat history
+				this.chatHistoryManager.addHistoryEntry("model", textualPlanResponse);
 			}
 		} catch (genError: any) {
 			console.error(
@@ -1368,9 +1376,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			// but keeping it here per the user's original code structure.
 			await this.apiKeyManager.switchToNextApiKey();
 
+			let accumulatedResponse = ""; // To capture full response for history
 			const streamCallbacks = {
-				onChunk: (chunk: string) =>
-					this.postMessageToWebview({ type: "aiResponseChunk", value: chunk }),
+				onChunk: (chunk: string) => {
+					accumulatedResponse += chunk; // Accumulate chunk
+					this.postMessageToWebview({ type: "aiResponseChunk", value: chunk });
+				},
 				onComplete: () =>
 					console.log(
 						"Chat stream completed or cancelled (onComplete callback)"
@@ -1399,7 +1410,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			const isErrorResponse =
 				aiResponseText.toLowerCase().startsWith("error:") ||
 				aiResponseText === ERROR_QUOTA_EXCEEDED;
-			// History for full response added by webview's aiResponseEnd handler
+
+			// Add the accumulated AI response to history *after* successful generation
+			if (!isErrorResponse) {
+				this.chatHistoryManager.addHistoryEntry("model", accumulatedResponse);
+			}
+
 			this.postMessageToWebview({
 				type: "aiResponseEnd",
 				success: !isErrorResponse,
@@ -1558,6 +1574,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					`AI failed to generate commit message: ${commitMessage}`
 				);
 			}
+
+			// Add the generated commit message to chat history
+			this.chatHistoryManager.addHistoryEntry("model", commitMessage);
 
 			// Clean and construct the git commit command
 			const {
@@ -1984,7 +2003,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				case "switchToPrevKey":
 					// Disable inputs before switch, re-enabled by updateKeyList via saveKeysToStorage
 					await this.apiKeyManager.switchToPreviousApiKey(); // Delegate
-					// updateWebviewKeyList is called within switchToPreviousApiKey -> saveKeysToStorage
+					// updateWebviewKeyList is called within switchToPreviousApiKey -> saveSettingsToStorage
 					// and updateWebviewKeyList causes setLoadingState(false) in webview if appropriate.
 					break;
 				case "clearChatRequest":
