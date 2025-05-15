@@ -338,6 +338,8 @@ export function createPlanningPrompt(
     6.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
     7.  Never Assume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
     8.  ALWAYS keep in mind of Modularization for everything you create.
+    // Ensure only one modify_file step per file path
+    9.  **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
 
     ${specificContextPrompt}
 
