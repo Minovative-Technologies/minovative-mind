@@ -2,8 +2,6 @@
 import * as vscode from "vscode";
 import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
-// Removed: scanWorkspace - not directly used here
-// Removed: buildContextString - not directly used here
 
 // Helper function type definition for AI action results (kept for potential future use)
 type ActionResult =
@@ -29,7 +27,7 @@ async function executeExplainAction(
 	const languageId = editor.document.languageId;
 	const fileName = editor.document.fileName;
 
-	const activeApiKey = sidebarProvider.getActiveApiKey(); // Still needed for the initial check
+	const activeApiKey = sidebarProvider.getActiveApiKey(); // Still needed for initial check
 	const selectedModel = sidebarProvider.getSelectedModelName();
 
 	if (!activeApiKey) {
