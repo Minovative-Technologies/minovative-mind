@@ -224,11 +224,11 @@ h2 {
 /* Style for the copy button positioned in the top-right corner of .ai-message */
 .copy-button {
 	position: absolute;
-	top: calc(
-		var(--copy-button-padding) / 2
+	bottom: calc(
+		var(--copy-button-padding)
 	); /* Position from the top, using padding variable */
 	right: calc(
-		var(--copy-button-padding) / 2
+		var(--copy-button-padding)
 	); /* Position from the right, using padding variable */
 	padding: var(--copy-button-padding); /* Padding inside the button */
 	width: var(--copy-button-size); /* Fixed width */
