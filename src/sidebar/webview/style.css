@@ -160,7 +160,7 @@ h2 {
 	display: flex;
 	flex-direction: column;
 	gap: var(--element-spacing); /* Space between messages */
-	min-height: 430px; /* Ensure a minimum visible height for the chat area */
+	min-height: 415px; /* Ensure a minimum visible height for the chat area */
 }
 
 /* --- Chat Messages --- */
@@ -922,11 +922,11 @@ h2 {
 /* Styles for the container that shows up when plan parsing fails. */
 #plan-parse-error-container {
 	/* Styled similar to #plan-confirmation-container for visual consistency in UI sections. */
-	border: 1px solid
-		var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder)); /* Uses active/focus border like confirmation */
+	/* MODIFIED: Use error colors instead of active/focus colors for better visual distinction */
+	border: 1px solid var(--vscode-inputValidation-errorBorder); /* Border color from theme */
 	background-color: var(
-		--vscode-inputOption-activeBackground
-	); /* Uses active background like confirmation */
+		--vscode-inputValidation-errorBackground
+	); /* Background color from theme */
 	padding: var(--container-padding);
 	margin: var(--element-spacing) 0;
 	text-align: center; /* Center align contents (like buttons) */

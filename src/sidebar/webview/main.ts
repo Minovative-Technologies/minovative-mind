@@ -13,6 +13,7 @@ import {
 	faRedo, // Already imported for retry button
 	faStop, // Already imported for cancel generation button
 	faCopy, // Added for copy message button
+	faExclamationTriangle, // Added for error messages
 } from "@fortawesome/free-solid-svg-icons";
 import MarkdownIt from "markdown-it";
 
@@ -28,7 +29,8 @@ library.add(
 	faTimes,
 	faRedo, // Added new icon to library
 	faStop, // Added new icon to library
-	faCopy // Added copy icon to library
+	faCopy, // Added copy icon to library
+	faExclamationTriangle // Added error icon to library
 );
 // --- End Font Awesome Imports ---
 
@@ -193,13 +195,38 @@ if (
 			const messageElement = document.createElement("div");
 			messageElement.classList.add("message");
 			if (className) {
-				messageElement.classList.add(className);
+				className
+					.split(" ")
+					.forEach((cls) => messageElement.classList.add(cls));
 			}
 
 			const senderElement = document.createElement("strong");
 			// Add a non-breaking space after the sender name
 			senderElement.textContent = `${sender}:\u00A0`; // Add non-breaking space
 			messageElement.appendChild(senderElement);
+
+			// START MODIFICATION: Conditionally add error icon
+			if (className.includes("error-message")) {
+				const errorIconContainer = document.createElement("span");
+				errorIconContainer.classList.add("error-icon");
+				errorIconContainer.title = "Error";
+				try {
+					const errorIconHTML = icon(faExclamationTriangle, {
+						classes: ["fa-icon"], // Use base icon class
+					}).html[0];
+					if (errorIconHTML) {
+						errorIconContainer.innerHTML = errorIconHTML;
+						messageElement.appendChild(errorIconContainer); // Append icon before text
+					} else {
+						console.error("Failed to generate Font Awesome error icon HTML.");
+						// Optional: Add text fallback like "(Error)"
+					}
+				} catch (e) {
+					console.error("Error setting Font Awesome error icon", e);
+					// Optional: Add text fallback like "(Error)"
+				}
+			}
+			// END MODIFICATION
 
 			const textElement = document.createElement("span");
 			textElement.classList.add("message-text-content"); // Add class to identify the text span
@@ -208,6 +235,7 @@ if (
 			let copyButton: HTMLButtonElement | null = null;
 
 			// START MODIFICATION: Add copy button for AI messages and handle streaming state
+			// Ensure copy button logic is applied *after* error icon if both are present
 			if (sender === "Model" && className.includes("ai-message")) {
 				copyButton = document.createElement("button");
 				copyButton.classList.add("copy-button");
@@ -218,8 +246,13 @@ if (
 				// Check if this is the start of a new stream by checking if text is empty.
 				// aiResponseStart sends { type: "aiResponseStart", value: { modelName: modelName } }
 				// followed by appendMessage("Model", "", "ai-message") to signal the beginning.
-				if (text === "" && className === "ai-message") {
-					// This is the start of a stream
+				// If the message also has 'error-message', it's an error *before* streaming starts.
+				if (
+					text === "" &&
+					className.includes("ai-message") &&
+					!className.includes("error-message")
+				) {
+					// This is the start of a stream (and not a start error)
 					console.log("Appending start of AI stream message.");
 					currentAiMessageContentElement = textElement;
 					currentAccumulatedText = ""; // Initialize accumulated text
@@ -970,10 +1003,11 @@ if (
 				// Streamed responses use aiResponseStart, aiResponseChunk, aiResponseEnd.
 				// Ensure the message is appended and handle error state if provided.
 				// The copy button logic for 'ai-message' is handled inside appendMessage.
+				// Pass multiple classes as a string.
 				appendMessage(
 					"Model",
 					message.value,
-					message.isError ? "ai-message error-message" : "ai-message" // Add ai-message class explicitly
+					`ai-message ${message.isError ? "error-message" : ""}`.trim()
 				);
 
 				// Handle plan confirmation if this non-streamed message requires it.
@@ -984,6 +1018,7 @@ if (
 					message.requiresConfirmation &&
 					message.planData
 				) {
+					console.log("Received aiResponse with confirmable plan.");
 					createPlanConfirmationUI();
 					if (planConfirmationContainer) {
 						pendingPlanData = message.planData as {
@@ -1030,6 +1065,7 @@ if (
 				// This call also handles Point 1.a:
 				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
 				// within the appendMessage function (see its definition) for a new AI stream.
+				// Note: aiResponseStart is only sent for *successful* starts. Errors would come as aiResponseEnd with !success.
 				appendMessage("Model", "", "ai-message");
 				// setLoadingState(true) was called when the user sent the message.
 				// We are now in the process of receiving the response, so loading is still active.
@@ -1089,9 +1125,11 @@ if (
 							? message.error
 							: "Unknown error occurred during AI response streaming.";
 					// Append the error message as a new system message or update status
+					// The provider's finally block often adds a history entry for errors,
+					// potentially including the failed response text. Appending here might be redundant
+					// or cause double messages depending on provider logic. Let's rely on provider adding history.
+					// Just update status for immediate feedback.
 					updateStatus(`AI Stream Error: ${errorMessageContent}`, true);
-					// We could also append it to the chat history as a system message if preferred.
-					// The provider's finally block often adds a history entry for errors.
 				}
 
 				// Handle plan confirmation if the stream was successful and resulted in a plan.
@@ -1507,23 +1545,45 @@ if (
 		// triggered by the 'webviewReady' message handler after receiving updateKeyList/updateModelList.
 		// It's safer to let the state management function handle initialization based on loaded config.
 		// Keep them here as belt-and-suspenders initial DOM state, but main control is setLoadingState.
-		chatInput!.disabled = true;
-		sendButton!.disabled = true;
-		modelSelect!.disabled = true;
+		if (chatInput) {
+			chatInput.disabled = true;
+		}
+		if (sendButton) {
+			sendButton.disabled = true;
+		}
+		if (modelSelect) {
+			modelSelect.disabled = true;
+		}
 
 		// Disabled initially because there are no messages
-		clearChatButton!.disabled = true;
-		saveChatButton!.disabled = true;
+		if (clearChatButton) {
+			clearChatButton.disabled = true;
+		}
+		if (saveChatButton) {
+			saveChatButton.disabled = true;
+		}
 
 		// Enabled initially as loading history is always possible unless loading/blocked
-		loadChatButton!.disabled = false;
+		if (loadChatButton) {
+			loadChatButton.disabled = false;
+		}
 
 		// Key navigation buttons disabled initially until key list is loaded
-		prevKeyButton!.disabled = true;
-		nextKeyButton!.disabled = true;
-		deleteKeyButton!.disabled = true;
-		addKeyInput!.disabled = true; // Also disable add key input
-		addKeyButton!.disabled = true; // Also disable add key button
+		if (prevKeyButton) {
+			prevKeyButton.disabled = true;
+		}
+		if (nextKeyButton) {
+			nextKeyButton.disabled = true;
+		}
+		if (deleteKeyButton) {
+			deleteKeyButton.disabled = true;
+		}
+		if (addKeyInput) {
+			addKeyInput.disabled = true;
+		} // Also disable add key input
+		if (addKeyButton) {
+			addKeyButton.disabled = true;
+		} // Also disable add key button
 
 		// END USER REQUESTED MODIFICATION
 
