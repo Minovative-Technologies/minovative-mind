@@ -12,7 +12,7 @@ interface ContextConfig {
 
 // Default configuration - Adjusted for ~1M token models
 const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
-	maxFileLength: 2 * 1024 * 1024, // Approx 2MB in characters
+	maxFileLength: 5 * 1024 * 1024, // Approx 5MB in characters
 	maxTotalLength: 5 * 1024 * 1024, // Approx 5MB in characters
 };
 
@@ -38,7 +38,7 @@ export async function buildContextString(
 	let currentTotalLength = context.length;
 	let filesSkippedForTotalSize = 0; // For file *content* skipping
 
-	// --- NEW: Generate ASCII Tree ---
+	// --- Generate ASCII Tree ---
 	context += "File Structure:\n";
 	const rootName = path.basename(workspaceRoot.fsPath);
 	const relativePaths = relevantFiles.map((uri) =>
