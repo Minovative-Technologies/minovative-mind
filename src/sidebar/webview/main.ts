@@ -197,17 +197,18 @@ if (
 			}
 
 			const senderElement = document.createElement("strong");
-			senderElement.textContent = `${sender}: `;
+			// Add a non-breaking space after the sender name
+			senderElement.textContent = `${sender}:\u00A0`; // Add non-breaking space
 			messageElement.appendChild(senderElement);
 
 			const textElement = document.createElement("span");
+			textElement.classList.add("message-text-content"); // Add class to identify the text span
 			messageElement.appendChild(textElement); // Always append text element
 
 			let copyButton: HTMLButtonElement | null = null;
 
 			// START MODIFICATION: Add copy button for AI messages and handle streaming state
 			if (sender === "Model" && className.includes("ai-message")) {
-				// Ensure the class is specifically ai-message or includes it (e.g., 'ai-message error-message')
 				copyButton = document.createElement("button");
 				copyButton.classList.add("copy-button");
 				copyButton.title = "Copy Message";
@@ -230,23 +231,20 @@ if (
 					// Disable copy button while content is loading/streaming
 					if (copyButton) {
 						copyButton.disabled = true;
-						copyButton.style.opacity = "0"; // Keep hidden initially
-						copyButton.style.pointerEvents = "none";
+						// Removed manual style opacity/pointer-events setting. Handled by CSS hover.
 					}
 				} else {
 					// This is a complete non-streamed AI message OR a specific error/status message
-					// Mark streaming as finished if it was active
+					// Mark streaming as finished if it was active (shouldn't be needed here but safe)
 					currentAiMessageContentElement = null;
 					currentAccumulatedText = "";
 
 					const renderedHtml = md.render(text);
 					textElement.innerHTML = renderedHtml;
-					// For non-streaming AI message, button is enabled immediately and made visible
+					// For non-streaming AI message, button is enabled immediately and made visible/clickable
 					if (copyButton) {
 						copyButton.disabled = false;
-						// Make button visible immediately for static messages, but still allow mouseover hide/show
-						copyButton.style.opacity = "1";
-						copyButton.style.pointerEvents = "auto";
+						// Removed manual style opacity/pointer-events setting. Handled by CSS hover.
 					}
 				}
 			} else {
@@ -443,7 +441,7 @@ if (
 		// Determine if there are messages in the chat container
 		const hasMessages = chatContainer
 			? chatContainer.childElementCount > 0 &&
-				!chatContainer.querySelector(".loading-message") // Don't count the loading message as content
+			  !chatContainer.querySelector(".loading-message") // Don't count the loading message as content
 			: false;
 
 		if (loadChatButton) {
@@ -935,6 +933,7 @@ if (
 	// START MODIFICATION: Add event listener for retryGenerationButton
 	if (retryGenerationButton) {
 		retryGenerationButton.addEventListener("click", () => {
+			console.log("Retry Generation button clicked.");
 			// Hide the error container
 			if (planParseErrorContainer) {
 				planParseErrorContainer.style.display = "none";
@@ -1068,9 +1067,7 @@ if (
 						) as HTMLButtonElement | null;
 						if (copyButton) {
 							copyButton.disabled = false; // Enable the copy button
-							// Make the copy button fully opaque and clickable now that the message is complete
-							copyButton.style.opacity = "1";
-							copyButton.style.pointerEvents = "auto";
+							// Removed manual style opacity/pointer-events setting. Handled by CSS hover.
 						}
 					}
 				} else {
@@ -1115,7 +1112,7 @@ if (
 						);
 
 						// Disable chat inputs while plan confirmation is visible.
-						// Call setLoadingState(false) which will disable inputs because planConfirmationVisible is true.
+						// Call setLoadingState(false) which will trigger setLoadingState(false) which then sees planConfirmationVisible and disables accordingly.
 						setLoadingState(false);
 						// START MODIFICATION: Hide cancel button when plan confirmation shows
 						if (cancelGenerationButton) {
@@ -1177,7 +1174,7 @@ if (
 
 					// --- START USER REQUESTED MODIFICATION ---
 					// These lines are redundant as setLoadingState(false) handles enabling buttons. Removed.
-					// --- END USER REQUESTATION MODIFICATION ---
+					// --- END USER REQUESTED MODIFICATION ---
 				} else {
 					// Fallback if UI elements are missing
 					console.error(
@@ -1458,8 +1455,7 @@ if (
 							) as HTMLButtonElement | null;
 							if (copyButton) {
 								copyButton.disabled = false;
-								copyButton.style.opacity = "1";
-								copyButton.style.pointerEvents = "auto";
+								// Removed manual style opacity/pointer-events setting. Handled by CSS hover.
 							}
 						}
 					}
@@ -1617,11 +1613,10 @@ if (
 				if (copyButton && !copyButton.disabled) {
 					const messageElement = copyButton.closest(".message");
 					if (messageElement) {
-						// The text content is in the span right before the copy button within the message div
-						// Find the text element (the first span that is not the copy button itself)
-						const textElement = Array.from(
-							messageElement.querySelectorAll("span")
-						).find((span) => span !== copyButton);
+						// Find the text content element (the span with class 'message-text-content')
+						const textElement = messageElement.querySelector(
+							".message-text-content"
+						) as HTMLSpanElement | null;
 
 						if (textElement) {
 							// Get the rendered HTML content of the text element
@@ -1640,15 +1635,30 @@ if (
 							).forEach((el) => {
 								if (el.tagName === "BR") {
 									el.replaceWith("\n");
+								} else if (el.tagName === "LI") {
+									// Add newline before list items, unless it's the first item in its parent
+									if (el.previousElementSibling) {
+										el.prepend("\n");
+									}
+								} else if (el.tagName === "TR") {
+									// Add newline before table rows, unless it's the first row in its parent
+									if (el.previousElementSibling) {
+										el.prepend("\n");
+									}
 								} else {
-									el.append("\n"); // Add newline after block elements
+									el.append("\n"); // Add newline after most block elements
 								}
 							});
 
 							// Get the text content and clean up extra newlines
 							let textToCopy = tempDiv.textContent || tempDiv.innerText || ""; // Use textContent or innerText
 							textToCopy = textToCopy.replace(/\n{3,}/g, "\n\n"); // Reduce multiple newlines to max two
-							textToCopy = textToCopy.trim(); // Trim leading/trailing whitespace
+							textToCopy = textToCopy.replace(/^\n+/, ""); // Remove leading newlines
+							textToCopy = textToCopy.replace(/\n+$/, ""); // Remove trailing newlines
+							textToCopy = textToCopy.trim(); // Trim leading/trailing whitespace (redundant after newline trim?)
+
+							// Additional cleanup for lists/tables where prepending newlines might create issues
+							textToCopy = textToCopy.replace(/\n\s*\n/g, "\n\n"); // Replace newline + whitespace + newline with just two newlines
 
 							try {
 								await navigator.clipboard.writeText(textToCopy);
