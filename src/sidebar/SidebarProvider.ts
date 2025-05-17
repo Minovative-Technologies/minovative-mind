@@ -698,6 +698,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				});
 				this._currentExecutionOutcome = "failed"; // Mark internal state as failed
 				// Keep _pendingPlanGenerationContext for potential retry
+				vscode.window.showErrorMessage(
+					`Minovative Mind: Failed to parse AI plan. Details: ${errorDetail}. Check sidebar for retry options.`
+				);
 				return; // Exit the function, UI will handle retry/cancel
 			}
 
@@ -1312,6 +1315,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					finalMessage =
 						"Plan execution failed. Changes made so far are permanent.";
 					isErrorFinal = true;
+
+					// Show a VS Code notification popup on failure
+					vscode.window.showErrorMessage(
+						"Minovative Mind: Plan execution failed. Please review the error messages in the chat, adjust your request by being more specific, or try a different prompt."
+					);
+
 					break;
 			}
 
