@@ -493,19 +493,18 @@ if (
 		}
 		// END USER REQUESTED MODIFICATION
 
-		// START MODIFICATION: Manage cancel generation button visibility
+		// START MODIFICATION: Manage cancel generation button visibility based on loading AND blocking UI state
 		if (cancelGenerationButton) {
-			// Button should be visible only when loading is true AND neither
-			// plan confirmation nor plan parse error UI is currently active.
+			// The button should be visible ONLY when loading is true AND neither
+			// plan confirmation container NOR plan parse error container is visible.
 			if (loading && !planConfirmationVisible && !planParseErrorVisible) {
-				// Show the cancel button
-				cancelGenerationButton.style.display = "inline-flex"; // Or 'block' depending on desired layout
+				cancelGenerationButton.style.display = "inline-flex"; // Show the cancel button
 			} else {
 				// Hide the cancel button if not loading, or if a specific UI block is active
-				cancelGenerationButton.style.display = "none";
+				cancelGenerationButton.style.display = "none"; // Hide the cancel button
 			}
 		}
-		// END MODIFICATION
+		// END MODIFICATION: Manage cancel generation button visibility
 
 		if (loading) {
 			// Point 4.a (from review instructions): When loading is true, append "Creating..." message if appropriate.
