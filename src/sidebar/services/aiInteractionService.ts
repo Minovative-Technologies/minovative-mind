@@ -335,11 +335,16 @@ export function createPlanningPrompt(
     3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
     4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
     5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. **Crucially, the 'description' field MUST be included and populated for EVERY step, regardless of the action type.** Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
-    6.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
-    7.  Never Assume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
-    8.  ALWAYS keep in mind of Modularization for everything you create.
+    6.  **JSON String Escaping:** When providing string values within the JSON (e.g., for \`content\`, \`generate_prompt\`, \`modification_prompt\`, \`description\`, \`path\`, \`command\`), ensure that special characters are correctly escaped according to JSON rules:
+        *   Newline (\`\\n\`) must be escaped as \`\\n\`.
+        *   Carriage return (\`\\r\`) must be escaped as \`\\r\`.
+        *   Backslash (\`\\\`) must be escaped as \`\\\`.
+        *   Double quote (\`"\`) must be escaped as \`"\`.
+    7.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
+    8.  Never Assume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
+    9.  ALWAYS keep in mind of Modularization for everything you create.
     // Ensure only one modify_file step per file path
-    9.  **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
+    10. **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
 
     ${specificContextPrompt}
 
