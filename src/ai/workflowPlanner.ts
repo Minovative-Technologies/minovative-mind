@@ -120,6 +120,9 @@ export interface ParsedPlanResult {
  * @returns An object containing the validated ExecutionPlan or an error message.
  */
 export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
+	// Log the raw JSON string before parsing
+	console.log("Attempting to parse and validate plan JSON:", jsonString);
+
 	try {
 		const potentialPlan = JSON.parse(jsonString);
 
@@ -166,44 +169,48 @@ export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 			// Validate path presence/absence and safety
 			if (actionsRequiringPath.includes(step.action)) {
 				if (typeof step.path !== "string" || step.path.trim() === "") {
-					const errorMsg = `Plan validation failed: Missing or empty path for required step ${step.step} (${step.action}). Please Retry. Please Retry.`;
+					const errorMsg = `Plan validation failed: Missing or empty path for required step ${step.step} (${step.action}). Please Retry.`;
 					console.error(errorMsg, step);
 					return { plan: null, error: errorMsg };
 				}
 				if (path.isAbsolute(step.path) || step.path.includes("..")) {
-					const errorMsg = `Plan validation failed: Invalid path (absolute or traversal) for step ${step.step}: ${step.path}. Please Retry. Please Retry.`;
-					console.error(errorMsg);
+					const errorMsg = `Plan validation failed: Invalid path (absolute or traversal) for step ${step.step}: ${step.path}.`;
+					console.error(errorMsg, step); // Include step object here
 					return { plan: null, error: errorMsg };
 				}
 				if (typeof step.command !== "undefined") {
 					// This is a warning, not a fatal error for parsing, but good to log.
 					// Depending on strictness, could be an error. For now, warning.
 					console.warn(
-						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'command'. Please Retry.`
+						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'command'.`,
+						step
 					);
 				}
 			} else if (actionsRequiringCommand.includes(step.action)) {
 				if (typeof step.command !== "string" || step.command.trim() === "") {
-					const errorMsg = `Plan validation failed: Missing or empty command for step ${step.step} (${step.action}). Please Retry. Please Retry.`;
+					const errorMsg = `Plan validation failed: Missing or empty command for step ${step.step} (${step.action}). Please Retry.`;
 					console.error(errorMsg, step);
 					return { plan: null, error: errorMsg };
 				}
 				if (typeof step.path !== "undefined") {
 					// Similar to above, path is not expected for command.
 					console.warn(
-						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'path'. Please Retry.`
+						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'path'.`,
+						step
 					);
 				}
 			} else {
 				// Actions that require neither (if any added later)
 				if (typeof step.path !== "undefined") {
 					console.warn(
-						`Plan validation warning: Step ${step.step} (${step.action}) has unexpected 'path'. Please Retry.`
+						`Plan validation warning: Step ${step.step} (${step.action}) has unexpected 'path'.`,
+						step
 					);
 				}
 				if (typeof step.command !== "undefined") {
 					console.warn(
-						`Plan validation warning: Step ${step.step} (${step.action}) has unexpected 'command'. Please Retry.`
+						`Plan validation warning: Step ${step.step} (${step.action}) has unexpected 'command'.`,
+						step
 					);
 				}
 			}
@@ -236,10 +243,9 @@ export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 					// However, it's good for exhaustiveness.
 					const exhaustiveCheck: any = step.action;
 					actionSpecificError = `Unhandled PlanStepAction during validation: ${exhaustiveCheck}`;
-					console.warn(actionSpecificError); // Log as warning, as base validation passed.
+					console.warn(actionSpecificError, step); // Log as warning, as base validation passed.
 					// Decide if this should be a fatal error. If the action is in PlanStepAction enum,
 					// but has no specific validation, it might be okay if it doesn't need extra fields.
-					// For now, let's treat unhandled *known* actions as non-fatal if they pass base checks.
 					// If it was an *unknown* action, the earlier check `!Object.values(PlanStepAction).includes(step.action)` would have caught it.
 					break;
 			}

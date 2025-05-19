@@ -302,6 +302,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		apiKey: string, // initialApiKey for context
 		modelName: string
 	): Promise<void> {
+		console.log("[SidebarProvider] Entering _handleInitialPlanRequest");
 		this.postMessageToWebview({
 			type: "aiResponseStart",
 			value: { modelName: modelName },
@@ -371,8 +372,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				chatHistory: [...this.chatHistoryManager.getChatHistory()],
 				textualPlanExplanation: textualPlanResponse,
 			};
-		} catch (error) {
-			console.error("Error in _handleInitialPlanRequest:", error);
+		} catch (error: any) {
+			console.error("Error in _handleInitialPlanRequest:", error.message);
+			console.error(error.stack); // Log stack trace
 			finalErrorForDisplay =
 				error instanceof Error ? error.message : String(error);
 		} finally {
@@ -408,6 +410,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		documentUri: vscode.Uri,
 		selection: vscode.Range
 	): Promise<void> {
+		console.log("[SidebarProvider] Entering initiatePlanFromEditorAction");
 		// Made public for external calls
 		console.log(
 			`[SidebarProvider] Received editor action: "${instruction}" for textual plan.`
@@ -590,8 +593,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		} catch (genError: any) {
 			console.error(
 				"Error during textual plan generation stream for editor action:",
-				genError
+				genError.message
 			);
+			console.error(genError.stack); // Log stack trace
 			errorStreaming =
 				genError instanceof Error ? genError.message : String(genError);
 			successStreaming = false;
@@ -618,6 +622,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	private async _generateAndExecuteStructuredPlan(
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {
+		console.log("[SidebarProvider] Entering _generateAndExecuteStructuredPlan");
 		this.postMessageToWebview({
 			type: "statusUpdate",
 			value: `Minovative Mind (${planContext.modelName}) is generating the detailed execution plan (JSON)...`,
@@ -711,8 +716,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				planContext.modelName,
 				token // Pass cancellation token to execution
 			);
-		} catch (error) {
-			console.error("Error in _generateAndExecuteStructuredPlan:", error);
+		} catch (error: any) {
+			console.error(
+				"Error in _generateAndExecuteStructuredPlan:",
+				error.message
+			);
+			console.error(error.stack); // Log stack trace
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			const isCancellation = errorMsg.includes("Operation cancelled by user.");
 
@@ -770,6 +779,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		modelName: string,
 		token: vscode.CancellationToken // Pass cancellation token
 	): Promise<void> {
+		console.log("[SidebarProvider] Entering _executePlan");
 		this._currentExecutionOutcome = undefined; // Reset outcome for this execution attempt
 		let executionOk = true;
 		this._activeChildProcesses = []; // Clear before starting any new processes
@@ -845,6 +855,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						if (combinedToken.isCancellationRequested) {
 							this._currentExecutionOutcome = "cancelled"; // Set internal state
 							executionOk = false;
+							console.log(
+								`[Execution] Step ${
+									index + 1
+								}/${totalSteps} skipped due to cancellation.`
+							);
 							return; // Exit the loop and the progress callback
 						}
 						const stepNumber = index + 1;
@@ -852,12 +867,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						const stepMessageTitle = `Step ${stepNumber}/${totalSteps}: ${
 							step.description || stepActionName
 						}`;
+						const stepPath = step.path || "";
+						const stepCommand = step.command || "";
+
+						console.log(
+							`[Execution] Starting ${stepMessageTitle}. Action: ${step.action}, Path: ${stepPath}, Command: ${stepCommand}`
+						); // Log step start
+
 						progress.report({
 							message: `${stepMessageTitle}...`,
 							increment: (index / totalSteps) * 100,
 						});
-						const stepPath = step.path || "";
-						const stepCommand = step.command || "";
 						this.postMessageToWebview({
 							type: "statusUpdate",
 							value: `Executing ${stepMessageTitle} ${
@@ -869,6 +889,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							}`,
 						});
 
+						let stepSuccess = false;
 						try {
 							const currentActiveKey = this.apiKeyManager.getActiveApiKey();
 							if (
@@ -890,6 +911,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 										text: `Step ${stepNumber} OK: Created directory \`${step.path}\``,
 									},
 								});
+								stepSuccess = true;
 							} else if (isCreateFileStep(step)) {
 								const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 								// Check if file exists before creating
@@ -910,6 +932,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											text: `Step ${stepNumber} SKIPPED: File \`${step.path}\` already exists.`,
 										},
 									});
+									stepSuccess = true; // Considered successful because we confirmed existence
 									continue; // Skip to next step
 								}
 
@@ -948,6 +971,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											text: `Step ${stepNumber} OK: Typed content into new file \`${step.path}\``,
 										},
 									});
+									stepSuccess = true;
 								} else if (step.generate_prompt) {
 									this.postMessageToWebview({
 										type: "statusUpdate",
@@ -1006,6 +1030,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											text: `Step ${stepNumber} OK: Generated and typed AI content into new file \`${step.path}\``,
 										},
 									});
+									stepSuccess = true;
 								} else {
 									throw new Error(
 										"CreateFileStep must have 'content' or 'generate_prompt'."
@@ -1099,6 +1124,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											text: `Step ${stepNumber} OK: Modified file \`${step.path}\``,
 										},
 									});
+									stepSuccess = true;
 								} else {
 									this.postMessageToWebview({
 										type: "appendRealtimeModelMessage",
@@ -1106,6 +1132,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											text: `Step ${stepNumber} OK: Modification for \`${step.path}\` resulted in no changes.`,
 										},
 									});
+									stepSuccess = true; // No change is also success for modify step
 								}
 							} else if (isRunCommandStep(step)) {
 								const commandToRun = step.command;
@@ -1170,6 +1197,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											text: `Step ${stepNumber} OK: Command \`${commandToRun}\` sent to terminal. (Monitor terminal for completion)`,
 										},
 									});
+									stepSuccess = true;
 								} else {
 									this.postMessageToWebview({
 										type: "appendRealtimeModelMessage",
@@ -1177,6 +1205,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											text: `Step ${stepNumber} SKIPPED: User did not allow command \`${commandToRun}\`.`,
 										},
 									});
+									stepSuccess = true; // Skipped step is not a failure
 								}
 							} else {
 								console.warn(
@@ -1188,8 +1217,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 										text: `Step ${stepNumber} SKIPPED: Unsupported action \`${step.action}\`.`,
 									},
 								});
+								stepSuccess = true; // Skipped step is not a failure
 							}
-						} catch (error) {
+							console.log(
+								`[Execution] Step ${stepNumber}/${totalSteps} completed successfully.`
+							); // Log step success
+						} catch (error: any) {
 							executionOk = false;
 							const errorMsg =
 								error instanceof Error ? error.message : String(error);
@@ -1201,6 +1234,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									: "failed";
 							}
 							if (!isCancellationError) {
+								console.error(
+									`[Execution] Step ${stepNumber}/${totalSteps} failed: ${errorMsg}`
+								); // Log step failure
+								console.error(error.stack); // Log stack trace
 								// Report step error to webview
 								this.postMessageToWebview({
 									type: "appendRealtimeModelMessage",
@@ -1214,6 +1251,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									value: `Error on Step ${stepNumber}: ${errorMsg}`,
 									isError: true,
 								});
+							} else {
+								console.log(
+									`[Execution] Step ${stepNumber}/${totalSteps} cancelled.`
+								); // Log step cancellation
 							}
 							if (isCancellationError) {
 								// If cancellation error, stop execution loop
@@ -1227,6 +1268,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						if (combinedToken.isCancellationRequested) {
 							this._currentExecutionOutcome = "cancelled"; // Set internal state
 							executionOk = false;
+							console.log(
+								`[Execution] Loop stopping after step ${stepNumber} due to cancellation.`
+							);
 							return; // Exit the progress callback
 						}
 					} // End for loop over steps
@@ -1254,7 +1298,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			if (this._currentExecutionOutcome === undefined) {
 				this._currentExecutionOutcome = executionOk ? "success" : "failed";
 			}
-		} catch (error) {
+		} catch (error: any) {
 			// This catch block handles errors thrown *outside* the withProgress callback,
 			// like the initial workspace folder check error.
 			executionOk = false;
@@ -1268,6 +1312,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					: "failed";
 			}
 			if (!isCancellationError) {
+				console.error(
+					"Error in _executePlan (outside withProgress):",
+					error.message
+				);
+				console.error(error.stack); // Log stack trace
 				const displayMsg = `Plan execution failed unexpectedly: ${errorMsg}`;
 				this.postMessageToWebview({
 					type: "appendRealtimeModelMessage",
@@ -1278,6 +1327,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					value: displayMsg,
 					isError: true,
 				});
+			} else {
+				console.log(
+					"[Execution] Plan execution cancelled (outside withProgress)."
+				);
 			}
 		} finally {
 			// Ensure all active child processes are terminated
@@ -1306,16 +1359,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			switch (this._currentExecutionOutcome) {
 				case "success":
 					finalMessage = "Plan execution completed successfully.";
+					console.log("[Execution] Plan execution completed successfully.");
 					break;
 				case "cancelled":
 					finalMessage =
 						"Plan execution cancelled by user. Changes made so far are permanent.";
+					console.log("[Execution] Plan execution cancelled by user.");
 					break;
 				case "failed":
 					finalMessage =
 						"Plan execution failed. Changes made so far are permanent.";
 					isErrorFinal = true;
-
+					console.log("[Execution] Plan execution failed.");
 					// Show a VS Code notification popup on failure
 					vscode.window.showErrorMessage(
 						"Minovative Mind: Plan execution failed. Please review the error messages in the chat, adjust your request by being more specific, or try a different prompt."
@@ -1357,6 +1412,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		apiKey: string, // initialApiKey for context
 		modelName: string
 	): Promise<void> {
+		console.log("[SidebarProvider] Entering _handleRegularChat");
 		this._cancellationTokenSource = new vscode.CancellationTokenSource();
 		const token = this._cancellationTokenSource.token;
 
@@ -1432,8 +1488,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				isPlanResponse: false,
 				planData: null,
 			});
-		} catch (error) {
-			console.error("Error in _handleRegularChat:", error);
+		} catch (error: any) {
+			console.error("Error in _handleRegularChat:", error.message);
+			console.error(error.stack); // Log stack trace
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			const isCancellation = errorMsg.includes("Operation cancelled by user.");
 			this.postMessageToWebview({
@@ -1463,6 +1520,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		apiKey: string, // initialApiKey for context
 		modelName: string
 	): Promise<void> {
+		console.log("[SidebarProvider] Entering _handleCommitCommand");
 		this._cancellationTokenSource = new vscode.CancellationTokenSource();
 		const token = this._cancellationTokenSource.token;
 		let currentGitProcess: ChildProcess | undefined;
@@ -1621,7 +1679,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			});
 		} catch (error: any) {
 			removeProcess(); // Ensure any active process is removed from tracking
-			console.error("Error in _handleCommitCommand:", error);
+			console.error("Error in _handleCommitCommand:", error.message);
+			console.error(error.stack); // Log stack trace
 			const errorMsg = error.message || String(error);
 			const isCancellation = errorMsg.includes("Operation cancelled by user.");
 
@@ -1761,7 +1820,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 
 		webviewView.webview.onDidReceiveMessage(async (data) => {
-			console.log(`[Provider] Message received: ${data.type}`);
+			console.log(`[Provider] Message received: ${data.type}`); // Log received message type
 
 			// Handle cancellation messages first
 			if (data.type === "cancelGeneration") {
@@ -2013,7 +2072,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					// Disable inputs before switch, re-enabled by updateKeyList via saveKeysToStorage
 					await this.apiKeyManager.switchToPreviousApiKey(); // Delegate
 					// updateWebviewKeyList is called within switchToPreviousApiKey -> saveSettingsToStorage
-					// and updateWebviewKeyList causes setLoadingState(false) in webview if appropriate.
+					// and updateWebviewModelList causes setLoadingState(false) in webview if appropriate.
 					break;
 				case "clearChatRequest":
 					await this.chatHistoryManager.clearChat(); // Delegate

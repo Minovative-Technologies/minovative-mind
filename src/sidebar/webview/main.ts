@@ -414,7 +414,7 @@ if (
 	// Modified setLoadingState to control button states based on loading and UI visibility
 	function setLoadingState(loading: boolean) {
 		isLoading = loading; // Keep track of overall loading state
-		console.log("setLoadingState:", loading);
+		console.log("setLoadingState:", loading); // ADDED console.log here
 
 		// Check visibility of blocking UI elements
 		const planConfirmationVisible =
@@ -603,6 +603,7 @@ if (
 						target.id === "confirm-plan-button" ||
 						target.closest("#confirm-plan-button")
 					) {
+						console.log("Confirm Plan button clicked."); // ADDED console.log here
 						if (pendingPlanData) {
 							vscode.postMessage({
 								type: "confirmPlanExecution",
@@ -623,6 +624,7 @@ if (
 						target.id === "cancel-plan-button" ||
 						target.closest("#cancel-plan-button")
 					) {
+						console.log("Cancel Plan button clicked."); // ADDED console.log here
 						// Correctly sends the cancel message
 						vscode.postMessage({ type: "cancelPlanExecution" });
 						updateStatus("Plan cancelled.");
@@ -672,9 +674,13 @@ if (
 	// Note: Placing general listeners here, and specific UI listeners (like cancel buttons) within initializeWebview
 	// ensures they are set up after DOM checks and UI creation (if any).
 
-	sendButton.addEventListener("click", sendMessage);
+	sendButton.addEventListener("click", () => {
+		console.log("Send button clicked.");
+		sendMessage();
+	}); // ADDED console.log here
 	chatInput.addEventListener("keydown", (e) => {
 		if (e.key === "Enter" && !e.shiftKey) {
+			console.log("Chat input Enter key pressed."); // ADDED console.log here
 			e.preventDefault();
 			sendMessage();
 		}
@@ -951,13 +957,16 @@ if (
 	// Clear/Save/Load listeners are correct, they trigger actions handled elsewhere.
 	// Button disabled states are managed by setLoadingState.
 	clearChatButton.addEventListener("click", () => {
+		console.log("Clear Chat button clicked."); // ADDED console.log here
 		vscode.postMessage({ type: "clearChatRequest" });
 	});
 	saveChatButton.addEventListener("click", () => {
+		console.log("Save Chat button clicked."); // ADDED console.log here
 		vscode.postMessage({ type: "saveChatRequest" });
 		updateStatus("Requesting chat save...");
 	});
 	loadChatButton.addEventListener("click", () => {
+		console.log("Load Chat button clicked."); // ADDED console.log here
 		vscode.postMessage({ type: "loadChatRequest" });
 		updateStatus("Requesting chat load...");
 	});
@@ -965,7 +974,7 @@ if (
 	// START MODIFICATION: Add event listener for retryGenerationButton
 	if (retryGenerationButton) {
 		retryGenerationButton.addEventListener("click", () => {
-			console.log("Retry Generation button clicked.");
+			console.log("Retry Generation button clicked."); // ADDED console.log here
 			// Hide the error container
 			if (planParseErrorContainer) {
 				planParseErrorContainer.style.display = "none";
@@ -992,6 +1001,7 @@ if (
 
 	window.addEventListener("message", (event: MessageEvent) => {
 		const message = event.data;
+		console.log("Received message:", event.data); // ADDED console.log here
 		console.log("[Webview] Message received from extension:", message.type);
 
 		switch (message.type) {
@@ -1615,7 +1625,7 @@ if (
 		// This listener is added within initializeWebview as part of UI setup.
 		if (cancelParseErrorButton) {
 			cancelParseErrorButton.addEventListener("click", () => {
-				console.log("Cancel Parse Error button clicked.");
+				console.log("Cancel Parse Error button clicked."); // ADDED console.log here
 				// 2a. Hide the error container
 				if (planParseErrorContainer) {
 					planParseErrorContainer.style.display = "none";
@@ -1641,7 +1651,7 @@ if (
 		// START MODIFICATION: Add click event listener for cancelGenerationButton
 		if (cancelGenerationButton) {
 			cancelGenerationButton.addEventListener("click", () => {
-				console.log("Cancel Generation button clicked.");
+				console.log("Cancel Generation button clicked."); // ADDED console.log here
 				// 1. Hide the button immediately (redundant as setLoadingState will hide it, but good for instant feedback)
 				// cancelGenerationButton.style.display = "none"; // Removed - setLoadingState(false) handles this
 				// 2. Send message to extension to cancel

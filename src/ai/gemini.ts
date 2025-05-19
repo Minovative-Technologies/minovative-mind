@@ -5,7 +5,6 @@ import {
 	GenerativeModel,
 	Content,
 	GenerationConfig,
-	// StartChatParams, // No longer needed for generateContentStream as it uses a different request structure
 } from "@google/generative-ai";
 
 export const ERROR_QUOTA_EXCEEDED = "ERROR_GEMINI_QUOTA_EXCEEDED";
@@ -26,6 +25,9 @@ let currentModelName: string | null = null;
  * @returns True if initialization was successful or already initialized correctly, false otherwise.
  */
 function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
+	console.log(
+		`Gemini: Attempting to initialize GoogleGenerativeAI with model: ${modelName}...`
+	);
 	try {
 		if (!apiKey) {
 			console.error("Gemini: API Key is missing.");
@@ -44,26 +46,28 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
 			return false;
 		}
 
-		if (
+		const needsInitialization =
 			!generativeAI ||
 			!model ||
 			apiKey !== currentApiKey ||
-			modelName !== currentModelName
-		) {
+			modelName !== currentModelName;
+
+		if (needsInitialization) {
 			console.log(
-				`Gemini: Initializing/Re-initializing. Key changed: ${
+				`Gemini: Re-initializing client. Key changed: ${
 					apiKey !== currentApiKey
-				}, Model changed: ${modelName !== currentModelName}`
+				}, Model changed: ${
+					modelName !== currentModelName
+				}. New model: ${modelName}`
 			);
 			generativeAI = new GoogleGenerativeAI(apiKey);
 			// For `generateContentStream`, generationConfig is applied per-request.
 			model = generativeAI.getGenerativeModel({ model: modelName });
 			currentApiKey = apiKey;
 			currentModelName = modelName;
-			console.log(
-				"Gemini: GoogleGenerativeAI initialized with model:",
-				modelName
-			);
+			console.log("Gemini: GoogleGenerativeAI initialized successfully.");
+		} else {
+			console.log("Gemini: Client already initialized with correct settings.");
 		}
 		return true;
 	} catch (error) {
@@ -133,16 +137,18 @@ export async function* generateContentStream(
 	let contentYielded = false; // Flag to track if any content has been successfully yielded
 
 	try {
+		// Log request details before sending
+		const truncatedPrompt =
+			prompt.length > 100 ? `${prompt.substring(0, 100)}...` : prompt;
 		console.log(
-			`Gemini (${modelName}): Sending stream request. Prompt: ${prompt.substring(
-				0,
-				100
-			)}...`
+			`Gemini (${modelName}): Sending stream request. Truncated Prompt: ${truncatedPrompt}`
 		);
 		if (generationConfig) {
+			// Log the config being used, stringify it
 			console.log(
-				`Gemini (${modelName}): Using custom generationConfig:`,
-				JSON.stringify(generationConfig) // Log the config being used
+				`Gemini (${modelName}): Using custom generationConfig: ${JSON.stringify(
+					generationConfig
+				)}`
 			);
 		}
 
@@ -166,9 +172,17 @@ export async function* generateContentStream(
 			if (text && text.length > 0) {
 				// Ensure text is not null/empty before yielding
 				contentYielded = true; // Mark that content has been yielded
+				// Log received chunk (truncated)
+				const truncatedChunk =
+					text.length > 50 ? `${text.substring(0, 50)}...` : text;
+				console.log(
+					`Gemini (${modelName}): Received chunk: "${truncatedChunk}"`
+				);
 				yield text; // Yield the text chunk
 			}
 		}
+
+		console.log(`Gemini (${modelName}): Stream finished.`);
 
 		// 6. Process final response data after the stream is fully consumed
 		// result.response is a Promise that resolves when the stream is finished.
@@ -233,22 +247,22 @@ export async function* generateContentStream(
 	} catch (error: any) {
 		// 7. Handle errors from API calls, network issues, or other exceptions during the process.
 
-		// Log if cancellation was requested around the time of the error.
-		// If the error itself is the cancellation error, re-throw it.
-		// Otherwise, process other errors.
+		// Log the raw error first for detailed debugging
+		console.error(
+			`Gemini (${modelName}): Raw error caught during content stream generation:`,
+			error
+		);
+
+		// If the error itself is the cancellation error, re-throw it immediately.
 		if (error instanceof Error && error.message === ERROR_OPERATION_CANCELLED) {
 			console.log("Gemini: Caught specific cancellation error, re-throwing.");
 			// Re-throw the specific cancellation error so callers can distinguish it.
 			throw error;
 		}
 
-		console.error(
-			`Gemini (${modelName}): Error during content stream generation:`,
-			error // Log the full error object for detailed debugging
-		);
-
 		let errorMessage = `An error occurred with the Gemini API (${modelName}) during streaming.`;
 		let isQuotaError = false;
+		let errorTypeLogged = "Other"; // Default type for logging
 
 		if (error instanceof Error) {
 			const lowerErrorMessage = error.message.toLowerCase();
@@ -257,7 +271,9 @@ export async function* generateContentStream(
 			const errorStatus = // Try to find HTTP status code from common error properties
 				(error as any).status ||
 				(error as any).httpGoogleError?.code || // Nested Google HTTP error code for some SDK errors
-				(error as any).code;
+				(error as any).code; // Generic code property
+
+			// --- Specific Error Type Handling and Logging ---
 
 			if (
 				lowerErrorMessage.includes("quota") ||
@@ -268,6 +284,7 @@ export async function* generateContentStream(
 			) {
 				errorMessage = `API quota or rate limit exceeded for model ${modelName}. Please check your Google Cloud/Gemini account limits.`;
 				isQuotaError = true;
+				errorTypeLogged = "Quota Exceeded";
 			} else if (
 				lowerErrorMessage.includes("api key not valid") ||
 				lowerErrorMessage.includes("invalid api key") ||
@@ -279,6 +296,7 @@ export async function* generateContentStream(
 			) {
 				errorMessage = `Invalid API Key or insufficient permissions for Gemini model ${modelName}. Please verify your API key and its permissions in the settings.`;
 				resetClient(); // API key is likely bad, reset client state
+				errorTypeLogged = "Invalid API Key/Permissions";
 			} else if (
 				lowerErrorMessage.includes("invalid model") ||
 				lowerErrorMessage.includes("model not found") ||
@@ -286,6 +304,7 @@ export async function* generateContentStream(
 			) {
 				errorMessage = `The selected Gemini model '${modelName}' is not valid, not found, or not accessible with your current API key.`;
 				resetClient(); // Model name or access issue, reset client state
+				errorTypeLogged = "Invalid Model";
 			} else if (
 				lowerErrorMessage.includes("json_parsing_error") ||
 				(generationConfig?.responseMimeType === "application/json" && // If JSON was expected
@@ -293,6 +312,7 @@ export async function* generateContentStream(
 						lowerErrorMessage.includes("failed to parse")))
 			) {
 				errorMessage = `Gemini (${modelName}) was requested to return JSON but failed to generate valid JSON. Model response might be malformed. Details: ${error.message}`;
+				errorTypeLogged = "JSON Parsing Error";
 			} else if (
 				// This handles cases where the SDK throws an error directly related to content blocking
 				// *before* any content could be yielded (e.g., request validation failure due to safety).
@@ -302,15 +322,26 @@ export async function* generateContentStream(
 				!contentYielded // Crucially, only if no content was yielded yet.
 			) {
 				errorMessage = `Request to Gemini (${modelName}) was blocked due to safety settings or other policy before any content could be generated. Details: ${error.message}`;
+				errorTypeLogged = "Request Blocked (Pre-generation)";
 			} else {
 				// Generic error message fallback using the error's message
 				errorMessage = `Gemini (${modelName}) error: ${error.message}`;
+				errorTypeLogged = "Generic API Error";
 			}
+
+			// Log the derived error details before throwing
+			console.error(
+				`Gemini (${modelName}): Processed error type: ${errorTypeLogged}, Status: ${errorStatus}, Name: ${errorName}, Message: "${errorMessage}"`
+			);
 		} else {
 			// Non-Error object thrown, convert to string
 			errorMessage = `An unknown error occurred with Gemini (${modelName}): ${String(
 				error
 			)}`;
+			errorTypeLogged = "Unknown/Non-Error Type";
+			console.error(
+				`Gemini (${modelName}): Processed error type: ${errorTypeLogged}, Message: "${errorMessage}"`
+			);
 		}
 
 		if (isQuotaError) {
