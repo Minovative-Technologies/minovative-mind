@@ -5,7 +5,8 @@ export function createInitialPlanningExplanationPrompt(
 	projectContext: string,
 	userRequest?: string,
 	editorContext?: PlanGenerationContext["editorContext"],
-	diagnosticsString?: string
+	diagnosticsString?: string,
+	chatHistory?: HistoryEntry[]
 ): string {
 	let specificContextPrompt = "";
 	let mainInstructions = "";
@@ -43,14 +44,30 @@ export function createInitialPlanningExplanationPrompt(
 			editorContext.instruction.toLowerCase() === "/fix"
 				? "'/fix' command"
 				: "custom instruction"
-		}) and the provided file/selection context, explain your step-by-step plan to fulfill the request. For '/fix', the plan should clearly address the 'Relevant Diagnostics' listed. For custom instructions, interpret the request in the context of the selected code and any diagnostics.`;
+		}) and the provided file/selection context, and any relevant chat history, explain your step-by-step plan to fulfill the request. For '/fix', the plan should clearly address the 'Relevant Diagnostics' listed. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
 	} else if (userRequest) {
 		specificContextPrompt = `
         --- User Request from Chat ---
         ${userRequest}
         --- End User Request ---`;
-		mainInstructions = `Based on the user's request from the chat ("${userRequest}"), explain your step-by-step plan to fulfill it.`;
+		mainInstructions = `Based on the user's request from the chat ("${userRequest}") and any relevant chat history, explain your step-by-step plan to fulfill it.`;
 	}
+
+	// ADDED: Format chat history for the prompt
+	const chatHistoryForPrompt =
+		chatHistory && chatHistory.length > 0
+			? `
+    --- Recent Chat History (for additional context on user's train of thought and previous interactions) ---
+    ${chatHistory
+			.map(
+				(entry) =>
+					`Role: ${entry.role}\nContent:\n${entry.parts
+						.map((p) => p.text)
+						.join("\n")}`
+			)
+			.join("\n---\n")}
+    --- End Recent Chat History ---`
+			: "";
 
 	return `
     You are an expert AI programmer assisting within VS Code. Your task is to explain your plan to fulfill the user's request.
@@ -69,7 +86,9 @@ export function createInitialPlanningExplanationPrompt(
     5.  Never Aussume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
     6. ALWAYS keep in mind of Modularization for everything you create.
 
-    ${specificContextPrompt}
+    Specific Context: ${specificContextPrompt}
+
+    Chat History: ${chatHistoryForPrompt}
 
     *** Broader Project Context (Reference Only) ***
     ${projectContext}

@@ -323,7 +323,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			const textualPlanPrompt = createInitialPlanningExplanationPrompt(
 				projectContext,
-				userRequest
+				userRequest,
+				undefined, // editorContext is undefined for chat plans
+				undefined, // diagnosticsString is undefined for chat plans
+				[...this.chatHistoryManager.getChatHistory()] // MODIFIED: Pass chat history
 			);
 			// This call to switchToNextApiKey before _generateWithRetry might be redundant
 			// given that _generateWithRetry handles switching on QUOTA_EXCEEDED,
@@ -345,7 +348,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			textualPlanResponse = await this._generateWithRetry(
 				textualPlanPrompt,
 				modelName,
-				undefined,
+				undefined, // History is not used by _generateWithRetry itself for this prompt, only the prompt string includes it.
 				"initial plan explanation",
 				undefined,
 				streamCallbacks,
@@ -369,7 +372,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				projectContext,
 				initialApiKey: apiKey, // Store the key that was active when planning started
 				modelName,
-				chatHistory: [...this.chatHistoryManager.getChatHistory()],
+				chatHistory: [...this.chatHistoryManager.getChatHistory()], // Store the history *including* the user's current message
 				textualPlanExplanation: textualPlanResponse,
 			};
 		} catch (error: any) {
@@ -385,7 +388,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			// Add the AI's successful textual plan response to chat history
 			if (success && textualPlanResponse !== null) {
-				this.chatHistoryManager.addHistoryEntry("model", textualPlanResponse);
+				// This is now handled by the aiResponseEnd handler in the webview
+				// this.chatHistoryManager.addHistoryEntry("model", textualPlanResponse);
+				console.log(
+					"[SidebarProvider] Not adding AI response to history in finally block; handled by webview."
+				);
+			} else if (!isCancellation && finalErrorForDisplay) {
+				// If there was a generation error (not cancellation), add it to history
+				this.chatHistoryManager.addHistoryEntry(
+					"model",
+					`Error generating initial plan: ${finalErrorForDisplay}`
+				);
 			}
 
 			this.postMessageToWebview({
@@ -394,8 +407,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				error: isCancellation
 					? "Plan generation cancelled by user."
 					: finalErrorForDisplay,
-				isPlanResponse: success,
-				planData: success
+				isPlanResponse: success, // If generation succeeded, it's a plan response requiring confirmation
+				planData: success // Only send planData if successful
 					? { originalRequest: userRequest, type: "textualPlanPending" }
 					: null,
 			});
@@ -465,9 +478,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		const token = this._cancellationTokenSource.token;
 
 		try {
+			// Add user message to chat history immediately (representing the editor action conceptually)
+			this.chatHistoryManager.addHistoryEntry(
+				"user",
+				`Editor Action: "${instruction}" on \`${documentUri.fsPath}\` selection.`
+			);
 			this.chatHistoryManager.addHistoryEntry(
 				"model",
-				`Received request from editor: "${instruction}". Generating plan explanation...`
+				`Received editor request. Generating plan explanation...`
 			);
 			this.postMessageToWebview({
 				type: "aiResponseStart",
@@ -528,9 +546,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			};
 			const textualPlanPrompt = createInitialPlanningExplanationPrompt(
 				projectContext,
-				undefined,
+				undefined, // userRequest is undefined for editor actions
 				editorCtx,
-				diagnosticsString
+				diagnosticsString,
+				[...this.chatHistoryManager.getChatHistory()] // MODIFIED: Pass chat history
 			);
 
 			let accumulatedTextualResponse = "";
@@ -554,7 +573,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			textualPlanResponse = await this._generateWithRetry(
 				textualPlanPrompt,
 				modelName,
-				undefined,
+				undefined, // History is not used by _generateWithRetry itself for this prompt, only the prompt string includes it.
 				"editor action plan explanation",
 				undefined,
 				streamCallbacks,
@@ -584,11 +603,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					diagnosticsString,
 					initialApiKey: activeKeyForContext, // Store the key that was active when planning started
 					modelName,
-					chatHistory: [...this.chatHistoryManager.getChatHistory()],
+					chatHistory: [...this.chatHistoryManager.getChatHistory()], // Store the history *including* the user's action message
 					textualPlanExplanation: textualPlanResponse,
 				};
 				// Add the AI's successful textual plan response to chat history
-				this.chatHistoryManager.addHistoryEntry("model", textualPlanResponse);
+				// This is now handled by the aiResponseEnd handler in the webview
+				// this.chatHistoryManager.addHistoryEntry("model", textualPlanResponse);
+				console.log(
+					"[SidebarProvider] Not adding AI response to history in finally block; handled by webview."
+				);
 			}
 		} catch (genError: any) {
 			console.error(
@@ -604,14 +627,23 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this._cancellationTokenSource = undefined;
 			const isCancellation =
 				errorStreaming?.includes("Operation cancelled by user.") || false;
+
+			// If there was a generation error (not cancellation), add it to history
+			if (!isCancellation && errorStreaming) {
+				this.chatHistoryManager.addHistoryEntry(
+					"model",
+					`Error generating initial plan explanation: ${errorStreaming}`
+				);
+			}
+
 			this.postMessageToWebview({
 				type: "aiResponseEnd",
 				success: successStreaming,
 				error: isCancellation
 					? "Plan generation cancelled by user."
 					: errorStreaming,
-				isPlanResponse: successStreaming,
-				planData: successStreaming ? planDataForConfirmation : null,
+				isPlanResponse: successStreaming, // If generation succeeded, it's a plan response requiring confirmation
+				planData: successStreaming ? planDataForConfirmation : null, // Only send planData if successful
 			});
 			if (!successStreaming && !isCancellation) {
 				this.postMessageToWebview({ type: "reenableInput" });
