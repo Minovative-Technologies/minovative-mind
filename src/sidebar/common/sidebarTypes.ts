@@ -45,6 +45,12 @@ export interface PlanGenerationContext {
 
 export type ExecutionOutcome = "success" | "cancelled" | "failed";
 
-// If you need ParsedPlanResult or CreateFileStep types here from workflowPlanner,
-// it's better to import them directly from "../ai/workflowPlanner" in files that need them,
-// rather than re-exporting them through sidebarTypes.ts, to keep dependencies clear.
+export interface EditorContext {
+	instruction: string;
+	selectedText: string;
+	fullText: string;
+	languageId: string;
+	filePath: string;
+	documentUri: import("vscode").Uri;
+	selection: import("vscode").Range;
+}

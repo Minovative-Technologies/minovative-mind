@@ -23,6 +23,10 @@ export class SettingsManager {
 		return this._selectedModelName;
 	}
 
+	public getSetting<T>(key: string, defaultValue: T): T {
+		return this.workspaceState.get<T>(key, defaultValue);
+	}
+
 	private loadSettingsFromStorage(): void {
 		try {
 			const savedModel = this.workspaceState.get<string>(

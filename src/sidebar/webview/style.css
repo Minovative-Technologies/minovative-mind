@@ -174,9 +174,6 @@ h2 {
 	border: 1px solid transparent; /* Base border */
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle shadow */
 }
-/* MODIFIED: Target only the direct <strong> child of .message (e.g., "User:", "Model:") */
-/* This ensures that <strong> tags from markdown *within* the message content (not direct children) */
-/* retain their default display: inline style and do not cause new lines. */
 .message > strong {
 	/* Sender label */
 	display: block; /* Ensure the sender label (e.g., "User:", "Model:") takes its own line */
@@ -190,7 +187,9 @@ h2 {
 	color: var(--vscode-list-activeSelectionForeground);
 	align-self: flex-end;
 	margin-left: auto;
+	min-height: fit-content;
 	border-color: var(--vscode-list-activeSelectionBackground);
+	overflow-x: auto; /* Allow horizontal scrolling for wide content like tables or code blocks */
 }
 .user-message strong {
 	color: var(--vscode-list-activeSelectionForeground);
@@ -203,8 +202,6 @@ h2 {
 	min-height: fit-content;
 	overflow-x: auto; /* Allow horizontal scrolling for wide content like tables or code blocks */
 	position: relative; /* Ensure .copy-button is positioned relative to this */
-	/* Removed padding-top as requested */
-	/* Allow margin-top and margin-bottom to collapse with preceding/following messages */
 }
 /* Specific styling for AI messages that are error messages */
 .ai-message.error-message {
