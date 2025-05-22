@@ -1,0 +1,11 @@
+/* Styles for the new Chat View */
+body {
+	font-family: var(--vscode-font-family);
+	color: var(--vscode-editor-foreground);
+	background-color: var(--vscode-editor-background);
+	padding: 10px;
+}
+
+h1 {
+	color: var(--vscode-textLink-foreground);
+}

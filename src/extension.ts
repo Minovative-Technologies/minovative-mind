@@ -1,6 +1,7 @@
 // src/extension.ts
 import * as vscode from "vscode";
 import { SidebarProvider } from "./sidebar/SidebarProvider";
+import { ChatViewProvider } from "./sidebar/ChatViewProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
 
 // Helper function type definition for AI action results (kept for potential future use)
@@ -129,6 +130,15 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerWebviewViewProvider(
 			SidebarProvider.viewType,
 			sidebarProvider
+		)
+	);
+
+	// Create and register the ChatViewProvider
+	const chatViewProvider = new ChatViewProvider(context.extensionUri);
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider(
+			ChatViewProvider.viewType,
+			chatViewProvider
 		)
 	);
 

@@ -34,9 +34,16 @@
 			"minovative-mind": [
 				{
 					"id": "minovativeMindSidebarView",
-					"name": "Chat",
+					"name": "Minovative Mind Tools",
 					"type": "webview",
 					"contextualTitle": "Minovative Mind",
+					"icon": "media/minovative-logo-192x192.png"
+				},
+				{
+					"id": "minovativeMindSidebarViewSettings",
+					"name": "Settings",
+					"type": "webview",
+					"contextualTitle": "Settings",
 					"icon": "media/minovative-logo-192x192.png"
 				}
 			]
