@@ -54,7 +54,7 @@ export async function getHtmlForWebview(
 	}
 }
 
-export async function getChatViewHtml(
+export async function getSettingsHtml(
 	webview: vscode.Webview,
 	extensionUri: vscode.Uri,
 	scriptUri: vscode.Uri,
@@ -66,7 +66,7 @@ export async function getChatViewHtml(
 		"src",
 		"sidebar",
 		"webview",
-		"chatView.html"
+		"settings.html"
 	);
 
 	try {

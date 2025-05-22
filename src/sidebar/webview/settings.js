@@ -5,7 +5,7 @@ const vscode = acquireVsCodeApi();
 
 window.addEventListener("message", (event) => {
 	const message = event.data;
-	console.log(`[ChatView] Message from extension: ${message.type}`);
+	console.log(`[Settings] Message from extension: ${message.type}`);
 	// Handle messages from the extension here
 });
 

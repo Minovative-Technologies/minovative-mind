@@ -1847,10 +1847,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							0,
 							Math.min(allScannedFiles.length, 10) // Use the renamed variable
 						); // Limit to 10 files
+
 						this.postMessageToWebview({
 							type: "statusUpdate",
-							value: `No specific files identified by AI. Using a broader, limited context.`,
+							value: `No specific files identified by AI.`,
 						});
+
 						console.warn(
 							"[SidebarProvider] Smart selection returned no files. Using a limited subset of all potential files as fallback."
 						);

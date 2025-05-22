@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import { getChatViewHtml } from "./ui/webviewHelper";
+import { getSettingsHtml } from "./ui/webviewHelper";
 
-export class ChatViewProvider implements vscode.WebviewViewProvider {
+export class SettingsProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarViewSettings";
 
 	private _view?: vscode.WebviewView;
@@ -33,7 +33,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				"src",
 				"sidebar",
 				"webview",
-				"chatView.js"
+				"settings.js"
 			)
 		);
 		const styleUri = webviewView.webview.asWebviewUri(
@@ -42,13 +42,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 				"src",
 				"sidebar",
 				"webview",
-				"chatView.css"
+				"settings.css"
 			)
 		);
 
 		const nonce = getNonce();
 
-		webviewView.webview.html = await getChatViewHtml(
+		webviewView.webview.html = await getSettingsHtml(
 			webviewView.webview,
 			this._extensionUri,
 			scriptUri,
@@ -57,7 +57,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 		);
 
 		webviewView.webview.onDidReceiveMessage(async (data) => {
-			console.log(`[ChatViewProvider] Message received: ${data.type}`);
+			console.log(`[SettingsProvider] Message received: ${data.type}`);
 			// Future logic for chat messages will go here
 		});
 	}
