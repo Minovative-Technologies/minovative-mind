@@ -58,6 +58,17 @@ export class SettingsProvider implements vscode.WebviewViewProvider {
 
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			console.log(`[SettingsProvider] Message received: ${data.type}`);
+
+			if (data.type === "openUrl") {
+				const url = data.url;
+				try {
+					await vscode.env.openExternal(vscode.Uri.parse(url));
+					console.log(`[SettingsProvider] Opened external URL: ${url}`);
+				} catch (error) {
+					console.error(`[SettingsProvider] Error opening URL ${url}:`, error);
+					vscode.window.showErrorMessage(`Failed to open URL: ${url}`);
+				}
+			}
 			// Future logic for chat messages will go here
 		});
 	}

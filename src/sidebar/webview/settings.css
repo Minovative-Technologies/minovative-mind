@@ -9,3 +9,35 @@ body {
 h1 {
 	color: var(--vscode-textLink-foreground);
 }
+
+/* Button container styles */
+.button-container {
+	display: flex;
+	gap: 10px;
+	margin-top: 20px;
+	margin-bottom: 20px;
+	width: 100%;
+}
+
+/* General button styles for the settings panel */
+button {
+	padding: 8px 15px;
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: 1px solid var(--vscode-button-border, transparent);
+	border-radius: 3px;
+	font-size: var(--vscode-font-size);
+	cursor: pointer;
+	transition: background-color 0.2s ease, border-color 0.2s ease;
+	white-space: nowrap;
+	max-width: fit-content;
+}
+
+button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+button:active {
+	background-color: var(--vscode-button-hoverBackground);
+	border-color: var(--vscode-button-border, currentColor);
+}
