@@ -1665,6 +1665,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		};
 
 		try {
+			this.postMessageToWebview({
+				type: "aiResponseStart",
+				value: { modelName: modelName },
+			});
 			// Add user command to chat history immediately
 			this.chatHistoryManager.addHistoryEntry("user", "/commit");
 

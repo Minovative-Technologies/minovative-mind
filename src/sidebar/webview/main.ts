@@ -1064,6 +1064,8 @@ if (
 
 			// --- New handlers for streamed responses ---
 			case "aiResponseStart": {
+				isLoading = true;
+				setLoadingState(true);
 				console.log("Received aiResponseStart. Starting stream.");
 				// Point 1.c (from review instructions): Ensure any generic "Creating..." or similar loading message is removed.
 				const loadingMsg = chatContainer?.querySelector(".loading-message");
