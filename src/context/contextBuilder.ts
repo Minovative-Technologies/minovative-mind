@@ -5,7 +5,6 @@ import { createAsciiTree } from "../utilities/treeFormatter";
 
 // Configuration for context building - Adjusted for large context windows
 interface ContextConfig {
-	// maxFiles: number; // Removed - Let maxTotalLength be the primary limit
 	maxFileLength: number; // Maximum characters per file content
 	maxTotalLength: number; // Approximate total character limit for the context string
 }
