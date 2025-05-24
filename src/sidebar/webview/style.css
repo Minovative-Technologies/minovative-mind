@@ -72,7 +72,7 @@ h2 {
 /* --- Chat Controls (Top Bar) --- */
 .chat-controls {
 	display: flex;
-	justify-content: space-between;
+	justify-content: end;
 	align-items: center;
 	padding: var(--element-spacing) 0;
 	border-bottom: 1px solid var(--border-color);
@@ -277,7 +277,7 @@ h2 {
 /* --- System / Loading / Error Messages --- */
 .system-message,
 .loading-message {
-	color: var(--vscode-descriptionForeground);
+	color: var(--vscode-focusBorder);
 	font-style: italic;
 	text-align: center;
 	background: none;
@@ -541,7 +541,7 @@ h2 {
 /* --- Status Area --- */
 #status-area {
 	font-size: 0.9em;
-	color: var(--vscode-descriptionForeground);
+	color: var(--vscode-focusBorder) !important;
 	min-height: 1.5em;
 	text-align: center;
 	padding: 10px 0px 0px 0px; /* Reduced top padding */

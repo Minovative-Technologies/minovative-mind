@@ -208,7 +208,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					async (progress) => {
 						progress.report({
 							increment: 30,
-							message: "Building docs prompt...",
+							message: "Minovative Mind: Building documentation prompt...",
 						});
 						// MODIFICATION START: Added new security instruction to the modificationPrompt
 						const modificationPrompt = `
@@ -239,7 +239,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 						progress.report({
 							increment: 40,
-							message: "Generating documentation...",
+							message: "Minovative Mind: Generating documentation with AI...",
 						});
 						console.log(
 							`--- Sending /docs Prompt (Model: ${selectedModel}) ---`
@@ -301,7 +301,10 @@ export async function activate(context: vscode.ExtensionContext) {
 							return;
 						}
 
-						progress.report({ increment: 90, message: "Applying changes..." });
+						progress.report({
+							increment: 90,
+							message: "Minovative Mind: Applying documentation changes...",
+						});
 						const edit = new vscode.WorkspaceEdit();
 						// Use selectionRange here as well for consistency
 						edit.replace(documentUri, selectionRange, responseContent);
@@ -322,45 +325,59 @@ export async function activate(context: vscode.ExtensionContext) {
 				// --- End /docs direct handling ---
 			} else {
 				// --- Handle /fix and custom instructions via Sidebar ---
-				try {
-					// Focus view
-					await vscode.commands.executeCommand(
-						"minovative-mind.activitybar.focus"
-					);
-					await new Promise((resolve) => setTimeout(resolve, 100)); // Short delay
-					await vscode.commands.executeCommand(
-						"minovativeMindSidebarView.focus"
-					);
+				await vscode.window.withProgress(
+					{
+						location: vscode.ProgressLocation.Notification,
+						title: "Minovative Mind: Preparing plan...",
+						cancellable: true,
+					},
+					async (progress, token) => {
+						try {
+							// Focus view
+							await vscode.commands.executeCommand(
+								"minovative-mind.activitybar.focus"
+							);
+							await new Promise((resolve) => setTimeout(resolve, 100)); // Short delay
+							await vscode.commands.executeCommand(
+								"minovativeMindSidebarView.focus"
+							);
 
-					vscode.window.setStatusBarMessage(
-						`Minovative Mind: Processing '${instruction}' in sidebar...`,
-						4000
-					);
+							// Removed existing setStatusBarMessage
+							progress.report({
+								message: `Minovative Mind: Processing '${instruction}' in sidebar...`,
+								increment: 10,
+							});
 
-					// Create a CancellationTokenSource
-					const cancellationTokenSource = new vscode.CancellationTokenSource();
+							// --- Call provider with the selection range, progress, and cancellation token ---
+							await sidebarProvider.initiatePlanFromEditorAction(
+								instruction,
+								selectedText,
+								fullText,
+								languageId,
+								documentUri,
+								selectionRange, // Pass the range
+								progress, // Pass progress
+								token // Pass token
+							);
+							// The cancellationTokenSource and its disposal are no longer needed here as withProgress manages the token.
+							// --- End updated call ---
 
-					// --- Call provider with the selection range and cancellation token ---
-					await sidebarProvider.initiatePlanFromEditorAction(
-						instruction,
-						selectedText,
-						fullText,
-						languageId,
-						documentUri,
-						selectionRange // Pass the range
-					);
-					// Optional: Dispose the token source if the operation is fully complete
-					// and no further cancellation is possible or needed for this specific action.
-					// For long-running operations managed by the sidebar, the sidebar itself might handle disposal.
-					// cancellationTokenSource.dispose();
-					// --- End updated call ---
-				} catch (error) {
-					console.error("Error redirecting modification to sidebar:", error);
-					vscode.window.showErrorMessage(
-						"Minovative Mind: Could not process modification via sidebar. " +
-							(error instanceof Error ? error.message : String(error))
-					);
-				}
+							vscode.window.showInformationMessage(
+								"Minovative Mind: Plan generated successfully."
+							);
+						} catch (error) {
+							console.error("Error generating plan via sidebar:", error);
+							vscode.window.showErrorMessage(
+								// Changed to showErrorMessage
+								"Minovative Mind: Could not generate plan. " + // Updated error message
+									(error instanceof Error ? error.message : String(error))
+							);
+							progress.report({ increment: 100, message: "Error occurred." }); // Report error state
+						} finally {
+							progress.report({ increment: 100, message: "Done." }); // Ensure progress is done
+						}
+					}
+				);
 				// --- End /fix and custom handling ---
 			}
 		}
@@ -386,14 +403,17 @@ export async function activate(context: vscode.ExtensionContext) {
 					cancellable: false,
 				},
 				async (progress) => {
-					progress.report({ increment: 20, message: "Preparing..." });
+					progress.report({
+						increment: 20,
+						message: "Minovative Mind: Preparing explanation...",
+					});
 					// Use the dedicated helper function
 					const result = await executeExplainAction(sidebarProvider);
 					progress.report({
 						increment: 80,
 						message: result.success
-							? "Processing result..."
-							: "Handling error...",
+							? "Minovative Mind: Processing AI response..."
+							: "Minovative Mind: Handling error...",
 					});
 
 					if (result.success) {

@@ -65,6 +65,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	private _cancellationTokenSource: vscode.CancellationTokenSource | undefined;
 	private _activeChildProcesses: ChildProcess[] = [];
 
+	// NEW: Members to hold the progress and cancellation token for the current plan generation
+	private _currentPlanProgress:
+		| vscode.Progress<{ message?: string; increment?: number }>
+		| undefined;
+	private _currentPlanToken: vscode.CancellationToken | undefined;
+
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri, // Renamed to avoid clash
 		context: vscode.ExtensionContext
@@ -442,27 +448,62 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		fullText: string,
 		languageId: string,
 		documentUri: vscode.Uri,
-		selection: vscode.Range
+		selection: vscode.Range,
+		progress?: vscode.Progress<{ message?: string; increment?: number }>, // MODIFIED SIGNATURE
+		token?: vscode.CancellationToken // MODIFIED SIGNATURE
 	): Promise<void> {
 		console.log("[SidebarProvider] Entering initiatePlanFromEditorAction");
+
+		// NEW: Store progress and token for the duration of this plan generation
+		this._currentPlanProgress = progress;
+		this._currentPlanToken = token;
+
+		// NEW: Initial cancellation check at the very beginning of the method
+		if (
+			this._currentPlanToken &&
+			this._currentPlanToken.isCancellationRequested
+		) {
+			this._currentPlanProgress?.report({
+				message: "Plan generation cancelled by user.",
+				increment: 100,
+			});
+			this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input for the UI
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Plan generation cancelled by user.",
+			});
+			this.chatHistoryManager.addHistoryEntry(
+				"model",
+				"Plan generation cancelled by user."
+			);
+			return;
+		}
+
 		const activeKeyForContext = this.apiKeyManager.getActiveApiKey();
 		const modelName = this.settingsManager.getSelectedModelName();
 
 		if (!activeKeyForContext || !modelName) {
+			const errorMessage =
+				"Error: No active API Key or Model set for planning.";
+			// NEW: Report error through progress notification
+			this._currentPlanProgress?.report({
+				message: `Error: ${errorMessage}`,
+				increment: 100,
+			});
 			this.postMessageToWebview({
 				type: "aiResponse", // This should be an aiResponseEnd probably
-				value: "Error: No active API Key or Model set for planning.",
+				value: errorMessage,
 				isError: true,
 				success: false, // Added for consistency
-				error: "No active API Key or Model set for planning.",
+				error: errorMessage,
 			});
 			this.postMessageToWebview({ type: "reenableInput" });
 			return;
 		}
 		// ... (rest of pre-checks for _pendingPlanGenerationContext, _cancellationTokenSource are good)
 
-		this._cancellationTokenSource = new vscode.CancellationTokenSource();
-		const token = this._cancellationTokenSource.token;
+		// Removed: this._cancellationTokenSource = new vscode.CancellationTokenSource();
+		// Removed: const token = this._cancellationTokenSource.token; // Using the 'token' parameter directly now
 
 		let textualPlanResponse: string = "";
 		let successStreaming = false;
@@ -542,6 +583,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				[...this.chatHistoryManager.getChatHistory()]
 			);
 
+			// NEW: Progress report before textual plan AI call
+			this._currentPlanProgress?.report({
+				message: "Minovative Mind: Generating textual plan explanation...",
+				increment: 20,
+			});
+
 			const streamCallbacks = {
 				onChunk: (chunk: string) => {
 					textualPlanResponse += chunk;
@@ -560,10 +607,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"editor action plan explanation",
 				undefined,
 				streamCallbacks,
-				token
+				this._currentPlanToken // Use the passed token
 			);
 
-			if (token.isCancellationRequested) {
+			if (
+				this._currentPlanToken &&
+				this._currentPlanToken.isCancellationRequested
+			) {
+				// Use the passed token
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 			if (
@@ -578,6 +629,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				successStreaming = true;
 				// Add the successful AI response to chat history
 				this.chatHistoryManager.addHistoryEntry("model", textualPlanResponse);
+				// NEW: Progress report after textual plan generated
+				this._currentPlanProgress?.report({
+					message: "Minovative Mind: Textual plan generated.",
+					increment: 50,
+				});
 				// planDataForConfirmation is set correctly here
 				this._pendingPlanGenerationContext = {
 					type: "editor",
@@ -600,6 +656,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 			errorStreaming = err.message;
 			successStreaming = false;
+			// NEW: Call progress report in catch block
+			this._currentPlanProgress?.report({
+				message: `Error: ${errorStreaming}`,
+				increment: 100,
+			});
 		} finally {
 			const isCancellation = errorStreaming === ERROR_OPERATION_CANCELLED;
 			this.postMessageToWebview({
@@ -613,8 +674,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					? { originalInstruction: instruction, type: "textualPlanPending" }
 					: null,
 			});
-			this._cancellationTokenSource?.dispose();
-			this._cancellationTokenSource = undefined;
+			// Removed: this._cancellationTokenSource?.dispose();
+			// Removed: this._cancellationTokenSource = undefined;
 			if (!successStreaming && !isCancellation && errorStreaming) {
 				// Added `&& errorStreaming` to ensure there was an actual error string
 				// If it wasn't successful and not a cancellation, and there was an error message
@@ -624,6 +685,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				);
 				this.postMessageToWebview({ type: "reenableInput" });
 			}
+			// NEW: Clear the stored progress and token after the operation concludes
+			this._currentPlanProgress = undefined;
+			this._currentPlanToken = undefined;
 		}
 	}
 
@@ -645,10 +709,23 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 
 		let structuredPlanJsonString = "";
-		this._cancellationTokenSource = new vscode.CancellationTokenSource();
-		const token = this._cancellationTokenSource.token;
+		// Removed: this._cancellationTokenSource = new vscode.CancellationTokenSource();
+		// Removed: const token = this._cancellationTokenSource.token; // Now using this._currentPlanToken
 
 		try {
+			// NEW: Cancellation check before AI call for JSON plan
+			if (
+				this._currentPlanToken &&
+				this._currentPlanToken.isCancellationRequested
+			) {
+				throw new Error("Plan generation cancelled after textual plan.");
+			}
+			// NEW: Progress report before JSON plan AI call
+			this._currentPlanProgress?.report({
+				message: "Minovative Mind: Generating execution plan (JSON)...",
+				increment: 70,
+			});
+
 			const jsonGenerationConfig: GenerationConfig = {
 				responseMimeType: "application/json",
 				temperature: 0.1, // Slightly lower for more deterministic JSON
@@ -673,12 +750,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"structured plan generation",
 				jsonGenerationConfig,
 				undefined, // No streaming for JSON plan generation
-				token
+				this._currentPlanToken // Use the stored token
 			);
 
 			// ... (rest of the try-catch-finally is largely okay)
 			// Ensure ERROR_OPERATION_CANCELLED is handled for cancellations
-			if (token.isCancellationRequested) {
+			if (
+				this._currentPlanToken &&
+				this._currentPlanToken.isCancellationRequested
+			) {
+				// Use the stored token
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 			if (
@@ -710,6 +791,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					value: { error: errorDetail, failedJson: structuredPlanJsonString },
 				});
 				this._currentExecutionOutcome = "failed";
+				// NEW: Report error through progress notification
+				this._currentPlanProgress?.report({
+					message: `Error: ${errorDetail}`,
+					increment: 100,
+				});
 				// Keep _pendingPlanGenerationContext for potential retry, do NOT set to null here
 				vscode.window.showErrorMessage(
 					`Minovative Mind: Failed to parse AI plan. Details: ${errorDetail}. Check sidebar for retry options.`
@@ -721,11 +807,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			const executablePlan = parsedPlanResult.plan;
 			this._pendingPlanGenerationContext = null;
 
+			// NEW: Progress report after JSON plan successfully parsed and validated
+			this._currentPlanProgress?.report({
+				message: "Minovative Mind: Execution plan generated.",
+				increment: 90,
+			});
+
 			await this._executePlan(
 				executablePlan,
 				planContext.initialApiKey,
 				planContext.modelName,
-				token
+				this._currentPlanToken ?? new vscode.CancellationTokenSource().token // Always pass a valid CancellationToken
 			);
 		} catch (error: unknown) {
 			// Changed from any
@@ -756,6 +848,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					type: "statusUpdate",
 					value: "Structured plan generation cancelled.",
 				});
+				// NEW: Report cancellation through progress notification
+				this._currentPlanProgress?.report({
+					message: "Structured plan generation cancelled.",
+					increment: 100,
+				});
 				// UI should re-enable from cancel message in webview OR reenableInput below
 			} else if (
 				!this._view?.visible &&
@@ -767,14 +864,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					value: `Error generating plan: ${err.message}`,
 					isError: true,
 				});
-				// Re-enable input only if it's not a parse error that shows its own UI
 				this.postMessageToWebview({ type: "reenableInput" });
+				// NEW: Report error through progress notification
+				this._currentPlanProgress?.report({
+					message: `Error generating plan: ${err.message}`,
+					increment: 100,
+				});
 			}
 			// If it was a parse error, the 'structuredPlanParseFailed' message handles UI.
 			// Pending context is intentionally kept for retry in case of parse failure.
 		} finally {
-			this._cancellationTokenSource?.dispose();
-			this._cancellationTokenSource = undefined;
+			// Removed: this._cancellationTokenSource?.dispose();
+			// Removed: this._cancellationTokenSource = undefined;
+			// _currentPlanProgress and _currentPlanToken are cleared in initiatePlanFromEditorAction's finally
 		}
 	}
 
@@ -840,6 +942,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					// Combine external token with the progress token for cancellation checks
 					const combinedTokenSource = new vscode.CancellationTokenSource();
 					const combinedToken = combinedTokenSource.token;
+
+					// Link the externally provided token to the combined token source
+					const disposable = token.onCancellationRequested(() => {
+						combinedTokenSource.cancel();
+						disposable.dispose(); // Dispose of listener once cancellation occurs
+					});
 
 					const totalSteps = plan.steps ? plan.steps.length : 0;
 					if (totalSteps === 0) {
@@ -978,6 +1086,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									});
 									stepSuccess = true;
 								} else if (step.generate_prompt) {
+									// Add a progress.report message before this._generateWithRetry
+									progress.report({
+										message: `Step ${stepNumber}: AI generating content for \`${step.path}\`...`,
+									});
 									this.postMessageToWebview({
 										type: "statusUpdate",
 										value: `Step ${stepNumber}/${totalSteps}: Generating content for ${step.path}...`,
@@ -1020,6 +1132,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 										.replace(/\n?```$/, "")
 										.trim();
 
+									// Ensure the subsequent progress.report message for typing content is present and clear:
+									progress.report({
+										message: `Step ${stepNumber}: Typing content into ${path.basename(
+											step.path
+										)}...`,
+									});
 									await typeContentIntoEditor(
 										editor,
 										cleanedGeneratedContent,
@@ -1066,6 +1184,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									}
 									throw readError;
 								}
+								// Add a progress.report message before this._generateWithRetry
+								progress.report({
+									message: `Step ${stepNumber}: AI generating modifications for \`${step.path}\`...`,
+								});
 								this.postMessageToWebview({
 									type: "statusUpdate",
 									value: `Step ${stepNumber}/${totalSteps}: Preparing to generate modifications for ${step.path}...`,
@@ -1106,6 +1228,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									.trim();
 
 								if (modifiedContent !== existingContent) {
+									// Add a progress.report message before vscode.workspace.applyEdit(edit)
+									progress.report({
+										message: `Step ${stepNumber}: Applying modifications to \`${step.path}\`...`,
+									});
 									const edit = new vscode.WorkspaceEdit();
 									const document = await vscode.workspace.openTextDocument(
 										fileUri
@@ -1131,6 +1257,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 									});
 									stepSuccess = true;
 								} else {
+									// Add a progress.report message in the else block
+									progress.report({
+										message: `Step ${stepNumber}: No changes needed for \`${step.path}\`.`,
+									});
 									this.postMessageToWebview({
 										type: "appendRealtimeModelMessage",
 										value: {
@@ -1157,6 +1287,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 										cwd: rootPath,
 									});
 									term.show();
+									// Modify the progress.report message to be more concise
+									progress.report({
+										message: `Step ${stepNumber}: Running command \`${commandToRun}\`...`,
+									});
 									this.postMessageToWebview({
 										type: "statusUpdate",
 										value: `Step ${stepNumber}: Running command \`${commandToRun}\` in terminal...`,
@@ -1821,7 +1955,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						aiModelCall: this._generateWithRetry.bind(this),
 						// Modified: Replace getSelectedModelNameForContext with getSelectedModelName
 						modelName: this.settingsManager.getSelectedModelName(),
-						cancellationToken: this._cancellationTokenSource?.token,
+						cancellationToken: this._cancellationTokenSource?.token, // Use _cancellationTokenSource token for smart context
 					};
 					const selectedFiles = await selectRelevantFilesAI(selectionOptions);
 
@@ -1987,6 +2121,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				console.log("[Provider] Cancelling current generation/operation...");
 				// Cancel the current CancellationTokenSource if it exists
 				this._cancellationTokenSource?.cancel();
+				// If a plan generation is active, also report cancellation on its progress
+				if (this._currentPlanProgress && this._currentPlanToken) {
+					this._currentPlanProgress.report({
+						message: "Plan generation cancelled by user.",
+						increment: 100,
+					});
+				}
+
 				// Kill any active child processes (e.e., git commands)
 				this._activeChildProcesses.forEach((cp) => {
 					if (!cp.killed) {
@@ -2039,13 +2181,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"model",
 					"Pending plan cancelled by user."
 				);
+				// Also report this to the progress notification if it's active
+				this._currentPlanProgress?.report({
+					message: "Pending plan cancelled by user.",
+					increment: 100,
+				});
 				this.postMessageToWebview({ type: "reenableInput" }); // Re-enable inputs
+				// Clear the stored progress and token for this specific plan
+				this._currentPlanProgress = undefined;
+				this._currentPlanToken = undefined;
 				return; // Stop processing
 			}
 
 			// Prevent new operations if one is ongoing and it's NOT one of the allowed messages
 			const isBackgroundTaskRunning =
-				!!this._cancellationTokenSource ||
+				!!this._cancellationTokenSource || // For chat/commit
+				!!this._currentPlanToken || // For plan generation
 				this._activeChildProcesses.length > 0;
 
 			// Define messages allowed even when a background task is running
