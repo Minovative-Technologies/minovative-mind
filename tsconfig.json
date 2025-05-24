@@ -1,17 +1,15 @@
 // tsconfig.json
 {
 	"compilerOptions": {
-		// ... other options
-		"module": "NodeNext", // Or your chosen module system
-		"target": "ES2020", // Or your target ES version
-		"lib": ["ES2020", "dom"], // <--- Add "dom" here
+		"module": "NodeNext",
+		"target": "ES2020",
+		"lib": ["ES2020", "dom"],
 		"outDir": "dist",
 		"sourceMap": true,
 		"strict": true,
-		"moduleResolution": "NodeNext", // Match module setting
-		// ... maybe esModuleInterop: true, resolveJsonModule: true etc.
-		"skipLibCheck": true // Can sometimes help with complex type issues
+		"moduleResolution": "NodeNext",
+		"skipLibCheck": true
 	},
-	"include": ["src/**/*"], // Ensure this includes your webview code
+	"include": ["src/**/*"],
 	"exclude": ["node_modules", ".vscode-test"]
 }

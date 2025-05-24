@@ -7,7 +7,6 @@ const webpack = require("webpack"); // Required for BannerPlugin
 
 /**@type {import('webpack').Configuration}*/
 const baseConfig = {
-	// Shared configuration options
 	module: {
 		rules: [
 			{
@@ -16,7 +15,6 @@ const baseConfig = {
 				use: [
 					{
 						loader: "ts-loader",
-						// ts-loader options (if any) go here
 					},
 				],
 			},
@@ -25,19 +23,11 @@ const baseConfig = {
 	resolve: {
 		extensions: [".ts", ".js"],
 	},
-	// externals: { // Keep externals for extension config only
-	//   vscode: 'commonjs vscode'
-	// },
 	output: {
-		// path: path.resolve(__dirname, 'dist'), // Defined per config
-		// filename: '[name].js', // Defined per config
 		libraryTarget: "commonjs2",
 		devtoolModuleFilenameTemplate: "../[resource-path]",
 	},
 	devtool: "source-map", // Or 'nosources-source-map' for production
-	// infrastructureLogging: { // Optional: For more detailed webpack output
-	//  level: "log",
-	// },
 };
 
 /**@type {import('webpack').Configuration}*/
@@ -62,8 +52,8 @@ const extensionConfig = {
 /**@type {import('webpack').Configuration}*/
 const webviewConfig = {
 	...baseConfig, // Inherit base configuration
-	target: "web", // <--- Change to 'web' for DOM access
-	mode: "none", // Or set 'production'/'development'
+	target: "web",
+	mode: "none", // Or 'production'/'development'
 
 	entry: "./src/sidebar/webview/main.ts", // Entry point for the webview script
 	output: {
@@ -75,8 +65,6 @@ const webviewConfig = {
 		// Required for libraryTarget: 'module'
 		outputModule: true,
 	},
-	// NO externals needed here typically
-	// NO plugins needed here for acquireVsCodeApi
 };
 
 // Export both configurations
