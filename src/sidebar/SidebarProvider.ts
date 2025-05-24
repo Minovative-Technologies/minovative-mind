@@ -386,6 +386,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				throw new Error(textualPlanResponse);
 			}
 
+			// Add the successful AI response to chat history
+			this.chatHistoryManager.addHistoryEntry("model", textualPlanResponse);
+
 			success = true;
 			this._pendingPlanGenerationContext = {
 				type: "chat",
@@ -393,7 +396,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				projectContext,
 				initialApiKey: apiKey,
 				modelName,
-				chatHistory: [...this.chatHistoryManager.getChatHistory()],
+				chatHistory: [...this.chatHistoryManager.getChatHistory()], // Reflect newly added entry
 				textualPlanExplanation: textualPlanResponse,
 			};
 		} catch (error: unknown) {
@@ -573,6 +576,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				throw new Error(textualPlanResponse); // This will be caught by catch block
 			} else {
 				successStreaming = true;
+				// Add the successful AI response to chat history
+				this.chatHistoryManager.addHistoryEntry("model", textualPlanResponse);
 				// planDataForConfirmation is set correctly here
 				this._pendingPlanGenerationContext = {
 					type: "editor",
@@ -581,7 +586,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					diagnosticsString,
 					initialApiKey: activeKeyForContext,
 					modelName,
-					chatHistory: [...this.chatHistoryManager.getChatHistory()],
+					chatHistory: [...this.chatHistoryManager.getChatHistory()], // Reflect newly added entry
 					textualPlanExplanation: textualPlanResponse,
 				};
 			}
@@ -610,8 +615,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			});
 			this._cancellationTokenSource?.dispose();
 			this._cancellationTokenSource = undefined;
-			if (!successStreaming && !isCancellation) {
-				// If it wasn't successful and not a cancellation
+			if (!successStreaming && !isCancellation && errorStreaming) {
+				// Added `&& errorStreaming` to ensure there was an actual error string
+				// If it wasn't successful and not a cancellation, and there was an error message
+				this.chatHistoryManager.addHistoryEntry(
+					"model",
+					`Error generating plan from editor action: ${errorStreaming}`
+				);
 				this.postMessageToWebview({ type: "reenableInput" });
 			}
 		}
