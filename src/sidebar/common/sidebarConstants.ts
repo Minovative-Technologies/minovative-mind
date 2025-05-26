@@ -7,7 +7,7 @@ export const GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY = "geminiActiveApiKeyIndex";
 // Workspace state keys
 export const MODEL_SELECTION_STORAGE_KEY = "geminiSelectedModel";
 
-// DONT CHANGE THESE MODELS
+// DONT CHANGE THESE MODELS (NEVER)
 export const AVAILABLE_GEMINI_MODELS = [
 	"gemini-2.5-pro-preview-05-06",
 	"gemini-2.5-flash-preview-05-20",
