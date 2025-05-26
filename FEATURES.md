@@ -63,7 +63,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 ### Precise Context Control
 
 - Intelligent Filtering: The AI intelligently identifies and provides the most relevant files from the project as context, which is especially beneficial in large codebases.
-- Configurable Inclusions/Exclusions: Users can fine-tune the AI’s understanding by explicitly including or excluding specific files or directories from its context, ensuring focused and accurate assistance. This also respects `.gitignore` rules.
+- Configurable Inclusions/Exclusions: Users can fine-tune the AI’s understanding by explicitly including or excluding specific files or directories from its context in the chat interface, ensuring focused and accurate assistance. This also respects `.gitignore` rules.
 
 ## User Experience & Productivity
 
