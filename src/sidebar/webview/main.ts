@@ -259,7 +259,7 @@ if (
 
 					// Add a loading indicator within the text element
 					textElement.innerHTML =
-						'<span class="loading-text">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+						'<span class="loading-text">Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
 
 					// Disable copy button while content is loading/streaming
 					if (copyButton) {
