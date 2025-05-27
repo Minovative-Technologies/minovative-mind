@@ -20,6 +20,7 @@ export interface UserSubscriptionData {
 	subscriptionPeriodEnd?: import("firebase/firestore").Timestamp;
 	subscribedTierPriceId?: string;
 	email: string; // User's email
+	uid: string; // User's email
 }
 
 export type UserTier = "free" | "paid" | "pro";

@@ -40,6 +40,7 @@ import { getHtmlForWebview } from "./ui/webviewHelper";
 import * as sidebarTypes from "./common/sidebarTypes";
 import * as sidebarConstants from "./common/sidebarConstants";
 import { AuthStateUpdatePayload, UserTier } from "./common/sidebarTypes";
+import { isFeatureAllowed } from "./utils/featureGating";
 import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
@@ -68,11 +69,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		| vscode.CancellationTokenSource
 		| undefined;
 	private _activeChildProcesses: ChildProcess[] = [];
-	private _isUserSignedIn: boolean = false;
-	private _currentUserTier: UserTier = "free";
-	private _isSubscriptionActive: boolean = false;
-	private _userUid: string | undefined = undefined;
-	private _userEmail: string | undefined = undefined;
+	public _isUserSignedIn: boolean = false;
+	public _currentUserTier: UserTier = "free";
+	public _isSubscriptionActive: boolean = false;
+	public _userUid: string | undefined = undefined;
+	public _userEmail: string | undefined = undefined;
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri, // Renamed to avoid clash
@@ -120,8 +121,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public updateUserAuthAndTier(payload: AuthStateUpdatePayload): void {
 		console.log("[SidebarProvider] Auth state update received:", payload);
 		this._isUserSignedIn = payload.isSignedIn;
-		this._currentUserTier = payload.tier;
-		this._isSubscriptionActive = payload.isSubscriptionActive;
+
+		// Modification: Set _currentUserTier and _isSubscriptionActive based on raw firebaseTier
+		const firebaseTier = payload.tier; // Assuming payload.tier is the raw tier from authentication claims
+		if (firebaseTier === "pro" || firebaseTier === "paid") {
+			this._currentUserTier = "pro";
+			this._isSubscriptionActive = true;
+		} else {
+			this._currentUserTier = "free";
+			this._isSubscriptionActive = false;
+		}
+
 		this._userUid = payload.uid;
 		this._userEmail = payload.email;
 
@@ -348,6 +358,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		modelName: string
 	): Promise<void> {
 		console.log("[SidebarProvider] Entering _handleInitialPlanRequest");
+		// Feature Gating check for 'plan_from_chat'
+		if (
+			!isFeatureAllowed(
+				this._currentUserTier,
+				this._isSubscriptionActive,
+				"plan_from_chat"
+			)
+		) {
+			console.log(
+				"[SidebarProvider] 'plan_from_chat' feature not allowed for current tier."
+			);
+			const restrictedMessage =
+				"This feature ('plan from chat') is currently in Beta and only available for Pro tier users or with an active subscription. Please upgrade to Pro or ensure your subscription is active for full functionality.";
+			this.postMessageToWebview({
+				type: "aiResponseEnd",
+				value: null,
+				isError: true,
+				success: false,
+				error: restrictedMessage,
+			});
+			this.postMessageToWebview({ type: "reenableInput" });
+			this._activeOperationCancellationTokenSource?.dispose();
+			this._activeOperationCancellationTokenSource = undefined;
+			return;
+		}
 		this.postMessageToWebview({
 			type: "aiResponseStart",
 			value: { modelName: modelName },
@@ -503,58 +538,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
-		if (this._currentUserTier === "free") {
-			// Free tier restrictions
-			const freeTierInstructions = [
-				"fix syntax",
-				"add comments",
-				"refactor small",
-				"explain code",
-				"generate boilerplate",
-				"add docstrings",
-				"optimize simple",
-				"debug single function",
-				"convert simple",
-				"rename symbol",
-				"inline variable",
-				"extract method",
-				"create test for",
-				"implement simple interface",
-				"add type hints",
-				"add basic error handling",
-				"generate basic test",
-				"generate example",
-				"create empty class",
-				"create empty function",
-				"create file",
-				"modify file",
-			];
-			const isAllowedFreeTier = freeTierInstructions.some((phrase) =>
-				instructionLower.includes(phrase)
-			);
-
-			// Allow all instructions if a subscription is active, even for free tier label, assuming it's a legacy or trial "free" account with active subscription
-			if (!this._isSubscriptionActive && !isAllowedFreeTier) {
-				const restrictedMessage =
-					"This instruction is only available for Pro tier users or with an active subscription. As a free tier user, you can use instructions like 'fix syntax', 'add comments', 'refactor small', 'explain code', 'generate boilerplate', etc. Please upgrade to Pro or ensure your subscription is active for full functionality.";
-				this.postMessageToWebview({
-					type: "aiResponseEnd",
-					value: null,
-					isError: true,
-					success: false,
-					error: restrictedMessage,
-				});
-				this.postMessageToWebview({ type: "reenableInput" });
-				progress?.report({
-					message: restrictedMessage,
-					increment: 100,
-				});
-				// No need for disposable here as it's not set up yet
-				this._activeOperationCancellationTokenSource?.dispose();
-				this._activeOperationCancellationTokenSource = undefined;
-				return;
-			}
-		} else if (this._currentUserTier === "pro") {
+		if (this._currentUserTier === "pro") {
 			// Pro tier has no restrictions for now, but this block is here for future expansion.
 			// Currently, just proceed.
 			console.log(

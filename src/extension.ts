@@ -2,6 +2,7 @@
 import * as vscode from "vscode";
 import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
+import { isFeatureAllowed } from "./sidebar/utils/featureGating";
 import { SettingsProvider } from "./sidebar/SettingsProvider";
 
 // Helper function type definition for AI action results (kept for potential future use)
@@ -21,6 +22,21 @@ async function executeExplainAction(
 	const selection = editor.selection;
 	if (selection.isEmpty) {
 		return { success: false, error: "No text selected." };
+	}
+
+	// Feature gating check for explain_selection
+	if (
+		!isFeatureAllowed(
+			sidebarProvider._currentUserTier,
+			sidebarProvider._isSubscriptionActive,
+			"explain_selection"
+		)
+	) {
+		return {
+			success: false,
+			error:
+				"This feature is not allowed for your current subscription plan. Please check your settings in the sidebar.",
+		};
 	}
 
 	const selectedText = editor.document.getText(selection);
@@ -170,11 +186,36 @@ export async function activate(context: vscode.ExtensionContext) {
 				placeHolder: "Type /fix, /docs or custom prompt",
 				title: "Minovative Mind: Modify Code",
 			});
+
 			if (!instructionsInput) {
 				vscode.window.showInformationMessage("Modification cancelled.");
 				return;
 			}
 			const instruction = instructionsInput.trim();
+
+			let actionTypeForGating: string;
+			if (instruction === "/fix") {
+				actionTypeForGating = "plan_from_editor_fix";
+			} else if (instruction === "/docs") {
+				actionTypeForGating = "editor_modification_command";
+			} else {
+				actionTypeForGating = "plan_from_editor_custom";
+			}
+
+			// Feature gating check
+			if (
+				!isFeatureAllowed(
+					sidebarProvider._currentUserTier,
+					sidebarProvider._isSubscriptionActive,
+					actionTypeForGating,
+					instruction // Pass instruction as the fourth argument
+				)
+			) {
+				vscode.window.showErrorMessage(
+					"This feature is not allowed for your current subscription plan. Please check your settings in the sidebar."
+				);
+				return;
+			}
 
 			// Call the gated method on sidebarProvider
 			// Progress and CancellationToken are handled by withProgress

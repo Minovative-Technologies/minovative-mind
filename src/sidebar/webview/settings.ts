@@ -391,28 +391,7 @@ if (manageSubscriptionButton) {
 			if (docSnap.exists()) {
 				const userData = docSnap.data() as UserSubscriptionData;
 				if (userData.stripeCustomerId) {
-					// This usually involves calling a backend (e.g., Firebase Function)
-					// that uses the Stripe SDK to create a portal session.
-					// For this example, it's a placeholder.
-					const stripePortalBaseUrl = "https://billing.stripe.com/p/login/";
-					// You need to securely get your Stripe Portal Link ID from Stripe dashboard
-					// or a configuration. It's NOT the customerId.
-					const stripePortalLinkId = "YOUR_STRIPE_PORTAL_CONFIGURATION_ID"; // e.g., lnk_xxxx
-
-					if (stripePortalLinkId.startsWith("YOUR_")) {
-						showAuthError("Stripe Portal Link ID not configured by developer.");
-						console.warn(
-							"Developer: Replace YOUR_STRIPE_PORTAL_CONFIGURATION_ID with your actual Stripe portal link ID."
-						);
-						return;
-					}
-					// Construct the URL or send a message to extension to trigger a backend call
-					// For a direct link if your portal link ID doesn't require prefilling customer:
-					// const portalLink = `${stripePortalBaseUrl}${stripePortalLinkId}`;
-					// For a prefilled portal session (safer, requires backend):
-					// vscode.postMessage({ command: "generateStripePortalLink", customerId: userData.stripeCustomerId });
-					// For now, let's use a generic link that requires login:
-					const portalLink = "https://billing.stripe.com/p/login/"; // User has to enter email
+					const portalLink = `http://localhost:3000/profile/dashboard/${userData.uid}`;
 					vscode.postMessage({ command: "openUrl", url: portalLink });
 				} else {
 					showAuthError(
