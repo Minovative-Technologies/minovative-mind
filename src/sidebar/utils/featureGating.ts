@@ -35,16 +35,12 @@ export function isFeatureAllowed(
 			case "api_key_management": // Adding, deleting, switching API keys
 			case "chat_history_management": // Clearing, saving, loading chat history
 			case "model_selection": // Selecting AI models
+			case "generate_documentation": // New: Generate documentation is allowed for free tier
 				return true;
 
-			// Special case for editor modification commands: '/docs' is allowed, others are blocked.
-			// We use a broader actionType "editor_modification_command" and differentiate by 'instruction'.
+			// Special case for editor modification commands: All are now restricted for free tier.
 			case "editor_modification_command":
-				const instructionLower = instruction?.toLowerCase().trim();
-				if (instructionLower === "/docs") {
-					return true; // '/docs' is specifically allowed for free tier
-				}
-				// All other custom modification commands (e.g., "refactor this", "add feature") are restricted
+				// All custom modification commands (e.g., "refactor this", "add feature", including '/docs') are now restricted for free tier.
 				return false;
 
 			default:

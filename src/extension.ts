@@ -4,6 +4,7 @@ import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
 import { isFeatureAllowed } from "./sidebar/utils/featureGating";
 import { SettingsProvider } from "./sidebar/SettingsProvider";
+import { cleanCodeOutput } from "./utils/codeUtils";
 
 // Helper function type definition for AI action results (kept for potential future use)
 type ActionResult =
@@ -113,10 +114,7 @@ async function executeExplainAction(
 			throw new Error(result || `Empty response from AI (${selectedModel}).`);
 		}
 		// Clean potential markdown code blocks from the explanation
-		const cleanedResult = result
-			.replace(/^```.*\n?/, "")
-			.replace(/\n?```$/, "")
-			.trim();
+		const cleanedResult = cleanCodeOutput(result);
 		return { success: true, content: cleanedResult };
 	} catch (error) {
 		console.error(`Error during explain action (${selectedModel}):`, error);
@@ -124,6 +122,110 @@ async function executeExplainAction(
 		return {
 			success: false,
 			error: `Failed to explain code: ${message}`,
+		};
+	}
+}
+
+// --- Helper Function for Documentation Generation ---
+async function executeDocsAction(
+	sidebarProvider: SidebarProvider,
+	selectedText: string,
+	fullText: string,
+	languageId: string,
+	fileName: string,
+	selectionRange: vscode.Range
+): Promise<ActionResult> {
+	// Feature gating check for generate_documentation
+	if (
+		!isFeatureAllowed(
+			sidebarProvider._currentUserTier,
+			sidebarProvider._isSubscriptionActive,
+			"generate_documentation"
+		)
+	) {
+		return {
+			success: false,
+			error:
+				"This feature is not allowed for your current subscription plan. Please check your settings in the sidebar.",
+		};
+	}
+
+	const activeApiKey = sidebarProvider.getActiveApiKey();
+	const selectedModel = sidebarProvider.getSelectedModelName();
+
+	if (!activeApiKey) {
+		return {
+			success: false,
+			error: "No active API Key set. Please configure it in the sidebar.",
+		};
+	}
+	if (!selectedModel) {
+		return {
+			success: false,
+			error: "No AI model selected. Please check the sidebar.",
+		};
+	}
+
+	const userInstruction = `Generate comprehensive documentation for the selected code block. The documentation should explain its purpose, functionality, parameters (if any), return values (if any), and any significant side effects or dependencies. Structure the documentation clearly using the native comment syntax for ${languageId} (e.g., JSDoc for TypeScript/JavaScript, Python docstrings for Python). Provide ONLY the raw documentation block. ABSOLUTELY DO NOT include any markdown language fences (e.g., \`\`\`javascript), code examples within fences, conversational text, or explanations. Provide only the raw documentation comments ready for direct insertion into the code.`;
+	const systemPrompt = `You are an expert AI programmer and technical writer assisting within VS Code using the ${selectedModel} model. Generate documentation for the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
+
+	const prompt = `
+	${systemPrompt}
+
+	--- Full File Content (${fileName}) ---
+	\`\`\`${languageId}
+	${fullText}
+	\`\`\`
+	--- End Full File Content ---
+
+	--- Code Selection to Document ---
+	\`\`\`${languageId}
+	${selectedText}
+	\`\`\`
+	--- End Code Selection to Document ---
+
+	--- User Instruction ---
+	${userInstruction}
+	--- End User Instruction ---
+
+	Assistant Response:
+`;
+
+	console.log(
+		`--- Sending generate documentation Action Prompt (Model: ${selectedModel}) ---`
+	);
+	console.log(`--- End generate documentation Action Prompt ---`);
+
+	try {
+		await sidebarProvider.switchToNextApiKey();
+		const result = await sidebarProvider._generateWithRetry(
+			prompt,
+			selectedModel,
+			undefined, // No history needed for single documentation generation
+			"generate documentation"
+		);
+
+		if (
+			!result ||
+			result.toLowerCase().startsWith("error:") ||
+			result === ERROR_QUOTA_EXCEEDED
+		) {
+			throw new Error(result || `Empty response from AI (${selectedModel}).`);
+		}
+
+		// Documentation can contain markdown, so no aggressive cleaning like explain.
+		// However, we might trim whitespace for consistency.
+		const cleanedResult = cleanCodeOutput(result);
+		return { success: true, content: cleanedResult };
+	} catch (error) {
+		console.error(
+			`Error during generate documentation action (${selectedModel}):`,
+			error
+		);
+		const message = error instanceof Error ? error.message : String(error);
+		return {
+			success: false,
+			error: `Failed to generate documentation: ${message}`,
 		};
 	}
 }
@@ -170,7 +272,6 @@ export async function activate(context: vscode.ExtensionContext) {
 				vscode.window.showWarningMessage("No active editor found.");
 				return;
 			}
-			// ... (existing logic to get selection, text, etc.)
 			const selectionRange = editor.selection;
 			if (selectionRange.isEmpty) {
 				vscode.window.showWarningMessage("No text selected.");
@@ -180,9 +281,11 @@ export async function activate(context: vscode.ExtensionContext) {
 			const fullText = editor.document.getText();
 			const languageId = editor.document.languageId;
 			const documentUri = editor.document.uri;
+			const fileName = editor.document.fileName; // Added for executeDocsAction
 
 			const instructionsInput = await vscode.window.showInputBox({
-				prompt: "Enter modification instructions, or use /fix or /docs:", // Ensure this prompt is consistent if it was changed
+				prompt:
+					"Enter instructions (e.g., /fix, /docs, or custom modification):",
 				placeHolder: "Type /fix, /docs or custom prompt",
 				title: "Minovative Mind: Modify Code",
 			});
@@ -193,12 +296,67 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 			const instruction = instructionsInput.trim();
 
+			// New /docs instruction handling
+			if (instruction === "/docs") {
+				const selectedModel = sidebarProvider.getSelectedModelName();
+				if (!selectedModel) {
+					vscode.window.showErrorMessage(
+						"Minovative Mind: No AI model selected. Please check the sidebar."
+					);
+					return;
+				}
+
+				await vscode.window.withProgress(
+					{
+						location: vscode.ProgressLocation.Notification,
+						title: `Minovative Mind: Generating documentation (${selectedModel})...`,
+						cancellable: false, // Documentation generation is not cancellable by user
+					},
+					async (progress) => {
+						progress.report({
+							increment: 20,
+							message: "Minovative Mind: Preparing request...",
+						});
+						const result = await executeDocsAction(
+							sidebarProvider,
+							selectedText,
+							fullText,
+							languageId,
+							fileName,
+							selectionRange
+						);
+						progress.report({
+							increment: 80,
+							message: result.success
+								? "Minovative Mind: Processing AI response..."
+								: "Minovative Mind: Handling error...",
+						});
+
+						if (result.success) {
+							await editor.edit((editBuilder) => {
+								// Insert at the start of the selection range, followed by a newline
+								editBuilder.insert(selectionRange.start, result.content + "\n");
+							});
+							vscode.window.showInformationMessage(
+								"Minovative Mind: Documentation successfully added at the start of your selection."
+							);
+						} else {
+							vscode.window.showErrorMessage(
+								`Minovative Mind: ${result.error}`
+							);
+						}
+						progress.report({ increment: 100, message: "Done." });
+					}
+				);
+				return; // Crucially return here to prevent falling through to planning logic
+			}
+
+			// Original actionTypeForGating logic, adjusted for /docs being handled separately
 			let actionTypeForGating: string;
 			if (instruction === "/fix") {
 				actionTypeForGating = "plan_from_editor_fix";
-			} else if (instruction === "/docs") {
-				actionTypeForGating = "editor_modification_command";
 			} else {
+				// Any other instruction, including custom prompts, will use plan_from_editor_custom
 				actionTypeForGating = "plan_from_editor_custom";
 			}
 
