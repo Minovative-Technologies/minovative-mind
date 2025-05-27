@@ -793,6 +793,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					? { originalInstruction: instruction, type: "textualPlanPending" }
 					: null,
 			});
+			// NEW LINE ADDED HERE
+			await this._showPlanCompletionNotification(
+				instruction,
+				successStreaming,
+				errorStreaming
+			);
 			disposable?.dispose();
 			this._activeOperationCancellationTokenSource?.dispose();
 			this._activeOperationCancellationTokenSource = undefined;
@@ -1812,6 +1818,44 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			});
 			this._activeOperationCancellationTokenSource?.dispose();
 			this._activeOperationCancellationTokenSource = undefined;
+		}
+	}
+
+	private async _showPlanCompletionNotification(
+		instruction: string,
+		success: boolean,
+		error: string | null
+	): Promise<void> {
+		let message: string;
+		let buttonText: string | undefined = "Open Sidebar";
+		let notificationFunction: (
+			message: string,
+			...items: string[]
+		) => Thenable<string | undefined>;
+
+		const instructionTruncated =
+			instruction.length > 50
+				? `${instruction.substring(0, 47)}...`
+				: instruction;
+
+		if (success) {
+			message = `Minovative Mind: Plan for '${instructionTruncated}' generated successfully!`;
+			buttonText = "Review Plan in Sidebar";
+			notificationFunction = vscode.window.showInformationMessage;
+		} else if (error === ERROR_OPERATION_CANCELLED) {
+			message = `Minovative Mind: Plan generation for '${instructionTruncated}' cancelled.`;
+			notificationFunction = vscode.window.showInformationMessage;
+		} else {
+			message = `Minovative Mind: Plan generation for '${instructionTruncated}' failed. ${
+				error ? `Error: ${error}` : "Unknown error."
+			}`;
+			notificationFunction = vscode.window.showErrorMessage;
+		}
+
+		const result = await notificationFunction(message, buttonText);
+
+		if (result === buttonText) {
+			vscode.commands.executeCommand("minovative-mind.activitybar.focus");
 		}
 	}
 
