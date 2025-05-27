@@ -39,6 +39,7 @@ import {
 import { getHtmlForWebview } from "./ui/webviewHelper";
 import * as sidebarTypes from "./common/sidebarTypes";
 import * as sidebarConstants from "./common/sidebarConstants";
+import { AuthStateUpdatePayload, UserTier } from "./common/sidebarTypes";
 import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
@@ -67,6 +68,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		| vscode.CancellationTokenSource
 		| undefined;
 	private _activeChildProcesses: ChildProcess[] = [];
+	private _isUserSignedIn: boolean = false;
+	private _currentUserTier: UserTier = "free";
+	private _isSubscriptionActive: boolean = false;
+	private _userUid: string | undefined = undefined;
+	private _userEmail: string | undefined = undefined;
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri, // Renamed to avoid clash
@@ -109,6 +115,25 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.settingsManager.initialize();
 		// ChatHistoryManager might be initialized on demand or via webviewReady
 		console.log("SidebarProvider initialization complete.");
+	}
+
+	public updateUserAuthAndTier(payload: AuthStateUpdatePayload): void {
+		console.log("[SidebarProvider] Auth state update received:", payload);
+		this._isUserSignedIn = payload.isSignedIn;
+		this._currentUserTier = payload.tier;
+		this._isSubscriptionActive = payload.isSubscriptionActive;
+		this._userUid = payload.uid;
+		this._userEmail = payload.email;
+
+		this.postMessageToWebview({
+			type: "authStateUpdate",
+			value: {
+				isSignedIn: this._isUserSignedIn,
+				currentUserTier: this._currentUserTier,
+				isSubscriptionActive: this._isSubscriptionActive,
+				userEmail: this._userEmail, // Do not send UID to webview for security
+			},
+		});
 	}
 
 	public getActiveApiKey(): string | undefined {
@@ -449,6 +474,112 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		token?: vscode.CancellationToken // MODIFIED SIGNATURE
 	): Promise<void> {
 		console.log("[SidebarProvider] Entering initiatePlanFromEditorAction");
+		console.log(
+			`User signedIn: ${this._isUserSignedIn}, Tier: ${this._currentUserTier}, Subscription Active: ${this._isSubscriptionActive}`
+		);
+
+		const instructionLower = instruction.toLowerCase();
+
+		// Gating logic for plan generation
+		if (!this._isUserSignedIn) {
+			this.postMessageToWebview({
+				type: "aiResponseEnd",
+				value: null,
+				isError: true,
+				success: false,
+				error:
+					"Please sign in to your Minovative Mind account to use this feature.",
+				// We don't need to pass planData for this error type
+			});
+			this.postMessageToWebview({ type: "reenableInput" });
+			progress?.report({
+				message:
+					"Please sign in to your Minovative Mind account to use this feature.",
+				increment: 100,
+			});
+			// No need for disposable here as it's not set up yet
+			this._activeOperationCancellationTokenSource?.dispose();
+			this._activeOperationCancellationTokenSource = undefined;
+			return;
+		}
+
+		if (this._currentUserTier === "free") {
+			// Free tier restrictions
+			const freeTierInstructions = [
+				"fix syntax",
+				"add comments",
+				"refactor small",
+				"explain code",
+				"generate boilerplate",
+				"add docstrings",
+				"optimize simple",
+				"debug single function",
+				"convert simple",
+				"rename symbol",
+				"inline variable",
+				"extract method",
+				"create test for",
+				"implement simple interface",
+				"add type hints",
+				"add basic error handling",
+				"generate basic test",
+				"generate example",
+				"create empty class",
+				"create empty function",
+				"create file",
+				"modify file",
+			];
+			const isAllowedFreeTier = freeTierInstructions.some((phrase) =>
+				instructionLower.includes(phrase)
+			);
+
+			// Allow all instructions if a subscription is active, even for free tier label, assuming it's a legacy or trial "free" account with active subscription
+			if (!this._isSubscriptionActive && !isAllowedFreeTier) {
+				const restrictedMessage =
+					"This instruction is only available for Pro tier users or with an active subscription. As a free tier user, you can use instructions like 'fix syntax', 'add comments', 'refactor small', 'explain code', 'generate boilerplate', etc. Please upgrade to Pro or ensure your subscription is active for full functionality.";
+				this.postMessageToWebview({
+					type: "aiResponseEnd",
+					value: null,
+					isError: true,
+					success: false,
+					error: restrictedMessage,
+				});
+				this.postMessageToWebview({ type: "reenableInput" });
+				progress?.report({
+					message: restrictedMessage,
+					increment: 100,
+				});
+				// No need for disposable here as it's not set up yet
+				this._activeOperationCancellationTokenSource?.dispose();
+				this._activeOperationCancellationTokenSource = undefined;
+				return;
+			}
+		} else if (this._currentUserTier === "pro") {
+			// Pro tier has no restrictions for now, but this block is here for future expansion.
+			// Currently, just proceed.
+			console.log(
+				"[SidebarProvider] Pro tier user, proceeding with instruction."
+			);
+		} else {
+			// Unknown tier
+			const unknownTierMessage = `Your user tier (${this._currentUserTier}) is not recognized. Please contact support or check your account status.`;
+			this.postMessageToWebview({
+				type: "aiResponseEnd",
+				value: null,
+				isError: true,
+				success: false,
+				error: unknownTierMessage,
+			});
+			this.postMessageToWebview({ type: "reenableInput" });
+			progress?.report({
+				message: unknownTierMessage,
+				increment: 100,
+			});
+			// No need for disposable here as it's not set up yet
+			this._activeOperationCancellationTokenSource?.dispose();
+			this._activeOperationCancellationTokenSource = undefined;
+			return;
+		}
 
 		this._activeOperationCancellationTokenSource =
 			new vscode.CancellationTokenSource();
@@ -688,6 +819,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"model",
 					`Error generating plan from editor action: ${errorStreaming}`
 				);
+			}
+			// Ensure input is re-enabled if no pending plan confirmation is needed (e.g., on error or cancellation)
+			if (!this._pendingPlanGenerationContext) {
 				this.postMessageToWebview({ type: "reenableInput" });
 			}
 		}
@@ -2131,7 +2265,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	public postMessageToWebview(message: any): void {
+	public postMessageToWebview(message: Record<string, unknown>): void {
 		if (this._view && this._view.visible) {
 			this._view.webview.postMessage(message).then(undefined, (err) => {
 				console.warn(
@@ -2251,6 +2385,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"saveChatRequest", // Allowed, as it's local state and uses dialog
 				"loadChatRequest", // Allowed, as it's local state and uses dialog
 				"selectModel", // Allowed, updates settings but doesn't start AI task immediately
+				"requestAuthState", // Allowed, just requests current auth state
 			];
 
 			if (
@@ -2282,6 +2417,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				// finally block or cancellation handler to re-enable input.
 				// postMessageToWebview({ type: "reenableInput" }); // Avoid redundant re-enable
 				return;
+			}
+
+			if (data.type === "requestAuthState") {
+				console.log("[SidebarProvider] Webview requested auth state.");
+				this.postMessageToWebview({
+					type: "authStateUpdate",
+					value: {
+						isSignedIn: this._isUserSignedIn,
+						currentUserTier: this._currentUserTier,
+						isSubscriptionActive: this._isSubscriptionActive,
+						userEmail: this._userEmail, // Do not send UID to webview for security
+					},
+				});
+				return; // Handled this message
 			}
 
 			switch (data.type) {

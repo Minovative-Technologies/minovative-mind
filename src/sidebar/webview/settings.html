@@ -4,19 +4,62 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- CSP will be replaced by getSettingsHtml -->
   <meta http-equiv="Content-Security-Policy" content="__CSP_SOURCE__">
-  <title>Minovative Mind Chat</title>
+  <title>Minovative Mind Settings</title>
   <link rel="stylesheet" href="__STYLES_URI__" nonce="__NONCE__">
 </head>
 
 <body>
-  <h1>Hello from the new Settings View!</h1>
-  <p>This is your dedicated setting's panel.</p>
-  <div class="button-container">
-    <button id="apiUsageButton">Check API Usage</button>
-    <button id="minovativeMindWebsiteButton">MM Website</button>
+  <div class="container">
+    <div class="section">
+      <h1>Account Settings</h1>
+
+      <div id="auth-loading">
+        <p>Loading account details...</p>
+      </div>
+
+      <div id="user-info">
+        <p>Email: <span id="user-email-display"></span></p>
+        <p>Status: <span id="subscription-status-display"></span><span id="subscription-loading-spinner"
+            class="loading-spinner"></span></p>
+        <div class="button-group">
+          <button id="sign-out-button">Sign Out</button>
+          <button id="manage-subscription-button">Manage Subscription</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="auth-section-wrapper">
+      <div id="auth-forms">
+        <h2>Sign In / Sign Up</h2>
+        <div class="form-group">
+          <label for="email-input">Email:</label>
+          <input type="email" id="email-input" required>
+        </div>
+        <div class="form-group">
+          <label for="password-input">Password:</label>
+          <input type="password" id="password-input" required>
+        </div>
+        <div class="button-group">
+          <button id="sign-in-button">Sign In</button>
+          <button id="sign-up-button">Sign Up</button>
+        </div>
+        <p id="auth-error" class="error-message"></p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Useful Links</h2>
+      <div class="button-group">
+        <button id="apiUsageButton">Check API Usage</button>
+        <button id="minovativeMindWebsiteButton">Website</button>
+      </div>
+    </div>
+
   </div>
-  <script src="__SCRIPT_URI__" nonce="__NONCE__"></script>
+  <!-- Script URI will be replaced by getSettingsHtml -->
+  <script nonce="__NONCE__" type="module" src="__SCRIPT_URI__"></script>
 </body>
 
 </html>

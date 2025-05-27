@@ -130,6 +130,7 @@
 		"@types/markdown-it": "^14.1.2",
 		"@vscode/test-cli": "^0.0.10",
 		"bluebird": "^3.7.2",
+		"firebase": "^11.8.1",
 		"ignore": "^7.0.4",
 		"markdown-it": "^14.1.0"
 	}

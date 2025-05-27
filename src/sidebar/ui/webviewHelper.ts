@@ -57,31 +57,45 @@ export async function getHtmlForWebview(
 export async function getSettingsHtml(
 	webview: vscode.Webview,
 	extensionUri: vscode.Uri,
-	scriptUri: vscode.Uri,
-	styleUri: vscode.Uri,
+	scriptUri: vscode.Uri, // URI for settingsWebview.js
+	styleUri: vscode.Uri, // URI for settings.css
 	nonce: string
 ): Promise<string> {
-	const htmlFileUri = vscode.Uri.joinPath(
+	const settingsHtmlPath = vscode.Uri.joinPath(
 		extensionUri,
 		"src",
 		"sidebar",
 		"webview",
 		"settings.html"
 	);
-
 	try {
-		const fileContentBytes = await vscode.workspace.fs.readFile(htmlFileUri);
+		const fileContentBytes = await vscode.workspace.fs.readFile(
+			settingsHtmlPath
+		);
 		let htmlContent = Buffer.from(fileContentBytes).toString("utf-8");
 
+		// Define CSP. Adjust as necessary for your needs.
+		const cspSource = `
+      default-src 'none';
+      style-src ${webview.cspSource} 'nonce-${nonce}' 'unsafe-inline';
+      script-src 'nonce-${nonce}';
+      font-src ${webview.cspSource};
+      connect-src https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://firestore.googleapis.com;
+      img-src ${webview.cspSource} https: data:;
+    `;
 		// Replace placeholders
-		htmlContent = htmlContent.replace(/__CSP_SOURCE__/g, webview.cspSource);
+		htmlContent = htmlContent.replace(
+			/__CSP_SOURCE__/g,
+			cspSource.replace(/\s\s+/g, " ").trim()
+		);
 		htmlContent = htmlContent.replace(/__NONCE__/g, nonce);
-		htmlContent = htmlContent.replace(/__SCRIPT_URI__/g, scriptUri.toString());
 		htmlContent = htmlContent.replace(/__STYLES_URI__/g, styleUri.toString());
+		htmlContent = htmlContent.replace(/__SCRIPT_URI__/g, scriptUri.toString());
 
 		return htmlContent;
 	} catch (e) {
-		console.error("Error reading chat view HTML file:", e);
-		return `<html><body>Error loading chat view: ${e}</body></html>`;
+		const error = e as Error;
+		console.error("Error reading settings.html file:", error);
+		return `<html><body>Error loading settings view: ${error.message}</body></html>`;
 	}
 }

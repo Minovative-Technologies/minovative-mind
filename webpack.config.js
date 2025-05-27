@@ -67,5 +67,19 @@ const webviewConfig = {
 	},
 };
 
-// Export both configurations
-module.exports = [extensionConfig, webviewConfig];
+const settingsWebviewConfig = {
+	...baseConfig,
+	target: "web",
+	mode: "none", // Or 'production'/'development'
+	entry: "./src/sidebar/webview/settings.ts", // **** THIS IS THE KEY ****
+	output: {
+		path: path.resolve(__dirname, "dist"),
+		filename: "settingsWebview.js", // Bundled output name (can also be settings.js)
+		libraryTarget: "module",
+	},
+	experiments: {
+		outputModule: true,
+	},
+};
+
+module.exports = [extensionConfig, webviewConfig, settingsWebviewConfig];
