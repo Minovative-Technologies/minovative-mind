@@ -80,7 +80,7 @@ export async function getSettingsHtml(
       style-src ${webview.cspSource} 'nonce-${nonce}' 'unsafe-inline';
       script-src 'nonce-${nonce}';
       font-src ${webview.cspSource};
-      connect-src https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://firestore.googleapis.com;
+      connect-src https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://www.googleapis.com https://minovative-mind.firebaseapp.com;
       img-src ${webview.cspSource} https: data:;
     `;
 		// Replace placeholders
