@@ -391,7 +391,7 @@ if (manageSubscriptionButton) {
 			if (docSnap.exists()) {
 				const userData = docSnap.data() as UserSubscriptionData;
 				if (userData.stripeCustomerId) {
-					const portalLink = `http://localhost:3000/profile/dashboard/${userData.uid}`;
+					const portalLink = `http://localhost:3000/profile/dashboard/${currentFirebaseUser.uid}`;
 					vscode.postMessage({ command: "openUrl", url: portalLink });
 				} else {
 					showAuthError(
