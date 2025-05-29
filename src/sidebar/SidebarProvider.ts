@@ -2093,7 +2093,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			removeProcess();
 			this._activeOperationCancellationTokenSource?.dispose();
 			this._activeOperationCancellationTokenSource = undefined;
-			// Re-enable input handled by aiResponseEnd in webview
+			this.postMessageToWebview({ type: "reenableInput" });
 		}
 	}
 
