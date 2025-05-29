@@ -74,6 +74,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public _isSubscriptionActive: boolean = false;
 	public _userUid: string | undefined = undefined;
 	public _userEmail: string | undefined = undefined;
+	private _pendingReviewProgressResolve: (() => void) | undefined;
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri, // Renamed to avoid clash
@@ -505,8 +506,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		languageId: string,
 		documentUri: vscode.Uri,
 		selection: vscode.Range,
-		progress?: vscode.Progress<{ message?: string; increment?: number }>, // MODIFIED SIGNATURE
-		token?: vscode.CancellationToken // MODIFIED SIGNATURE
+		initialProgress?: vscode.Progress<{ message?: string; increment?: number }>, // RENAMED PARAMETER
+		initialToken?: vscode.CancellationToken // RENAMED PARAMETER
 	): Promise<void> {
 		console.log("[SidebarProvider] Entering initiatePlanFromEditorAction");
 		console.log(
@@ -527,7 +528,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				// We don't need to pass planData for this error type
 			});
 			this.postMessageToWebview({ type: "reenableInput" });
-			progress?.report({
+			initialProgress?.report({
+				// UPDATED
 				message:
 					"Please sign in to your Minovative Mind account to use this feature.",
 				increment: 100,
@@ -555,7 +557,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				error: unknownTierMessage,
 			});
 			this.postMessageToWebview({ type: "reenableInput" });
-			progress?.report({
+			initialProgress?.report({
+				// UPDATED
 				message: unknownTierMessage,
 				increment: 100,
 			});
@@ -572,11 +575,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		// Link the external token (from withProgress) to the unified internal token source
 		// This ensures that if the progress notification is cancelled, our internal operation also cancels.
 		let disposable: vscode.Disposable | undefined;
-		if (token) {
-			disposable = token.onCancellationRequested(() => {
+		if (initialToken) {
+			// UPDATED
+			disposable = initialToken.onCancellationRequested(() => {
+				// UPDATED
 				this._activeOperationCancellationTokenSource?.cancel();
-				if (progress) {
-					progress.report({
+				if (initialProgress) {
+					// UPDATED
+					initialProgress.report({
+						// UPDATED
 						message: "Plan generation cancelled by user.",
 						increment: 100,
 					});
@@ -586,7 +593,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		// Initial cancellation check at the very beginning of the method
 		if (activeOpToken.isCancellationRequested) {
-			progress?.report({
+			initialProgress?.report({
+				// UPDATED
 				message: "Plan generation cancelled by user.",
 				increment: 100,
 			});
@@ -612,7 +620,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			const errorMessage =
 				"Error: No active API Key or Model set for planning.";
 			// Report error through progress notification
-			progress?.report({
+			initialProgress?.report({
+				// UPDATED
 				message: `Error: ${errorMessage}`,
 				increment: 100,
 			});
@@ -707,7 +716,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 
 			// Progress report before textual plan AI call
-			progress?.report({
+			initialProgress?.report({
+				// UPDATED
 				message: "Minovative Mind: Generating textual plan explanation...",
 				increment: 20,
 			});
@@ -749,9 +759,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				// Add the successful AI response to chat history
 				this.chatHistoryManager.addHistoryEntry("model", textualPlanResponse);
 				// Progress report after textual plan generated
-				progress?.report({
+				initialProgress?.report({
+					// UPDATED
+					increment: 100, // Instruction 1: Set to 100 with message "Minovative Mind: Textual plan generated."
 					message: "Minovative Mind: Textual plan generated.",
-					increment: 50,
 				});
 				// planDataForConfirmation is set correctly here
 				this._pendingPlanGenerationContext = {
@@ -776,9 +787,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			errorStreaming = err.message;
 			successStreaming = false;
 			// Call progress report in catch block
-			progress?.report({
+			initialProgress?.report({
+				// UPDATED
+				increment: 100, // Instruction 1: Set to 100 with error message
 				message: `Error: ${errorStreaming}`,
-				increment: 100,
 			});
 		} finally {
 			const isCancellation = errorStreaming === ERROR_OPERATION_CANCELLED;
@@ -793,12 +805,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					? { originalInstruction: instruction, type: "textualPlanPending" }
 					: null,
 			});
-			// NEW LINE ADDED HERE
-			await this._showPlanCompletionNotification(
-				instruction,
-				successStreaming,
-				errorStreaming
-			);
+			// Add the new notification if the sidebar is not visible and streaming was successful
+			if (successStreaming && this._view?.visible === false) {
+				vscode.window.withProgress(
+					{
+						location: vscode.ProgressLocation.Notification,
+						title: "Minovative Mind: Plan ready for review.",
+						cancellable: true,
+					},
+					(progress, token) => {
+						return new Promise<void>((resolve) => {
+							this._pendingReviewProgressResolve = resolve;
+
+							token.onCancellationRequested(() => {
+								this._pendingReviewProgressResolve = undefined;
+								progress.report({
+									message: "Review dismissed.",
+									increment: 100,
+								});
+							});
+						});
+					}
+				);
+			}
+			// Instruction 1: REMOVED this call: await this._showPlanCompletionNotification(instruction, successStreaming, errorStreaming);
 			disposable?.dispose();
 			this._activeOperationCancellationTokenSource?.dispose();
 			this._activeOperationCancellationTokenSource = undefined;
@@ -817,12 +847,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	private async _generateAndExecuteStructuredPlan(
+	private async _generateJsonAndExecutePlan(
+		// RENAMED METHOD
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {
-		// ... (No changes needed in the calling of createPlanningPrompt, as projectContext is already part of planContext)
-		// ... (The rest of this function seems okay in how it uses planContext.projectContext)
-		console.log("[SidebarProvider] Entering _generateAndExecuteStructuredPlan");
+		console.log("[SidebarProvider] Entering _generateJsonAndExecutePlan");
 		this.postMessageToWebview({
 			type: "statusUpdate",
 			value: `Minovative Mind (${planContext.modelName}) is generating the detailed execution plan (JSON)...`,
@@ -919,7 +948,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			// Clear context ONLY if parsing and validation succeed and we are about to execute
 			const executablePlan = parsedPlanResult.plan;
-			this._pendingPlanGenerationContext = null;
+			this._pendingPlanGenerationContext = null; // This clearing logic is moved as per instruction 4, so should not be cleared here if it's moved earlier
 
 			// The calling `initiatePlanFromEditorAction`'s `progress?.report` handles notification updates.
 
@@ -935,7 +964,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			const err = error as Error;
 			const isCancellation = err.message === ERROR_OPERATION_CANCELLED;
 			console.error(
-				"Error in _generateAndExecuteStructuredPlan:",
+				"Error in _generateJsonAndExecutePlan:", // UPDATED
 				err.message,
 				err.stack
 			);
@@ -950,7 +979,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				// For now, if structuredPlanJsonString is empty, it means generation failed early.
 				// The _pendingPlanGenerationContext should remain for retry.
 				console.log(
-					"[_generateAndExecuteStructuredPlan] Generation failed before producing JSON. Pending context kept for retry."
+					"[_generateJsonAndExecutePlan] Generation failed before producing JSON. Pending context kept for retry." // UPDATED
 				);
 			}
 
@@ -1713,6 +1742,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				isError: isErrorFinal,
 			});
 			this.postMessageToWebview({ type: "reenableInput" });
+
+			// Instruction 3: Add call to _showPlanCompletionNotification
+			await this._showPlanCompletionNotification(
+				plan.planDescription || "Unnamed Plan",
+				this._currentExecutionOutcome ?? "failed" // Ensure outcome is set
+			);
 		}
 	}
 
@@ -1822,9 +1857,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async _showPlanCompletionNotification(
-		instruction: string,
-		success: boolean,
-		error: string | null
+		description: string, // RENAMED PARAMETER from instruction to description
+		outcome: sidebarTypes.ExecutionOutcome // RENAMED PARAMETER from success, error
 	): Promise<void> {
 		let message: string;
 		let notificationFunction: (
@@ -1832,22 +1866,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			...items: string[]
 		) => Thenable<string | undefined>;
 
-		const instructionTruncated =
-			instruction.length > 50
-				? `${instruction.substring(0, 47)}...`
-				: instruction;
+		const descriptionTruncated =
+			description.length > 50
+				? `${description.substring(0, 47)}...`
+				: description;
 
-		if (success) {
-			message = `Minovative Mind: Plan for '${instructionTruncated}' generated successfully!`;
-			notificationFunction = vscode.window.showInformationMessage;
-		} else if (error === ERROR_OPERATION_CANCELLED) {
-			message = `Minovative Mind: Plan generation for '${instructionTruncated}' cancelled.`;
-			notificationFunction = vscode.window.showInformationMessage;
-		} else {
-			message = `Minovative Mind: Plan generation for '${instructionTruncated}' failed. ${
-				error ? `Error: ${error}` : "Unknown error."
-			}`;
-			notificationFunction = vscode.window.showErrorMessage;
+		switch (outcome) {
+			case "success":
+				message = `Minovative Mind: Plan execution for '${descriptionTruncated}' completed successfully!`;
+				notificationFunction = vscode.window.showInformationMessage;
+				break;
+			case "cancelled":
+				message = `Minovative Mind: Plan execution for '${descriptionTruncated}' cancelled by user.`;
+				notificationFunction = vscode.window.showInformationMessage;
+				break;
+			case "failed":
+				message = `Minovative Mind: Plan execution for '${descriptionTruncated}' failed. Check sidebar for details.`;
+				notificationFunction = vscode.window.showErrorMessage;
+				break;
 		}
 
 		// MODIFICATION START
@@ -1855,18 +1891,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		const isSidebarVisible = this._view?.visible === true;
 
 		if (!isSidebarVisible) {
-			if (success) {
-				actions = ["Review Plan in Sidebar"];
-			} else {
-				// For cancellation and failure
-				actions = ["Open Sidebar"];
-			}
+			// Now based on outcome directly, not `success`
+			actions = ["Open Sidebar"];
 		}
 		// MODIFICATION END
 
 		const result = await notificationFunction(message, ...actions);
 
-		if (result === "Review Plan in Sidebar" || result === "Open Sidebar") {
+		if (result === "Open Sidebar") {
+			// Simplified action
 			vscode.commands.executeCommand("minovative-mind.activitybar.focus");
 		}
 	}
@@ -2397,6 +2430,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			if (data.type === "cancelPlanExecution") {
 				console.log("[Provider] Cancelling pending plan confirmation...");
 				this._pendingPlanGenerationContext = null; // Clear the pending context
+				if (this._pendingReviewProgressResolve) {
+					this._pendingReviewProgressResolve(); // Resolve the pending review progress notification
+					this._pendingReviewProgressResolve = undefined; // Clear the resolve function
+				}
+				// Instruction 4: Add VS Code notification
+				vscode.window.showInformationMessage(
+					"Minovative Mind: Plan review cancelled by user."
+				);
 				this.postMessageToWebview({
 					type: "statusUpdate",
 					value: "Pending plan cancelled.",
@@ -2507,9 +2548,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						const contextForExecution = {
 							...this._pendingPlanGenerationContext,
 						};
-						// _pendingPlanGenerationContext is cleared *after* successful JSON parsing in _generateAndExecuteStructuredPlan
+						// Instruction 4: Clear pending context *before* the call
+						this._pendingPlanGenerationContext = null;
+						// _pendingPlanGenerationContext is cleared *after* successful JSON parsing in _generateJsonAndExecutePlan (originally _generateAndExecuteStructuredPlan)
 						// if (!this._pendingPlanGenerationContext) is checked before the call.
-						await this._generateAndExecuteStructuredPlan(contextForExecution);
+						if (this._pendingReviewProgressResolve) {
+							this._pendingReviewProgressResolve(); // Resolve the pending review progress notification
+							this._pendingReviewProgressResolve = undefined; // Clear the resolve function
+						}
+						await this._generateJsonAndExecutePlan(contextForExecution); // UPDATED method name
 					} else {
 						this.postMessageToWebview({
 							type: "statusUpdate",
@@ -2532,10 +2579,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							"User requested retry of structured plan generation."
 						);
 						const contextForRetry = { ...this._pendingPlanGenerationContext };
-						// The _generateAndExecuteStructuredPlan function will handle
+						// The _generateJsonAndExecutePlan function will handle // UPDATED method name
 						// the JSON generation attempt, reporting success/failure, and
 						// updating _pendingPlanGenerationContext accordingly.
-						await this._generateAndExecuteStructuredPlan(contextForRetry);
+						await this._generateJsonAndExecutePlan(contextForRetry); // UPDATED method name
 					} else {
 						// Should not happen if UI state is correct, but handle defensively
 						this.postMessageToWebview({
