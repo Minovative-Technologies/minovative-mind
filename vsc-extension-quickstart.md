@@ -12,15 +12,17 @@
   - **Contributes:** Declares the specific contributions Minovative Mind makes to the VS Code UI and functionality:
     - **Views Containers:** Registers the 'Minovative Mind' icon in the Activity Bar, providing quick access to its features.
     - **Views:** Defines the 'Minovative Mind Tools' and 'Settings' webview sidebars accessible from the Activity Bar, offering interactive interfaces for AI operations and configuration.
-    - **Commands:** Lists the commands available for execution, such as `minovative-mind.modifySelection` (for AI-driven code modification) and `minovative-mind.explainSelection` (for AI-driven code explanations).
+    - **Commands:** Lists the commands available for execution, such as `minovative-mind.modifySelection` (for versatile AI-driven operations like generating documentation, applying fixes, and executing custom plans) and `minovative-mind.explainSelection` (for AI-driven code explanations).
     - **Menus:** Configures where the extension's commands appear, specifically in the editor's context menu when text is selected.
     - **Keybindings:** Assigns keyboard shortcuts, like `Ctrl+M` (or `Cmd+M` on macOS) for the `minovative-mind.modifySelection` command, enabling quick access.
+    - **Configuration:** Manages API keys and AI model selections, ensuring secure and flexible interaction with various AI services.
 - src/extension.ts - this is the core file providing the implementation for the Minovative Mind extension.
-  - The `activate` function serves as the extension's primary entry point, called when the extension is first activated (e.g., by executing a command or opening a Minovative Mind view).
-  - Within `activate`, the `SidebarProvider` and `SettingsProvider` are initialized and registered. These providers manage the webview panels that power the 'Minovative Mind Tools' and 'Settings' sidebars, enabling a rich interactive user experience.
+  - The `activate` function serves as the extension's primary entry point, called when the extension is first activated (e.g., by executing a command or opening a Minovative Mind view). Within `activate`, Firebase is initialized for user authentication and managing subscription tiers.
+  - Within `activate`, the `SidebarProvider` and `SettingsProvider` are initialized and registered. These providers manage the webview panels that power the 'Minovative Mind Tools' and 'Settings' sidebars, enabling a rich interactive user experience by handling AI models, API keys, user authentication, and chat history.
   - The file registers the main commands:
-    - `minovative-mind.modifySelection`: This command allows users to apply AI-driven modifications to selected code. Users can prepend their selection with commands like `/fix` (for bug fixes), `/docs` (for documentation generation), or provide custom instructions directly to the AI, with results displayed in the Minovative Mind sidebar.
+    - `minovative-mind.modifySelection`: This command allows users to apply AI-driven operations to selected code. If the user types `/docs`, it generates documentation directly into the active editor. For `/fix` or any other custom instruction, it initiates an AI-driven multi-step execution plan that is displayed in the Minovative Mind sidebar for review and execution.
     - `minovative-mind.explainSelection`: This command generates a concise, AI-powered explanation of the selected code, helping users quickly understand unfamiliar or complex sections.
+    - The special `/commit` command, when used as a chat input, enables AI-driven Git operations.
 
 ## Setup
 
@@ -32,16 +34,21 @@
 - **Open the Minovative Mind Sidebar:** Click on the 'Minovative Mind' icon in the VS Code Activity Bar (usually on the left side) to open the main tools and settings panels.
 - **Run Commands from the Command Palette:**
   - Press (`Ctrl+Shift+P` or `Cmd+Shift+P` on Mac).
-  - Type `Minovative Mind: Custom Modifications` to initiate an AI-driven modification.
-  - Type `Minovative Mind: Generate Explanation` to get an AI explanation of selected code.
+  - Type `Minovative Mind: Custom Modifications` to open an input box for AI-driven code operations (e.g., `/docs`, `/fix`, or custom prompts).
+  - Type `Minovative Mind: Generate Explanation` to get an AI explanation of selected code, displayed in the sidebar.
 - **Access Commands via Editor Context Menu:**
   - Select any code in the editor.
   - Right-click on the selection.
-  - Choose `Minovative Mind: Custom Modifications` or `Minovative Mind: Generate Explanation` from the context menu.
+  - Choose `Minovative Mind: Custom Modifications` to open an input box for AI-driven code operations (e.g., `/docs`, `/fix`, or custom prompts).
+  - Choose `Minovative Mind: Generate Explanation` to get an AI explanation of selected code, displayed in the sidebar.
 - **Use the Keybinding for Custom Modifications:**
   - Select the code you wish to modify.
-  - Press `Ctrl+M` (or `Cmd+M` on Mac) to quickly invoke the `Minovative Mind: Custom Modifications` command.
-- **Interact with the Input Box:** When using the modification command (via Command Palette, Context Menu, or Keybinding), a quick pick input box will appear. You can type instructions like `/fix`, `/docs`, or any custom prompt, or leave it blank for a default action, to guide the AI's modification process.
+  - Press `Ctrl+M` (or `Cmd+M` on Mac) to quickly invoke the `Minovative Mind: Custom Modifications` command, opening an input box for AI-driven code operations.
+- **Interact with the Input Box:** When you invoke the 'Minovative Mind: Custom Modifications' command (via Command Palette, Context Menu, or Keybinding), a quick pick input box will appear.
+  - Type `/docs` to generate documentation for the selected code, which will be directly inserted into the active editor.
+  - Type `/fix` to initiate an AI-driven multi-step execution plan to fix the selected code, displayed in the Minovative Mind sidebar for your review.
+  - Type any custom prompt (e.g., "Refactor this function to be more concise") to initiate an AI-driven multi-step execution plan based on your instruction, displayed in the Minovative Mind sidebar for your review.
+- **Use the /commit Command:** Type `/commit` into the chat input of the Minovative Mind sidebar. This special command helps you stage changes and generate a Git commit message based on your modifications.
 
 ## Make changes
 
