@@ -2521,12 +2521,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				vscode.Uri.joinPath(this._extensionUri, "src", "sidebar", "webview"),
 			],
 		};
+		// Generate logoUri here
+		const logoUri = webviewView.webview.asWebviewUri(
+			vscode.Uri.joinPath(
+				this._extensionUri,
+				"media",
+				"minovative-logo-192x192.png"
+			)
+		);
+
 		// Use the imported webview helper, delegating to settingsManager for model name
 		webviewView.webview.html = await getHtmlForWebview(
 			webviewView.webview,
 			this._extensionUri,
 			sidebarConstants.AVAILABLE_GEMINI_MODELS,
-			this.settingsManager.getSelectedModelName() // Delegate
+			this.settingsManager.getSelectedModelName(),
+			logoUri
 		);
 
 		webviewView.webview.onDidReceiveMessage(async (data) => {

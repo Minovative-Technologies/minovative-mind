@@ -95,6 +95,9 @@ const clearChatButton = document.getElementById(
 const statusArea = document.getElementById(
 	"status-area"
 ) as HTMLDivElement | null;
+const emptyChatPlaceholder = document.getElementById(
+	"empty-chat-placeholder"
+) as HTMLDivElement | null; // Declare new DOM element variable for the #empty-chat-placeholder div.
 // START MODIFICATION: Get reference to the new #cancel-generation-button
 const cancelGenerationButton = document.getElementById(
 	"cancel-generation-button"
@@ -159,7 +162,8 @@ if (
 	!planParseErrorDisplay || // Added planParseErrorDisplay to critical elements check
 	!failedJsonDisplay || // Added failedJsonDisplay to critical elements check
 	!retryGenerationButton || // Added retryGenerationButton to critical elements check
-	!cancelParseErrorButton // Added cancelParseErrorButton to critical elements check
+	!cancelParseErrorButton || // Added cancelParseErrorButton to critical elements check
+	!emptyChatPlaceholder // Added emptyChatPlaceholder to critical elements check
 ) {
 	// END MODIFICATION: Add new DOM elements to the critical elements null check
 	console.error("Required DOM elements not found!");
@@ -290,6 +294,7 @@ if (
 
 			chatContainer.appendChild(messageElement);
 			chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to bottom
+			updateEmptyChatPlaceholderVisibility(); // Call after any message is appended
 		}
 	}
 
@@ -528,6 +533,7 @@ if (
 			if (loadingMsg) {
 				loadingMsg.remove();
 			}
+			updateEmptyChatPlaceholderVisibility(); // Call when isLoading becomes false
 		}
 
 		// If a new request starts (setLoadingState(true)) while a plan is awaiting confirmation,
@@ -563,6 +569,34 @@ if (
 			// No need to explicitly re-enable buttons here; setLoadingState(true) will handle disabling them correctly.
 		}
 		// END MODIFICATION
+	}
+
+	// New modular function: updateEmptyChatPlaceholderVisibility
+	function updateEmptyChatPlaceholderVisibility() {
+		console.log("[DEBUG] updateEmptyChatPlaceholderVisibility called.");
+		if (!chatContainer || !emptyChatPlaceholder) {
+			// console.warn("chatContainer or emptyChatPlaceholder not found. Cannot update visibility.");
+			return;
+		}
+
+		// Count actual chat messages, excluding temporary .loading-message
+		// A message is any .message div that is NOT also .loading-message
+		const actualMessages = Array.from(chatContainer.children).filter(
+			(child) =>
+				child.classList.contains("message") &&
+				!child.classList.contains("loading-message")
+		);
+
+		if (actualMessages.length > 0) {
+			emptyChatPlaceholder.style.display = "none";
+			chatContainer.style.display = "flex"; // Show chat container
+		} else {
+			emptyChatPlaceholder.style.display = "flex"; // Set the display style of #empty-chat-placeholder to flex if there are no messages.
+			chatContainer.style.display = "none"; // Hide chat container
+		}
+		console.log(
+			`[DEBUG] actualMessages.length: ${actualMessages.length}, emptyChatPlaceholder.style.display: ${emptyChatPlaceholder.style.display}`
+		);
 	}
 
 	function createPlanConfirmationUI() {
@@ -1073,7 +1107,6 @@ if (
 					loadingMsg.remove();
 				}
 				// Point 1.b (from review instructions): Ensure appendMessage("Model", "", "ai-message") is called.
-				// This call also handles Point 1.a:
 				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
 				// within the appendMessage function (see its definition) for a new AI stream.
 				// Note: aiResponseStart is only sent for *successful* starts. Errors would come as aiResponseEnd with !success.
@@ -1422,8 +1455,7 @@ if (
 						failedJsonDisplay.textContent = "";
 					}
 				}
-				// After potentially hiding UI and setting loading=false, setLoadingState was called,
-				// which correctly updates all button states including save/clear based on the empty chat.
+				updateEmptyChatPlaceholderVisibility(); // Call after chatCleared is processed (to show the placeholder).
 				break;
 			}
 			case "restoreHistory": {
@@ -1470,8 +1502,7 @@ if (
 						failedJsonDisplay.textContent = "";
 					}
 				}
-				// After potentially hiding UI and setting loading=false, setLoadingState was called,
-				// which correctly updates all button states including save/clear based on the restored chat content.
+				updateEmptyChatPlaceholderVisibility(); // Call after restoreHistory is processed (to show/hide based on loaded history).
 				break;
 			}
 			// START MODIFICATION: Modify 'reenableInput' handler
@@ -1555,7 +1586,7 @@ if (
 		// These initial states are now handled by the initial call to setLoadingState(false)
 		// triggered by the 'webviewReady' message handler after receiving updateKeyList/updateModelList.
 		// It's safer to let the state management function handle initialization based on loaded config.
-		// Keep them here as belt-and-suspenders initial DOM state, but main control is setLoadingState.
+		// Keep them here as belt-and-subspenders initial DOM state, but main control is setLoadingState.
 		if (chatInput) {
 			chatInput.disabled = true;
 		}
@@ -1772,6 +1803,9 @@ if (
 		createPlanConfirmationUI();
 		// Note: Plan parse error UI elements are expected to be in the HTML.
 		// Their container (planParseErrorContainer) should be initially hidden via CSS (e.g., style="display: none;").
+
+		updateEmptyChatPlaceholderVisibility(); // Call immediately after the DOM elements are initialized.
+		console.log("[DEBUG] initializeWebview completed.");
 	}
 
 	initializeWebview();

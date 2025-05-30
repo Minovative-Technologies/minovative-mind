@@ -26,8 +26,13 @@
     </div>
   </div>
   <div id="status-area"></div>
-  <div id="chat-container">
-    <!-- AI messages will be dynamically added here by JavaScript.
+  <div id="chat-area-wrapper">
+    <div id="empty-chat-placeholder">
+      <img class="empty-chat-logo" src="__LOGO_URI__">
+      <p class="empty-chat-text">Start chatting or use /plan to generate code with natural language.</p>
+    </div>
+    <div id="chat-container">
+      <!-- AI messages will be dynamically added here by JavaScript.
          A typical structure might look like this:
          <div class="chat-message ai-message">
            <span class="message-content">...AI message text...</span>
@@ -35,6 +40,7 @@
          </div>
          The button element is added below within this container for dynamic use.
     -->
+    </div>
   </div>
   <div id="input-container">
     <textarea id="chat-input" rows="3" placeholder="Enter message or /plan [request]..."></textarea>

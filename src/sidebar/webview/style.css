@@ -149,18 +149,56 @@ h2 {
 	cursor: not-allowed;
 }
 
+/* --- Chat Area Wrapper (New Rule) --- */
+#chat-area-wrapper {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+}
+
 /* --- Chat Container --- */
 #chat-container {
 	flex-grow: 1;
 	overflow-y: auto;
 	padding: var(--element-spacing);
 	margin: var(--element-spacing) 0;
-	background-color: var(--vscode-editorWidget-background);
 	border-radius: var(--border-radius);
 	display: flex;
 	flex-direction: column;
 	gap: var(--element-spacing); /* Space between messages */
-	min-height: 415px; /* Ensure a minimum visible height for the chat area */
+	min-height: 415px;
+	max-height: 415px;
+}
+
+/* --- Empty Chat Placeholder --- */
+#empty-chat-placeholder {
+	display: flex;
+	flex-direction: column; /* For vertical stacking of image and text */
+	justify-content: center; /* Center content vertically */
+	align-items: center; /* Center content horizontally */
+	text-align: center; /* Center text within its own line */
+	padding: var(--element-spacing); /* Match chat container padding */
+	margin: var(--element-spacing) 0; /* Match chat container margin */
+	background-color: var(
+		--vscode-editorWidget-background
+	); /* Match chat container background */
+	border-radius: var(--border-radius); /* Match chat container border radius */
+	flex-grow: 1; /* Allow it to take up available space, like chat-container */
+	min-height: 415px;
+}
+
+.empty-chat-logo {
+	width: 100px; /* Example size */
+	height: auto; /* Maintain aspect ratio */
+	opacity: 0.5; /* Subtle appearance */
+	filter: grayscale(100%); /* Make it monochrome to fit theme */
+}
+
+.empty-chat-text {
+	font-size: 1.1em;
+	color: var(--vscode-descriptionForeground); /* A subtle text color */
+	max-width: 80%; /* Prevent text from stretching too wide */
+	line-height: 1.5;
 }
 
 /* --- Chat Messages --- */
@@ -195,7 +233,7 @@ h2 {
 	color: var(--vscode-list-activeSelectionForeground);
 }
 .ai-message {
-	background-color: var(--vscode-editorWidget-background);
+	background-color: transparent;
 	border: 1px solid var(--border-color);
 	align-self: flex-start;
 	margin-right: auto;

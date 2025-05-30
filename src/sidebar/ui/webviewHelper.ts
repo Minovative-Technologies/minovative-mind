@@ -6,7 +6,8 @@ export async function getHtmlForWebview(
 	webview: vscode.Webview,
 	extensionUri: vscode.Uri,
 	availableModels: readonly string[], // Pass as parameter
-	selectedModel: string // Pass as parameter
+	selectedModel: string, // Pass as parameter
+	logoUri: vscode.Uri // New parameter
 ): Promise<string> {
 	const scriptUri = webview.asWebviewUri(
 		vscode.Uri.joinPath(extensionUri, "dist", "webview.js")
@@ -41,6 +42,10 @@ export async function getHtmlForWebview(
 		htmlContent = htmlContent.replace(/__CSP_SOURCE__/g, webview.cspSource);
 		htmlContent = htmlContent.replace(/__NONCE__/g, nonce);
 		htmlContent = htmlContent.replace(/__STYLES_URI__/g, stylesUri.toString());
+		htmlContent = htmlContent.replace(
+			/__LOGO_URI__/g,
+			webview.asWebviewUri(logoUri).toString()
+		); // Use the passed logoUri
 		htmlContent = htmlContent.replace(
 			/__MODEL_OPTIONS_HTML__/g,
 			modelOptionsHtml
