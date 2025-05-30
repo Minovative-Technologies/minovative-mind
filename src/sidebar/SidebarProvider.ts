@@ -45,6 +45,13 @@ import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
 } from "../context/smartContextSelector";
+import {
+	signIn,
+	signUp,
+	signOutUser,
+	getFirebaseConfig,
+	FirebaseUser,
+} from "../firebase/firebaseService";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -53,6 +60,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	private readonly _extensionUri: vscode.Uri;
 	private readonly _secretStorage: vscode.SecretStorage;
 	private readonly _workspaceState: vscode.Memento;
+
+	// New: Auth State Change Event
+	private _onDidAuthStateChange =
+		new vscode.EventEmitter<AuthStateUpdatePayload>();
+	public readonly onDidAuthStateChange = this._onDidAuthStateChange.event;
 
 	// Managers
 	private apiKeyManager: ApiKeyManager;
@@ -145,6 +157,146 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				userEmail: this._userEmail, // Do not send UID to webview for security
 			},
 		});
+	}
+
+	/**
+	 * Updates the internal user authentication and tier state based on raw Firebase user and subscription data.
+	 * This method is intended to be used as a callback from the Firebase service.
+	 * @param user The FirebaseUser object, or null if no user is signed in.
+	 * @param subscriptionData User's subscription details, or null if no active subscription.
+	 */
+	public updateUserAuthAndTierFromFirebase(
+		user: FirebaseUser | null,
+		subscriptionData: sidebarTypes.UserSubscriptionData | null
+	): void {
+		console.log("[SidebarProvider] Firebase Auth state update received.");
+
+		this._isUserSignedIn = user !== null;
+		this._userUid = user?.uid;
+		this._userEmail = user?.email || undefined; // Ensure it's undefined if null
+
+		// Determine subscription status and tier based on the provided data
+		let newIsSubscriptionActive = false;
+		let newCurrentUserTier: UserTier = "free";
+
+		if (user) {
+			// Modified: Set _isSubscriptionActive and _currentUserTier based on subscriptionData.subscriptionStatus
+			if (
+				subscriptionData?.subscriptionStatus === "active" ||
+				subscriptionData?.subscriptionStatus === "trialing"
+			) {
+				newIsSubscriptionActive = true;
+				newCurrentUserTier = "pro";
+			} else {
+				// User is signed in but no active subscription or subscription status is not 'active' or 'trialing'
+				newIsSubscriptionActive = false;
+				newCurrentUserTier = "free";
+			}
+		} else {
+			// No user is signed in
+			newIsSubscriptionActive = false;
+			newCurrentUserTier = "free";
+		}
+
+		// Apply the determined state
+		this._isSubscriptionActive = newIsSubscriptionActive;
+		this._currentUserTier = newCurrentUserTier;
+
+		console.log(
+			`[SidebarProvider] Current Auth State (from Firebase): SignedIn=${this._isUserSignedIn}, Tier=${this._currentUserTier}, ActiveSubscription=${this._isSubscriptionActive}, Email=${this._userEmail}`
+		);
+
+		// Post message to SidebarProvider's own webview
+		this.postMessageToWebview({
+			type: "authStateUpdate",
+			value: {
+				isSignedIn: this._isUserSignedIn,
+				currentUserTier: this._currentUserTier,
+				isSubscriptionActive: this._isSubscriptionActive,
+				userEmail: this._userEmail, // Do not send UID to webview for security
+			},
+		});
+
+		// After updating the webview, fire the event
+		const currentAuthState = this.getAuthStatePayload();
+		this._onDidAuthStateChange.fire(currentAuthState);
+
+		// Instruction notes "and potentially the SettingsProvider's webview if it's open".
+		// To achieve this, SettingsProvider would need to expose a method (e.g., `updateAuthState`)
+		// and SidebarProvider would need a reference to the SettingsProvider instance.
+		// This is beyond the scope of "Add a new public method..." without further architectural changes.
+		// For now, only the SidebarProvider's webview is directly updated.
+	}
+
+	/**
+	 * Returns an AuthStateUpdatePayload object encapsulating the current authentication and tier state.
+	 * This method is intended for external components (e.g., SettingsProvider) to query the current auth state.
+	 * The `uid` is included as it's needed for the Stripe portal URL in some cases.
+	 * @returns {AuthStateUpdatePayload} The current authentication state.
+	 */
+	public getAuthStatePayload(): AuthStateUpdatePayload {
+		return {
+			isSignedIn: this._isUserSignedIn,
+			uid: this._userUid,
+			email: this._userEmail,
+			tier: this._currentUserTier,
+			isSubscriptionActive: this._isSubscriptionActive,
+		};
+	}
+
+	public async triggerSignIn(email: string, password: string): Promise<void> {
+		try {
+			await signIn(email, password);
+			vscode.window.showInformationMessage("Sign-in successful!");
+		} catch (error: any) {
+			vscode.window.showErrorMessage(`Sign-in failed: ${error.message}`);
+		}
+	}
+
+	public async triggerSignUp(email: string, password: string): Promise<void> {
+		try {
+			await signUp(email, password);
+			vscode.window.showInformationMessage(
+				"Sign-up successful! Please check your email for verification."
+			);
+		} catch (error: any) {
+			vscode.window.showErrorMessage(`Sign-up failed: ${error.message}`);
+		}
+	}
+
+	public async triggerSignOut(): Promise<void> {
+		try {
+			await signOutUser();
+			vscode.window.showInformationMessage("Signed out successfully!");
+		} catch (error: any) {
+			vscode.window.showErrorMessage(`Sign-out failed: ${error.message}`);
+		}
+	}
+
+	public async openStripeCustomerPortal(): Promise<void> {
+		try {
+			if (!this._userUid) {
+				vscode.window.showErrorMessage(
+					"Failed to open Stripe portal: User not signed in or UID not available."
+				);
+				return;
+			}
+
+			const firebaseConfig = await getFirebaseConfig();
+			if (!firebaseConfig) {
+				vscode.window.showErrorMessage(
+					"Failed to open Stripe portal: Firebase configuration not available."
+				);
+				return;
+			}
+
+			await vscode.env.openExternal(vscode.Uri.parse(""));
+			vscode.window.showInformationMessage("Opening Stripe Customer Portal...");
+		} catch (error: any) {
+			vscode.window.showErrorMessage(
+				`Failed to open Stripe portal: ${error.message}`
+			);
+		}
 	}
 
 	public getActiveApiKey(): string | undefined {
@@ -2494,7 +2646,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					isError: true,
 				});
 				// Re-enable input is often needed when a message is blocked, but it might be handled
-				// by the operation that *is* running. Let's rely on the running operation's
+				// by the running operation's
 				// finally block or cancellation handler to re-enable input.
 				// postMessageToWebview({ type: "reenableInput" }); // Avoid redundant re-enable
 				return;

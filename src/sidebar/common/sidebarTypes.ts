@@ -1,6 +1,7 @@
 // src/sidebar/common/sidebarTypes.ts
 import * as vscode from "vscode";
 import { Content } from "@google/generative-ai"; // Assuming History might be needed if HistoryEntry evolves
+import { Timestamp } from "firebase/firestore"; // Import Timestamp for Firestore dates
 
 // Re-export or define as needed. If HistoryEntry is just Content, you can use Content directly.
 export type HistoryEntry = Content; // Or export type HistoryEntry = History; if more appropriate
@@ -15,9 +16,10 @@ export interface UserSubscriptionData {
 		| "canceled"
 		| "unpaid"
 		| "free"
-		| "incomplete"; // Added "free" & "incomplete"
-	subscriptionPeriodStart?: import("firebase/firestore").Timestamp; // For Firestore Timestamps
-	subscriptionPeriodEnd?: import("firebase/firestore").Timestamp;
+		| "incomplete"
+		| "trialing"; // Added "free" & "incomplete"
+	subscriptionPeriodStart?: Timestamp; // For Firestore Timestamps
+	subscriptionPeriodEnd?: Timestamp | null;
 	subscribedTierPriceId?: string;
 	email: string; // User's email
 	uid: string; // User's email
@@ -25,7 +27,7 @@ export interface UserSubscriptionData {
 
 export type UserTier = "free" | "paid" | "pro";
 
-// Message from Settings Webview to Extension
+// Message from Extension to Settings Webview (e.g., for Firebase config)
 export interface AuthStateUpdatePayload {
 	isSignedIn: boolean;
 	uid?: string;
@@ -45,12 +47,35 @@ export interface OpenUrlMessage {
 	url: string;
 }
 
+export interface AuthErrorMessage {
+	command: "authError";
+	payload: { message: string };
+}
+
 // New interface for webview readiness (from Webview to Extension)
 export interface SettingsWebviewReadyMessage {
 	command: "settingsWebviewReady";
 }
 
-// Message from Extension to Settings Webview (e.g., for Firebase config)
+// New interfaces for auth requests (from Webview to Extension)
+export interface SignInRequestMessage {
+	command: "signInRequest";
+	payload: { email: string; password: string };
+}
+
+export interface SignUpRequestMessage {
+	command: "signUpRequest";
+	payload: { email: string; password: string };
+}
+
+export interface SignOutRequestMessage {
+	command: "signOutRequest";
+}
+
+export interface ManageSubscriptionRequestMessage {
+	command: "manageSubscriptionRequest";
+}
+
 export interface FirebaseConfigPayload {
 	apiKey: string;
 	authDomain: string;
@@ -67,19 +92,25 @@ export interface InitializeSettingsViewMessage {
 	// Add other initial data if needed
 }
 
-// Union type for all messages exchanged with the settings webview (bi-directional)
-export type SettingsWebviewMessage =
-	| AuthStateUpdateMessage
-	| OpenUrlMessage
-	| SettingsWebviewReadyMessage // Added as per instruction
-	| InitializeSettingsViewMessage;
-
 // Union type for messages *from* the Settings Webview *to* the Extension
 export type SettingsWebviewIncomingMessage =
-	| AuthStateUpdateMessage
+	| SettingsWebviewReadyMessage
+	| SignInRequestMessage
+	| SignUpRequestMessage
+	| SignOutRequestMessage
 	| OpenUrlMessage
-	| SettingsWebviewReadyMessage // Logically incoming
-	| InitializeSettingsViewMessage; // Added as per instruction, despite original intent as outgoing
+	| ManageSubscriptionRequestMessage;
+
+// Union type for messages *from* the Extension *to* the Settings Webview
+export type SettingsWebviewOutgoingMessage =
+	| InitializeSettingsViewMessage
+	| AuthStateUpdateMessage
+	| AuthErrorMessage;
+
+// Union type for all messages exchanged with the settings webview (bi-directional)
+export type SettingsWebviewMessage =
+	| SettingsWebviewIncomingMessage
+	| SettingsWebviewOutgoingMessage;
 
 export interface ApiKeyInfo {
 	maskedKey: string;

@@ -1,31 +1,12 @@
 // src/sidebar/webview/settings.ts
-import { initializeApp, FirebaseApp } from "firebase/app";
-import {
-	getAuth,
-	createUserWithEmailAndPassword,
-	signInWithEmailAndPassword,
-	onAuthStateChanged,
-	signOut,
-	User as FirebaseUser,
-	Auth,
-} from "firebase/auth";
-import {
-	getFirestore,
-	doc,
-	getDoc,
-	setDoc,
-	onSnapshot,
-	Firestore,
-} from "firebase/firestore";
+// Removed all Firebase SDK imports as per instructions.
 
-// Assuming VsCodeWebviewApi is defined in a .d.ts file and available globally
-// No direct import needed for VsCodeWebviewApi if using declare global
+import { auth } from "../../firebase/firebaseService";
 import type {
-	FirebaseConfigPayload,
-	UserSubscriptionData,
-	UserTier,
+	UserTier, // Used for determining subscription status text
 	AuthStateUpdatePayload,
-	SettingsWebviewIncomingMessage, // Added as per instruction
+	SettingsWebviewIncomingMessage,
+	SettingsWebviewOutgoingMessage, // Ensure this is imported for the type assertion change
 } from "../common/sidebarTypes"; // Adjust path if your types are elsewhere
 
 const vscode = acquireVsCodeApi();
@@ -76,11 +57,7 @@ const minovativeMindWebsiteButton = document.getElementById(
 	"minovativeMindWebsiteButton"
 ) as HTMLButtonElement;
 
-let fbApp: FirebaseApp | null = null;
-let fbAuth: Auth | null = null;
-let fbDb: Firestore | null = null;
-let currentFirebaseUser: FirebaseUser | null = null;
-let unsubscribeSubscription: (() => void) | null = null; // For Firestore snapshot listener
+// Removed all Firebase related variables (fbApp, fbAuth, fbDb, currentFirebaseUser, unsubscribeSubscription).
 
 function showAuthError(message: string): void {
 	if (authErrorP) {
@@ -96,62 +73,72 @@ function clearAuthError(): void {
 	}
 }
 
-function updateUILoginState(user: FirebaseUser | null): void {
-	currentFirebaseUser = user;
+/**
+ * Updates the UI elements based on the authentication state payload received from the extension.
+ * This function replaces the Firebase-driven UI update logic.
+ * @param payload The AuthStateUpdatePayload containing user sign-in and subscription status.
+ */
+function updateUIFromAuthState(payload: AuthStateUpdatePayload): void {
+	console.log("[SettingsWebview] Updating UI with auth state:", payload);
+	clearAuthError(); // Clear any previous errors when a new state is received
+
+	// Hide the initial authentication loading spinner once any state is received
 	if (authLoadingDiv) {
 		authLoadingDiv.style.display = "none";
 	}
 
-	if (user) {
+	if (payload.isSignedIn) {
+		// User is signed in: show user info, hide auth forms
 		if (userInfoDiv) {
 			userInfoDiv.style.display = "block";
 		}
 		if (authSectionDiv) {
-			authSectionDiv.style.display = "none";
+			authSectionDiv.style.display = "none"; // Hide the entire authentication section
 		}
+		if (authFormsDiv) {
+			authFormsDiv.style.display = "none"; // Ensure forms are hidden
+		}
+
 		if (userEmailDisplay) {
-			userEmailDisplay.textContent = user.email || "N/A";
+			userEmailDisplay.textContent = payload.email || "N/A";
 		}
 
-		// Always send an immediate payload for signed-in state, even before subscription data arrives.
-		// This provides an immediate "signed in" status to the extension.
-		const initialPayload: AuthStateUpdatePayload = {
-			isSignedIn: true,
-			uid: user.uid,
-			email: user.email || undefined,
-			tier: "free", // Default until actual subscription data is fetched
-			isSubscriptionActive: false, // Default until actual subscription data is fetched
-		};
-		vscode.postMessage({
-			command: "authStateUpdated",
-			payload: initialPayload,
-		});
-
-		if (user.uid) {
-			// Ensure uid exists before trying to fetch subscription data
-			fetchAndDisplaySubscription(user.uid);
+		let subscriptionStatusText: string;
+		if (payload.tier === "pro") {
+			// Changed from "paid" to "pro"
+			if (payload.isSubscriptionActive) {
+				subscriptionStatusText = "Tier - Pro (Active)"; // Updated text
+			} else {
+				// If tier is 'pro' but not active, it's considered inactive or expired
+				subscriptionStatusText = "Tier - Pro (Inactive/Expired)"; // Updated text
+			}
 		} else {
-			// If for some reason uid is null for a signed-in user (highly unlikely with FirebaseUser),
-			// we should ensure any existing subscription listener is cleaned up.
-			if (unsubscribeSubscription) {
-				unsubscribeSubscription();
-				unsubscribeSubscription = null;
-			}
-			if (subscriptionLoadingSpinner) {
-				subscriptionLoadingSpinner.style.display = "none";
-			}
-			// The initialPayload already covered the state. No further action needed here.
+			// Free tier or no subscription data implies free tier
+			subscriptionStatusText = "Tier - Free";
+		}
+		if (subscriptionStatusDisplay) {
+			subscriptionStatusDisplay.textContent = subscriptionStatusText;
+		}
+
+		// The manage subscription button should be visible if a user is signed in
+		// as the extension will handle the logic of where to redirect.
+		if (manageSubscriptionButton) {
+			manageSubscriptionButton.style.display = "inline-block";
+		}
+
+		if (subscriptionLoadingSpinner) {
+			subscriptionLoadingSpinner.style.display = "none"; // Hide spinner once status is displayed
 		}
 	} else {
-		// Signed out case
+		// User is signed out: hide user info, show auth forms
 		if (userInfoDiv) {
 			userInfoDiv.style.display = "none";
 		}
 		if (authSectionDiv) {
-			authSectionDiv.style.display = "block";
+			authSectionDiv.style.display = "block"; // Show the entire authentication section
 		}
 		if (authFormsDiv) {
-			authFormsDiv.style.display = "block";
+			authFormsDiv.style.display = "block"; // Ensure forms are shown
 		}
 		if (subscriptionStatusDisplay) {
 			subscriptionStatusDisplay.textContent = "Not signed in";
@@ -162,165 +149,17 @@ function updateUILoginState(user: FirebaseUser | null): void {
 		if (subscriptionLoadingSpinner) {
 			subscriptionLoadingSpinner.style.display = "none";
 		}
-		// When signing out, always clean up the subscription listener first.
-		if (unsubscribeSubscription) {
-			unsubscribeSubscription();
-			unsubscribeSubscription = null;
-		}
-
-		// Send the signed-out payload.
-		const payload: AuthStateUpdatePayload = {
-			isSignedIn: false,
-			tier: "free",
-			isSubscriptionActive: false,
-		};
-		vscode.postMessage({ command: "authStateUpdated", payload });
-	}
-	clearAuthError();
-}
-
-async function fetchAndDisplaySubscription(uid: string): Promise<void> {
-	if (!fbDb) {
-		if (subscriptionStatusDisplay) {
-			subscriptionStatusDisplay.textContent = "Database not initialized.";
-		}
-		if (subscriptionLoadingSpinner) {
-			subscriptionLoadingSpinner.style.display = "none";
-		}
-		return;
-	}
-	if (subscriptionStatusDisplay) {
-		subscriptionStatusDisplay.textContent = "Checking subscription details...";
-	}
-	if (subscriptionLoadingSpinner) {
-		subscriptionLoadingSpinner.style.display = "inline-block";
-	}
-
-	if (unsubscribeSubscription) {
-		unsubscribeSubscription();
-	}
-
-	unsubscribeSubscription = onSnapshot(
-		doc(fbDb, "users", uid),
-		async (docSnap) => {
-			let userTier: UserTier = "free";
-			let isSubscriptionActive = false;
-			let subStatusText: string;
-
-			if (docSnap.exists()) {
-				const subData = docSnap.data() as UserSubscriptionData;
-
-				if (subData.subscriptionStatus === "active") {
-					const endDate = subData.subscriptionPeriodEnd?.toDate();
-					if (endDate && endDate > new Date()) {
-						userTier = "paid";
-						isSubscriptionActive = true;
-						subStatusText = `Tier - Paid (Active until ${endDate.toLocaleDateString()})`;
-						if (manageSubscriptionButton) {
-							manageSubscriptionButton.style.display = "inline-block";
-						}
-					} else if (endDate) {
-						subStatusText = `Tier - Paid (Expired on ${endDate.toLocaleDateString()})`;
-						if (manageSubscriptionButton && subData.stripeCustomerId) {
-							manageSubscriptionButton.style.display = "inline-block";
-						}
-					} else {
-						userTier = "paid"; // Assume active if no end date but status is active
-						isSubscriptionActive = true;
-						subStatusText = "Tier - Paid (Active)";
-						if (manageSubscriptionButton && subData.stripeCustomerId) {
-							manageSubscriptionButton.style.display = "inline-block";
-						}
-					}
-				} else if (subData.subscriptionStatus) {
-					subStatusText = `Tier - ${userTier} (${subData.subscriptionStatus})`;
-					if (manageSubscriptionButton && subData.stripeCustomerId) {
-						manageSubscriptionButton.style.display = "inline-block";
-					} else if (manageSubscriptionButton) {
-						manageSubscriptionButton.style.display = "none";
-					}
-				} else {
-					subStatusText = "Tier - Free";
-					if (manageSubscriptionButton) {
-						manageSubscriptionButton.style.display = "none";
-					}
-				}
-			} else {
-				subStatusText = "Free Tier (No subscription data found for this user)";
-				if (manageSubscriptionButton) {
-					manageSubscriptionButton.style.display = "none";
-				}
-			}
-			if (subscriptionStatusDisplay) {
-				subscriptionStatusDisplay.textContent = subStatusText;
-			}
-			if (subscriptionLoadingSpinner) {
-				subscriptionLoadingSpinner.style.display = "none";
-			}
-
-			const payload: AuthStateUpdatePayload = {
-				isSignedIn: true,
-				uid,
-				email: currentFirebaseUser?.email || undefined,
-				tier: userTier,
-				isSubscriptionActive,
-			};
-			vscode.postMessage({ command: "authStateUpdated", payload });
-		},
-		(error) => {
-			console.error("Error fetching subscription:", error);
-			if (subscriptionStatusDisplay) {
-				subscriptionStatusDisplay.textContent =
-					"Error loading subscription details.";
-			}
-			if (subscriptionLoadingSpinner) {
-				subscriptionLoadingSpinner.style.display = "none";
-			}
-			const payload: AuthStateUpdatePayload = {
-				isSignedIn: true,
-				uid,
-				email: currentFirebaseUser?.email || undefined,
-				tier: "free",
-				isSubscriptionActive: false,
-			};
-			vscode.postMessage({ command: "authStateUpdated", payload });
-		}
-	);
-}
-
-function initializeFirebase(config: FirebaseConfigPayload): void {
-	if (!fbApp) {
-		try {
-			console.log("[SettingsWebview] Initializing Firebase...");
-			fbApp = initializeApp(config);
-			fbAuth = getAuth(fbApp);
-			fbDb = getFirestore(fbApp);
-
-			onAuthStateChanged(fbAuth, (user) => {
-				updateUILoginState(user);
-			});
-			console.log(
-				"[SettingsWebview] Firebase initialized. Setting up auth state listener."
-			);
-		} catch (e) {
-			const error = e as Error;
-			console.error("Firebase initialization failed:", error);
-			if (authLoadingDiv) {
-				authLoadingDiv.textContent = "Error initializing. Check console.";
-			}
-			showAuthError(
-				"Could not connect to authentication service. Please ensure your Firebase configuration is correct."
-			);
+		if (userEmailDisplay) {
+			userEmailDisplay.textContent = "N/A"; // Clear email display when signed out
 		}
 	}
 }
 
-// --- Event Listeners for Auth ---
+// Removed the initializeFirebase function as Firebase is no longer initialized in the webview.
+
+// --- Event Listeners for Authentication Actions ---
 if (signUpButton) {
-	signUpButton.addEventListener("click", async () => {
-		if (!fbAuth || !fbDb || !emailInput || !passwordInput) {
-			return;
-		}
+	signUpButton.addEventListener("click", () => {
 		clearAuthError();
 		const email = emailInput.value;
 		const password = passwordInput.value;
@@ -328,31 +167,16 @@ if (signUpButton) {
 			showAuthError("Email and password are required.");
 			return;
 		}
-		try {
-			const userCredential = await createUserWithEmailAndPassword(
-				fbAuth,
-				email,
-				password
-			);
-			await setDoc(doc(fbDb, "users", userCredential.user.uid), {
-				email: userCredential.user.email,
-				subscriptionStatus: "free",
-				stripeCustomerId: "",
-				stripeSubscriptionId: "",
-				subscribedTierPriceId: "",
-			});
-		} catch (e) {
-			const error = e as Error;
-			showAuthError(error.message);
-		}
+		// Send a structured message to the VS Code extension for sign-up
+		vscode.postMessage({
+			command: "signUpRequest",
+			payload: { email, password },
+		});
 	});
 }
 
 if (signInButton) {
-	signInButton.addEventListener("click", async () => {
-		if (!fbAuth || !emailInput || !passwordInput) {
-			return;
-		}
+	signInButton.addEventListener("click", () => {
 		clearAuthError();
 		const email = emailInput.value;
 		const password = passwordInput.value;
@@ -360,63 +184,42 @@ if (signInButton) {
 			showAuthError("Email and password are required.");
 			return;
 		}
-		try {
-			await signInWithEmailAndPassword(fbAuth, email, password);
-		} catch (e) {
-			const error = e as Error;
-			showAuthError(error.message);
-		}
+		// Send a structured message to the VS Code extension for sign-in
+		vscode.postMessage({
+			command: "signInRequest",
+			payload: { email, password },
+		});
 	});
 }
 
 if (signOutButton) {
-	signOutButton.addEventListener("click", async () => {
-		if (!fbAuth) {
-			return;
-		}
-		try {
-			await signOut(fbAuth);
-		} catch (e) {
-			const error = e as Error;
-			showAuthError(error.message);
-		}
+	signOutButton.addEventListener("click", () => {
+		clearAuthError();
+		// Send a structured message to the VS Code extension for sign-out
+		vscode.postMessage({ command: "signOutRequest" });
 	});
 }
 
 if (manageSubscriptionButton) {
-	manageSubscriptionButton.addEventListener("click", async () => {
-		if (currentFirebaseUser && fbDb) {
-			const userDocRef = doc(fbDb, "users", currentFirebaseUser.uid);
-			const docSnap = await getDoc(userDocRef);
-			if (docSnap.exists()) {
-				const userData = docSnap.data() as UserSubscriptionData;
-				if (userData.stripeCustomerId) {
-					const portalLink = `http://localhost:3000/profile/dashboard/${currentFirebaseUser.uid}`;
-					vscode.postMessage({ command: "openUrl", url: portalLink });
-				} else {
-					showAuthError(
-						"Stripe Customer ID not found. Cannot manage subscription directly."
-					);
-					vscode.postMessage({
-						command: "openUrl",
-						url: "http://minovativemind.dev/registration/signin",
-					}); // Link to pricing/subscribe page
-				}
-			} else {
-				showAuthError("User data not found. Cannot manage subscription.");
-			}
-		} else {
-			showAuthError("Not signed in. Cannot manage subscription.");
-		}
+	manageSubscriptionButton.addEventListener("click", () => {
+		clearAuthError();
+
+		// Send a structured message to the VS Code extension to manage subscription
+		// The extension will determine the appropriate URL or action.
+		vscode.postMessage({
+			type: "openUrl", // Changed from command: "manageSubscriptionRequest"
+			command: "openUrl", // Added command: "openUrl"
+			url: `https://minovative-mind-git-minovative-mind-vsc-minovative-tech.vercel.app/`, // Dynamic URL
+		});
 	});
 }
 
-// --- Event Listeners for Original Buttons ---
+// --- Event Listeners for Original Buttons (unrelated to auth refactoring) ---
 if (apiUsageButton) {
 	apiUsageButton.addEventListener("click", () => {
 		vscode.postMessage({
-			type: "openUrl", // Ensure command type is consistent if SettingsProvider expects "command"
-			command: "openUrl", // Adding this for consistency with other messages
+			type: "openUrl", // Kept for consistency, though 'command' is preferred
+			command: "openUrl",
 			url: "https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com/quotas",
 		});
 	});
@@ -427,7 +230,7 @@ if (apiUsageButton) {
 if (minovativeMindWebsiteButton) {
 	minovativeMindWebsiteButton.addEventListener("click", () => {
 		vscode.postMessage({
-			type: "openUrl",
+			type: "openUrl", // Kept for consistency, though 'command' is preferred
 			command: "openUrl",
 			url: "https://minovativemind.dev",
 		});
@@ -436,28 +239,35 @@ if (minovativeMindWebsiteButton) {
 	console.warn("Minovative Mind Website button not found.");
 }
 
-// --- Handle messages from the extension ---
+// --- Handle messages from the VS Code extension ---
 window.addEventListener("message", (event) => {
-	const message = event.data as SettingsWebviewIncomingMessage; // Updated type as per instruction
+	const message = event.data as SettingsWebviewOutgoingMessage; // Changed type assertion here
 	console.log(`[SettingsWebview] Message from extension: ${message.command}`);
 	switch (message.command) {
-		case "initialize":
+		case "authStateUpdated": // Changed switch case from "authStateUpdate" to "authStateUpdated" here
 			console.log(
-				`[SettingsWebview] Message from extension: ${message.command}`
-			); // Added as per instruction
-			if (authLoadingDiv) {
-				authLoadingDiv.style.display = "block"; // Ensured as per instruction
-			}
-			initializeFirebase(message.firebaseConfig);
+				"[SettingsWebview] Received authStateUpdated payload:",
+				message.payload
+			);
+			updateUIFromAuthState(message.payload);
 			break;
-		// Add other message handlers if extension needs to push data to settings
+		case "authError": // Handle authentication errors reported by the extension
+			// Assuming SettingsWebviewIncomingMessage is updated to include this type.
+			console.error(`[SettingsWebview] Auth Error: ${message.payload.message}`);
+			showAuthError(message.payload.message);
+			break;
+		// The "initialize" command (previously used for Firebase config) is no longer needed here.
+		// Other commands from the extension can be added as new cases.
 	}
 });
 
-// --- Initial UI state ---
+// --- Initial UI state setup ---
+// Show a loading spinner and message while waiting for the initial auth state from the extension.
 if (authLoadingDiv) {
 	authLoadingDiv.style.display = "block";
+	authLoadingDiv.textContent = "Loading authentication state...";
 }
+// Hide other sections until the actual state is determined by the extension.
 if (userInfoDiv) {
 	userInfoDiv.style.display = "none";
 }
@@ -467,21 +277,31 @@ if (authFormsDiv) {
 if (subscriptionLoadingSpinner) {
 	subscriptionLoadingSpinner.style.display = "none";
 }
+if (manageSubscriptionButton) {
+	manageSubscriptionButton.style.display = "none"; // Hide initially
+}
 
-// Post message to extension indicating webview is ready to receive commands
+// Post a message to the extension indicating that the webview is fully loaded and ready.
+// This signal should prompt the extension to send the initial `authStateUpdate` payload.
 const sendReadyMessage = () => {
+	console.log(
+		"[SettingsWebview] DOMContentLoaded. Requesting auth state from extension."
+	);
 	vscode.postMessage({ command: "settingsWebviewReady" });
 	console.log("[SettingsWebview] Posted 'settingsWebviewReady' message.");
 };
 
-// Add DOMContentLoaded listener and fallback check as per instruction
+// Add DOMContentLoaded listener to ensure the DOM is fully loaded before sending messages.
+// This prevents issues if the script executes before all elements are available.
 if (document.readyState === "loading") {
 	document.addEventListener("DOMContentLoaded", sendReadyMessage);
 } else {
-	// DOM is already ready or interactive, send message immediately
+	// If the DOM is already ready (e.g., script loaded as 'defer' or at the end of body),
+	// send the message immediately.
 	sendReadyMessage();
 }
 
-// The webview is ready and will listen for the "initialize" message
-// which contains the Firebase config.
-console.log("[SettingsWebview] Script loaded. Waiting for initialize message.");
+// Log a message indicating the script's readiness and its expectation for auth state.
+console.log(
+	"[SettingsWebview] Script loaded. Waiting for auth state update from extension."
+);

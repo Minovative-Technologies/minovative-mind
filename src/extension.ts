@@ -5,6 +5,7 @@ import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import neces
 import { isFeatureAllowed } from "./sidebar/utils/featureGating";
 import { SettingsProvider } from "./sidebar/SettingsProvider";
 import { cleanCodeOutput } from "./utils/codeUtils";
+import { initializeFirebase } from "./firebase/firebaseService";
 
 // Helper function type definition for AI action results (kept for potential future use)
 type ActionResult =
@@ -239,6 +240,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// --- Sidebar Setup ---
 	const sidebarProvider = new SidebarProvider(context.extensionUri, context);
+
+	// PROMPT MODIFICATION: Call initializeFirebase before sidebarProvider.initialize()
+	// to proactively load user data and link the callback.
+	await initializeFirebase(
+		sidebarProvider.updateUserAuthAndTierFromFirebase.bind(sidebarProvider)
+	);
 
 	// --- Initialize Provider (Await Key & Settings Loading) ---
 	await sidebarProvider.initialize(); // Ensure keys and settings are loaded before registering commands
