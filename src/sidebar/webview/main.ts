@@ -1499,6 +1499,9 @@ if (
 					}
 				}
 				updateEmptyChatPlaceholderVisibility(); // Call after restoreHistory is processed (to show/hide based on loaded history).
+
+				document.documentElement.scrollTop = 0;
+
 				break;
 			}
 			// START MODIFICATION: Modify 'reenableInput' handler
