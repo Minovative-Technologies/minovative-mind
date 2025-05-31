@@ -9,7 +9,7 @@ export enum PlanStepAction {
 	CreateDirectory = "create_directory",
 	CreateFile = "create_file",
 	ModifyFile = "modify_file",
-	RunCommand = "run_command", // <-- Add new action
+	RunCommand = "run_command",
 }
 
 /**

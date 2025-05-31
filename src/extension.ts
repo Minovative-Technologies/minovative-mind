@@ -64,7 +64,7 @@ async function executeExplainAction(
 	}
 
 	const userInstruction =
-		"Explain the following code selection concisely. Focus on its purpose, functionality, and key components. Provide the explanation without using Markdown formatting at ALL.";
+		"Explain the following code selection concisely and simply. Focus on its purpose, functionality, and key components. Provide the explanation without using Markdown formatting at ALL.";
 	const systemPrompt = `You are an expert AI programmer assisting within VS Code using the ${selectedModel} model. Analyze the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
 
 	const prompt = `

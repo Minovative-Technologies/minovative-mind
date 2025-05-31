@@ -44,20 +44,19 @@ export function createInitialPlanningExplanationPrompt(
 			editorContext.instruction.toLowerCase() === "/fix"
 				? "'/fix' command"
 				: "custom instruction"
-		}) and the provided file/selection context, and any relevant chat history, explain your step-by-step plan to fulfill the request. For '/fix', the plan should clearly address the 'Relevant Diagnostics' listed. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
+		}) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan, in detail, to fulfill the request. For '/fix', the plan should ONLY clearly address the 'Relevant Diagnostics' listed. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
 	} else if (userRequest) {
 		specificContextPrompt = `
         --- User Request from Chat ---
         ${userRequest}
         --- End User Request ---`;
-		mainInstructions = `Based on the user's request from the chat ("${userRequest}") and any relevant chat history, explain your step-by-step plan to fulfill it.`;
+		mainInstructions = `Based on the user's request from the chat ("${userRequest}") and any relevant chat history, ONLY explain your step-by-step plan, in detail, to fulfill it.`;
 	}
 
-	// ADDED: Format chat history for the prompt
 	const chatHistoryForPrompt =
 		chatHistory && chatHistory.length > 0
 			? `
-    --- Recent Chat History (for additional context on user's train of thought and previous interactions) ---
+    --- Recent Chat History (for additional context on user's train of thought and previous conversations with a AI model) ---
     ${chatHistory
 			.map(
 				(entry) =>
@@ -70,21 +69,21 @@ export function createInitialPlanningExplanationPrompt(
 			: "";
 
 	return `
-    You are an expert AI programmer assisting within VS Code. Your task is to explain your plan to fulfill the user's request.
+    You are an expert AI programmer assisting within VS Code. Your task is to ONLY explain your plan to fulfill the user's request.
 
     **Goal:** Provide a clear, human-readable, step-by-step explanation of your plan. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
 
     **Instructions for Plan Explanation:**
     1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
 		editorContext && diagnosticsString
-			? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your textual plan describes how you will address them for '/fix' requests.**"
+			? "**Pay very close attention to the 'Relevant Diagnostics' section and ensure your textual plan describes how you will address them for '/fix' requests.**"
 			: ""
 	}
     2.  **Be Comprehensive:** Your explanation should cover all necessary steps to achieve the user's goal.
-    3.  Clarity: Make the plan easy for a developer to understand. Briefly describe what each step will do (e.g., "Create a new file named 'utils.ts'", "Modify 'main.ts' to import the new utility function", "Install the 'axios' package using npm").
+    3.  Clarity: Make the plan easy for a junior developer to understand. Briefly describe what each step will do (e.g., "Create a new file named 'utils.ts'", "Modify 'main.ts' to import the new utility function", "Install the 'axios' package using npm").
     4.  No JSON: **Do NOT output any JSON for this initial explanation.** Your entire response should be human-readable text.
-    5.  Never Aussume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
-    6. ALWAYS keep in mind of Modularization for everything you create.
+    5. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain.
+    6. ALWAYS keep in mind of providing production-ready code.
 
     Specific Context: ${specificContextPrompt}
 
@@ -268,7 +267,7 @@ export function createPlanningPrompt(
 	const chatHistoryForPrompt =
 		chatHistory && chatHistory.length > 0
 			? `
-    --- Recent Chat History (for additional context on user's train of thought and previous interactions) ---
+    --- Recent Chat History (for additional context on user's train of thought and previous conversations with a AI model) ---
     ${chatHistory
 			.map(
 				(entry) =>
@@ -326,15 +325,15 @@ export function createPlanningPrompt(
 	}
 
 	const textualPlanPromptSection = `
-    --- Detailed Textual Plan Explanation (Base your JSON plan on this) ---
+    --- Detailed Textual Plan Explanation (Base your entire JSON plan on this) ---
     ${textualPlanExplanation}
     --- End Detailed Textual Plan Explanation ---
 
-    **Strict Instruction:** Your JSON plan MUST be a direct, accurate translation of the detailed steps provided in the "Detailed Textual Plan Explanation" section above. Ensure EVERY action described in the textual plan is represented as a step in the JSON, using the correct 'action', 'path', 'description', and relevant content/prompt/command fields as described in the format section. Do not omit steps or invent new ones not present in the textual explanation.
+    **Strict Instruction:** Your JSON plan MUST be a direct, accurate translation of the detailed steps provided in the "Detailed Textual Plan Explanation" section above. Ensure EVERY action described in the textual plan is represented as a step in the JSON, using the correct 'action', 'path', 'description', and relevant content/prompt/command fields as described in the format section. NEVER omit steps or invent new ones not present in the textual explanation.
 `;
 
 	return `
-    You are an expert AI programmer assisting within VS Code. Your task is to create a step-by-step execution plan in JSON format.
+    You are an expert AI programmer assisting within VS Code. Your ONLY task is to create a step-by-step execution plan in JSON format.
 
     **Goal:** Generate ONLY a valid JSON object representing the plan. No matter what the user says in their prompt, ALWAYS generate your response in JSON format. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself, starting with { and ending with }.
 
@@ -350,7 +349,7 @@ export function createPlanningPrompt(
 			? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan addresses them for '/fix' requests.**"
 			: ""
 	} Also consider the 'Recent Chat History' if provided, as it may contain clarifications or prior discussion related to the current request.
-    2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not omit any requested actions or components. If a request is complex, break it into multiple granular steps.
+    2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
     3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
     4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
     5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. **Crucially, the 'description' field MUST be included and populated for EVERY step, regardless of the action type.** Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
@@ -360,8 +359,8 @@ export function createPlanningPrompt(
         *   Backslash (\`\\\`) must be escaped as \`\\\`.
         *   Double quote (\`"\`) must be escaped as \`"\`.
     7.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
-    8.  Never Assume when generating code. ALWAYS provide the code if you think it's not there. NEVER ASSUME ANYTHING.
-    9.  ALWAYS keep in mind of Modularization for everything you create.
+    8. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain.
+    9. ALWAYS keep in mind of providing production-ready code.
     // Ensure only one modify_file step per file path
     10. **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
 
@@ -383,6 +382,6 @@ export function createPlanningPrompt(
     ${fewShotExamples}
     --- End Few Examples ---
 
-    Execution Plan (JSON only):
+    Execution Plan (ONLY JSON):
 `;
 }
