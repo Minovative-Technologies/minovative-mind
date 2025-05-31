@@ -1,9 +1,13 @@
-# Change Log
+## 📄 Change Log
 
-All notable changes to the "minovative-mind-vscode" extension will be documented in this file.
-
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
 ## [Unreleased]
 
 - Initial release
+
+## [0.1.0-beta] - 2025-5-31
+
+### Added
+
+- Beta release of Minovative Mind

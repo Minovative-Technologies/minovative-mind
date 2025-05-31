@@ -100,7 +100,7 @@ For a detailed guide on all features, advanced workflows (like AI-driven plannin
 
 ## 📄 Change Log
 
-Stay updated with the latest improvements and bug fixes: [Minovative Mind Website](https://www.minovativemind.dev/updates)
+Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
 ## 🔒 Privacy Policy
 
