@@ -6,8 +6,8 @@ Stay updated with the latest improvements and bug fixes: [Minovative Mind Update
 
 - Initial release
 
-## [0.1.0-beta] - 2025-5-31
+## [0.0.1-beta.2] - 2025-5-31
 
 ### Added
 
-- Beta release of Minovative Mind
+- Beta pre-release for developer showcasing and feedback
