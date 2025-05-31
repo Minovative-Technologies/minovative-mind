@@ -4,6 +4,11 @@
 	"description": "Integrates Google Gemini into VS Code with project context awareness.",
 	"version": "0.0.1",
 	"publisher": "MinovativeTechnologies",
+	"icon": "media/minovative-logo-192x192.png",
+	"banner": {
+		"color": "#3A456C",
+		"theme": "dark"
+	},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/Quarantiine/minovative-mind-vscode.git"

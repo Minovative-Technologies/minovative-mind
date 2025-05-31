@@ -173,6 +173,7 @@ h2 {
 /* --- Empty Chat Placeholder --- */
 #empty-chat-placeholder {
 	display: flex;
+	position: relative;
 	flex-direction: column; /* For vertical stacking of image and text */
 	justify-content: center; /* Center content vertically */
 	align-items: center; /* Center content horizontally */
@@ -1176,4 +1177,17 @@ code#failed-json-display {
 	40% {
 		opacity: 1;
 	} /* Dot is visible in the middle of the cycle */
+}
+
+/* --- Beta Text Styling --- */
+.beta-text {
+	position: absolute;
+	top: 5px;
+	font-size: small;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	white-space: nowrap;
+	font-family: monospace;
+	font-weight: 600;
+	color: (--vscode-textCodeBlock-background);
 }

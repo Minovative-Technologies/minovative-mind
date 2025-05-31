@@ -517,11 +517,7 @@ if (
 				!currentAiMessageContentElement &&
 				!chatContainer?.querySelector(".loading-message")
 			) {
-				appendMessage(
-					"Model",
-					"Plan Execution in Progress...",
-					"loading-message"
-				);
+				appendMessage("Model", "Generating...", "loading-message");
 			}
 		} else {
 			const loadingMsg = chatContainer?.querySelector(".loading-message");
