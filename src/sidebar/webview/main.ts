@@ -463,14 +463,15 @@ if (
 		if (deleteKeyButton) {
 			deleteKeyButton.disabled = !enableApiKeyControls || !isApiKeySet;
 		}
+		const enableAddKeyInputControls =
+			!loading && !planConfirmationVisible && !planParseErrorVisible;
 		if (addKeyInput) {
-			addKeyInput.disabled = !enableApiKeyControls;
+			addKeyInput.disabled = !enableAddKeyInputControls;
 		}
 		if (addKeyButton) {
-			addKeyButton.disabled = !enableApiKeyControls;
+			addKeyButton.disabled = !enableAddKeyInputControls;
 		}
 
-		// START USER REQUESTED MODIFICATION: Control load/save/clear buttons
 		// Determine if chat history buttons can be interacted with
 		// Enabled only if not loading AND neither blocking UI is visible
 		const canInteractWithChatHistoryButtons =
@@ -808,10 +809,10 @@ if (
 			}
 			if (addKeyInput) {
 				addKeyInput.disabled = true;
-			} // Disable the input itself
+			}
 			if (addKeyButton) {
 				addKeyButton.disabled = true;
-			} // Disable the add button
+			}
 			if (loadChatButton) {
 				loadChatButton.disabled = true;
 			}
@@ -860,7 +861,7 @@ if (
 		}
 		if (prevKeyButton) {
 			prevKeyButton.disabled = true;
-		} // Disable the button that was clicked
+		}
 		if (nextKeyButton) {
 			nextKeyButton.disabled = true;
 		}
@@ -914,7 +915,7 @@ if (
 		}
 		if (nextKeyButton) {
 			nextKeyButton.disabled = true;
-		} // Disable the button that was clicked
+		}
 		if (deleteKeyButton) {
 			deleteKeyButton.disabled = true;
 		}
@@ -968,7 +969,7 @@ if (
 		}
 		if (deleteKeyButton) {
 			deleteKeyButton.disabled = true;
-		} // Disable the button that was clicked
+		}
 		if (addKeyInput) {
 			addKeyInput.disabled = true;
 		}
@@ -1385,11 +1386,6 @@ if (
 						updateApiKeyStatus("Please add an API key.");
 					}
 					// Button states are now managed by setLoadingState
-					// prevKeyButton!.disabled = totalKeys <= 1; // Removed
-					// nextKeyButton!.disabled = totalKeys <= 1; // Removed
-					// deleteKeyButton!.disabled = updateData.activeIndex === -1; // Removed
-
-					// Re-evaluate input states based on API key status and current UI state
 					setLoadingState(isLoading); // This call now correctly updates inputs/buttons based on the new isApiKeySet value and existing state.
 				} else {
 					console.error("Invalid 'updateKeyList' message received:", message);
@@ -1620,16 +1616,8 @@ if (
 		if (deleteKeyButton) {
 			deleteKeyButton.disabled = true;
 		}
-		if (addKeyInput) {
-			addKeyInput.disabled = true;
-		} // Also disable add key input
-		if (addKeyButton) {
-			addKeyButton.disabled = true;
-		} // Also disable add key button
 
-		// END USER REQUESTED MODIFICATION
-
-		// START MODIFICATION: Set initial display state for the cancel button
+		// Set initial display state for the cancel button
 		if (cancelGenerationButton) {
 			cancelGenerationButton.style.display = "none";
 		}
@@ -1637,7 +1625,6 @@ if (
 		if (planParseErrorContainer) {
 			planParseErrorContainer.style.display = "none";
 		}
-		// END MODIFICATION
 
 		// Set icons for buttons
 		setIconForButton(sendButton, faPaperPlane);
