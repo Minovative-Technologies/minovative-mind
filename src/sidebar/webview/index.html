@@ -51,19 +51,20 @@
       <i class="fas fa-stop"></i>
     </button>
   </div>
+
   <!-- Added plan-parse-error-container as per instructions -->
   <div id="plan-parse-error-container" style="display: none;">
     <h3>Plan Generation Failed</h3>
     <p id="plan-parse-error-display" class="error-message-text"></p>
     <h4>Failed JSON (previous attempt):</h4>
     <pre><code id="failed-json-display"></code></pre>
-    <!-- MODIFICATION START: Replaced single retry button with a div containing retry and cancel buttons -->
     <div id="plan-parse-error-buttons-wrapper">
       <button id="retry-generation-button" title="Retry Plan Generation"></button>
       <button id="cancel-parse-error-button" title="Cancel Retry"></button>
     </div>
-    <!-- MODIFICATION END -->
   </div>
+  <!-- END Added plan-parse-error-container as per instructions -->
+
   <div class="section model-selection-section">
     <h2>AI Model Selection</h2>
     <div class="model-select-container">

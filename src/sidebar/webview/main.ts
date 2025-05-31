@@ -98,7 +98,7 @@ const statusArea = document.getElementById(
 const emptyChatPlaceholder = document.getElementById(
 	"empty-chat-placeholder"
 ) as HTMLDivElement | null; // Declare new DOM element variable for the #empty-chat-placeholder div.
-// START MODIFICATION: Get reference to the new #cancel-generation-button
+// Get reference to the new #cancel-generation-button
 const cancelGenerationButton = document.getElementById(
 	"cancel-generation-button"
 ) as HTMLButtonElement | null;
@@ -108,7 +108,7 @@ let planConfirmationContainer: HTMLDivElement | null = null;
 let confirmPlanButton: HTMLButtonElement | null = null;
 let cancelPlanButton: HTMLButtonElement | null = null;
 
-// START MODIFICATION: Declare new DOM element variables for the parse error UI
+// Declare new DOM element variables for the parse error UI
 const planParseErrorContainer = document.getElementById(
 	"plan-parse-error-container"
 ) as HTMLDivElement | null;
@@ -124,7 +124,7 @@ const retryGenerationButton = document.getElementById(
 const cancelParseErrorButton = document.getElementById(
 	"cancel-parse-error-button"
 ) as HTMLButtonElement | null; // Added cancel button for parse error
-// END MODIFICATION: Declare new DOM element variables for the parse error UI
+// END Declare new DOM element variables for the parse error UI
 
 // State
 let isApiKeySet = false;
@@ -140,7 +140,7 @@ let pendingPlanData: {
 
 console.log("Webview script loaded.");
 
-// START MODIFICATION: Add new DOM elements to the critical elements null check
+// Add new DOM elements to the critical elements null check
 if (
 	!sendButton ||
 	!chatInput ||
@@ -165,7 +165,7 @@ if (
 	!cancelParseErrorButton || // Added cancelParseErrorButton to critical elements check
 	!emptyChatPlaceholder // Added emptyChatPlaceholder to critical elements check
 ) {
-	// END MODIFICATION: Add new DOM elements to the critical elements null check
+	// END Add new DOM elements to the critical elements null check
 	console.error("Required DOM elements not found!");
 	const body = document.querySelector("body");
 	if (body) {
@@ -209,7 +209,7 @@ if (
 			senderElement.textContent = `${sender}:\u00A0`; // Add non-breaking space
 			messageElement.appendChild(senderElement);
 
-			// START MODIFICATION: Conditionally add error icon
+			// Conditionally add error icon
 			if (className.includes("error-message")) {
 				const errorIconContainer = document.createElement("span");
 				errorIconContainer.classList.add("error-icon");
@@ -238,7 +238,7 @@ if (
 
 			let copyButton: HTMLButtonElement | null = null;
 
-			// START MODIFICATION: Add copy button for AI messages and handle streaming state
+			// Add copy button for AI messages and handle streaming state
 			// Ensure copy button logic is applied *after* error icon if both are present
 			if (sender === "Model" && className.includes("ai-message")) {
 				copyButton = document.createElement("button");
@@ -290,7 +290,7 @@ if (
 				textElement.innerHTML = renderedHtml;
 				// No copy button for non-AI messages
 			}
-			// END MODIFICATION: Add copy button for AI messages
+			// END Add copy button for AI messages
 
 			chatContainer.appendChild(messageElement);
 			chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to bottom
@@ -499,7 +499,7 @@ if (
 		}
 		// END USER REQUESTED MODIFICATION
 
-		// START MODIFICATION: Manage cancel generation button visibility based on loading AND blocking UI state
+		// Manage cancel generation button visibility based on loading AND blocking UI state
 		if (cancelGenerationButton) {
 			// The button should be visible ONLY when loading is true AND neither
 			// plan confirmation container NOR plan parse error container is visible.
@@ -510,26 +510,20 @@ if (
 				cancelGenerationButton.style.display = "none"; // Hide the cancel button
 			}
 		}
-		// END MODIFICATION: Manage cancel generation button visibility
+		// END Manage cancel generation button visibility
 
 		if (loading) {
-			// Point 4.a (from review instructions): When loading is true, append "Creating..." message if appropriate.
-			// This is for the initial user send, before the AI stream begins.
-			// Point 4.c (from review instructions): The aiResponseStart handler will reliably remove this "Creating..."
-			// message when the actual AI stream begins.
-			// Only add a general loading message if we are not currently receiving a stream AND no other loading message is present.
 			if (
 				!currentAiMessageContentElement &&
 				!chatContainer?.querySelector(".loading-message")
 			) {
 				appendMessage(
 					"Model",
-					"Creating...Don't change the file view while plan execution is in progress...Sit tight while Minovative Mind work for you",
+					"Plan Execution in Progress...",
 					"loading-message"
 				);
 			}
 		} else {
-			// Point 4.b (from review instructions): If loading is set to false, ensure any "Creating..." message is removed.
 			const loadingMsg = chatContainer?.querySelector(".loading-message");
 			if (loadingMsg) {
 				loadingMsg.remove();
@@ -552,7 +546,7 @@ if (
 			// No need to explicitly re-enable buttons here; setLoadingState(true) will handle disabling them correctly.
 		}
 
-		// START MODIFICATION: Hide planParseErrorContainer if a new message is sent (loading becomes true)
+		// Hide planParseErrorContainer if a new message is sent (loading becomes true)
 		if (
 			loading &&
 			planParseErrorContainer &&
@@ -1006,7 +1000,7 @@ if (
 		updateStatus("Requesting chat load...");
 	});
 
-	// START MODIFICATION: Add event listener for retryGenerationButton
+	// Add event listener for retryGenerationButton
 	if (retryGenerationButton) {
 		retryGenerationButton.addEventListener("click", () => {
 			console.log("Retry Generation button clicked."); // ADDED console.log here
@@ -1027,7 +1021,7 @@ if (
 			}
 			updateStatus("Retrying structured plan generation...");
 
-			// --- START USER REQUESTED MODIFICATION ---
+			// --- USER REQUESTED MODIFICATION ---
 			// These lines are redundant as setLoadingState(true) handles disabling buttons. Removed.
 			// --- END USER REQUESTED MODIFICATION ---
 		});
@@ -1077,7 +1071,7 @@ if (
 
 						// Disable chat inputs and other controls while plan confirmation is visible.
 						setLoadingState(false); // This will trigger setLoadingState(false) which then sees planConfirmationVisible and disables accordingly.
-						// START MODIFICATION: Hide cancel button when plan confirmation shows
+						// Hide cancel button when plan confirmation shows
 						if (cancelGenerationButton) {
 							cancelGenerationButton.style.display = "none";
 						}
@@ -1197,7 +1191,7 @@ if (
 						// Disable chat inputs while plan confirmation is visible.
 						// Call setLoadingState(false) which will trigger setLoadingState(false) which then sees planConfirmationVisible and disables accordingly.
 						setLoadingState(false);
-						// START MODIFICATION: Hide cancel button when plan confirmation shows
+						// Hide cancel button when plan confirmation shows
 						if (cancelGenerationButton) {
 							cancelGenerationButton.style.display = "none";
 						}
@@ -1225,7 +1219,7 @@ if (
 			}
 			// --- End new handlers for streamed responses ---
 
-			// START MODIFICATION: Add new case for 'structuredPlanParseFailed'
+			// Add new case for 'structuredPlanParseFailed'
 			case "structuredPlanParseFailed": {
 				const { error, failedJson } = message.value;
 				console.log("Received structuredPlanParseFailed.");
@@ -1255,7 +1249,7 @@ if (
 						true
 					);
 
-					// --- START USER REQUESTED MODIFICATION ---
+					// --- USER REQUESTED MODIFICATION ---
 					// These lines are redundant as setLoadingState(false) handles enabling buttons. Removed.
 					// --- END USER REQUESTED MODIFICATION ---
 				} else {
@@ -1274,7 +1268,7 @@ if (
 			}
 			// END MODIFICATION
 
-			// START MODIFICATION: Add new case for 'restorePendingPlanConfirmation'
+			// Add new case for 'restorePendingPlanConfirmation'
 			case "restorePendingPlanConfirmation":
 				if (message.value) {
 					console.log("Received restorePendingPlanConfirmation.");
@@ -1293,7 +1287,7 @@ if (
 							"Pending plan confirmation restored. Review and confirm to proceed."
 						);
 
-						// START MODIFICATION: Hide cancel button when plan confirmation shows on restore
+						// Hide cancel button when plan confirmation shows on restore
 						if (cancelGenerationButton) {
 							cancelGenerationButton.style.display = "none";
 						}
@@ -1322,9 +1316,9 @@ if (
 					setLoadingState(false);
 				}
 				break;
-			// END MODIFICATION: Add new case for 'restorePendingPlanConfirmation'
+			// END Add new case for 'restorePendingPlanConfirmation'
 
-			// START MODIFICATION: Add new case for 'appendRealtimeModelMessage'
+			// Add new case for 'appendRealtimeModelMessage'
 			case "appendRealtimeModelMessage":
 				// This case handles messages that should be directly appended to the chat as if they were from the Model.
 				// It's intended for real-time updates or messages from the model that are not part of a typical streaming response (e.g., step OK/FAIL, command output).
@@ -1504,7 +1498,7 @@ if (
 
 				break;
 			}
-			// START MODIFICATION: Modify 'reenableInput' handler
+			// Modify 'reenableInput' handler
 			case "reenableInput": {
 				console.log("Received reenableInput request from provider.");
 				// This message signals an operation was cancelled or an error occurred requiring input re-enabling.
@@ -1566,7 +1560,7 @@ if (
 				// and the status message reflects that state or the user interacts with the confirmation UI.
 				break;
 			}
-			// END MODIFICATION: Modify 'reenableInput' handler
+			// END Modify 'reenableInput' handler
 			default:
 				console.warn(
 					"[Webview] Received unknown message type from extension:",
@@ -1580,7 +1574,7 @@ if (
 		console.log("Webview sent ready message.");
 		chatInput?.focus();
 
-		// START USER REQUESTED MODIFICATION: Initial button states
+		// USER REQUESTED Initial button states
 		// Disabled until API key is confirmed and not loading and no blocking UI
 		// These initial states are now handled by the initial call to setLoadingState(false)
 		// triggered by the 'webviewReady' message handler after receiving updateKeyList/updateModelList.
@@ -1640,11 +1634,11 @@ if (
 		setIconForButton(addKeyButton, faPlus);
 		setIconForButton(retryGenerationButton, faRedo); // faRedo imported for this
 		setIconForButton(cancelParseErrorButton, faTimes); // Set icon for the cancel parse error button (faTimes imported)
-		// START MODIFICATION: Set icon for the cancel generation button
+		// Set icon for the cancel generation button
 		setIconForButton(cancelGenerationButton, faStop); // faStop imported for this
 		// END MODIFICATION
 
-		// START MODIFICATION: Add click event listener for cancelParseErrorButton as requested
+		// Add click event listener for cancelParseErrorButton as requested
 		// This listener is added within initializeWebview as part of UI setup.
 		if (cancelParseErrorButton) {
 			cancelParseErrorButton.addEventListener("click", () => {
@@ -1669,9 +1663,9 @@ if (
 				setLoadingState(false); // This call now correctly manages all button states based on the hidden UI.
 			});
 		}
-		// END MODIFICATION: Add click event listener for cancelParseErrorButton
+		// END Add click event listener for cancelParseErrorButton
 
-		// START MODIFICATION: Add click event listener for cancelGenerationButton
+		// Add click event listener for cancelGenerationButton
 		if (cancelGenerationButton) {
 			cancelGenerationButton.addEventListener("click", () => {
 				console.log("Cancel Generation button clicked."); // ADDED console.log here
@@ -1691,9 +1685,9 @@ if (
 				// and the "Operation cancelled by user." chat message and status update.
 			});
 		}
-		// END MODIFICATION: Add click event listener for cancelGenerationButton
+		// END Add click event listener for cancelGenerationButton
 
-		// START MODIFICATION: Add event delegation listener for copy buttons on chatContainer
+		// Add event delegation listener for copy buttons on chatContainer
 		if (chatContainer) {
 			chatContainer.addEventListener("click", async (event) => {
 				const target = event.target as HTMLElement;
@@ -1787,7 +1781,7 @@ if (
 				}
 			});
 		}
-		// END MODIFICATION: Add event delegation listener for copy buttons
+		// END Add event delegation listener for copy buttons
 
 		// Create plan confirmation UI elements (initially hidden)
 		createPlanConfirmationUI();
