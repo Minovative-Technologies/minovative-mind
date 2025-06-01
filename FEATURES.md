@@ -54,7 +54,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - Easy Configuration: Users can easily add their `Google Gemini API` keys directly within the `Minovative Mind sidebar`.
 - Secure Storage: API keys are securely stored using `VS Code’s` built-in secret storage and are not exposed or sent outside the local environment, except directly to `Google’s Gemini API` endpoints.
 - Multi-Key Support: Allows adding and managing multiple API keys.
-- Proactive API Key Switching: The extension automatically cycles through configured API keys if one hits a quota limit or encounters other common API errors, ensuring uninterrupted service. Users can also manually switch to the next or previous key, or delete the active key.
+- Proactive API Key Switching: The extension automatically cycles through configured API keys if one hits a quota limit or encounters other common API errors, ensuring uninterrupted service. Users can also manually switch to the next or previous key, or delete the active key. Also API keys will rotate on every AI API call to distribute cost and usage across all API keys for extreme efficiency. Users can also manually switch to the next or previous key, or delete the active key.
 
 ### Flexible AI Model Selection
 
