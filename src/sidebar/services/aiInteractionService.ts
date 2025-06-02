@@ -1,5 +1,7 @@
 // src/sidebar/services/aiInteractionService.ts
 import { HistoryEntry, PlanGenerationContext } from "../common/sidebarTypes"; // Assuming PlanGenerationContext is correctly defined
+import * as vscode from "vscode"; // Required for vscode.CancellationToken
+import { generateContentStream } from "../../ai/gemini";
 
 export function createInitialPlanningExplanationPrompt(
 	projectContext: string,
@@ -384,4 +386,49 @@ export function createPlanningPrompt(
 
     Execution Plan (ONLY JSON):
 `;
+}
+
+export async function _performModification(
+	originalFileContent: string,
+	modificationPrompt: string,
+	languageId: string,
+	filePath: string,
+	modelName: string,
+	apiKey: string,
+	token: vscode.CancellationToken
+): Promise<string> {
+	const prompt = `You are an expert AI software developer. Your task is to modify the provided file content based on the given instructions.
+
+    You MUST ONLY return the complete modified file content. Do NOT include any conversational text, explanations, or markdown code blocks (e.g., \`\`\`typescript\\n...\\n\`\`\`). Your response must start directly with the modified file content.
+
+    File Path: ${filePath}
+    Language: ${languageId}
+
+    --- Original File Content ---
+    \`\`\`${languageId}
+    ${originalFileContent}
+    \`\`\`
+    --- End Original File Content ---
+
+    --- Modification Instruction ---
+    ${modificationPrompt}
+    --- End Modification Instruction ---
+
+    Your complete, raw modified file content:`;
+
+	let modifiedContent = "";
+	const contentStream = generateContentStream(
+		apiKey,
+		modelName,
+		prompt,
+		undefined,
+		undefined,
+		token
+	);
+
+	for await (const chunk of contentStream) {
+		modifiedContent += chunk;
+	}
+
+	return modifiedContent;
 }
