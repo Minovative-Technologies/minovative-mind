@@ -74,6 +74,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	// State managed by SidebarProvider
 	private _pendingPlanGenerationContext: sidebarTypes.PlanGenerationContext | null =
 		null;
+	private _lastPlanGenerationContext: sidebarTypes.PlanGenerationContext | null =
+		null;
 	private _currentExecutionOutcome: sidebarTypes.ExecutionOutcome | undefined =
 		undefined;
 	// Unified cancellation token for active AI operations (chat, plan generation, commit)
@@ -614,6 +616,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				chatHistory: [...this.chatHistoryManager.getChatHistory()], // Reflect newly added entry
 				textualPlanExplanation: textualPlanResponse,
 			};
+			this._lastPlanGenerationContext = {
+				...this._pendingPlanGenerationContext,
+			};
 		} catch (error: unknown) {
 			// Changed from any
 			const err = error as Error;
@@ -927,6 +932,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					chatHistory: [...this.chatHistoryManager.getChatHistory()], // Reflect newly added entry
 					textualPlanExplanation: textualPlanResponse,
 				};
+				this._lastPlanGenerationContext = {
+					...this._pendingPlanGenerationContext,
+				};
 			}
 		} catch (genError: unknown) {
 			// Changed from any
@@ -999,11 +1007,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	private async _generateJsonAndExecutePlan(
-		// RENAMED METHOD
+	private async generateStructuredPlanAndExecute(
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {
-		console.log("[SidebarProvider] Entering _generateJsonAndExecutePlan");
+		console.log("[SidebarProvider] Entering generateStructuredPlanAndExecute");
 		this.postMessageToWebview({
 			type: "statusUpdate",
 			value: `Minovative Mind (${planContext.modelName}) is generating the detailed execution plan (JSON)...`,
@@ -1116,7 +1123,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			const err = error as Error;
 			const isCancellation = err.message === ERROR_OPERATION_CANCELLED;
 			console.error(
-				"Error in _generateJsonAndExecutePlan:", // UPDATED
+				"Error in generateStructuredPlanAndExecute:", // UPDATED
 				err.message,
 				err.stack
 			);
@@ -1131,7 +1138,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				// For now, if structuredPlanJsonString is empty, it means generation failed early.
 				// The _pendingPlanGenerationContext should remain for retry.
 				console.log(
-					"[_generateJsonAndExecutePlan] Generation failed before producing JSON. Pending context kept for retry." // UPDATED
+					"[generateStructuredPlanAndExecute] Generation failed before producing JSON. Pending context kept for retry." // UPDATED
 				);
 			}
 
@@ -2604,6 +2611,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			if (data.type === "cancelPlanExecution") {
 				console.log("[Provider] Cancelling pending plan confirmation...");
 				this._pendingPlanGenerationContext = null; // Clear the pending context
+				this._lastPlanGenerationContext = null; // Clear context on explicit cancellation
 				if (this._pendingReviewProgressResolve) {
 					this._pendingReviewProgressResolve(); // Resolve the pending review progress notification
 					this._pendingReviewProgressResolve = undefined; // Clear the resolve function
@@ -2722,15 +2730,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						const contextForExecution = {
 							...this._pendingPlanGenerationContext,
 						};
-						// Instruction 4: Clear pending context *before* the call
 						this._pendingPlanGenerationContext = null;
-						// _pendingPlanGenerationContext is cleared *after* successful JSON parsing in _generateJsonAndExecutePlan (originally _generateAndExecuteStructuredPlan)
-						// if (!this._pendingPlanGenerationContext) is checked before the call.
 						if (this._pendingReviewProgressResolve) {
-							this._pendingReviewProgressResolve(); // Resolve the pending review progress notification
-							this._pendingReviewProgressResolve = undefined; // Clear the resolve function
+							this._pendingReviewProgressResolve();
+							this._pendingReviewProgressResolve = undefined;
 						}
-						await this._generateJsonAndExecutePlan(contextForExecution); // UPDATED method name
+						await this.generateStructuredPlanAndExecute(contextForExecution);
 					} else {
 						this.postMessageToWebview({
 							type: "statusUpdate",
@@ -2742,30 +2747,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					break;
 				}
 				case "retryStructuredPlanGeneration": {
-					// Only retry if there is a pending plan context (from the failed parse attempt)
-					if (this._pendingPlanGenerationContext) {
+					if (!this._lastPlanGenerationContext) {
+						console.error("No last plan generation context found to retry.");
 						this.postMessageToWebview({
 							type: "statusUpdate",
-							value: "Retrying structured plan generation...",
-						});
-						this.chatHistoryManager.addHistoryEntry(
-							"model",
-							"User requested retry of structured plan generation."
-						);
-						const contextForRetry = { ...this._pendingPlanGenerationContext };
-						// The _generateJsonAndExecutePlan function will handle // UPDATED method name
-						// the JSON generation attempt, reporting success/failure, and
-						// updating _pendingPlanGenerationContext accordingly.
-						await this._generateJsonAndExecutePlan(contextForRetry); // UPDATED method name
-					} else {
-						// Should not happen if UI state is correct, but handle defensively
-						this.postMessageToWebview({
-							type: "statusUpdate",
-							value: "Error: No pending plan context for retry.",
 							isError: true,
+							value:
+								"Error: No previous plan to retry. Please start a new plan.",
 						});
-						this.postMessageToWebview({ type: "reenableInput" }); // Re-enable input if state is unexpected
+						this.postMessageToWebview({ type: "reenableInput" });
+						return;
 					}
+					const contextForRetry = { ...this._lastPlanGenerationContext };
+					this.chatHistoryManager.addHistoryEntry(
+						"model",
+						"User requested retry of structured plan generation."
+					);
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Retrying structured plan generation...",
+					});
+					await this.generateStructuredPlanAndExecute(contextForRetry);
 					break;
 				}
 				// case "cancelPlanExecution" handled earlier in dedicated block
