@@ -2645,6 +2645,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"loadChatRequest", // Allowed, as it's local state and uses dialog
 				"selectModel", // Allowed, updates settings but doesn't start AI task immediately
 				"requestAuthState", // Allowed, just requests current auth state
+				"deleteSpecificMessage", // Allowed, local state modification
 			];
 
 			if (
@@ -2844,6 +2845,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				case "loadChatRequest":
 					await this.chatHistoryManager.loadChat(); // Delegate
 					// restoreChatHistoryToWebview is called within loadChat
+					break;
+				case "deleteSpecificMessage":
+					const messageIndex = data.messageIndex;
+					this.chatHistoryManager.deleteHistoryEntry(messageIndex);
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Message deleted successfully.",
+					});
+					// The deletion logic in ChatHistoryManager should trigger a webview update (restoreChatHistoryToWebview)
+					// which re-renders the chat, so isLoading states should be handled by that re-render.
 					break;
 				case "selectModel":
 					if (typeof data.value === "string") {

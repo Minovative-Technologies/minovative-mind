@@ -56,6 +56,24 @@ export class ChatHistoryManager {
 		this.postMessageToWebview({ type: "reenableInput" });
 	}
 
+	public deleteHistoryEntry(index: number): void {
+		if (
+			typeof index !== "number" ||
+			!Number.isInteger(index) ||
+			index < 0 ||
+			index >= this._chatHistory.length
+		) {
+			console.warn(
+				`Invalid index provided for deleteHistoryEntry: ${index}. History length: ${this._chatHistory.length}`
+			);
+			return;
+		}
+
+		console.log(`Removing message at index ${index} from history.`);
+		this._chatHistory.splice(index, 1);
+		this.restoreChatHistoryToWebview(); // Update webview to reflect the change
+	}
+
 	public async saveChat(): Promise<void> {
 		const options: vscode.SaveDialogOptions = {
 			saveLabel: "Save Chat History",

@@ -237,6 +237,7 @@ if (
 			messageElement.appendChild(textElement); // Always append text element
 
 			let copyButton: HTMLButtonElement | null = null;
+			let deleteButton: HTMLButtonElement | null = null; // Declare deleteButton
 
 			// Add copy button for AI messages and handle streaming state
 			// Ensure copy button logic is applied *after* error icon if both are present
@@ -245,11 +246,25 @@ if (
 				className.includes("user-message") ||
 				className.includes("ai-message")
 			) {
+				// Create copy button
 				copyButton = document.createElement("button");
 				copyButton.classList.add("copy-button");
 				copyButton.title = "Copy Message";
-				messageElement.appendChild(copyButton); // Append button after the text element
 				setIconForButton(copyButton, faCopy); // Set the initial copy icon
+
+				// Create delete button
+				deleteButton = document.createElement("button");
+				deleteButton.classList.add("delete-button");
+				deleteButton.title = "Delete Message";
+				setIconForButton(deleteButton, faTrashCan);
+
+				// Create actions container
+				const messageActions = document.createElement("div");
+				messageActions.classList.add("message-actions");
+				messageActions.appendChild(copyButton);
+				messageActions.appendChild(deleteButton);
+
+				messageElement.appendChild(messageActions); // Append actions container to messageElement
 
 				// Keep logic for disabling button during AI streaming specific to 'ai-message'
 				if (
@@ -267,9 +282,12 @@ if (
 					textElement.innerHTML =
 						'<span class="loading-text">Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
 
-					// Disable copy button while content is loading/streaming
+					// Disable copy and delete buttons while content is loading/streaming
 					if (copyButton) {
 						copyButton.disabled = true;
+					}
+					if (deleteButton) {
+						deleteButton.disabled = true;
 					}
 				} else {
 					// This is a complete non-streamed AI message OR a complete user message
@@ -278,13 +296,16 @@ if (
 
 					const renderedHtml = md.render(text);
 					textElement.innerHTML = renderedHtml;
-					// For complete messages (user or non-streaming AI), button is enabled immediately
+					// For complete messages (user or non-streaming AI), buttons are enabled immediately
 					if (copyButton) {
 						copyButton.disabled = false;
 					}
+					if (deleteButton) {
+						deleteButton.disabled = false;
+					}
 				}
 			} else {
-				// For system messages, etc. (no copy button)
+				// For system messages, etc. (no copy/delete buttons)
 				const renderedHtml = md.render(text);
 				textElement.innerHTML = renderedHtml;
 			}
@@ -1128,7 +1149,7 @@ if (
 					const renderedHtml = md.render(currentAccumulatedText);
 					currentAiMessageContentElement.innerHTML = renderedHtml;
 
-					// Find the copy button for this message and enable it
+					// Find the copy and delete buttons for this message and enable them
 					const messageElement = currentAiMessageContentElement.parentElement;
 					if (messageElement) {
 						const copyButton = messageElement.querySelector(
@@ -1136,7 +1157,12 @@ if (
 						) as HTMLButtonElement | null;
 						if (copyButton) {
 							copyButton.disabled = false; // Enable the copy button
-							// Removed manual style opacity/pointer-events setting. Handled by CSS hover.
+						}
+						const deleteButton = messageElement.querySelector(
+							".delete-button"
+						) as HTMLButtonElement | null;
+						if (deleteButton) {
+							deleteButton.disabled = false; // Enable the delete button
 						}
 					}
 				} else {
@@ -1522,7 +1548,12 @@ if (
 							) as HTMLButtonElement | null;
 							if (copyButton) {
 								copyButton.disabled = false;
-								// Removed manual style opacity/pointer-events setting. Handled by CSS hover.
+							}
+							const deleteButton = messageElement.querySelector(
+								".delete-button"
+							) as HTMLButtonElement | null;
+							if (deleteButton) {
+								deleteButton.disabled = false;
 							}
 						}
 					}
@@ -1688,6 +1719,9 @@ if (
 				const copyButton = target.closest(
 					".copy-button"
 				) as HTMLButtonElement | null;
+				const deleteButton = target.closest(
+					".delete-button"
+				) as HTMLButtonElement | null;
 
 				// Check if a copy button was clicked and it's enabled
 				if (copyButton && !copyButton.disabled) {
@@ -1770,6 +1804,30 @@ if (
 					} else {
 						console.warn(
 							"Copy button clicked, but parent message element not found."
+						);
+					}
+				} else if (deleteButton && !deleteButton.disabled) {
+					// New logic for delete button
+					const messageElementToDelete = deleteButton.closest(".message");
+					if (messageElementToDelete) {
+						// Get all .message elements within chatContainer
+						const allMessages = Array.from(
+							chatContainer.querySelectorAll(".message")
+						);
+						const messageIndex = allMessages.indexOf(messageElementToDelete);
+
+						if (messageIndex !== -1) {
+							vscode.postMessage({
+								type: "deleteSpecificMessage",
+								messageIndex: messageIndex,
+							});
+							updateStatus("Requesting message deletion...");
+						} else {
+							console.warn("Could not find index of message to delete.");
+						}
+					} else {
+						console.warn(
+							"Delete button clicked, but parent message element not found."
 						);
 					}
 				}
