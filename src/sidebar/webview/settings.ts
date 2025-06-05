@@ -209,7 +209,7 @@ if (manageSubscriptionButton) {
 		vscode.postMessage({
 			type: "openUrl", // Changed from command: "manageSubscriptionRequest"
 			command: "openUrl", // Added command: "openUrl"
-			url: `https://minovative-mind-git-minovative-mind-vsc-minovative-tech.vercel.app/`, // Dynamic URL
+			url: `https://minovativemind.dev/`, // Dynamic URL
 		});
 	});
 }

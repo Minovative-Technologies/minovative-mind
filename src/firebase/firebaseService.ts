@@ -253,7 +253,6 @@ export const signUp = async (
 			doc(db, "users", userCredential.user.uid),
 			{
 				email: userCredential.user.email,
-				createdAt: Timestamp.now(),
 				subscriptionStatus: "free",
 				subscriptionPeriodEnd: null,
 			},

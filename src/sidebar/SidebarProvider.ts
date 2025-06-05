@@ -259,7 +259,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		try {
 			await signUp(email, password);
 			vscode.window.showInformationMessage(
-				"Sign-up successful! Please check your email for verification."
+				"Sign-up successful! Go to the website and purchase the subscription to use premium features."
 			);
 		} catch (error: any) {
 			vscode.window.showErrorMessage(`Sign-up failed: ${error.message}`);
