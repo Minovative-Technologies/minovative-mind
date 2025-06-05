@@ -288,7 +288,8 @@ h2 {
 }
 
 /* Hover state for the copy button when hovering over the AI message */
-.ai-message:hover .copy-button {
+.ai-message:hover .copy-button,
+.user-message:hover .copy-button {
 	opacity: 1; /* Fully opaque on hover */
 	pointer-events: auto; /* Allow clicks on hover */
 }

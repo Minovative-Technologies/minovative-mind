@@ -8,12 +8,12 @@ import {
 	faChevronLeft,
 	faChevronRight,
 	faPlus,
-	faCheck, // Already imported for confirmation button, also used for copy feedback
-	faTimes, // Already imported for cancel buttons
-	faRedo, // Already imported for retry button
-	faStop, // Already imported for cancel generation button
-	faCopy, // Added for copy message button
-	faExclamationTriangle, // Added for error messages
+	faCheck,
+	faTimes,
+	faRedo,
+	faStop,
+	faCopy,
+	faExclamationTriangle,
 } from "@fortawesome/free-solid-svg-icons";
 import MarkdownIt from "markdown-it";
 
@@ -27,10 +27,10 @@ library.add(
 	faPlus,
 	faCheck,
 	faTimes,
-	faRedo, // Added new icon to library
-	faStop, // Added new icon to library
-	faCopy, // Added copy icon to library
-	faExclamationTriangle // Added error icon to library
+	faRedo,
+	faStop,
+	faCopy,
+	faExclamationTriangle
 );
 // --- End Font Awesome Imports ---
 
@@ -240,23 +240,25 @@ if (
 
 			// Add copy button for AI messages and handle streaming state
 			// Ensure copy button logic is applied *after* error icon if both are present
-			if (sender === "Model" && className.includes("ai-message")) {
+			// Refactor: Create copy button if message is 'user-message' or 'ai-message'
+			if (
+				className.includes("user-message") ||
+				className.includes("ai-message")
+			) {
 				copyButton = document.createElement("button");
 				copyButton.classList.add("copy-button");
 				copyButton.title = "Copy Message";
 				messageElement.appendChild(copyButton); // Append button after the text element
 				setIconForButton(copyButton, faCopy); // Set the initial copy icon
 
-				// Check if this is the start of a new stream by checking if text is empty.
-				// aiResponseStart sends { type: "aiResponseStart", value: { modelName: modelName } }
-				// followed by appendMessage("Model", "", "ai-message") to signal the beginning.
-				// If the message also has 'error-message', it's an error *before* streaming starts.
+				// Keep logic for disabling button during AI streaming specific to 'ai-message'
 				if (
+					sender === "Model" && // This condition ensures it only applies to Model messages
 					text === "" &&
 					className.includes("ai-message") &&
 					!className.includes("error-message")
 				) {
-					// This is the start of a stream (and not a start error)
+					// This is the start of an AI stream (and not a start error)
 					console.log("Appending start of AI stream message.");
 					currentAiMessageContentElement = textElement;
 					currentAccumulatedText = ""; // Initialize accumulated text
@@ -268,27 +270,23 @@ if (
 					// Disable copy button while content is loading/streaming
 					if (copyButton) {
 						copyButton.disabled = true;
-						// Removed manual style opacity/pointer-events setting. Handled by CSS hover.
 					}
 				} else {
-					// This is a complete non-streamed AI message OR a specific error/status message
-					// Mark streaming as finished if it was active (shouldn't be needed here but safe)
-					currentAiMessageContentElement = null;
+					// This is a complete non-streamed AI message OR a complete user message
+					currentAiMessageContentElement = null; // Clear AI streaming state if it was active
 					currentAccumulatedText = "";
 
 					const renderedHtml = md.render(text);
 					textElement.innerHTML = renderedHtml;
-					// For non-streaming AI message, button is enabled immediately and made visible/clickable
+					// For complete messages (user or non-streaming AI), button is enabled immediately
 					if (copyButton) {
 						copyButton.disabled = false;
-						// Removed manual style opacity/pointer-events setting. Handled by CSS hover.
 					}
 				}
 			} else {
-				// For user messages, system messages, etc.
+				// For system messages, etc. (no copy button)
 				const renderedHtml = md.render(text);
 				textElement.innerHTML = renderedHtml;
-				// No copy button for non-AI messages
 			}
 			// END Add copy button for AI messages
 
