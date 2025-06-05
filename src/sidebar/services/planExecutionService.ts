@@ -35,7 +35,7 @@ export async function typeContentIntoEditor(
 	token: vscode.CancellationToken,
 	progress?: vscode.Progress<{ message?: string; increment?: number }>
 ): Promise<void> {
-	const chunkSize = 200; // Characters per chunk
+	const chunkSize = 5; // Characters per chunk
 	const delayMs = 0; // Delay between chunks
 
 	for (let i = 0; i < content.length; i += chunkSize) {

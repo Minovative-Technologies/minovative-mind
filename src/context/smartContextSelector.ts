@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import type { GenerationConfig } from "@google/generative-ai"; // Assuming this is the correct import
+import type { GenerationConfig } from "@google/generative-ai";
 import {
 	HistoryEntry,
 	PlanGenerationContext,
@@ -91,23 +91,23 @@ export async function selectRelevantFilesAI(
 	const fileListString = relativeFilePaths.map((p) => `- "${p}"`).join("\n");
 
 	const selectionPrompt = `
-You are an AI assistant helping a developer focus on the most relevant parts of their codebase.
-Based on the user's request, active editor context, and chat history provided below, please select a small subset of files from the "Available Project Files" list that are most pertinent to fulfilling the user's request.
+	You are an AI assistant helping a developer focus on the most relevant parts of their codebase.
+	Based on the user's request, active editor context, and chat history provided below, please select a subset of files from the "Available Project Files" list that are most pertinent to fulfilling the user's request.
 
-${contextPrompt}
+	${contextPrompt}
 
-Available Project Files:
-${fileListString}
+	Available Project Files:
+	${fileListString}
 
-Instructions for your response:
-1.  Analyze all the provided information to understand the user's goal.
-2.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes.
-3.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
-4.  If no specific files from the list seem particularly relevant (e.g., the request is very general or can be answered without looking at other files beyond the active one), return an empty JSON array: [].
-5.  Do NOT include any files not present in the "Available Project Files" list.
-6.  Your entire response should be ONLY the JSON array. Do not include any other text, explanations, or markdown formatting.
+	Instructions for your response:
+	1.  Analyze all the provided information to understand the user's goal.
+	2.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes.
+	3.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
+	4.  If no specific files from the list seem particularly relevant (e.g., the request is very general or can be answered without looking at other files beyond the active one), return an empty JSON array: [].
+	5.  Do NOT include any files not present in the "Available Project Files" list.
+	6.  Your entire response should be ONLY the JSON array. Do not include any other text, explanations, or markdown formatting.
 
-JSON Array of selected file paths:
+	JSON Array of selected file paths:
 `;
 
 	console.log(
@@ -117,9 +117,8 @@ JSON Array of selected file paths:
 
 	try {
 		const generationConfig: GenerationConfig = {
-			// Consider adjusting temperature for this task, maybe lower for more factual selection
-			// temperature: 0.3,
-			responseMimeType: "application/json", // Request JSON output directly if supported
+			temperature: 2,
+			responseMimeType: "application/json",
 		};
 
 		const aiResponse = await aiModelCall(

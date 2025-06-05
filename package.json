@@ -128,6 +128,7 @@
 	},
 	"devDependencies": {
 		"@types/bluebird": "^3.5.42",
+		"@types/diff-match-patch": "*",
 		"@types/glob": "^8.1.0",
 		"@types/mocha": "^10.0.6",
 		"@types/vscode": "^1.80.0",
@@ -150,6 +151,7 @@
 		"@types/markdown-it": "^14.1.2",
 		"@vscode/test-cli": "^0.0.10",
 		"bluebird": "^3.7.2",
+		"diff-match-patch": "^1.0.5",
 		"firebase": "^11.8.1",
 		"ignore": "^7.0.4",
 		"markdown-it": "^14.1.0"

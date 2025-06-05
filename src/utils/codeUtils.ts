@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { generatePreciseTextEdits } from "../utils/diffingUtils";
 
 export function cleanCodeOutput(codeString: string): string {
 	if (!codeString) {
@@ -25,56 +26,25 @@ export async function applyAITextEdits(
 		return;
 	}
 
-	// Basic diffing algorithm: Find common prefix and suffix to identify the changed range.
-	// This approach works well for a single contiguous block of changes.
-	let commonPrefixLength = 0;
-	const minLength = Math.min(originalContent.length, modifiedContent.length);
-
-	// Find common prefix
-	while (
-		commonPrefixLength < minLength &&
-		originalContent[commonPrefixLength] === modifiedContent[commonPrefixLength]
-	) {
-		commonPrefixLength++;
-	}
-
-	let commonSuffixLength = 0;
-	const originalEndIndex = originalContent.length - 1;
-	const modifiedEndIndex = modifiedContent.length - 1;
-
-	// Find common suffix, ensuring it doesn't overlap with the common prefix
-	while (
-		originalEndIndex - commonSuffixLength >= commonPrefixLength &&
-		modifiedEndIndex - commonSuffixLength >= commonPrefixLength &&
-		originalContent[originalEndIndex - commonSuffixLength] ===
-			modifiedContent[modifiedEndIndex - commonSuffixLength]
-	) {
-		commonSuffixLength++;
-	}
+	// Generate precise text edits based on the original and modified content
+	const preciseEdits = await generatePreciseTextEdits(
+		originalContent,
+		modifiedContent,
+		editor.document
+	);
 
 	if (token.isCancellationRequested) {
 		return;
 	}
 
-	// Define the range to replace in the original document
-	const startPosition = editor.document.positionAt(commonPrefixLength);
-	const endPosition = editor.document.positionAt(
-		originalContent.length - commonSuffixLength
-	);
-
-	const rangeToReplace = new vscode.Range(startPosition, endPosition);
-
-	// The new text to insert for the modified range
-	const newText = modifiedContent.substring(
-		commonPrefixLength,
-		modifiedContent.length - commonSuffixLength
-	);
-
 	// Apply the edit
 	// Use `editor.edit()` for applying changes to the active text editor.
 	await editor.edit(
 		(editBuilder) => {
-			editBuilder.replace(rangeToReplace, newText);
+			// Iterate through preciseEdits and apply each one
+			for (const edit of preciseEdits) {
+				editBuilder.replace(edit.range, edit.newText);
+			}
 		},
 		{
 			undoStopBefore: true, // Make this edit a separate undo stop

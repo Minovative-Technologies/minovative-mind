@@ -23,7 +23,10 @@ export function createInitialPlanningExplanationPrompt(
         --- Specific User Request Context from Editor ---
         File Path: ${editorContext.filePath}
         Language: ${editorContext.languageId}
+
+        --- Instruction Type ---
         ${instructionType}
+        --- End Instruction Type ---
 
         --- Selected Code in Editor ---
         \`\`\`${editorContext.languageId}
@@ -42,17 +45,19 @@ export function createInitialPlanningExplanationPrompt(
         ${editorContext.fullText}
         \`\`\`
         --- End Full Content ---`;
+
 		mainInstructions = `Based on the user's request from the editor (${
 			editorContext.instruction.toLowerCase() === "/fix"
 				? "'/fix' command"
 				: "custom instruction"
-		}) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan, in detail, to fulfill the request. For '/fix', the plan should ONLY clearly address the 'Relevant Diagnostics' listed. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
+		}) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For '/fix', the plan should ONLY clearly address the 'Relevant Diagnostics' listed. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
 	} else if (userRequest) {
 		specificContextPrompt = `
         --- User Request from Chat ---
         ${userRequest}
         --- End User Request ---`;
-		mainInstructions = `Based on the user's request from the chat ("${userRequest}") and any relevant chat history, ONLY explain your step-by-step plan, in detail, to fulfill it.`;
+
+		mainInstructions = `Based on the user's request from the chat ("${userRequest}") and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill it.`;
 	}
 
 	const chatHistoryForPrompt =
@@ -73,12 +78,12 @@ export function createInitialPlanningExplanationPrompt(
 	return `
     You are an expert AI programmer assisting within VS Code. Your task is to ONLY explain your plan to fulfill the user's request.
 
-    **Goal:** Provide a clear, human-readable, step-by-step explanation of your plan. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
+    **Goal:** Provide a clear, readable, step-by-step explanation of your plan in great detail no matter what. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
 
     **Instructions for Plan Explanation:**
-    1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
+    1.  Analyze Request & Context: ${mainInstructions}. Use the broader project context below for reference. ${
 		editorContext && diagnosticsString
-			? "**Pay very close attention to the 'Relevant Diagnostics' section and ensure your textual plan describes how you will address them for '/fix' requests.**"
+			? "**Pay very close attention to the 'Relevant Diagnostics' section and ensure your textual plan describes, in great detail, how you will address them for '/fix' requests.**"
 			: ""
 	}
     2.  **Be Comprehensive:** Your explanation should cover all necessary steps to achieve the user's goal.
@@ -135,14 +140,13 @@ export function createPlanningPrompt(
             {
                 "step": 1,
                 "action": "create_directory | create_file | modify_file | run_command",
-                "description": "What this step does. **This field is ALWAYS required for every step no matter what.**",
-                "path": "relative/path/to/target", // Required for file/dir ops. Relative to workspace root. No leading '/'. Use forward slashes. Safe paths only (no '..').
+                "description": "What this step does. Make sure the step is as detailed as possible. **This field is ALWAYS required for every step no matter what.**",
+                "path": "relative/path/to/target", // Required for file/dir ops. Relative to workspace root and user's project.
                 "content": "...", // For create_file with direct content (string). Use ONLY this OR generate_prompt.
-                "generate_prompt": "...", // For create_file, AI instruction to generate content (string). Use ONLY this OR content.
-                "modification_prompt": "...", // For modify_file, AI instruction to generate changes (string). Required.
+                "generate_prompt": "...", // For create_file, AI instruction to generate content (string). Use ONLY this OR content. Make sure the step is as detailed as possible.
+                "modification_prompt": "...", // For modify_file, AI instruction to generate changes (string). Required. Make sure the step is as detailed as possible.
                 "command": "..." // For run_command, the shell command to execute (string). Required.
             }
-            // ... more steps
         ]
     }`;
 
@@ -332,7 +336,7 @@ export function createPlanningPrompt(
     --- End Detailed Textual Plan Explanation ---
 
     **Strict Instruction:** Your JSON plan MUST be a direct, accurate translation of the detailed steps provided in the "Detailed Textual Plan Explanation" section above. Ensure EVERY action described in the textual plan is represented as a step in the JSON, using the correct 'action', 'path', 'description', and relevant content/prompt/command fields as described in the format section. NEVER omit steps or invent new ones not present in the textual explanation.
-`;
+    `;
 
 	return `
     You are an expert AI programmer assisting within VS Code. Your ONLY task is to create a step-by-step execution plan in JSON format.
@@ -348,7 +352,7 @@ export function createPlanningPrompt(
     **Instructions for Plan Generation:**
     1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
 		editorContext && actualDiagnosticsString
-			? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan addresses them for '/fix' requests.**"
+			? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan, in great detail, addresses them for '/fix' requests.**"
 			: ""
 	} Also consider the 'Recent Chat History' if provided, as it may contain clarifications or prior discussion related to the current request.
     2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
@@ -366,15 +370,21 @@ export function createPlanningPrompt(
     // Ensure only one modify_file step per file path
     10. **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
 
+    --- Specific Context Prompt ---
     ${specificContextPrompt}
+    --- End Specific Context Prompt ---
 
+    --- Chat History For Prompt ---
     ${chatHistoryForPrompt}
+    --- End Chat History For Prompt ---
 
-    *** Broader Project Context (Reference Only) ***
+    --- Broader Project Context (Reference Only) ---
     ${projectContext}
-    *** End Broader Project Context ***
+    --- End Broader Project Context ---
 
+    --- Textual Plan Prompt Section ---
     ${textualPlanPromptSection}
+    --- End Textual Plan Prompt Section ---
 
     --- Expected JSON Plan Format ---
     ${jsonFormatDescription}
@@ -385,7 +395,7 @@ export function createPlanningPrompt(
     --- End Few Examples ---
 
     Execution Plan (ONLY JSON):
-`;
+    `;
 }
 
 export async function _performModification(
@@ -398,6 +408,7 @@ export async function _performModification(
 	token: vscode.CancellationToken
 ): Promise<string> {
 	const prompt = `You are an expert AI software developer. Your task is to modify the provided file content based on the given instructions.
+    **Crucially, ensure the generated code is modular, readable, adheres to common coding standards for ${languageId}, and is production-ready, efficient, and maintainable.**
 
     You MUST ONLY return the complete modified file content. Do NOT include any conversational text, explanations, or markdown code blocks (e.g., \`\`\`typescript\\n...\\n\`\`\`). Your response must start directly with the modified file content.
 
