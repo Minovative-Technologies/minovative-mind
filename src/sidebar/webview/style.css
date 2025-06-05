@@ -281,8 +281,10 @@ h2 {
 	padding: var(--copy-button-padding); /* Padding inside the button */
 	width: var(--copy-button-size); /* Fixed width */
 	height: var(--copy-button-size); /* Fixed height */
-	background-color: var(--copy-button-bg); /* Subtle background */
-	border: var(--copy-button-border); /* Subtle border */
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Subtle background */
+	border: 1px solid var(--vscode-button-border); /* Subtle border */
 	color: var(--copy-button-color); /* Icon color */
 	border-radius: var(--border-radius); /* Match parent border radius */
 	cursor: pointer;
@@ -321,8 +323,8 @@ h2 {
 	user-select: none;
 	font-size: 0.8em;
 	/* Adjust colors for a subtle delete appearance */
-	background-color: rgba(var(--vscode-errorForeground), 0.07);
-	border: 1px solid rgba(var(--vscode-errorForeground), 0.15);
+	background-color: var(--vscode-inputValidation-errorBackground);
+	border: 1px solid var(--vscode-inputValidation-errorBorder);
 	color: var(--vscode-errorForeground);
 }
 
