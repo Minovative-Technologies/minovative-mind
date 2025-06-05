@@ -204,7 +204,6 @@ h2 {
 
 /* --- Chat Messages --- */
 .message {
-	padding: var(--message-padding);
 	border-radius: var(--border-radius);
 	word-wrap: break-word;
 	line-height: 1.5;
@@ -229,6 +228,7 @@ h2 {
 	overflow-x: auto;
 }
 .user-message {
+	padding: var(--message-padding);
 	background-color: var(--vscode-list-activeSelectionBackground);
 	color: var(--vscode-list-activeSelectionForeground);
 	align-self: flex-end;
