@@ -100,3 +100,23 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - Error Indicators: Displays distinct visual cues for error messages within the chat and status area.
 
 By combining these features, Minovative Mind aims to provide a comprehensive AI-powered assistant directly within `VS Code`, significantly streamlining development tasks and improving overall developer productivity.
+
+# Minovative Mind — Feature Comparison
+
+| **Feature Category**               | **Feature**                                                            | **Free Users** | **Paid Users ($20/mo)** |
+| ---------------------------------- | ---------------------------------------------------------------------- | -------------- | ----------------------- |
+| **Core AI Capabilities**           | AI Chat Interface (General Q&A, Contextual Awareness)                  | ✅ Yes         | ✅ Yes                  |
+|                                    | Contextual Code Explanation                                            | ✅ Yes         | ✅ Yes                  |
+|                                    | AI-Generated Documentation (`/docs` command)                           | ✅ Yes         | ✅ Yes                  |
+|                                    | Intelligent Code Modification (free-form refactors, enhancements)      | ❌ No          | ✅ Yes                  |
+|                                    | Automated Code Fixing (`/fix` command)                                 | ❌ No          | ✅ Yes                  |
+| **Advanced Workflow & Automation** | AI-Driven Planning & Execution (`/plan` command for multi-step tasks)  | ❌ No          | ✅ Yes                  |
+|                                    | Automated Git Commit Messages (`/commit` command)                      | ✅ Yes         | ✅ Yes                  |
+| **Customization & Management**     | Seamless API Key Setup (Add, Delete, Switch Keys)                      | ✅ Yes         | ✅ Yes                  |
+|                                    | Flexible AI Model Selection (Gemini 2.5 Flash / Pro)                   | ✅ Yes         | ✅ Yes                  |
+|                                    | Precise Context Control (Include/Exclude files & directories)          | ✅ Yes         | ✅ Yes                  |
+| **User Experience & Productivity** | Chat History Management (Save, Load, Clear)                            | ✅ Yes         | ✅ Yes                  |
+|                                    | Copy Message Button (from AI responses)                                | ✅ Yes         | ✅ Yes                  |
+|                                    | Live Code Insertion (Real-time typing animation for AI-generated code) | ❌ No          | ✅ Yes                  |
+|                                    | Smart Context Awareness (AI understands full project environment)      | ✅ Yes         | ✅ Yes                  |
+|                                    | Built-in Troubleshooting & Usage Guidance                              | ✅ Yes         | ✅ Yes                  |
