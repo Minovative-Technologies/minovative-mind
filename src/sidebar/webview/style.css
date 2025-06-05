@@ -629,6 +629,7 @@ h2 {
 	padding: 10px 0px 0px 0px; /* Reduced top padding */
 	flex-shrink: 0;
 	transition: color 0.2s ease-in-out;
+	overflow-x: scroll;
 }
 
 /* --- Input Area --- */
