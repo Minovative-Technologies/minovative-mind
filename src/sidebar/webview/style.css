@@ -159,7 +159,7 @@ h2 {
 /* --- Chat Container --- */
 #chat-container {
 	flex-grow: 1;
-	overflow-y: auto;
+	overflow-y: scroll;
 	padding: var(--element-spacing);
 	margin: var(--element-spacing) 0;
 	border-radius: var(--border-radius);
@@ -185,6 +185,7 @@ h2 {
 	border-radius: var(--border-radius); /* Match chat container border radius */
 	flex-grow: 1; /* Allow it to take up available space, like chat-container */
 	min-height: 415px;
+	max-height: 415px;
 }
 
 .empty-chat-logo {
@@ -240,7 +241,6 @@ h2 {
 }
 .ai-message {
 	background-color: transparent;
-	border: 1px solid var(--border-color);
 	align-self: flex-start;
 	margin-right: auto;
 	min-height: fit-content;
@@ -269,7 +269,7 @@ h2 {
 	transition: opacity 0.3s ease-in-out; /* Smooth transition for visibility */
 	position: absolute;
 	bottom: -30px;
-	right: 0px;
+	left: 0px;
 	z-index: 10;
 }
 
@@ -281,8 +281,8 @@ h2 {
 }
 
 .ai-message .message-actions {
-	right: 0px;
-	left: auto;
+	left: 0px;
+	right: auto;
 }
 
 /* --- Copy Button --- */

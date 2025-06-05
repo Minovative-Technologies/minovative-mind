@@ -356,10 +356,13 @@ if (
 					if (statusArea.textContent === sanitizedText) {
 						statusArea.textContent = "";
 					}
-				}, 5000);
+				}, 15000);
 			} else {
-				// For errors, clear only if another status message replaces it
-				// The statusArea text will stay until updated again
+				setTimeout(() => {
+					if (statusArea.textContent === sanitizedText) {
+						statusArea.textContent = "";
+					}
+				}, 30000);
 			}
 		}
 	}

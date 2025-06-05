@@ -2442,7 +2442,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					);
 					this.postMessageToWebview({
 						type: "statusUpdate",
-						value: "Error in smart file selection. Using broader context.",
+						value: "No files selected",
 						isError: true,
 					});
 					// Fallback to a limited subset of allScannedFiles if selectRelevantFilesAI throws an error
