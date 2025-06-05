@@ -165,7 +165,6 @@ h2 {
 	border-radius: var(--border-radius);
 	display: flex;
 	flex-direction: column;
-	gap: var(--element-spacing); /* Space between messages */
 	min-height: 415px;
 	max-height: 415px;
 }
@@ -209,17 +208,24 @@ h2 {
 	word-wrap: break-word;
 	line-height: 1.5;
 	max-width: 95%; /* Keep slightly off edge */
-	position: relative; /* Needed for absolute positioning of children like .message-actions */
 	border: 1px solid transparent; /* Base border */
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	margin-bottom: 35px;
 }
 .message > strong {
-	/* Sender label */
 	display: block; /* Ensure the sender label (e.g., "User:", "Model:") takes its own line */
-	margin-bottom: 4px;
+	margin-bottom: 5px;
 	font-weight: 600;
 	font-size: 0.9em;
 	opacity: 0.8;
+}
+.message-text-content {
+	display: block;
+	flex-grow: 1;
+	overflow-x: auto;
 }
 .user-message {
 	background-color: var(--vscode-list-activeSelectionBackground);
@@ -228,7 +234,6 @@ h2 {
 	margin-left: auto;
 	min-height: fit-content;
 	border-color: var(--vscode-list-activeSelectionBackground);
-	overflow-x: auto; /* Allow horizontal scrolling for wide content like tables or code blocks */
 }
 .user-message strong {
 	color: var(--vscode-list-activeSelectionForeground);
@@ -239,7 +244,6 @@ h2 {
 	align-self: flex-start;
 	margin-right: auto;
 	min-height: fit-content;
-	overflow-x: auto; /* Allow horizontal scrolling for wide content like tables or code blocks */
 	position: relative; /* Ensure .message-actions is positioned relative to this */
 }
 /* Specific styling for AI messages that are error messages */
@@ -258,21 +262,27 @@ h2 {
 
 /* --- Message Actions Container --- */
 .message-actions {
-	position: absolute;
-	bottom: var(--copy-button-padding); /* Position from the bottom */
-	right: var(--copy-button-padding); /* Position from the right */
 	display: flex; /* Use flexbox to arrange buttons horizontally */
 	gap: 4px; /* Space between action buttons */
 	opacity: 0; /* Initially hidden */
-	pointer-events: none; /* Disable pointer events when hidden */
+	pointer-events: auto; /* Enable pointer events by default, opacity controls visibility */
 	transition: opacity 0.3s ease-in-out; /* Smooth transition for visibility */
+	position: absolute;
+	bottom: -30px;
+	right: 0px;
+	z-index: 10;
 }
 
 /* Hover state for the message actions when hovering over an AI or User message */
 .ai-message:hover .message-actions,
-.user-message:hover .message-actions {
+.user-message:hover .message-actions,
+.message-actions:hover {
 	opacity: 1; /* Fully opaque on hover */
-	pointer-events: auto; /* Allow clicks on hover */
+}
+
+.ai-message .message-actions {
+	right: 0px;
+	left: auto;
 }
 
 /* --- Copy Button --- */
