@@ -2,6 +2,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { createAsciiTree } from "../utilities/treeFormatter";
+import { FileChangeEntry } from "../types/workflow"; // New import
 
 // Configuration for context building - Adjusted for large context windows
 interface ContextConfig {
@@ -23,12 +24,14 @@ const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
  * @param relevantFiles An array of vscode.Uri objects for relevant files.
  * @param workspaceRoot The root URI of the workspace for relative paths.
  * @param config Optional configuration for context building.
+ * @param recentChanges Optional array of recent file changes to include.
  * @returns A promise that resolves to the generated context string.
  */
 export async function buildContextString(
 	relevantFiles: vscode.Uri[],
 	workspaceRoot: vscode.Uri,
-	config: ContextConfig = DEFAULT_CONTEXT_CONFIG
+	config: ContextConfig = DEFAULT_CONTEXT_CONFIG,
+	recentChanges?: FileChangeEntry[] // Modified signature
 ): Promise<string> {
 	let context = `Project Context (Workspace: ${path.basename(
 		workspaceRoot.fsPath
@@ -78,6 +81,37 @@ export async function buildContextString(
 	}
 	// --- END: Generate ASCII Tree ---
 
+	// --- Add Recent Project Changes ---
+	if (recentChanges && recentChanges.length > 0) {
+		let changesSummarySection =
+			"*** Recent Project Changes (During Current Workflow Execution) ***\n";
+
+		for (const change of recentChanges) {
+			const formattedChange =
+				`--- File ${change.changeType.toUpperCase()}: ${
+					change.filePath
+				} ---\n` + `${change.summary}\n\n`;
+
+			if (
+				currentTotalLength +
+					changesSummarySection.length +
+					formattedChange.length >
+				config.maxTotalLength
+			) {
+				changesSummarySection +=
+					"... (additional changes omitted due to context limit)\n";
+				break; // Truncate and stop adding changes
+			}
+			changesSummarySection += formattedChange;
+		}
+		context += changesSummarySection;
+		currentTotalLength += changesSummarySection.length;
+		console.log(
+			`Context size after adding recent changes: ${currentTotalLength} chars.`
+		);
+	}
+	// --- END: Recent Project Changes ---
+
 	context += "File Contents (partial):\n";
 	const contentHeaderLength = "File Contents (partial):\n".length;
 	currentTotalLength += contentHeaderLength;
@@ -85,7 +119,7 @@ export async function buildContextString(
 	let contentAdded = false; // Track if any content was added
 
 	for (const fileUri of relevantFiles) {
-		// Check if we have *any* space left for content after the structure
+		// Check if we have *any* space left for content after the structure and recent changes
 		if (currentTotalLength >= config.maxTotalLength) {
 			filesSkippedForTotalSize =
 				relevantFiles.length - relevantFiles.indexOf(fileUri);

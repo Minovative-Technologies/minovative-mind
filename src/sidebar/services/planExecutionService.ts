@@ -5,6 +5,9 @@ import * as path from "path";
 // New imports for AI interaction and code utilities
 import { _performModification } from "./aiInteractionService"; // Assuming this path based on "aiInteractionService.ts"
 import { applyAITextEdits } from "../../utils/codeUtils";
+import { ProjectChangeLogger } from "../../workflow/ProjectChangeLogger";
+import { generateFileChangeSummary } from "../../utils/diffingUtils";
+import { FileChangeEntry } from "../../types/workflow";
 
 // Define enums and interfaces for plan execution
 export enum PlanStepAction {
@@ -75,7 +78,8 @@ export async function typeContentIntoEditor(
 export async function executePlanStep(
 	step: PlanStep,
 	token: vscode.CancellationToken,
-	progress: vscode.Progress<{ message?: string; increment?: number }>
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	changeLogger: ProjectChangeLogger
 ): Promise<void> {
 	progress.report({ message: step.description });
 
@@ -118,7 +122,7 @@ export async function executePlanStep(
 				)} with AI...`,
 			});
 
-			const currentContent = editor.document.getText();
+			const originalContent = editor.document.getText();
 
 			// Retrieve the Gemini API key
 			const geminiApiKey: string | undefined = vscode.workspace
@@ -134,7 +138,7 @@ export async function executePlanStep(
 
 			// Call the AI function to get modified content
 			const aiModifiedContent = await _performModification(
-				currentContent,
+				originalContent,
 				step.modificationPrompt,
 				editor.document.languageId,
 				editor.document.uri.fsPath,
@@ -155,6 +159,24 @@ export async function executePlanStep(
 				token
 			);
 
+			const newContent = editor.document.getText();
+			const { summary, addedLines, removedLines } =
+				await generateFileChangeSummary(
+					originalContent,
+					newContent,
+					step.file!
+				);
+
+			const newChangeEntry: FileChangeEntry = {
+				changeType: "modified",
+				filePath: step.file!,
+				summary: summary,
+				addedLines: addedLines,
+				removedLines: removedLines,
+				timestamp: Date.now(),
+			};
+			changeLogger.logChange(newChangeEntry);
+
 			progress.report({
 				message: `Successfully applied modifications to ${path.basename(
 					filePath
@@ -173,8 +195,41 @@ export async function executePlanStep(
 			await typeContentIntoEditor(editorToType, step.content, token, progress);
 			break;
 
+		case PlanStepAction.CreateFile:
+			if (!step.file || !step.content) {
+				throw new Error("Missing file path or content for CreateFile action.");
+			}
+			const newFilePath = path.join(vscode.workspace.rootPath || "", step.file);
+
+			await vscode.workspace.fs.writeFile(
+				vscode.Uri.file(newFilePath),
+				Buffer.from(step.content)
+			);
+
+			const newFileContent = step.content;
+
+			const {
+				summary: createSummary,
+				addedLines: createAddedLines,
+				removedLines: createRemovedLines,
+			} = await generateFileChangeSummary("", newFileContent, step.file!);
+
+			const createChangeEntry: FileChangeEntry = {
+				changeType: "created",
+				filePath: step.file!,
+				summary: createSummary,
+				addedLines: createAddedLines,
+				removedLines: createRemovedLines,
+				timestamp: Date.now(),
+			};
+
+			changeLogger.logChange(createChangeEntry);
+			progress.report({
+				message: `Successfully created file ${path.basename(newFilePath)}.`,
+			});
+			break;
+
 		// Add other cases here as they are implemented in the future
-		// case PlanStepAction.CreateFile:
 		// case PlanStepAction.DeleteFile:
 		// case PlanStepAction.ViewFile:
 		// case PlanStepAction.ExecuteCommand:

@@ -2,6 +2,7 @@
 import { HistoryEntry, PlanGenerationContext } from "../common/sidebarTypes"; // Assuming PlanGenerationContext is correctly defined
 import * as vscode from "vscode"; // Required for vscode.CancellationToken
 import { generateContentStream } from "../../ai/gemini";
+import { FileChangeEntry } from "../../types/workflow";
 
 export function createInitialPlanningExplanationPrompt(
 	projectContext: string,
@@ -110,7 +111,8 @@ export function createPlanningPrompt(
 	editorContext: PlanGenerationContext["editorContext"] | undefined,
 	combinedDiagnosticsAndRetryString: string | undefined,
 	chatHistory: HistoryEntry[] | undefined,
-	textualPlanExplanation: string
+	textualPlanExplanation: string,
+	recentChanges: FileChangeEntry[] | undefined
 ): string {
 	let actualDiagnosticsString: string | undefined = undefined;
 	let extractedRetryInstruction: string | undefined = undefined;
@@ -285,6 +287,21 @@ export function createPlanningPrompt(
     --- End Recent Chat History ---`
 			: "";
 
+	const recentChangesForPrompt =
+		recentChanges && recentChanges.length > 0
+			? `
+    **Important Context:** The "*** Recent Project Changes (During Current Workflow Execution) ***" section provides a summary of files that have already been modified or created in this current workflow. Use this information to inform your understanding of the evolving project state and ensure subsequent steps are coherent with these changes. For example, if a new function was added in a previous step, ensure your current plan step correctly references or imports it if necessary.
+
+    *** Recent Project Changes (During Current Workflow Execution) ***
+    ${recentChanges
+			.map(
+				(entry) =>
+					`Change Type: ${entry.changeType}\nFile Path: ${entry.filePath}\nSummary: ${entry.summary}`
+			)
+			.join("\n---\n")}
+    --- End Recent Project Changes ---`
+			: "";
+
 	let specificContextPrompt = "";
 	let mainInstructions = "";
 
@@ -354,7 +371,7 @@ export function createPlanningPrompt(
 		editorContext && actualDiagnosticsString
 			? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan, in great detail, addresses them for '/fix' requests.**"
 			: ""
-	} Also consider the 'Recent Chat History' if provided, as it may contain clarifications or prior discussion related to the current request.
+	} Also carefully review the 'Recent Chat History' if provided. This history contains previous interactions, including any steps already taken or files created/modified. Your plan MUST build upon these prior changes, avoid redundant operations (e.g., recreating existing files, reinstalling already installed dependencies), and correctly reference or import new entities (e.g., functions from newly created utility files) introduced in earlier steps or during the conversation.
     2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
     3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
     4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
@@ -382,8 +399,10 @@ export function createPlanningPrompt(
     ${projectContext}
     --- End Broader Project Context ---
 
+    ${recentChangesForPrompt}
+
     --- Textual Plan Prompt Section ---
-    ${textualPlanPromptSection}
+    ${textualPlanExplanation}
     --- End Textual Plan Prompt Section ---
 
     --- Expected JSON Plan Format ---

@@ -52,6 +52,8 @@ import {
 	getFirebaseConfig,
 	FirebaseUser,
 } from "../firebase/firebaseService";
+import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger"; // Added import
+import { FileChangeEntry } from "../types/workflow";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -70,6 +72,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	private apiKeyManager: ApiKeyManager;
 	private settingsManager: SettingsManager;
 	private chatHistoryManager: ChatHistoryManager;
+	private changeLogger: ProjectChangeLogger; // Added private property
 
 	// State managed by SidebarProvider
 	private _pendingPlanGenerationContext: sidebarTypes.PlanGenerationContext | null =
@@ -110,6 +113,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.chatHistoryManager = new ChatHistoryManager(
 			this.postMessageToWebview.bind(this)
 		);
+		this.changeLogger = new ProjectChangeLogger(); // Initialize ProjectChangeLogger
 
 		context.secrets.onDidChange((e) => {
 			if (
@@ -551,6 +555,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			new vscode.CancellationTokenSource();
 		const token = this._activeOperationCancellationTokenSource.token;
 
+		this.changeLogger = new ProjectChangeLogger(); // Instantiate new logger for a new plan
+		this.changeLogger.clear(); // Clear existing changes for a new plan
+
 		try {
 			this._pendingPlanGenerationContext = null;
 
@@ -800,6 +807,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		let successStreaming = false;
 		let errorStreaming: string | null = null;
 
+		this.changeLogger = new ProjectChangeLogger(); // Instantiate new logger for a new plan
+		this.changeLogger.clear(); // Clear existing changes for a new plan
+
 		try {
 			this.postMessageToWebview({
 				type: "aiResponseStart",
@@ -893,7 +903,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			textualPlanResponse = await this._generateWithRetry(
 				textualPlanPrompt,
 				modelName,
-				undefined, // History is in prompt string
+				undefined, // History in prompt string
 				"editor action plan explanation",
 				undefined,
 				streamCallbacks,
@@ -1039,6 +1049,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				temperature: 1,
 			};
 
+			const recentChanges = this.changeLogger.getChangeLog(); // Retrieve changes here
+
 			const jsonPlanningPrompt = createPlanningPrompt(
 				planContext.type === "chat"
 					? planContext.originalUserRequest
@@ -1047,7 +1059,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				planContext.type === "editor" ? planContext.editorContext : undefined,
 				planContext.diagnosticsString,
 				planContext.chatHistory,
-				planContext.textualPlanExplanation
+				planContext.textualPlanExplanation,
+				recentChanges // Pass recentChanges as a new argument
 			);
 
 			// Redundant switchToNextApiKey removed here
@@ -1354,6 +1367,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 											text: `Step ${stepNumber} OK: Created directory \`${step.path}\``,
 										},
 									});
+									this.changeLogger.logChange({
+										filePath: step.path,
+										changeType: "created",
+										summary: `Created directory: '${step.path}'`,
+										timestamp: Date.now(),
+									}); // Log directory creation
 									stepSuccess = true;
 								} else if (isCreateFileStep(step)) {
 									const fileUri = vscode.Uri.joinPath(rootUri, step.path);
@@ -1417,6 +1436,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 												text: `Step ${stepNumber} OK: Typed content into new file \`${step.path}\``,
 											},
 										});
+										this.changeLogger.logChange({
+											filePath: step.path,
+											changeType: "created",
+											summary: `Created file: '${step.path}' with content.`,
+											timestamp: Date.now(),
+										}); // Log file creation with content
 										stepSuccess = true;
 									} else if (step.generate_prompt) {
 										progress.report({
@@ -1486,6 +1511,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 												text: `Step ${stepNumber} OK: Generated and typed AI content into new file \`${step.path}\``,
 											},
 										});
+										this.changeLogger.logChange({
+											filePath: step.path,
+											changeType: "created",
+											summary: `Created file: '${step.path}' with generated content.`,
+											timestamp: Date.now(),
+										}); // Log file creation with generated content
 										stepSuccess = true;
 									} else {
 										throw new Error(
@@ -1583,6 +1614,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 												text: `Step ${stepNumber} OK: Modified file \`${step.path}\``,
 											},
 										});
+										this.changeLogger.logChange({
+											filePath: step.path,
+											changeType: "modified",
+											summary: `Modified file: '${step.path}' with content.`,
+											timestamp: Date.now(),
+										}); // Log file modification
 										stepSuccess = true;
 									} else {
 										progress.report({
@@ -1655,6 +1692,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 												text: `Step ${stepNumber} OK: Command \`${commandToRun}\` sent to terminal. (Monitor terminal for completion)`,
 											},
 										});
+										// Not logging command execution to changeLogger as it's primarily for file-system changes relevant to AI context.
 										stepSuccess = true;
 									} else {
 										this.postMessageToWebview({
