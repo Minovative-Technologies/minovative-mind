@@ -91,7 +91,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public _isSubscriptionActive: boolean = false;
 	public _userUid: string | undefined = undefined;
 	public _userEmail: string | undefined = undefined;
-	private _pendingReviewProgressResolve: (() => void) | undefined;
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri, // Renamed to avoid clash
@@ -228,7 +227,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this._onDidAuthStateChange.fire(currentAuthState);
 
 		// Instruction notes "and potentially the SettingsProvider's webview if it's open".
-		// To achieve this, SettingsProvider would need to expose a method (e.g., `updateAuthState`)
+		// To achieve this, SettingsProvider would need to expose a method (e.e., `updateAuthState`)
 		// and SidebarProvider would need a reference to the SettingsProvider instance.
 		// This is beyond the scope of "Add a new public method..." without further architectural changes.
 		// For now, only the SidebarProvider's webview is directly updated.
@@ -623,6 +622,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				chatHistory: [...this.chatHistoryManager.getChatHistory()], // Reflect newly added entry
 				textualPlanExplanation: textualPlanResponse,
 			};
+			this._ensureSidebarVisible(); // Ensure sidebar is visible after textual plan is ready for review
 			this._lastPlanGenerationContext = {
 				...this._pendingPlanGenerationContext,
 			};
@@ -931,7 +931,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					increment: 100, // Instruction 1: Set to 100 with message "Minovative Mind: Textual plan generated."
 					message: "Minovative Mind: Textual plan generated.",
 				});
-				// planDataForConfirmation is set correctly here
+				this._ensureSidebarVisible(); // Ensure sidebar is visible when textual plan is ready for review
 				this._pendingPlanGenerationContext = {
 					type: "editor",
 					editorContext: editorCtx,
@@ -975,30 +975,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					? { originalInstruction: instruction, type: "textualPlanPending" }
 					: null,
 			});
-			// Add the new notification if the sidebar is not visible and streaming was successful
-			if (successStreaming && this._view?.visible === false) {
-				vscode.window.withProgress(
-					{
-						location: vscode.ProgressLocation.Notification,
-						title: "Minovative Mind: Plan ready for review.",
-						cancellable: true,
-					},
-					(progress, token) => {
-						return new Promise<void>((resolve) => {
-							this._pendingReviewProgressResolve = resolve;
-
-							token.onCancellationRequested(() => {
-								this._pendingReviewProgressResolve = undefined;
-								progress.report({
-									message: "Review dismissed.",
-									increment: 100,
-								});
-							});
-						});
-					}
-				);
-			}
-			// Instruction 1: REMOVED this call: await this._showPlanCompletionNotification(instruction, successStreaming, errorStreaming);
 			disposable?.dispose();
 			this._activeOperationCancellationTokenSource?.dispose();
 			this._activeOperationCancellationTokenSource = undefined;
@@ -2109,6 +2085,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
+	/**
+	 * Ensures the Minovative Mind sidebar is visible.
+	 * If the view exists but is not visible, it programmatically opens the sidebar.
+	 */
+	private async _ensureSidebarVisible(): Promise<void> {
+		if (this._view && this._view.visible === false) {
+			console.log("[SidebarProvider] Sidebar not visible, attempting to show.");
+			try {
+				await vscode.commands.executeCommand(
+					"workbench.view.extension.minovative-mind"
+				);
+				console.log("[SidebarProvider] Sidebar visibility command executed.");
+			} catch (error: any) {
+				console.error(
+					"[SidebarProvider] Failed to execute sidebar visibility command:",
+					error.message
+				);
+			}
+		} else {
+			console.log(
+				"[SidebarProvider] Sidebar is already visible or view is not initialized."
+			);
+		}
+	}
+
 	private async _handleCommitCommand(
 		apiKey: string, // initialApiKey for context
 		modelName: string
@@ -2646,10 +2647,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				console.log("[Provider] Cancelling pending plan confirmation...");
 				this._pendingPlanGenerationContext = null; // Clear the pending context
 				this._lastPlanGenerationContext = null; // Clear context on explicit cancellation
-				if (this._pendingReviewProgressResolve) {
-					this._pendingReviewProgressResolve(); // Resolve the pending review progress notification
-					this._pendingReviewProgressResolve = undefined; // Clear the resolve function
-				}
 				// Instruction 4: Add VS Code notification
 				vscode.window.showInformationMessage(
 					"Minovative Mind: Plan review cancelled by user."
@@ -2766,10 +2763,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 							...this._pendingPlanGenerationContext,
 						};
 						this._pendingPlanGenerationContext = null;
-						if (this._pendingReviewProgressResolve) {
-							this._pendingReviewProgressResolve();
-							this._pendingReviewProgressResolve = undefined;
-						}
 						await this.generateStructuredPlanAndExecute(contextForExecution);
 					} else {
 						this.postMessageToWebview({
