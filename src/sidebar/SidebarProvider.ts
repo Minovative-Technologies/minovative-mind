@@ -557,6 +557,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.changeLogger = new ProjectChangeLogger(); // Instantiate new logger for a new plan
 		this.changeLogger.clear(); // Clear existing changes for a new plan
 
+		// Get rootFolder here
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			const errorMsg = "Error: No workspace folder open.";
+			this.postMessageToWebview({
+				type: "aiResponseEnd",
+				value: null,
+				isError: true,
+				success: false,
+				error: errorMsg,
+			});
+			this.postMessageToWebview({ type: "reenableInput" });
+			this._activeOperationCancellationTokenSource?.dispose();
+			this._activeOperationCancellationTokenSource = undefined;
+			return;
+		}
+		const rootFolder = workspaceFolders[0];
+
 		try {
 			this._pendingPlanGenerationContext = null;
 
@@ -621,6 +639,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				modelName,
 				chatHistory: [...this.chatHistoryManager.getChatHistory()], // Reflect newly added entry
 				textualPlanExplanation: textualPlanResponse,
+				workspaceRootUri: rootFolder.uri,
 			};
 			this._ensureSidebarVisible(); // Ensure sidebar is visible after textual plan is ready for review
 			this._lastPlanGenerationContext = {
@@ -679,6 +698,28 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 
 		const instructionLower = instruction.toLowerCase();
+
+		// Get rootFolder here
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			const errorMsg = "Error: No workspace folder open.";
+			this.postMessageToWebview({
+				type: "aiResponseEnd",
+				value: null,
+				isError: true,
+				success: false,
+				error: errorMsg,
+			});
+			this.postMessageToWebview({ type: "reenableInput" });
+			initialProgress?.report({
+				message: errorMsg,
+				increment: 100,
+			});
+			this._activeOperationCancellationTokenSource?.dispose();
+			this._activeOperationCancellationTokenSource = undefined;
+			return;
+		}
+		const rootFolder = workspaceFolders[0];
 
 		// Gating logic for plan generation
 		if (!this._isUserSignedIn) {
@@ -818,7 +859,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this._pendingPlanGenerationContext = null;
 
 			let relativeFilePath = documentUri.fsPath;
-			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (workspaceFolders && workspaceFolders.length > 0) {
 				relativeFilePath = path
 					.relative(workspaceFolders[0].uri.fsPath, documentUri.fsPath)
@@ -941,6 +981,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					modelName,
 					chatHistory: [...this.chatHistoryManager.getChatHistory()], // Reflect newly added entry
 					textualPlanExplanation: textualPlanResponse,
+					workspaceRootUri: rootFolder.uri,
 				};
 				this._lastPlanGenerationContext = {
 					...this._pendingPlanGenerationContext,
@@ -1072,8 +1113,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				.replace(/\s*```$/im, "")
 				.trim();
 
-			const parsedPlanResult: ParsedPlanResult = parseAndValidatePlan(
-				structuredPlanJsonString
+			const parsedPlanResult: ParsedPlanResult = await parseAndValidatePlan(
+				structuredPlanJsonString,
+				planContext.workspaceRootUri
 			);
 
 			if (!parsedPlanResult.plan) {

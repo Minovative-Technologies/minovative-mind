@@ -148,6 +148,7 @@ export interface PlanGenerationContext {
 	modelName: string;
 	chatHistory?: HistoryEntry[];
 	textualPlanExplanation: string;
+	workspaceRootUri: vscode.Uri;
 }
 
 export type ExecutionOutcome = "success" | "cancelled" | "failed";

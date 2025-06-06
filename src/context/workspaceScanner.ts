@@ -1,103 +1,8 @@
 // src/context/workspaceScanner.ts
 import * as vscode from "vscode";
-import ignore from "ignore"; // Import the 'ignore' library
 import BPromise from "bluebird"; // using bluebird map for concurrency control
 import * as path from "path"; // Import path for joining
-
-// Default patterns to ignore, mimicking common project build/dependency folders and git
-const DEFAULT_IGNORE_PATTERNS: string[] = [
-	// --- Common Build/Dependency Folders ---
-	"node_modules",
-	".git", // Git directory
-	"dist",
-	"out",
-	"build",
-	"target", // Common in Java/Rust
-	"bin", // Common for compiled binaries/scripts
-	"obj", // Common for .NET
-
-	// --- Hidden Files/Folders (Dotfiles/Dotfolders) ---
-	".vscode", // VS Code workspace settings
-	".idea", // JetBrains IDE settings
-	".settings", // Eclipse settings
-	".github", // GitHub specific files (workflows, etc.)
-	".gitlab", // GitLab specific files
-	".env*", // Environment variables (e.g., .env, .env.local)
-	".DS_Store", // macOS folder metadata
-	".classpath", // Java classpath file
-	".project", // Eclipse project file
-	".cache", // Common cache directory
-	".npm", // npm cache/config
-	".yarn", // Yarn cache/config
-
-	// --- Lock Files ---
-	"package-lock.json",
-	"yarn.lock",
-	"pnpm-lock.yaml",
-	"composer.lock", // PHP
-	"Gemfile.lock", // Ruby
-	"Pipfile.lock", // Python
-	"poetry.lock", // Python
-
-	// --- Log Files ---
-	"*.log",
-
-	// --- Temporary/System Files ---
-	"*.swp", // Vim swap files
-	"*.swo", // Vim swap files
-	"*~", // Backup files
-
-	// --- Compiled Code/Cache ---
-	"*.pyc",
-	"__pycache__",
-
-	// --- Media & Archive Files (already present, kept for completeness) ---
-	"*.vsix",
-	// Images
-	"*.png",
-	"*.jpg",
-	"*.jpeg",
-	"*.gif",
-	"*.bmp",
-	"*.tiff",
-	"*.ico",
-	"*.webp",
-	// Scalable Vector Graphics
-	"*.svg",
-	// Video
-	"*.mp4",
-	"*.webm",
-	"*.avi",
-	"*.mov",
-	"*.wmv",
-	"*.flv",
-	"*.mkv",
-	// Audio
-	"*.mp3",
-	"*.wav",
-	"*.ogg",
-	"*.aac",
-	// Fonts
-	"*.woff",
-	"*.woff2",
-	"*.ttf",
-	"*.otf",
-	"*.eot",
-	// Archives
-	"*.zip",
-	"*.rar",
-	"*.7z",
-	"*.tar",
-	"*.gz",
-	// Documents (often not needed for code context)
-	"*.pdf",
-	"*.doc",
-	"*.docx",
-	"*.ppt",
-	"*.pptx",
-	"*.xls",
-	"*.xlsx",
-];
+import { loadGitIgnoreMatcher } from "../utils/ignoreUtils"; // NEW IMPORT
 
 // Interface for scan options (can be expanded later for settings)
 interface ScanOptions {
@@ -125,40 +30,13 @@ export async function scanWorkspace(
 	// Multi-root workspaces can be handled later by iterating through workspaceFolders.
 	const rootFolder = workspaceFolders[0];
 	const relevantFiles: vscode.Uri[] = [];
-	const ig = ignore(); // Create an ignore instance
 
-	// Add default ignore patterns
-	ig.add(DEFAULT_IGNORE_PATTERNS);
+	// Load gitignore rules and default patterns using the utility function
+	const ig = await loadGitIgnoreMatcher(rootFolder.uri);
 
 	// Add custom ignore patterns from options
 	if (options?.additionalIgnorePatterns) {
 		ig.add(options.additionalIgnorePatterns);
-	}
-
-	// Respect .gitignore if enabled (default to true)
-	if (options?.respectGitIgnore !== false) {
-		const gitIgnoreUri = vscode.Uri.joinPath(rootFolder.uri, ".gitignore");
-		try {
-			const gitIgnoreContentBytes = await vscode.workspace.fs.readFile(
-				gitIgnoreUri
-			);
-			const gitIgnoreContent = Buffer.from(gitIgnoreContentBytes).toString(
-				"utf-8"
-			);
-			console.log("Found .gitignore, adding rules.");
-			ig.add(gitIgnoreContent);
-		} catch (error) {
-			// It's okay if .gitignore doesn't exist
-			if (
-				error instanceof vscode.FileSystemError &&
-				error.code === "FileNotFound"
-			) {
-				console.log(".gitignore not found in root, skipping.");
-			} else {
-				console.error("Error reading .gitignore:", error);
-				vscode.window.showWarningMessage("Error reading .gitignore file.");
-			}
-		}
 	}
 
 	// Define concurrency (default to a reasonable number, e.g., 10)

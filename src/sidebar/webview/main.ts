@@ -47,6 +47,10 @@ const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
 // --- Global variables for streaming responses ---
 let currentAiMessageContentElement: HTMLSpanElement | null = null;
 let currentAccumulatedText: string = "";
+let typingBuffer: string = "";
+let typingTimer: NodeJS.Timeout | null = null;
+const TYPING_SPEED_MS: number = 0;
+const CHARS_PER_INTERVAL: number = 5;
 // --- End Global variables for streaming responses ---
 
 // --- DOM Elements ---
@@ -139,6 +143,47 @@ let pendingPlanData: {
 } | null = null;
 
 console.log("Webview script loaded.");
+
+function stopTypingAnimation() {
+	if (typingTimer !== null) {
+		clearInterval(typingTimer);
+		typingTimer = null;
+		console.log("[Webview] Typing animation stopped.");
+	}
+}
+
+function typeNextCharacters() {
+	if (!currentAiMessageContentElement) {
+		stopTypingAnimation();
+		console.warn(
+			"[Webview] No currentAiMessageContentElement found, stopping typing animation."
+		);
+		return;
+	}
+	if (typingBuffer.length === 0 && !isLoading) {
+		// Only stop if buffer is empty AND not actively loading (e.g., if a new chunk is expected soon)
+		stopTypingAnimation();
+		return;
+	}
+	const charsToType = Math.min(CHARS_PER_INTERVAL, typingBuffer.length);
+	if (charsToType > 0) {
+		currentAccumulatedText += typingBuffer.substring(0, charsToType);
+		typingBuffer = typingBuffer.substring(charsToType);
+		currentAiMessageContentElement.innerHTML = md.render(
+			currentAccumulatedText
+		);
+		if (chatContainer) {
+			chatContainer.scrollTop = chatContainer.scrollHeight;
+		}
+	}
+}
+
+function startTypingAnimation() {
+	if (typingTimer === null) {
+		typingTimer = setInterval(typeNextCharacters, TYPING_SPEED_MS);
+		console.log("[Webview] Typing animation started.");
+	}
+}
 
 // Add new DOM elements to the critical elements null check
 if (
@@ -277,6 +322,8 @@ if (
 					console.log("Appending start of AI stream message.");
 					currentAiMessageContentElement = textElement;
 					currentAccumulatedText = ""; // Initialize accumulated text
+					typingBuffer = ""; // ADDED: Clear typing buffer
+					startTypingAnimation(); // ADDED: Start the typing animation
 
 					// Add a loading indicator within the text element
 					textElement.innerHTML =
@@ -291,6 +338,8 @@ if (
 					}
 				} else {
 					// This is a complete non-streamed AI message OR a complete user message
+					stopTypingAnimation(); // ADDED: Stop any ongoing typing animation
+					typingBuffer = ""; // ADDED: Clear typing buffer
 					currentAiMessageContentElement = null; // Clear AI streaming state if it was active
 					currentAccumulatedText = "";
 
@@ -1113,7 +1162,13 @@ if (
 			case "aiResponseStart": {
 				isLoading = true;
 				setLoadingState(true);
-				console.log("Received aiResponseStart. Starting stream.");
+				// ADDED: Reset typing state
+				currentAccumulatedText = "";
+				typingBuffer = "";
+				stopTypingAnimation(); // Ensure no old timer is running
+				console.log(
+					"Received aiResponseStart. Starting stream via appendMessage."
+				); // ADDED: Specific console log
 				// Point 1.c (from review instructions): Ensure any generic "Creating..." or similar loading message is removed.
 				const loadingMsg = chatContainer?.querySelector(".loading-message");
 				if (loadingMsg) {
@@ -1132,22 +1187,22 @@ if (
 			case "aiResponseChunk": {
 				// Point 2.a, 2.b, 2.c (from review instructions) are handled within appendMessage now.
 				// This message type is only for streaming content chunks.
-				if (currentAiMessageContentElement && message.value !== undefined) {
-					currentAccumulatedText += message.value;
-					// Update the HTML content of the current AI message element
-					currentAiMessageContentElement.innerHTML = md.render(
-						currentAccumulatedText
-					);
-					if (chatContainer) {
-						chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to keep latest content visible
+				if (message.value !== undefined) {
+					typingBuffer += message.value; // REPLACED: currentAccumulatedText update with typingBuffer
+					if (typingTimer === null) {
+						// ADDED: Defensive start
+						startTypingAnimation();
 					}
+					// The actual DOM update and scrolling are now handled by typeNextCharacters in the interval.
 				}
 				break;
 			}
 			case "aiResponseEnd": {
+				stopTypingAnimation(); // ADDED: Stop typing animation
 				console.log("Received aiResponseEnd. Stream finished.");
 				// After stream ends, finalize the message content and handle UI updates
 				if (currentAiMessageContentElement) {
+					currentAccumulatedText += typingBuffer; // ADDED: Append any remaining buffered text
 					// Finalize the content in the DOM using the accumulated text
 					const renderedHtml = md.render(currentAccumulatedText);
 					currentAiMessageContentElement.innerHTML = renderedHtml;
@@ -1171,12 +1226,13 @@ if (
 				} else {
 					// Handle cases where stream ended but we somehow lost the element reference
 					console.warn(
-						"aiResponseEnd received but currentAiMessageContentElement is null."
+						"aiResponseEnd received but currentAiMessageContentElement is null. Attempting to clear state." // MODIFIED: More specific warning
 					);
 				}
 
 				// Point 3.c (from review instructions): Confirm that currentAiMessageContentElement = null; and currentAccumulatedText = ""; are always called
 				// to reset state for the next stream.
+				typingBuffer = ""; // ADDED: Clear typingBuffer here
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
 
@@ -1445,6 +1501,8 @@ if (
 				// setLoadingState(false) will now handle disabling clear/save buttons correctly based on empty chat
 				setLoadingState(false); // Ensure loading state is reset and buttons updated.
 				// Reset streaming globals in case a clear happens mid-stream (unlikely but safe)
+				stopTypingAnimation();
+				typingBuffer = "";
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
 				// If plan confirmation was active, hide it
@@ -1524,16 +1582,14 @@ if (
 			// Modify 'reenableInput' handler
 			case "reenableInput": {
 				console.log("Received reenableInput request from provider.");
-				// This message signals an operation was cancelled or an error occurred requiring input re-enabling.
+				// This message signals an operation was cancelled or an-error occurred requiring input re-enabling.
 
 				// Always set isLoading to false, as the operation that was loading is now considered finished or cancelled.
 				isLoading = false;
+				stopTypingAnimation(); // ADDED: Stop typing animation
 
 				// Remove any general "Creating..." or "Loading..." message from chat, similar to setLoadingState(false) logic.
-				const loadingMsg = chatContainer?.querySelector(".loading-message");
-				if (loadingMsg) {
-					loadingMsg.remove();
-				}
+				// The loading message removal is handled by setLoadingState(false).
 
 				// Ensure streaming state is also reset if this happens unexpectedly mid-stream
 				if (currentAiMessageContentElement) {
@@ -1541,28 +1597,30 @@ if (
 						"reenableInput received mid-stream. Resetting stream state."
 					);
 					// Finalize the current message with accumulated text before clearing state
-					if (currentAiMessageContentElement) {
-						const renderedHtml = md.render(currentAccumulatedText);
-						currentAiMessageContentElement.innerHTML = renderedHtml;
-						const messageElement = currentAiMessageContentElement.parentElement;
-						if (messageElement) {
-							const copyButton = messageElement.querySelector(
-								".copy-button"
-							) as HTMLButtonElement | null;
-							if (copyButton) {
-								copyButton.disabled = false;
-							}
-							const deleteButton = messageElement.querySelector(
-								".delete-button"
-							) as HTMLButtonElement | null;
-							if (deleteButton) {
-								deleteButton.disabled = false;
-							}
+					currentAccumulatedText += typingBuffer; // ADDED: Append any remaining buffered text
+					const renderedHtml = md.render(currentAccumulatedText);
+					currentAiMessageContentElement.innerHTML = renderedHtml;
+					const messageElement = currentAiMessageContentElement.parentElement;
+					if (messageElement) {
+						const copyButton = messageElement.querySelector(
+							".copy-button"
+						) as HTMLButtonElement | null;
+						if (copyButton) {
+							copyButton.disabled = false;
+						}
+						const deleteButton = messageElement.querySelector(
+							".delete-button"
+						) as HTMLButtonElement | null;
+						if (deleteButton) {
+							deleteButton.disabled = false;
 						}
 					}
-					currentAiMessageContentElement = null;
-					currentAccumulatedText = "";
 				}
+
+				// Clear all streaming state variables regardless of whether currentAiMessageContentElement was active
+				typingBuffer = ""; // ADDED: Clear typingBuffer
+				currentAiMessageContentElement = null;
+				currentAccumulatedText = "";
 
 				// Call setLoadingState(false) to re-evaluate all input and button states based on the new isLoading=false,
 				// current API key status, and visibility of blocking UI elements.

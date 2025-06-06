@@ -1,6 +1,6 @@
-// src/ai/workflowPlanner.ts
-
+import * as vscode from "vscode";
 import * as path from "path";
+import { loadGitIgnoreMatcher } from "../utils/ignoreUtils";
 
 /**
  * Defines the possible actions within an execution plan step.
@@ -117,9 +117,13 @@ export interface ParsedPlanResult {
  * Parses a JSON string into an ExecutionPlan and performs basic validation.
  *
  * @param jsonString The JSON string received from the AI.
+ * @param workspaceRootUri The URI of the workspace root.
  * @returns An object containing the validated ExecutionPlan or an error message.
  */
-export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
+export async function parseAndValidatePlan(
+	jsonString: string,
+	workspaceRootUri: vscode.Uri
+): Promise<ParsedPlanResult> {
 	// Log the raw JSON string before parsing
 	console.log("Attempting to parse and validate plan JSON:", jsonString);
 
@@ -138,6 +142,9 @@ export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 			console.error(errorMsg, potentialPlan);
 			return { plan: null, error: errorMsg };
 		}
+
+		const ig = await loadGitIgnoreMatcher(workspaceRootUri);
+		const filteredSteps: PlanStep[] = []; // Initialize an empty array for filtered steps
 
 		// Validate each step
 		for (let i = 0; i < potentialPlan.steps.length; i++) {
@@ -178,6 +185,25 @@ export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 					console.error(errorMsg, step); // Include step object here
 					return { plan: null, error: errorMsg };
 				}
+
+				// .gitignore check
+				const fullPath = path.join(workspaceRootUri.fsPath, step.path);
+				// Normalize path separators for .gitignore matcher
+				const relativePath = path
+					.relative(workspaceRootUri.fsPath, fullPath)
+					.replace(/\\/g, "/");
+
+				if (
+					ig.ignores(relativePath) ||
+					(step.action === PlanStepAction.CreateDirectory &&
+						ig.ignores(relativePath + "/"))
+				) {
+					console.warn(
+						`Skipping step ${step.step} (${step.action}) as it targets an ignored path: '${step.path}'.`
+					);
+					continue; // Skip this step and move to the next iteration
+				}
+
 				if (typeof step.command !== "undefined") {
 					// This is a warning, not a fatal error for parsing, but good to log.
 					// Depending on strictness, could be an error. For now, warning.
@@ -254,9 +280,18 @@ export function parseAndValidatePlan(jsonString: string): ParsedPlanResult {
 				console.error(`Plan validation failed: ${actionSpecificError}`, step);
 				return { plan: null, error: actionSpecificError };
 			}
+
+			// If the step passed all validations (including .gitignore check), add it to the filtered list
+			filteredSteps.push(step);
 		}
 
-		console.log("Plan validation successful.");
+		potentialPlan.steps = filteredSteps.map((step, index) => ({
+			...step,
+			step: index + 1, // Assign new sequential step numbers based on the filtered list
+		}));
+		console.log(
+			`Plan validation successful. ${filteredSteps.length} steps remaining after filtering.`
+		);
 		return { plan: potentialPlan as ExecutionPlan };
 	} catch (error: any) {
 		const errorMsg = `Error parsing plan JSON: ${
