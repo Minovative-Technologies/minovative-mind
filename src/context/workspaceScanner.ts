@@ -1,6 +1,6 @@
 // src/context/workspaceScanner.ts
 import * as vscode from "vscode";
-import ignore, { Ignore } from "ignore"; // Import the 'ignore' library
+import ignore from "ignore"; // Import the 'ignore' library
 import BPromise from "bluebird"; // using bluebird map for concurrency control
 import * as path from "path"; // Import path for joining
 
