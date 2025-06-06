@@ -9,7 +9,8 @@ export const MODEL_SELECTION_STORAGE_KEY = "geminiSelectedModel";
 
 // DONT CHANGE THESE MODELS (NEVER)
 export const AVAILABLE_GEMINI_MODELS = [
-	"gemini-2.5-pro-preview-05-06",
+	"gemini-2.5-pro-preview-06-05",
+	"gemini-2.5-pro-exp-03-25",
 	"gemini-2.5-flash-preview-05-20",
 ];
 export const DEFAULT_MODEL = AVAILABLE_GEMINI_MODELS[1];
