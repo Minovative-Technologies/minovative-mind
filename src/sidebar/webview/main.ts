@@ -490,6 +490,11 @@ if (
 	// Modified setLoadingState to control button states based on loading and UI visibility
 	function setLoadingState(loading: boolean) {
 		isLoading = loading; // Keep track of overall loading state
+		// Move loadingMsg.remove() logic to the very beginning of the function
+		const loadingMsg = chatContainer?.querySelector(".loading-message");
+		if (loadingMsg) {
+			loadingMsg.remove();
+		}
 		console.log("setLoadingState:", loading); // ADDED console.log here
 
 		// Check visibility of blocking UI elements
@@ -570,6 +575,17 @@ if (
 		}
 		// END USER REQUESTED MODIFICATION
 
+		// Add new console.log statements here
+		console.log(
+			`[setLoadingState] Status: loading=${loading}, planConfVis=${planConfirmationVisible}, planParseErrVis=${planParseErrorVisible}`
+		);
+		console.log(
+			`[setLoadingState] Chat: childCount=${chatContainer?.childElementCount}, hasMessages=${hasMessages}`
+		);
+		console.log(
+			`[setLoadingState] Buttons: saveDisabled=${saveChatButton?.disabled}, clearDisabled=${clearChatButton?.disabled}`
+		);
+
 		// Manage cancel generation button visibility based on loading AND blocking UI state
 		if (cancelGenerationButton) {
 			// The button should be visible ONLY when loading is true AND neither
@@ -591,10 +607,6 @@ if (
 				appendMessage("Model", "Generating...", "loading-message");
 			}
 		} else {
-			const loadingMsg = chatContainer?.querySelector(".loading-message");
-			if (loadingMsg) {
-				loadingMsg.remove();
-			}
 			updateEmptyChatPlaceholderVisibility(); // Call when isLoading becomes false
 		}
 
@@ -1170,10 +1182,6 @@ if (
 					"Received aiResponseStart. Starting stream via appendMessage."
 				); // ADDED: Specific console log
 				// Point 1.c (from review instructions): Ensure any generic "Creating..." or similar loading message is removed.
-				const loadingMsg = chatContainer?.querySelector(".loading-message");
-				if (loadingMsg) {
-					loadingMsg.remove();
-				}
 				// Point 1.b (from review instructions): Ensure appendMessage("Model", "", "ai-message") is called.
 				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
 				// within the appendMessage function (see its definition) for a new AI stream.
@@ -1288,6 +1296,7 @@ if (
 					// This is a successful streamed response that is NOT a plan requiring confirmation.
 					// Inputs should be re-enabled.
 					setLoadingState(false); // This call now correctly manages all button states
+					updateEmptyChatPlaceholderVisibility(); // Add this line
 				} else {
 					console.log("aiResponseEnd indicates failed streaming operation.");
 					// If !message.success and message.error was handled above, or if it's a non-plan failure.
