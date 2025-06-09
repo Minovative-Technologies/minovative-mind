@@ -198,14 +198,14 @@ export async function parseAndValidatePlan(
 					(step.action === PlanStepAction.CreateDirectory &&
 						ig.ignores(relativePath + "/"))
 				) {
-					const errorMsg =
-						"Plan validation failed: Path for step " +
+					const warningMsg =
+						"Skipping plan step " +
 						step.step +
-						" ('" +
+						" (" +
 						step.path +
-						"') is ignored by .gitignore rules. Please choose a different, non-ignored path.";
-					console.error(errorMsg, step);
-					return { plan: null, error: errorMsg };
+						") as its path is ignored by .gitignore rules. This step will not be executed.";
+					console.warn(warningMsg, step);
+					continue;
 				}
 
 				if (typeof step.command !== "undefined") {
