@@ -24,4 +24,4 @@ export const DEFAULT_MODEL =
 // Note: With the current constant definition of AVAILABLE_GEMINI_MODELS,
 // this fallback branch will not be hit as the array is not empty.
 
-export const TEMPERATURE = 1;
+export const TEMPERATURE = 2;
