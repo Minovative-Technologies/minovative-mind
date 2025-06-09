@@ -134,7 +134,7 @@ async function executeDocsAction(
 	fullText: string,
 	languageId: string,
 	fileName: string,
-	selectionRange: vscode.Range
+	effectiveRange: vscode.Range // Renamed from selectionRange
 ): Promise<ActionResult> {
 	// Feature gating check for generate_documentation
 	if (
@@ -279,16 +279,16 @@ export async function activate(context: vscode.ExtensionContext) {
 				vscode.window.showWarningMessage("No active editor found.");
 				return;
 			}
-			const selectionRange = editor.selection;
-			if (selectionRange.isEmpty) {
-				vscode.window.showWarningMessage("No text selected.");
-				return;
-			}
-			const selectedText = editor.document.getText(selectionRange);
+
+			// Refactor variable declarations as per instructions
+			const originalSelection: vscode.Selection = editor.selection;
+			let effectiveRange: vscode.Range;
+			let selectedText: string;
+
 			const fullText = editor.document.getText();
 			const languageId = editor.document.languageId;
 			const documentUri = editor.document.uri;
-			const fileName = editor.document.fileName; // Added for executeDocsAction
+			const fileName = editor.document.fileName;
 
 			const instructionsInput = await vscode.window.showInputBox({
 				prompt:
@@ -302,6 +302,64 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 			const instruction = instructionsInput.trim();
+
+			let diagnosticsString: string | undefined = undefined; // Initialize for diagnostics
+
+			// NEW: Handle '/fix' with empty selection first
+			if (instruction === "/fix" && originalSelection.isEmpty) {
+				selectedText = fullText; // Set selectedText to the entire document
+				// Set effectiveRange to cover the entire document
+				effectiveRange = new vscode.Range(
+					editor.document.positionAt(0),
+					editor.document.positionAt(fullText.length)
+				);
+
+				// Retrieve and format diagnostics
+				const diagnostics = vscode.languages.getDiagnostics(documentUri);
+				if (diagnostics.length > 0) {
+					diagnosticsString = diagnostics
+						.map((d) => {
+							const line = d.range.start.line + 1; // VS Code lines are 0-indexed
+							const char = d.range.start.character + 1; // VS Code chars are 0-indexed
+							const severity = vscode.DiagnosticSeverity[d.severity]; // Convert enum to string (e.g., "Error", "Warning")
+							return `[${line}:${char}] ${severity}: ${d.message}`;
+						})
+						.join("\n");
+				} else {
+					diagnosticsString = "No diagnostics found in the document.";
+				}
+				// Crucially, for '/fix' with empty selection, we skip the "No text selected." warning.
+			} else if (instruction === "/docs" && originalSelection.isEmpty) {
+				// This is the check for /docs with empty selection
+				vscode.window.showWarningMessage("No text selected.");
+				return;
+			} else if (originalSelection.isEmpty) {
+				// This new block handles all other instructions (custom requests) when no selection is present.
+				selectedText = fullText;
+				effectiveRange = new vscode.Range(
+					editor.document.positionAt(0),
+					editor.document.positionAt(fullText.length)
+				);
+
+				const diagnostics = vscode.languages.getDiagnostics(documentUri);
+				if (diagnostics.length > 0) {
+					diagnosticsString = diagnostics
+						.map((d) => {
+							const line = d.range.start.line + 1;
+							const char = d.range.start.character + 1;
+							const severity = vscode.DiagnosticSeverity[d.severity];
+							return `[${line}:${char}] ${severity}: ${d.message}`;
+						})
+						.join("\n");
+				} else {
+					diagnosticsString = "No diagnostics found in the document.";
+				}
+				// Crucially, ensure no warning message is shown in this block, as the expanded scope is intentional.
+			} else {
+				// User has a non-empty originalSelection
+				selectedText = editor.document.getText(originalSelection);
+				effectiveRange = originalSelection;
+			}
 
 			// New /docs instruction handling
 			if (instruction === "/docs") {
@@ -326,11 +384,11 @@ export async function activate(context: vscode.ExtensionContext) {
 						});
 						const result = await executeDocsAction(
 							sidebarProvider,
-							selectedText,
+							selectedText, // Now correctly set from the conditional logic above
 							fullText,
 							languageId,
 							fileName,
-							selectionRange
+							effectiveRange // Use effectiveRange
 						);
 						progress.report({
 							increment: 80,
@@ -341,8 +399,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
 						if (result.success) {
 							await editor.edit((editBuilder) => {
-								// Insert at the start of the selection range, followed by a newline
-								editBuilder.insert(selectionRange.start, result.content + "\n");
+								// Insert at the start of the effective range, followed by a newline
+								editBuilder.insert(effectiveRange.start, result.content + "\n");
 							});
 							vscode.window.showInformationMessage(
 								"Minovative Mind: Documentation successfully added at the start of your selection."
@@ -395,13 +453,14 @@ export async function activate(context: vscode.ExtensionContext) {
 					// and token linking internally for initiatePlanFromEditorAction.
 					await sidebarProvider.initiatePlanFromEditorAction(
 						instruction,
-						selectedText,
+						selectedText, // Use the potentially modified selectedText
 						fullText,
 						languageId,
 						documentUri,
-						selectionRange,
+						effectiveRange, // Use the potentially modified effectiveRange
 						progress, // Pass progress
-						token // Pass cancellation token
+						token, // Pass cancellation token
+						diagnosticsString // NEW: Pass the diagnosticsString
 					);
 				}
 			);

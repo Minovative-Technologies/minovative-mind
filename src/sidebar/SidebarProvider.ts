@@ -690,7 +690,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		documentUri: vscode.Uri,
 		selection: vscode.Range,
 		initialProgress?: vscode.Progress<{ message?: string; increment?: number }>, // RENAMED PARAMETER
-		initialToken?: vscode.CancellationToken // RENAMED PARAMETER
+		initialToken?: vscode.CancellationToken, // RENAMED PARAMETER
+		diagnosticsString?: string // New optional parameter
 	): Promise<void> {
 		console.log("[SidebarProvider] Entering initiatePlanFromEditorAction");
 		console.log(
@@ -865,33 +866,38 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					.replace(/\\/g, "/");
 			}
 
-			let diagnosticsString = "";
-			try {
-				const allDiagnostics = vscode.languages.getDiagnostics(documentUri);
-				const relevantDiagnostics = allDiagnostics.filter((diag) =>
-					diag.range.intersection(selection)
-				);
-				if (relevantDiagnostics.length > 0) {
-					// Sort diagnostics by line and severity
-					relevantDiagnostics.sort((a, b) =>
-						a.range.start.line !== b.range.start.line
-							? a.range.start.line - b.range.start.line
-							: a.severity - b.severity
+			// Use the provided diagnosticsString parameter, or calculate it if not provided
+			let finalDiagnosticsString = diagnosticsString;
+			if (finalDiagnosticsString === undefined) {
+				let calculatedDiagnostics = "";
+				try {
+					const allDiagnostics = vscode.languages.getDiagnostics(documentUri);
+					const relevantDiagnostics = allDiagnostics.filter((diag) =>
+						diag.range.intersection(selection)
 					);
-					diagnosticsString = relevantDiagnostics
-						.map(
-							(d) =>
-								`- ${vscode.DiagnosticSeverity[d.severity]} (Line ${
-									d.range.start.line + 1
-								}): ${d.message}`
-						)
-						.join("\n");
+					if (relevantDiagnostics.length > 0) {
+						// Sort diagnostics by line and severity
+						relevantDiagnostics.sort((a, b) =>
+							a.range.start.line !== b.range.start.line
+								? a.range.start.line - b.range.start.line
+								: a.severity - b.severity
+						);
+						calculatedDiagnostics = relevantDiagnostics
+							.map(
+								(d) =>
+									`- ${vscode.DiagnosticSeverity[d.severity]} (Line ${
+										d.range.start.line + 1
+									}): ${d.message}`
+							)
+							.join("\n");
+					}
+				} catch (diagError: unknown) {
+					// Changed from any
+					const dErr = diagError as Error;
+					console.error("Error retrieving diagnostics:", dErr.message);
+					calculatedDiagnostics = "[Could not retrieve diagnostics]";
 				}
-			} catch (diagError: unknown) {
-				// Changed from any
-				const dErr = diagError as Error;
-				console.error("Error retrieving diagnostics:", dErr.message);
-				diagnosticsString = "[Could not retrieve diagnostics]";
+				finalDiagnosticsString = calculatedDiagnostics;
 			}
 
 			const editorCtx: sidebarTypes.EditorContext = {
@@ -904,11 +910,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				selection,
 			};
 
-			// MODIFIED: Pass editorCtx.instruction, editorCtx, and diagnosticsString
+			// MODIFIED: Pass editorCtx.instruction, editorCtx, and finalDiagnosticsString
 			const projectContext = await this._buildProjectContext(
 				editorCtx.instruction,
 				editorCtx,
-				diagnosticsString
+				finalDiagnosticsString
 			);
 			if (projectContext.startsWith("[Error")) {
 				throw new Error(projectContext);
@@ -918,7 +924,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				projectContext,
 				undefined, // userRequest is undefined for editor actions
 				editorCtx,
-				diagnosticsString,
+				finalDiagnosticsString, // Use the final string
 				[...this.chatHistoryManager.getChatHistory()]
 			);
 
@@ -976,7 +982,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					type: "editor",
 					editorContext: editorCtx,
 					projectContext,
-					diagnosticsString,
+					diagnosticsString: finalDiagnosticsString,
 					initialApiKey: activeKeyForContext,
 					modelName,
 					chatHistory: [...this.chatHistoryManager.getChatHistory()], // Reflect newly added entry

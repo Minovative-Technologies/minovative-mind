@@ -111,7 +111,7 @@
 				"command": "minovative-mind.modifySelection",
 				"key": "ctrl+m",
 				"mac": "cmd+m",
-				"when": "editorHasSelection && editorTextFocus"
+				"when": "editorTextFocus"
 			}
 		]
 	},
