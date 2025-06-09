@@ -3,6 +3,7 @@ import { HistoryEntry, PlanGenerationContext } from "../common/sidebarTypes"; //
 import * as vscode from "vscode"; // Required for vscode.CancellationToken
 import { generateContentStream } from "../../ai/gemini";
 import { FileChangeEntry } from "../../types/workflow";
+import { TEMPERATURE } from "../common/sidebarConstants";
 
 export function createInitialPlanningExplanationPrompt(
 	projectContext: string,
@@ -77,7 +78,7 @@ export function createInitialPlanningExplanationPrompt(
 			: "";
 
 	return `
-    You are an expert AI programmer assisting within VS Code. Your task is to ONLY explain your plan to fulfill the user's request.
+    You are an highly expert AI programmer assisting within VS Code. Your task is to ONLY explain your plan to fulfill the user's request.
 
     **Goal:** Provide a clear, readable, step-by-step explanation of your plan in great detail no matter what. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
 
@@ -269,6 +270,20 @@ export function createPlanningPrompt(
         ]
     }
 
+    Example 7: Create a test file for an existing component in a nested directory
+    {
+        "planDescription": "Create a test file for an existing UI component.",
+        "steps": [
+            {
+                "step": 1,
+                "action": "create_file",
+                "description": "Create 'MyComponent.test.tsx' within the 'src/components/MyComponent' directory.",
+                "path": "src/components/MyComponent/MyComponent.test.tsx",
+                "generate_prompt": "Generate a basic Jest/React Testing Library test file for a functional React component located at 'src/components/MyComponent/MyComponent.tsx'. The component is named 'MyComponent'."
+            }
+        ]
+    }
+
     --- End Valid JSON Output Examples ---
 `;
 
@@ -399,10 +414,12 @@ export function createPlanningPrompt(
     ${projectContext}
     --- End Broader Project Context ---
 
+    --- Recent Changes ---
     ${recentChangesForPrompt}
+    --- End Recent Changes ---
 
     --- Textual Plan Prompt Section ---
-    ${textualPlanExplanation}
+    ${textualPlanPromptSection}
     --- End Textual Plan Prompt Section ---
 
     --- Expected JSON Plan Format ---
@@ -446,13 +463,17 @@ export async function _performModification(
 
     Your complete, raw modified file content:`;
 
+	const generationConfig = {
+		temperature: TEMPERATURE,
+	};
+
 	let modifiedContent = "";
 	const contentStream = generateContentStream(
 		apiKey,
 		modelName,
 		prompt,
 		undefined,
-		undefined,
+		generationConfig,
 		token
 	);
 

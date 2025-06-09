@@ -291,7 +291,7 @@ const sendReadyMessage = () => {
 	console.log("[SettingsWebview] Posted 'settingsWebviewReady' message.");
 };
 
-// Add DOMContentLoaded listener to ensure the DOM is fully loaded before sending messages.
+// DOMContentLoaded listener to ensure the DOM is fully loaded before sending messages.
 // This prevents issues if the script executes before all elements are available.
 if (document.readyState === "loading") {
 	document.addEventListener("DOMContentLoaded", sendReadyMessage);

@@ -89,7 +89,7 @@ export interface FirebaseConfigPayload {
 export interface InitializeSettingsViewMessage {
 	command: "initialize";
 	firebaseConfig: FirebaseConfigPayload;
-	// Add other initial data if needed
+	// other initial data if needed
 }
 
 // Union type for messages *from* the Settings Webview *to* the Extension

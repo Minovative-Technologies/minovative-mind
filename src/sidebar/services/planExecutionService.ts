@@ -26,7 +26,7 @@ export interface PlanStep {
 	content?: string; // Content for actions like CreateFile, TypeContent
 	modificationPrompt?: string; // Prompt for ModifyFile action
 	description: string; // User-friendly description of the step
-	// Add other properties as needed for different actions
+	// other properties as needed for different actions
 	command?: string; // For executeCommand
 	args?: string[]; // For executeCommand
 	message?: string; // For showMessage
@@ -68,7 +68,7 @@ export async function typeContentIntoEditor(
 				// Increment could be based on i / content.length if desired, but message update is often enough
 			});
 		}
-		// Add a small delay only if not cancelled
+		// a small delay only if not cancelled
 		if (!token.isCancellationRequested) {
 			await new Promise((resolve) => setTimeout(resolve, delayMs));
 		}
@@ -228,12 +228,6 @@ export async function executePlanStep(
 				message: `Successfully created file ${path.basename(newFilePath)}.`,
 			});
 			break;
-
-		// Add other cases here as they are implemented in the future
-		// case PlanStepAction.DeleteFile:
-		// case PlanStepAction.ViewFile:
-		// case PlanStepAction.ExecuteCommand:
-		// case PlanStepAction.ShowMessage:
 
 		default:
 			// For any action not explicitly implemented, throw an error.

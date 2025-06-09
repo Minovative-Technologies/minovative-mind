@@ -185,7 +185,7 @@ function startTypingAnimation() {
 	}
 }
 
-// Add new DOM elements to the critical elements null check
+// new DOM elements to the critical elements null check
 if (
 	!sendButton ||
 	!chatInput ||
@@ -250,8 +250,8 @@ if (
 			}
 
 			const senderElement = document.createElement("strong");
-			// Add a non-breaking space after the sender name
-			senderElement.textContent = `${sender}:\u00A0`; // Add non-breaking space
+			// a non-breaking space after the sender name
+			senderElement.textContent = `${sender}:\u00A0`; // non-breaking space
 			messageElement.appendChild(senderElement);
 
 			// Conditionally add error icon
@@ -278,13 +278,13 @@ if (
 			// END MODIFICATION
 
 			const textElement = document.createElement("span");
-			textElement.classList.add("message-text-content"); // Add class to identify the text span
+			textElement.classList.add("message-text-content"); // class to identify the text span
 			messageElement.appendChild(textElement); // Always append text element
 
 			let copyButton: HTMLButtonElement | null = null;
 			let deleteButton: HTMLButtonElement | null = null; // Declare deleteButton
 
-			// Add copy button for AI messages and handle streaming state
+			// copy button for AI messages and handle streaming state
 			// Ensure copy button logic is applied *after* error icon if both are present
 			// Refactor: Create copy button if message is 'user-message' or 'ai-message'
 			if (
@@ -325,7 +325,7 @@ if (
 					typingBuffer = ""; // ADDED: Clear typing buffer
 					startTypingAnimation(); // ADDED: Start the typing animation
 
-					// Add a loading indicator within the text element
+					// a loading indicator within the text element
 					textElement.innerHTML =
 						'<span class="loading-text">Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
 
@@ -575,7 +575,7 @@ if (
 		}
 		// END USER REQUESTED MODIFICATION
 
-		// Add new console.log statements here
+		// new console.log statements here
 		console.log(
 			`[setLoadingState] Status: loading=${loading}, planConfVis=${planConfirmationVisible}, planParseErrVis=${planParseErrorVisible}`
 		);
@@ -1079,7 +1079,7 @@ if (
 		updateStatus("Requesting chat load...");
 	});
 
-	// Add event listener for retryGenerationButton
+	// event listener for retryGenerationButton
 	if (retryGenerationButton) {
 		retryGenerationButton.addEventListener("click", () => {
 			console.log("Retry Generation button clicked."); // ADDED console.log here
@@ -1296,7 +1296,7 @@ if (
 					// This is a successful streamed response that is NOT a plan requiring confirmation.
 					// Inputs should be re-enabled.
 					setLoadingState(false); // This call now correctly manages all button states
-					updateEmptyChatPlaceholderVisibility(); // Add this line
+					updateEmptyChatPlaceholderVisibility(); // this line
 				} else {
 					console.log("aiResponseEnd indicates failed streaming operation.");
 					// If !message.success and message.error was handled above, or if it's a non-plan failure.
@@ -1307,7 +1307,7 @@ if (
 			}
 			// --- End new handlers for streamed responses ---
 
-			// Add new case for 'structuredPlanParseFailed'
+			// new case for 'structuredPlanParseFailed'
 			case "structuredPlanParseFailed": {
 				const { error, failedJson } = message.value;
 				console.log("Received structuredPlanParseFailed.");
@@ -1356,7 +1356,7 @@ if (
 			}
 			// END MODIFICATION
 
-			// Add new case for 'restorePendingPlanConfirmation'
+			// new case for 'restorePendingPlanConfirmation'
 			case "restorePendingPlanConfirmation":
 				if (message.value) {
 					console.log("Received restorePendingPlanConfirmation.");
@@ -1406,7 +1406,7 @@ if (
 				break;
 			// END Add new case for 'restorePendingPlanConfirmation'
 
-			// Add new case for 'appendRealtimeModelMessage'
+			// new case for 'appendRealtimeModelMessage'
 			case "appendRealtimeModelMessage":
 				// This case handles messages that should be directly appended to the chat as if they were from the Model.
 				// It's intended for real-time updates or messages from the model that are not part of a typical streaming response (e.g., step OK/FAIL, command output).
@@ -1733,7 +1733,7 @@ if (
 		setIconForButton(cancelGenerationButton, faStop); // faStop imported for this
 		// END MODIFICATION
 
-		// Add click event listener for cancelParseErrorButton as requested
+		// click event listener for cancelParseErrorButton as requested
 		// This listener is added within initializeWebview as part of UI setup.
 		if (cancelParseErrorButton) {
 			cancelParseErrorButton.addEventListener("click", () => {
@@ -1760,7 +1760,7 @@ if (
 		}
 		// END Add click event listener for cancelParseErrorButton
 
-		// Add click event listener for cancelGenerationButton
+		// click event listener for cancelGenerationButton
 		if (cancelGenerationButton) {
 			cancelGenerationButton.addEventListener("click", () => {
 				console.log("Cancel Generation button clicked."); // ADDED console.log here
@@ -1782,7 +1782,7 @@ if (
 		}
 		// END Add click event listener for cancelGenerationButton
 
-		// Add event delegation listener for copy buttons on chatContainer
+		// event delegation listener for copy buttons on chatContainer
 		if (chatContainer) {
 			chatContainer.addEventListener("click", async (event) => {
 				const target = event.target as HTMLElement;
@@ -1820,17 +1820,17 @@ if (
 								if (el.tagName === "BR") {
 									el.replaceWith("\n");
 								} else if (el.tagName === "LI") {
-									// Add newline before list items, unless it's the first item in its parent
+									// newline before list items, unless it's the first item in its parent
 									if (el.previousElementSibling) {
 										el.prepend("\n");
 									}
 								} else if (el.tagName === "TR") {
-									// Add newline before table rows, unless it's the first row in its parent
+									// newline before table rows, unless it's the first row in its parent
 									if (el.previousElementSibling) {
 										el.prepend("\n");
 									}
 								} else {
-									el.append("\n"); // Add newline after most block elements
+									el.append("\n"); // newline after most block elements
 								}
 							});
 

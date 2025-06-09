@@ -176,12 +176,12 @@ export async function parseAndValidatePlan(
 			// Validate path presence/absence and safety
 			if (actionsRequiringPath.includes(step.action)) {
 				if (typeof step.path !== "string" || step.path.trim() === "") {
-					const errorMsg = `Plan validation failed: Missing or empty path for required step ${step.step} (${step.action}). Please Retry.`;
+					const errorMsg = `Plan validation failed: Missing or empty path for required step ${step.step} (${step.action}). Path must be a non-empty relative string.`;
 					console.error(errorMsg, step);
 					return { plan: null, error: errorMsg };
 				}
 				if (path.isAbsolute(step.path) || step.path.includes("..")) {
-					const errorMsg = `Plan validation failed: Invalid path (absolute or traversal) for step ${step.step}: ${step.path}.`;
+					const errorMsg = `Plan validation failed: Path for step ${step.step} ('${step.path}') is invalid. Paths must be relative to the workspace root, use forward slashes, and not contain '..' for directory traversal.`;
 					console.error(errorMsg, step); // Include step object here
 					return { plan: null, error: errorMsg };
 				}
@@ -198,10 +198,14 @@ export async function parseAndValidatePlan(
 					(step.action === PlanStepAction.CreateDirectory &&
 						ig.ignores(relativePath + "/"))
 				) {
-					console.warn(
-						`Skipping step ${step.step} (${step.action}) as it targets an ignored path: '${step.path}'.`
-					);
-					continue; // Skip this step and move to the next iteration
+					const errorMsg =
+						"Plan validation failed: Path for step " +
+						step.step +
+						" ('" +
+						step.path +
+						"') is ignored by .gitignore rules. Please choose a different, non-ignored path.";
+					console.error(errorMsg, step);
+					return { plan: null, error: errorMsg };
 				}
 
 				if (typeof step.command !== "undefined") {

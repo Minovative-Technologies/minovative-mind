@@ -38,7 +38,7 @@ export class SettingsProvider implements vscode.WebviewViewProvider {
 				vscode.Uri.joinPath(this._extensionUri, "dist"),
 				vscode.Uri.joinPath(this._extensionUri, "media"),
 				vscode.Uri.joinPath(this._extensionUri, "src", "sidebar", "webview"),
-				// Add your actual 'dist' or script output directory if different
+				// your actual 'dist' or script output directory if different
 			],
 		};
 

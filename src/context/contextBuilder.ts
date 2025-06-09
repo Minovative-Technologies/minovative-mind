@@ -81,7 +81,7 @@ export async function buildContextString(
 	}
 	// --- END: Generate ASCII Tree ---
 
-	// --- Add Recent Project Changes ---
+	// Recent Project Changes ---
 	if (recentChanges && recentChanges.length > 0) {
 		let changesSummarySection =
 			"*** Recent Project Changes (During Current Workflow Execution) ***\n";
@@ -112,7 +112,50 @@ export async function buildContextString(
 	}
 	// --- END: Recent Project Changes ---
 
-	context += "File Contents (partial):\n";
+	// A direct list of existing relative file paths ---
+	let existingPathsSection = "Existing Relative File Paths:\n";
+	const maxPathsToList = 1000; // Limit the number of paths to avoid excessive context
+	let pathsAddedCount = 0;
+
+	for (const fileUri of relevantFiles) {
+		if (pathsAddedCount >= maxPathsToList) {
+			existingPathsSection += "... (additional paths omitted due to limit)\n";
+			break;
+		}
+		const relativePath = path
+			.relative(workspaceRoot.fsPath, fileUri.fsPath)
+			.replace(/\\\\/g, "/");
+		existingPathsSection += `- ${relativePath}\n`;
+		pathsAddedCount++;
+	}
+	existingPathsSection += "\n"; // Add a newline for separation
+
+	// Check if adding this section exceeds total context limit
+	if (
+		currentTotalLength + existingPathsSection.length >
+		config.maxTotalLength
+	) {
+		console.warn(
+			`Existing paths list exceeds total context limit. Truncating.`
+		);
+		const availableLength = config.maxTotalLength - currentTotalLength - 50; // Reserve space for truncation message
+		existingPathsSection =
+			existingPathsSection.substring(
+				0,
+				availableLength > 0 ? availableLength : 0
+			) + "\n... (Existing paths list truncated due to size limit)\n\n";
+		context += existingPathsSection;
+		currentTotalLength = config.maxTotalLength; // Maxed out after adding truncated structure
+	} else {
+		context += existingPathsSection;
+		currentTotalLength += existingPathsSection.length;
+	}
+	console.log(
+		`Context size after adding existing paths list: ${currentTotalLength} chars.`
+	);
+	// --- END: Direct list of existing relative file paths ---
+
+	context += "File Contents (partial):\n"; // This line is already there, ensure it follows the new section
 	const contentHeaderLength = "File Contents (partial):\n".length;
 	currentTotalLength += contentHeaderLength;
 
@@ -196,7 +239,7 @@ export async function buildContextString(
 		contentAdded = true;
 	}
 
-	// Add the final skipped message if needed
+	// the final skipped message if needed
 	if (!contentAdded && currentTotalLength < config.maxTotalLength) {
 		context += "\n(No file content included due to size limits or errors)";
 	} else if (filesSkippedForTotalSize > 0) {

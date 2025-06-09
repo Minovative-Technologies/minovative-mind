@@ -5,6 +5,7 @@ import {
 	HistoryEntry,
 	PlanGenerationContext,
 } from "../sidebar/common/sidebarTypes";
+import { TEMPERATURE } from "../sidebar/common/sidebarConstants";
 
 export interface SelectRelevantFilesAIOptions {
 	userRequest: string;
@@ -117,7 +118,7 @@ export async function selectRelevantFilesAI(
 
 	try {
 		const generationConfig: GenerationConfig = {
-			temperature: 2,
+			temperature: TEMPERATURE,
 			responseMimeType: "application/json",
 		};
 

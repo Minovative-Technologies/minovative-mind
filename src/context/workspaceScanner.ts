@@ -34,7 +34,7 @@ export async function scanWorkspace(
 	// Load gitignore rules and default patterns using the utility function
 	const ig = await loadGitIgnoreMatcher(rootFolder.uri);
 
-	// Add custom ignore patterns from options
+	// custom ignore patterns from options
 	if (options?.additionalIgnorePatterns) {
 		ig.add(options.additionalIgnorePatterns);
 	}

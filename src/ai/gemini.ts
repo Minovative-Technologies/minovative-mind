@@ -131,7 +131,7 @@ export async function* generateContentStream(
 	// 3. Construct request contents: combine history and the new prompt
 	const requestContents: Content[] = [
 		...(history || []), // Spread existing history if provided
-		{ role: "user", parts: [{ text: prompt }] }, // Add the new user prompt
+		{ role: "user", parts: [{ text: prompt }] }, // the new user prompt
 	];
 
 	let contentYielded = false; // Flag to track if any content has been successfully yielded

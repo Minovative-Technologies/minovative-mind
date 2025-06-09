@@ -65,32 +65,56 @@ export async function generateFileChangeSummary(
 
 	let addedLines: string[] = [];
 	let removedLines: string[] = [];
-	let totalInsertions = 0;
-	let totalDeletions = 0;
+	// totalInsertions and totalDeletions are not needed as we use addedLines.length and removedLines.length
+	// let totalInsertions = 0;
+	// let totalDeletions = 0;
 
 	for (const diff of diffs) {
 		const [type, text] = diff;
 		if (type === diff_match_patch.DIFF_INSERT) {
 			// Ensure empty strings from split are filtered out for cleaner results
 			addedLines.push(...text.split("\n").filter((line) => line !== ""));
-			totalInsertions += text.length;
+			// totalInsertions += text.length;
 		} else if (type === diff_match_patch.DIFF_DELETE) {
 			// Ensure empty strings from split are filtered out for cleaner results
 			removedLines.push(...text.split("\n").filter((line) => line !== ""));
-			totalDeletions += text.length;
+			// totalDeletions += text.length;
 		}
 	}
 
 	const addedContentFlat = addedLines.join("\n");
 	const removedContentFlat = removedLines.join("\n");
 
-	// Maps to store identified entities: name -> type (e.g., 'function', 'class', 'method', 'variable')
-	const addedEntities = new Map<string, string>();
-	const removedEntities = new Map<string, string>();
+	// Maps to store identified entities: type -> list of names (e.g., 'function' -> ['name1', 'name2'])
+	const addedEntities: Map<string, string[]> = new Map();
+	const removedEntities: Map<string, string[]> = new Map();
 
 	// Helper to extract entities from a given content string
-	const collectEntities = (content: string, targetMap: Map<string, string>) => {
+	const collectEntities = (
+		content: string,
+		targetMap: Map<string, string[]>
+	) => {
 		let match;
+
+		// Helper to add entity, ensuring uniqueness within its type list
+		const addEntity = (type: string, name: string) => {
+			if (!targetMap.has(type)) {
+				targetMap.set(type, []);
+			}
+			const namesForType = targetMap.get(type)!;
+			if (!namesForType.includes(name)) {
+				namesForType.push(name);
+			}
+		};
+
+		// Helper to check if a name is already captured as a function/method
+		const isFunctionName = (name: string): boolean => {
+			return (
+				(targetMap.get("function")?.includes(name) ||
+					targetMap.get("method")?.includes(name)) ??
+				false
+			);
+		};
 
 		// Regex for function declarations (e.g., `function name()`, `const name = () => {}`, class methods)
 		// Capture group 1: standalone function `function name(...)`
@@ -101,7 +125,7 @@ export async function generateFileChangeSummary(
 		while ((match = functionRegex.exec(content)) !== null) {
 			const name = match[1] || match[2] || match[3];
 			if (name) {
-				targetMap.set(name, match[3] ? "method" : "function");
+				addEntity(match[3] ? "method" : "function", name);
 			}
 		}
 		functionRegex.lastIndex = 0; // Reset regex for next use
@@ -111,7 +135,7 @@ export async function generateFileChangeSummary(
 		while ((match = classRegex.exec(content)) !== null) {
 			const name = match[1];
 			if (name) {
-				targetMap.set(name, "class");
+				addEntity("class", name);
 			}
 		}
 		classRegex.lastIndex = 0;
@@ -123,8 +147,8 @@ export async function generateFileChangeSummary(
 		while ((match = variableRegex.exec(content)) !== null) {
 			const name = match[1];
 			// Only add if not already identified as a function/method
-			if (name && !targetMap.has(name)) {
-				targetMap.set(name, "variable");
+			if (name && !isFunctionName(name)) {
+				addEntity("variable", name);
 			}
 		}
 		variableRegex.lastIndex = 0;
@@ -135,7 +159,7 @@ export async function generateFileChangeSummary(
 		while ((match = interfaceTypeAliasRegex.exec(content)) !== null) {
 			const name = match[1];
 			if (name) {
-				targetMap.set(name, "type/interface");
+				addEntity("type/interface", name);
 			}
 		}
 		interfaceTypeAliasRegex.lastIndex = 0;
@@ -145,76 +169,175 @@ export async function generateFileChangeSummary(
 		while ((match = enumRegex.exec(content)) !== null) {
 			const name = match[1];
 			if (name) {
-				targetMap.set(name, "enum");
+				addEntity("enum", name);
 			}
 		}
 		enumRegex.lastIndex = 0;
+
+		// NEW: Regex for import statements. Count each line that starts with 'import'.
+		const importLineRegex = /^\s*import\s+\S/gm; // Matches lines starting with 'import ' (and not just 'import')
+		let importStatementCount = 0;
+		while ((match = importLineRegex.exec(content)) !== null) {
+			importStatementCount++;
+		}
+		if (importStatementCount > 0) {
+			addEntity("import statement", `(${importStatementCount})`);
+		}
+		importLineRegex.lastIndex = 0;
+
+		// NEW: Regex for export statements. Count each line that starts with 'export'.
+		const exportLineRegex = /^\s*export\s+\S/gm; // Matches lines starting with 'export '
+		let exportStatementCount = 0;
+		while ((match = exportLineRegex.exec(content)) !== null) {
+			exportStatementCount++;
+		}
+		if (exportStatementCount > 0) {
+			addEntity("export statement", `(${exportStatementCount})`);
+		}
+		exportLineRegex.lastIndex = 0;
 	};
 
 	collectEntities(addedContentFlat, addedEntities);
 	collectEntities(removedContentFlat, removedEntities);
 
 	const summaries: string[] = [];
-	const processedNames = new Set<string>(); // To prevent duplicate summaries for the same named entity
 
-	// 1. Identify modified entities (present in both added and removed content with same name and type)
-	for (const [name, type] of addedEntities.entries()) {
-		if (removedEntities.has(name) && removedEntities.get(name) === type) {
-			summaries.push(`modified ${type} \`${name}\``);
-			processedNames.add(name);
-		}
-	}
+	// Helper function to get entity types and their names, considering modifications
+	// An entity is 'modified' if a name+type pair exists in both added and removed content.
+	// It's 'added' if it's in added but not in removed.
+	// It's 'removed' if it's in removed but not in added.
+	const getProcessedEntities = (
+		added: Map<string, string[]>,
+		removed: Map<string, string[]>,
+		type: "added" | "removed" | "modified"
+	): Map<string, string[]> => {
+		const result = new Map<string, string[]>();
 
-	// 2. Identify purely added entities
-	for (const [name, type] of addedEntities.entries()) {
-		if (!processedNames.has(name)) {
-			summaries.push(`added ${type} \`${name}\``);
-			processedNames.add(name);
+		// Determine modified and purely added
+		for (const [addedType, addedNames] of added.entries()) {
+			for (const addedName of addedNames) {
+				const isModified =
+					removed.has(addedType) && removed.get(addedType)?.includes(addedName);
+				if (
+					(type === "modified" && isModified) ||
+					(type === "added" && !isModified)
+				) {
+					if (!result.has(addedType)) {
+						result.set(addedType, []);
+					}
+					result.get(addedType)?.push(addedName);
+				}
+			}
 		}
-	}
 
-	// 3. Identify purely removed entities
-	for (const [name, type] of removedEntities.entries()) {
-		if (!processedNames.has(name)) {
-			summaries.push(`removed ${type} \`${name}\``);
-			processedNames.add(name);
+		// Determine purely removed
+		if (type === "removed") {
+			for (const [removedType, removedNames] of removed.entries()) {
+				for (const removedName of removedNames) {
+					const isModified =
+						added.has(removedType) &&
+						added.get(removedType)?.includes(removedName);
+					if (!isModified) {
+						if (!result.has(removedType)) {
+							result.set(removedType, []);
+						}
+						result.get(removedType)?.push(removedName);
+					}
+				}
+			}
 		}
-	}
+		return result;
+	};
+
+	const modifiedGrouped = getProcessedEntities(
+		addedEntities,
+		removedEntities,
+		"modified"
+	);
+	const addedGrouped = getProcessedEntities(
+		addedEntities,
+		removedEntities,
+		"added"
+	);
+	const removedGrouped = getProcessedEntities(
+		addedEntities,
+		removedEntities,
+		"removed"
+	);
+
+	// Helper to format grouped entities into summary strings
+	const formatGroup = (prefix: string, groupedMap: Map<string, string[]>) => {
+		const entries: string[] = [];
+		for (const [type, names] of groupedMap.entries()) {
+			if (names.length === 0) {
+				continue;
+			}
+
+			const formattedNames = names.map((name) => `\`${name}\``).join(", ");
+			// Determine pluralization for entity type
+			let typeDisplay = type;
+			if (names.length > 1 && !type.endsWith("s")) {
+				// Avoid double-pluralizing already plural names or counts
+				if (type.endsWith("statement")) {
+					// "import statement" -> "import statements"
+					typeDisplay += "s";
+				} else {
+					typeDisplay += "s"; // "function" -> "functions"
+				}
+			}
+			entries.push(`${prefix} ${typeDisplay} ${formattedNames}`);
+		}
+		return entries;
+	};
+
+	summaries.push(...formatGroup("modified", modifiedGrouped));
+	summaries.push(...formatGroup("added", addedGrouped));
+	summaries.push(...formatGroup("removed", removedGrouped));
 
 	let finalSummary = summaries.length > 0 ? summaries.join(", ") : "";
 
-	const totalChangesLength = totalInsertions + totalDeletions;
+	const addedLineCount = addedLines.length;
+	const removedLineCount = removedLines.length;
 
-	// Add general summary if specific entities aren't found or changes are extensive
+	// General summary if specific entities aren't found
 	if (finalSummary === "") {
-		if (totalInsertions > 0 && totalDeletions === 0) {
+		if (addedLineCount > 0 && removedLineCount === 0) {
 			finalSummary = "added new content";
-		} else if (totalDeletions > 0 && totalInsertions === 0) {
+		} else if (removedLineCount > 0 && addedLineCount === 0) {
 			finalSummary = "removed content";
-		} else if (totalInsertions > 0 && totalDeletions > 0) {
-			if (totalChangesLength > 500) {
-				// Arbitrary threshold for "major changes"
+		} else if (addedLineCount > 0 && removedLineCount > 0) {
+			// Use total line changes for magnitude
+			if (addedLineCount + removedLineCount > 10) {
+				// Arbitrary threshold for "major changes" based on lines
 				finalSummary = "major changes detected";
-			} else if (totalChangesLength > 0) {
+			} else {
 				finalSummary = "modified existing content";
 			}
 		} else {
 			finalSummary = "no significant changes"; // Fallback, should rarely happen if diffs exist
 		}
-	} else if (
-		totalInsertions > 0 &&
-		totalDeletions > 0 &&
-		summaries.length < 5
-	) {
-		// If some specific changes were found but there's also substantial general modification not covered by specific entities
-		if (totalChangesLength > 200) {
-			// A larger threshold for considering general modification
-			finalSummary += ", modified existing content";
-		}
 	}
 
-	// Prepend the file path
-	const summaryWithFilePath = `${filePath}: ${finalSummary}`;
+	// Append quantitative summary of line changes
+	const lineSummaryParts: string[] = [];
+	if (addedLineCount > 0) {
+		lineSummaryParts.push(
+			`Added ${addedLineCount} line${addedLineCount === 1 ? "" : "s"}`
+		);
+	}
+	if (removedLineCount > 0) {
+		lineSummaryParts.push(
+			`Removed ${removedLineCount} line${removedLineCount === 1 ? "" : "s"}`
+		);
+	}
+
+	let quantitativeSummary = "";
+	if (lineSummaryParts.length > 0) {
+		quantitativeSummary = ` (${lineSummaryParts.join(", ")})`;
+	}
+
+	// Prepend the file path and append quantitative summary
+	const summaryWithFilePath = `${filePath}: ${finalSummary}${quantitativeSummary}`;
 
 	return {
 		summary: summaryWithFilePath,
