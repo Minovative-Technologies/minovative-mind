@@ -17,11 +17,12 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 ### Intelligent Code Modification & Generation
 
-- Flexible Instructions: Users can select code and provide free-form instructions (e.g., “Refactor this function to use `async/await`”).
+- Flexible Instructions: Users can select any code snippet or operate on the **entire active file if no selection is present**, and provide free-form instructions (e.g., “Refactor this function to use async/await”).
 - Quick Access: Triggered via a keyboard shortcut (`Ctrl+M` or `Cmd+M`) or the editor’s right-click context menu (`Minovative Mind > Custom Modifications`).
 - AI-Generated Documentation (`/docs`): Typing `/docs` for selected code automatically generates appropriate documentation (e.g., `JSDoc`, `Python docstrings`) and inserts it directly into the file.
-- Automated Code Fixing (`/fix`): Typing `/fix` prompts the AI to analyze selected code, including relevant `VS Code` diagnostics (warnings, errors), and propose/apply fixes directly within the editor.
+- Automated Code Fixing (`/fix`): Typing `/fix` prompts the AI to analyze selected code, or the **entire active file if no selection is present**, including relevant `VS Code` diagnostics (warnings, errors), and propose/apply fixes directly within the editor.
 - Modular Code Generation: The AI is explicitly instructed to promote modular code generation principles, encouraging maintainable and scalable solutions.
+- **Diagnostic-Aware Modifications**: For both targeted selections and whole-file operations, the AI leverages relevant VS Code diagnostics (warnings, errors) to inform its custom modifications, leading to more accurate and problem-solving suggestions.
 
 ## Advanced Workflow & Automation
 
@@ -40,12 +41,31 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - Interactive Execution Feedback: Provides real-time progress updates in `VS Code` notifications and the sidebar chat. Includes a simulated “typing” animation for AI-generated content in the editor.
 - Cancellation: Users can cancel an ongoing plan execution at any time via the `VS Code` progress notification.
 - Retry Mechanism: If the AI fails to generate a valid `JSON` plan due to parsing errors, a “Retry” option is provided in the sidebar to re-attempt generation.
+- **Dynamic Context Awareness:** The AI maintains a robust and adaptive understanding of ongoing project changes, including newly created files and recent modifications, throughout a multi-step workflow. This ensures that subsequent planned actions are highly coherent and build accurately upon previous steps, leading to more reliable and contextually aware solutions that reflect the evolving state of your codebase.
+- **Seamless Editor-to-Plan Integration**: When custom code modification requests (triggered via `Ctrl+M` or `Cmd+M`) or `/fix` commands involve complex, multi-step tasks, the extension seamlessly escalates them to the full AI-driven planning and execution system. This allows the AI to break down and execute the task as a coherent series of actions, potentially across multiple files, to achieve the desired outcome.
 
 ### Automated Git Commit Messages
 
 - Effortless Commit Messages: Generates descriptive and relevant `Git commit` messages automatically based on staged changes.
 - Quick Execution: Can be triggered by typing `/commit` in the chat or clicking a dedicated “Commit Changes” button in the sidebar.
 - Streamlined Process: Automatically stages pending changes (`git add .`), analyzes the diff, generates a conventional commit message, and executes the `git commit` command.
+
+## Account & Subscription Management
+
+### User Accounts & Authentication
+
+- **Seamless Integration:** Users can effortlessly sign in and sign up for a Minovative Mind account directly within the VS Code sidebar.
+- **Secure Sessions:** The extension securely manages user authentication sessions, enabling personalized feature access and preferences.
+
+### Flexible Subscription Tiers
+
+- **Free Tier:** Provides foundational AI capabilities, including comprehensive AI chat, contextual code explanation, AI-generated documentation (`/docs` command), and automated Git commit message generation (`/commit` command).
+- **Pro Tier:** Unlocks the full suite of Minovative Mind's advanced AI-Agent features, such as intelligent code modification, automated code fixing (`/fix` command), sophisticated AI-driven planning & execution for multi-step tasks (`/plan` command), and real-time live code insertion with dynamic typing animations.
+
+### Manage Your Subscription
+
+- **Customer Portal Access:** Users can conveniently manage their Pro subscription details, view billing information, and update payment methods via a secure link to the Stripe Customer Portal, accessible directly from the extension's settings.
+- **Transparent Feature Gating:** The extension clearly indicates which features are available or restricted based on the user's current authentication status and subscription tier.
 
 ## Customization & Management
 
@@ -101,7 +121,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 By combining these features, Minovative Mind aims to provide a comprehensive AI-powered assistant directly within `VS Code`, significantly streamlining development tasks and improving overall developer productivity.
 
-# Minovative Mind — Feature Comparison
+## Minovative Mind — Feature Comparison
 
 | **Feature Category**               | **Feature**                                                            | **Free Users** | **Paid Users ($20/mo)** |
 | ---------------------------------- | ---------------------------------------------------------------------- | -------------- | ----------------------- |

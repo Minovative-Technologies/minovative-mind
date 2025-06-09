@@ -73,7 +73,7 @@ You have control over your data and how you interact with the Minovative Mind Ex
 
 ## 8. Children's Privacy
 
-If users are under the age of 13, they need a parent's permission to use this extension.
+The Minovative Mind VS Code Extension is not intended for use by children under the age of 13. We do not knowingly collect personally identifiable information from children under 13. If we become aware that we have inadvertently received personal information from a user under the age of 13, we will take steps to delete that information from our records as quickly as possible. If you are a parent or guardian and believe we may have collected information from your child, please contact us at the address provided in the "Contact Us" section below.
 
 ## 9. Changes to This Privacy Policy
 
@@ -83,4 +83,4 @@ We may update this Privacy Policy from time to time to reflect changes in our pr
 
 If you have any questions or concerns about this Privacy Policy or our data practices, please contact us at:
 
-[Please replace this placeholder with your actual Publisher Name/Contact Email address]
+Minovative Technologies (support@minovativemind.dev)
