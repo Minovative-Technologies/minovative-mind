@@ -219,7 +219,12 @@ if (
 	}
 } else {
 	// Modified appendMessage to handle stream initialization and add copy button for AI messages
-	function appendMessage(sender: string, text: string, className: string = "") {
+	function appendMessage(
+		sender: string,
+		text: string,
+		className: string = "",
+		isHistoryMessage: boolean = false
+	) {
 		if (chatContainer) {
 			// Handle the "Creating..." loading message
 			if (className === "loading-message") {
@@ -247,6 +252,10 @@ if (
 				className
 					.split(" ")
 					.forEach((cls) => messageElement.classList.add(cls));
+			}
+			if (isHistoryMessage) {
+				// NEW: Add dataset.isHistory attribute
+				messageElement.dataset.isHistory = "true";
 			}
 
 			const senderElement = document.createElement("strong");
@@ -282,81 +291,107 @@ if (
 			messageElement.appendChild(textElement); // Always append text element
 
 			let copyButton: HTMLButtonElement | null = null;
-			let deleteButton: HTMLButtonElement | null = null; // Declare deleteButton
+			let deleteButton: HTMLButtonElement | null = null;
 
-			// copy button for AI messages and handle streaming state
-			// Ensure copy button logic is applied *after* error icon if both are present
-			// Refactor: Create copy button if message is 'user-message' or 'ai-message'
-			if (
-				className.includes("user-message") ||
-				className.includes("ai-message")
-			) {
-				// Create copy button
-				copyButton = document.createElement("button");
-				copyButton.classList.add("copy-button");
-				copyButton.title = "Copy Message";
-				setIconForButton(copyButton, faCopy); // Set the initial copy icon
-
-				// Create delete button
-				deleteButton = document.createElement("button");
-				deleteButton.classList.add("delete-button");
-				deleteButton.title = "Delete Message";
-				setIconForButton(deleteButton, faTrashCan);
-
-				// Create actions container
-				const messageActions = document.createElement("div");
-				messageActions.classList.add("message-actions");
-				messageActions.appendChild(copyButton);
-				messageActions.appendChild(deleteButton);
-
-				messageElement.appendChild(messageActions); // Append actions container to messageElement
-
-				// Keep logic for disabling button during AI streaming specific to 'ai-message'
+			// The entire block for creating/appending copyButton, deleteButton, and messageActions
+			// must be wrapped in `if (isHistoryMessage)`
+			if (isHistoryMessage) {
+				// NEW PRIMARY CONDITION
+				// Only history messages get buttons and are involved in streaming logic
 				if (
-					sender === "Model" && // This condition ensures it only applies to Model messages
-					text === "" &&
-					className.includes("ai-message") &&
-					!className.includes("error-message")
+					className.includes("user-message") ||
+					className.includes("ai-message")
 				) {
-					// This is the start of an AI stream (and not a start error)
-					console.log("Appending start of AI stream message.");
-					currentAiMessageContentElement = textElement;
-					currentAccumulatedText = ""; // Initialize accumulated text
-					typingBuffer = ""; // ADDED: Clear typing buffer
-					startTypingAnimation(); // ADDED: Start the typing animation
+					// Existing condition, now nested
+					// Create copy button
+					copyButton = document.createElement("button");
+					copyButton.classList.add("copy-button");
+					copyButton.title = "Copy Message";
+					setIconForButton(copyButton, faCopy);
 
-					// a loading indicator within the text element
-					textElement.innerHTML =
-						'<span class="loading-text">Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+					// Create delete button
+					deleteButton = document.createElement("button");
+					deleteButton.classList.add("delete-button");
+					deleteButton.title = "Delete Message";
+					setIconForButton(deleteButton, faTrashCan);
 
-					// Disable copy and delete buttons while content is loading/streaming
-					if (copyButton) {
-						copyButton.disabled = true;
-					}
-					if (deleteButton) {
-						deleteButton.disabled = true;
+					// Create actions container
+					const messageActions = document.createElement("div");
+					messageActions.classList.add("message-actions");
+					messageActions.appendChild(copyButton);
+					messageActions.appendChild(deleteButton);
+
+					messageElement.appendChild(messageActions); // Append actions container to messageElement
+
+					// Keep logic for disabling button during AI streaming specific to 'ai-message'
+					if (
+						sender === "Model" && // This condition ensures it only applies to Model messages
+						text === "" &&
+						className.includes("ai-message") &&
+						!className.includes("error-message")
+					) {
+						// This is the start of an AI stream for a HISTORY message (e.g., from aiResponseStart)
+						console.log(
+							"Appending start of AI stream message (isHistoryMessage)."
+						); // Modified log
+						currentAiMessageContentElement = textElement;
+						currentAccumulatedText = ""; // Initialize accumulated text
+						typingBuffer = ""; // Clear typing buffer
+						startTypingAnimation(); // Start the typing animation
+
+						// a loading indicator within the text element
+						textElement.innerHTML =
+							'<span class="loading-text">Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+
+						// Disable copy and delete buttons while content is loading/streaming
+						if (copyButton) {
+							copyButton.disabled = true;
+						}
+						if (deleteButton) {
+							deleteButton.disabled = true;
+						}
+					} else {
+						// This is a complete HISTORY message (user message or complete AI message from history/aiResponseEnd)
+						stopTypingAnimation(); // Stop any ongoing typing animation
+						typingBuffer = ""; // Clear typing buffer
+						currentAiMessageContentElement = null; // Clear AI streaming state if it was active
+						currentAccumulatedText = "";
+
+						const renderedHtml = md.render(text);
+						textElement.innerHTML = renderedHtml;
+						// For complete messages (user or non-streaming AI), buttons are enabled immediately
+						if (copyButton) {
+							copyButton.disabled = false;
+						}
+						if (deleteButton) {
+							deleteButton.disabled = false;
+						}
 					}
 				} else {
-					// This is a complete non-streamed AI message OR a complete user message
-					stopTypingAnimation(); // ADDED: Stop any ongoing typing animation
-					typingBuffer = ""; // ADDED: Clear typing buffer
-					currentAiMessageContentElement = null; // Clear AI streaming state if it was active
-					currentAccumulatedText = "";
-
+					// This is a system message (or other non-user/AI message) that IS part of history
+					// (e.g., restored system messages). No buttons.
+					console.log(
+						"Appending history-backed non-user/AI message (no buttons)."
+					); // Added log
 					const renderedHtml = md.render(text);
 					textElement.innerHTML = renderedHtml;
-					// For complete messages (user or non-streaming AI), buttons are enabled immediately
-					if (copyButton) {
-						copyButton.disabled = false;
-					}
-					if (deleteButton) {
-						deleteButton.disabled = false;
-					}
+					// Ensure streaming state is reset here as it's a complete message.
+					stopTypingAnimation();
+					typingBuffer = "";
+					currentAiMessageContentElement = null;
+					currentAccumulatedText = "";
 				}
 			} else {
-				// For system messages, etc. (no copy/delete buttons)
+				// NEW ELSE BLOCK for !isHistoryMessage (no buttons, direct render, state reset)
+				// For non-history messages (e.g., real-time status updates from Model), no copy/delete buttons
+				console.log("Appending non-history message (no buttons)."); // Added log
 				const renderedHtml = md.render(text);
 				textElement.innerHTML = renderedHtml;
+				// Ensure streaming state is reset for these complete messages.
+				stopTypingAnimation();
+				typingBuffer = "";
+				currentAiMessageContentElement = null;
+				currentAccumulatedText = "";
 			}
 			// END Add copy button for AI messages
 
@@ -453,7 +488,8 @@ if (
 			appendMessage(
 				"System",
 				"Please add or select a valid API Key first.",
-				"error-message"
+				"error-message",
+				true // System messages are part of history
 			);
 			return;
 		}
@@ -461,7 +497,6 @@ if (
 		// Set loading state to true immediately upon sending
 		setLoadingState(true);
 
-		// Check for commands first
 		const lowerMessage = fullMessage.toLowerCase();
 		if (lowerMessage.startsWith("/plan ")) {
 			const planRequest = fullMessage.substring(6).trim();
@@ -471,18 +506,19 @@ if (
 				appendMessage(
 					"System",
 					"Please provide a description for the plan after /plan.",
-					"error-message"
+					"error-message",
+					true // System messages are part of history
 				);
 				return;
 			}
-			appendMessage("You", fullMessage, "user-message");
+			appendMessage("You", fullMessage, "user-message", true);
 			vscode.postMessage({ type: "planRequest", value: planRequest });
 		} else if (lowerMessage === "/commit") {
-			appendMessage("You", fullMessage, "user-message");
+			appendMessage("You", fullMessage, "user-message", true);
 			vscode.postMessage({ type: "commitRequest" });
 		} else {
 			// Regular chat message
-			appendMessage("You", fullMessage, "user-message");
+			appendMessage("You", fullMessage, "user-message", true);
 			vscode.postMessage({ type: "chatMessage", value: fullMessage });
 		}
 	}
@@ -490,7 +526,6 @@ if (
 	// Modified setLoadingState to control button states based on loading and UI visibility
 	function setLoadingState(loading: boolean) {
 		isLoading = loading; // Keep track of overall loading state
-		// Move loadingMsg.remove() logic to the very beginning of the function
 		const loadingMsg = chatContainer?.querySelector(".loading-message");
 		if (loadingMsg) {
 			loadingMsg.remove();
@@ -604,7 +639,7 @@ if (
 				!currentAiMessageContentElement &&
 				!chatContainer?.querySelector(".loading-message")
 			) {
-				appendMessage("Model", "Generating...", "loading-message");
+				appendMessage("Model", "Generating...", "loading-message", false); // Loading messages are not history
 			}
 		} else {
 			updateEmptyChatPlaceholderVisibility(); // Call when isLoading becomes false
@@ -1124,7 +1159,8 @@ if (
 				appendMessage(
 					"Model",
 					message.value,
-					`ai-message ${message.isError ? "error-message" : ""}`.trim()
+					`ai-message ${message.isError ? "error-message" : ""}`.trim(),
+					true // `aiResponse` is a complete message meant for history
 				);
 
 				// Handle plan confirmation if this non-streamed message requires it.
@@ -1186,7 +1222,7 @@ if (
 				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
 				// within the appendMessage function (see its definition) for a new AI stream.
 				// Note: aiResponseStart is only sent for *successful* starts. Errors would come as aiResponseEnd with !success.
-				appendMessage("Model", "", "ai-message");
+				appendMessage("Model", "", "ai-message", true); // This is a history message
 				// setLoadingState(true) was called when the user sent the message.
 				// We are now in the process of receiving the response, so loading is still active.
 				// No need to call setLoadingState(false) here. Button states are already handled by the initial setLoadingState(true).
@@ -1348,7 +1384,8 @@ if (
 					appendMessage(
 						"System",
 						`Structured plan parsing failed: ${error}. Failed JSON: \n\`\`\`json\n${failedJson}\n\`\`\`. Error UI missing.`,
-						"error-message"
+						"error-message",
+						true // System messages are part of history
 					);
 					setLoadingState(false); // Still set loading to false, manages buttons based on no UI block.
 				}
@@ -1416,7 +1453,8 @@ if (
 					appendMessage(
 						"Model",
 						message.value.text,
-						`ai-message ${message.value.isError ? "error-message" : ""}`.trim()
+						`ai-message ${message.value.isError ? "error-message" : ""}`.trim(),
+						false // These are real-time, NOT history-backed messages
 					);
 					// After adding a message, update button states based on content count, but only if not blocked
 					// Calling setLoadingState(isLoading) re-evaluates button states based on current state and UI visibility
@@ -1549,7 +1587,7 @@ if (
 						) {
 							// For restored messages, they are complete, so no streaming logic applies here.
 							// appendMessage will correctly add the copy button for AI messages here
-							appendMessage(msg.sender, msg.text, msg.className || "");
+							appendMessage(msg.sender, msg.text, msg.className || "", true);
 						}
 					});
 					updateStatus("Chat history restored.");
@@ -1878,13 +1916,17 @@ if (
 					}
 				} else if (deleteButton && !deleteButton.disabled) {
 					// New logic for delete button
-					const messageElementToDelete = deleteButton.closest(".message");
+					const messageElementToDelete = deleteButton.closest(
+						".message[data-is-history='true']"
+					); // MODIFIED: Filter by data-is-history attribute
 					if (messageElementToDelete) {
-						// Get all .message elements within chatContainer
-						const allMessages = Array.from(
-							chatContainer.querySelectorAll(".message")
+						// Get all .message elements within chatContainer that are history messages
+						const allHistoryMessages = Array.from(
+							chatContainer.querySelectorAll(".message[data-is-history='true']") // MODIFIED: Filter by data-is-history attribute
 						);
-						const messageIndex = allMessages.indexOf(messageElementToDelete);
+						const messageIndex = allHistoryMessages.indexOf(
+							messageElementToDelete
+						); // MODIFIED: Use allHistoryMessages
 
 						if (messageIndex !== -1) {
 							vscode.postMessage({
@@ -1893,12 +1935,14 @@ if (
 							});
 							updateStatus("Requesting message deletion...");
 						} else {
-							console.warn("Could not find index of message to delete.");
+							console.warn(
+								"Could not find index of history message to delete (after data-is-history filter)."
+							); // NEW console.warn
 						}
 					} else {
 						console.warn(
-							"Delete button clicked, but parent message element not found."
-						);
+							"Delete button clicked, but target is not a history-backed message."
+						); // NEW console.warn
 					}
 				}
 			});
