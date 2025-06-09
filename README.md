@@ -77,7 +77,7 @@ Users can now sign in/sign up directly within the VS Code sidebar, with secure s
 
 ### Manage Your Subscription
 
-Subscription details can be securely managed via a dedicated link to the Stripe Customer Portal, accessible directly from the extension's settings.
+Subscription details can be securely managed via a dedicated link to the Stripe Customer Portal, accessible directly from the Minovative Mind Website
 
 ### Transparent Feature Gating
 
@@ -127,7 +127,7 @@ For detailed information on how the Minovative Mind VS Code extension handles us
 
 ## 🔒 Terms of Use
 
-For detailed information on the terms and conditions governing the use of the Minovative Mind VS Code extension, please refer to our comprehensive [Minovative Mind VS Code Terms of Use](https://www.minovativemind.dev/legal/terms-of-use).
+For detailed information on the terms and conditions governing the use of the Minovative Mind VS Code extension, please refer to our comprehensive [Minovative Mind VS Code Terms of Use](https://www.minovativemind.dev/legal/terms-of-use/vscode).
 
 ## 💬 Feedback & Support
 
