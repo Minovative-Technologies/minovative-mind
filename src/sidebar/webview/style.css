@@ -226,6 +226,7 @@ h2 {
 	display: block;
 	flex-grow: 1;
 	overflow-x: auto;
+	overflow-y: hidden;
 }
 .user-message {
 	padding: var(--message-padding);
