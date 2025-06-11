@@ -18,8 +18,8 @@ export function createInitialPlanningExplanationPrompt(
 	if (editorContext) {
 		const instructionType =
 			editorContext.instruction.toLowerCase() === "/fix"
-				? `The user triggered the '/fix' command on the selected code.`
-				: `The user provided the custom instruction: "${editorContext.instruction}".`;
+				? `The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix.`
+				: `The user provided the custom instruction for you to complete for you to complete: "${editorContext.instruction}".`;
 
 		specificContextPrompt = `
         --- Specific User Request Context from Editor ---
@@ -91,8 +91,7 @@ export function createInitialPlanningExplanationPrompt(
     2.  **Be Comprehensive:** Your explanation should cover all necessary steps to achieve the user's goal.
     3.  Clarity: Make the plan easy for a junior developer to understand. Briefly describe what each step will do (e.g., "Create a new file named 'utils.ts'", "Modify 'main.ts' to import the new utility function", "Install the 'axios' package using npm").
     4.  No JSON: **Do NOT output any JSON for this initial explanation.** Your entire response should be human-readable text.
-    5. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain.
-    6. ALWAYS keep in mind of providing production-ready code with no placeholders at all.
+    5. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for the developers.
 
     Specific Context: ${specificContextPrompt}
 
@@ -364,14 +363,17 @@ export function createPlanningPrompt(
 	if (editorContext) {
 		const instructionType =
 			editorContext.instruction.toLowerCase() === "/fix"
-				? `The user triggered the '/fix' command on the selected code.`
-				: `The user provided the custom instruction: "${editorContext.instruction}".`;
+				? `The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix`
+				: `The user provided the custom instruction for you to complete: "${editorContext.instruction}".`;
 
 		specificContextPrompt = `
         --- Specific User Request Context from Editor ---
         File Path: ${editorContext.filePath}
         Language: ${editorContext.languageId}
+        
+        --- Instruction Type ---
         ${instructionType}
+        --- End Instruction Type ---
 
         --- Selected Code in Editor ---
         \`\`\`${editorContext.languageId}
@@ -390,6 +392,7 @@ export function createPlanningPrompt(
         ${editorContext.fullText}
         \`\`\`
         --- End Full Content ---`;
+
 		mainInstructions = `Based on the user's request from the editor (${
 			editorContext.instruction.toLowerCase() === "/fix"
 				? "'/fix' command"
@@ -438,10 +441,9 @@ export function createPlanningPrompt(
         *   Backslash (\`\\\`) must be escaped as \`\\\`.
         *   Double quote (\`"\`) must be escaped as \`"\`.
     7.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
-    8. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain.
-    9. ALWAYS keep in mind of providing production-ready code with no placeholders at all
+    8. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for developers.
     // Ensure only one modify_file step per file path
-    10. **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
+    9. **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
 
     --- Specific Context Prompt ---
     ${specificContextPrompt}

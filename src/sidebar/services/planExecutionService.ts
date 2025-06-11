@@ -199,34 +199,126 @@ export async function executePlanStep(
 			if (!step.file || !step.content) {
 				throw new Error("Missing file path or content for CreateFile action.");
 			}
-			const newFilePath = path.join(vscode.workspace.rootPath || "", step.file);
-
-			await vscode.workspace.fs.writeFile(
-				vscode.Uri.file(newFilePath),
-				Buffer.from(step.content)
+			const targetFilePath = path.join(
+				vscode.workspace.rootPath || "",
+				step.file
 			);
+			const targetFileUri = vscode.Uri.file(targetFilePath);
 
-			const newFileContent = step.content;
+			try {
+				await vscode.workspace.fs.stat(targetFileUri); // Attempt to stat the file
 
-			const {
-				summary: createSummary,
-				addedLines: createAddedLines,
-				removedLines: createRemovedLines,
-			} = await generateFileChangeSummary("", newFileContent, step.file!);
+				// If stat succeeds, the file exists
+				const existingContentBuffer = await vscode.workspace.fs.readFile(
+					targetFileUri
+				);
+				const existingContent = existingContentBuffer.toString();
 
-			const createChangeEntry: FileChangeEntry = {
-				changeType: "created",
-				filePath: step.file!,
-				summary: createSummary,
-				addedLines: createAddedLines,
-				removedLines: createRemovedLines,
-				timestamp: Date.now(),
-			};
+				if (existingContent === step.content) {
+					progress.report({
+						message: `File ${path.basename(
+							targetFilePath
+						)} already has the target content. Skipping update.`,
+					});
+					return; // File exists and content is identical, do nothing.
+				} else {
+					// File exists but content differs, update it.
+					progress.report({
+						message: `Updating content of ${path.basename(targetFilePath)}...`,
+					});
 
-			changeLogger.logChange(createChangeEntry);
-			progress.report({
-				message: `Successfully created file ${path.basename(newFilePath)}.`,
-			});
+					let documentToUpdate: vscode.TextDocument;
+					try {
+						documentToUpdate = await vscode.workspace.openTextDocument(
+							targetFileUri
+						);
+					} catch (error) {
+						throw new Error(
+							`Failed to open document ${targetFilePath} for update: ${
+								(error as Error).message
+							}`
+						);
+					}
+
+					const editorToUpdate = await vscode.window.showTextDocument(
+						documentToUpdate
+					);
+
+					await applyAITextEdits(
+						editorToUpdate,
+						step.content,
+						"Update existing file content",
+						token
+					);
+
+					const newContent = editorToUpdate.document.getText();
+					const { summary, addedLines, removedLines } =
+						await generateFileChangeSummary(
+							existingContent,
+							newContent,
+							step.file!
+						);
+
+					const updateChangeEntry: FileChangeEntry = {
+						changeType: "modified",
+						filePath: step.file!,
+						summary: summary,
+						addedLines: addedLines,
+						removedLines: removedLines,
+						timestamp: Date.now(),
+					};
+					changeLogger.logChange(updateChangeEntry);
+
+					progress.report({
+						message: `Successfully updated file ${path.basename(
+							targetFilePath
+						)}.`,
+					});
+				}
+			} catch (error) {
+				// Check for specific file not found errors
+				if (
+					error instanceof vscode.FileSystemError &&
+					(error.code === "FileNotFound" || error.code === "EntryNotFound")
+				) {
+					// File does not exist, proceed with creation
+					progress.report({
+						message: `Creating new file: ${path.basename(targetFilePath)}...`,
+					});
+					await vscode.workspace.fs.writeFile(
+						targetFileUri,
+						Buffer.from(step.content)
+					);
+
+					const newFileContent = step.content;
+
+					const { summary: createSummary, addedLines: createAddedLines } =
+						await generateFileChangeSummary("", newFileContent, step.file!);
+
+					const createChangeEntry: FileChangeEntry = {
+						changeType: "created",
+						filePath: step.file!,
+						summary: createSummary,
+						addedLines: createAddedLines,
+						removedLines: [], // Explicitly set to [] for creation
+						timestamp: Date.now(),
+					};
+
+					changeLogger.logChange(createChangeEntry);
+					progress.report({
+						message: `Successfully created file ${path.basename(
+							targetFilePath
+						)}.`,
+					});
+				} else {
+					// Re-throw other errors encountered during stat or file system operations
+					throw new Error(
+						`Error accessing or creating file ${targetFilePath}: ${
+							(error as Error).message
+						}`
+					);
+				}
+			}
 			break;
 
 		default:
