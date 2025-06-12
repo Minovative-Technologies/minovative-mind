@@ -2,6 +2,8 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [0.0.6-beta.0] - 2025-6-12
+
 ## [0.0.5-beta.0] - 2025-6-8
 
 ## [0.0.4-beta.0] - 2025-6-6
