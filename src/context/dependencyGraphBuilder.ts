@@ -1,7 +1,7 @@
-import { parseFileImports } from "../utils/fileDependencyParser";
 import * as vscode from "vscode";
 import * as path from "path";
 import BPromise from "bluebird";
+import { parseFileImports } from "../utils/fileDependencyParser";
 
 export async function buildDependencyGraph(
 	allScannedFiles: vscode.Uri[],
