@@ -1,6 +1,6 @@
 // src/sidebar/services/aiInteractionService.ts
-import { HistoryEntry, PlanGenerationContext } from "../common/sidebarTypes"; // Assuming PlanGenerationContext is correctly defined
-import * as vscode from "vscode"; // Required for vscode.CancellationToken
+import { HistoryEntry, PlanGenerationContext } from "../common/sidebarTypes";
+import * as vscode from "vscode";
 import { generateContentStream } from "../../ai/gemini";
 import { FileChangeEntry } from "../../types/workflow";
 import { TEMPERATURE } from "../common/sidebarConstants";
@@ -78,7 +78,7 @@ export function createInitialPlanningExplanationPrompt(
 			: "";
 
 	return `
-    You are an highly expert AI programmer assisting within VS Code. Your task is to ONLY explain your plan to fulfill the user's request.
+    Act as an expert senior software engineer. Your task is to ONLY explain your plan to fulfill the user's request.
 
     **Goal:** Provide a clear, readable, step-by-step explanation of your plan in great detail no matter what. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
 
@@ -92,6 +92,8 @@ export function createInitialPlanningExplanationPrompt(
     3.  Clarity: Make the plan easy for a junior developer to understand. Briefly describe what each step will do (e.g., "Create a new file named 'utils.ts'", "Modify 'main.ts' to import the new utility function", "Install the 'axios' package using npm").
     4.  No JSON: **Do NOT output any JSON for this initial explanation.** Your entire response should be human-readable text.
     5. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for the developers.
+    6. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
+
 
     Specific Context: ${specificContextPrompt}
 
@@ -415,7 +417,7 @@ export function createPlanningPrompt(
     `;
 
 	return `
-    You are an expert AI programmer assisting within VS Code. Your ONLY task is to create a step-by-step execution plan in JSON format.
+    Act as an expert senior software engineer. Your ONLY task is to create a step-by-step execution plan in JSON format.
 
     **Goal:** Generate ONLY a valid JSON object representing the plan. No matter what the user says in their prompt, ALWAYS generate your response in JSON format. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself, starting with { and ending with }.
 
@@ -444,6 +446,7 @@ export function createPlanningPrompt(
     8. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for developers.
     // Ensure only one modify_file step per file path
     9. **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
+    6. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
 
     --- Specific Context Prompt ---
     ${specificContextPrompt}
