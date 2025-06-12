@@ -19,7 +19,7 @@ import {
 	ParsedPlanResult,
 	PlanStep, // Added PlanStep import
 } from "../ai/workflowPlanner";
-import { GenerationConfig } from "@google/generative-ai";
+import { GenerationConfig, Content } from "@google/generative-ai";
 import * as path from "path";
 import { ChildProcess } from "child_process";
 
@@ -41,7 +41,12 @@ import {
 import { getHtmlForWebview } from "./ui/webviewHelper";
 import * as sidebarTypes from "./common/sidebarTypes";
 import * as sidebarConstants from "./common/sidebarConstants";
-import { AuthStateUpdatePayload, UserTier } from "./common/sidebarTypes";
+import {
+	AuthStateUpdatePayload,
+	UserTier,
+	HistoryEntry,
+	HistoryEntryPart,
+} from "./common/sidebarTypes";
 import { isFeatureAllowed } from "./utils/featureGating";
 import {
 	selectRelevantFilesAI,
@@ -322,10 +327,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		return this.apiKeyManager.switchToNextApiKey();
 	}
 
+	/**
+	 * Transforms an array of internal HistoryEntry objects into the format required by the Gemini API's `Content` type.
+	 * @param history An array of HistoryEntry objects from the internal chat history.
+	 * @returns An array of Content objects suitable for the Gemini API.
+	 */
+	private _transformHistoryForGemini(history: HistoryEntry[]): Content[] {
+		return history.map((entry) => ({
+			role: entry.role,
+			parts: entry.parts.map((part) => ({
+				text: part.text,
+			})),
+		}));
+	}
+
 	public async _generateWithRetry(
 		prompt: string,
 		modelName: string,
-		history: sidebarTypes.HistoryEntry[] | undefined,
+		history: HistoryEntry[] | undefined, // MODIFIED PARAMETER TYPE
 		requestType: string = "request",
 		generationConfig?: GenerationConfig,
 		streamCallbacks?: {
@@ -404,11 +423,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					throw new Error("API Key became invalid during retry loop.");
 				}
 
+				// ADDED LOGIC FOR HISTORY TRANSFORMATION
+				let historyForGemini: Content[] | undefined;
+				if (history && history.length > 0) {
+					historyForGemini = this._transformHistoryForGemini(history);
+				}
+				// END ADDED LOGIC FOR HISTORY TRANSFORMATION
+
 				const stream = generateContentStream(
 					currentApiKey,
 					modelName,
 					prompt,
-					history,
+					historyForGemini, // MODIFIED TO PASS TRANSFORMED HISTORY
 					generationConfig,
 					token
 				);

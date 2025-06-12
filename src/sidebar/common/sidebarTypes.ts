@@ -3,8 +3,16 @@ import * as vscode from "vscode";
 import { Content } from "@google/generative-ai"; // Assuming History might be needed if HistoryEntry evolves
 import { Timestamp } from "firebase/firestore"; // Import Timestamp for Firestore dates
 
-// Re-export or define as needed. If HistoryEntry is just Content, you can use Content directly.
-export interface HistoryEntry extends Content {
+// Define the specific structure for parts within HistoryEntry
+export interface HistoryEntryPart {
+	text: string;
+}
+
+// HistoryEntry should align with Gemini API's TextPart expectation for its content parts
+// by explicitly defining its parts property, overriding the general 'Part[]' from 'Content'.
+// Omit 'parts' from the original Content interface to enforce our stricter definition.
+export interface HistoryEntry extends Omit<Content, "parts"> {
+	parts: HistoryEntryPart[];
 	diffContent?: string;
 }
 

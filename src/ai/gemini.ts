@@ -152,6 +152,32 @@ export async function* generateContentStream(
 			);
 		}
 
+		// Validation loop for requestContents
+		for (const contentItem of requestContents) {
+			if (contentItem && Array.isArray(contentItem.parts)) {
+				for (const part of contentItem.parts) {
+					if (part && typeof part === "object") {
+						const partKeys = Object.keys(part);
+						// Expected keys for Gemini ContentPart types
+						const expectedPartKeys = ["text", "inlineData", "fileData"];
+						const unexpectedKeys = partKeys.filter(
+							(key) => !expectedPartKeys.includes(key)
+						);
+
+						if (unexpectedKeys.length > 0) {
+							// Log a detailed warning/error
+							console.warn(
+								`Gemini (${modelName}): Detected unexpected properties in content part. ` +
+									`Problematic part structure: ${JSON.stringify(part)}. ` +
+									`Unexpected keys: ${unexpectedKeys.join(", ")}. ` +
+									`This might indicate an issue with how content parts are constructed (e.g., passing non-standard properties from VS Code objects directly).`
+							);
+						}
+					}
+				}
+			}
+		}
+
 		// 4. Initiate stream generation with the model
 		// model.generateContentStream returns a Promise that resolves to a StreamGenerateContentResult object
 		const result = await model.generateContentStream({
