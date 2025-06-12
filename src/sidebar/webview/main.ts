@@ -877,7 +877,7 @@ if (
 						} else {
 							updateStatus("Error: No pending plan data to confirm.", true);
 						}
-					} /* else if (
+					} else if (
 						// This is the #cancel-plan-button logic being reviewed
 						target.id === "cancel-plan-button" ||
 						target.closest("#cancel-plan-button")
@@ -892,7 +892,7 @@ if (
 						pendingPlanData = null;
 						// Correctly re-enables inputs as plan flow is cancelled
 						setLoadingState(false); // This call now correctly manages all button states
-					} */
+					}
 				}
 			);
 		}
