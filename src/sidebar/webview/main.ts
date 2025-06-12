@@ -782,7 +782,7 @@ if (
 			updateStatus("New request initiated, parse error UI hidden.");
 			// No need to explicitly re-enable buttons here; setLoadingState(true) will handle disabling them correctly.
 		}
-		// ADDED: Hide commitReviewContainer if a new request starts
+		// Hide commitReviewContainer if a new request starts
 		if (
 			loading &&
 			commitReviewContainer &&
@@ -1325,13 +1325,13 @@ if (
 			case "aiResponseStart": {
 				isLoading = true;
 				setLoadingState(true);
-				// ADDED: Reset typing state
+				// Reset typing state
 				currentAccumulatedText = "";
 				typingBuffer = "";
 				stopTypingAnimation(); // Ensure no old timer is running
 				console.log(
 					"Received aiResponseStart. Starting stream via appendMessage."
-				); // ADDED: Specific console log
+				); // Specific console log
 				// Point 1.c (from review instructions): Ensure any generic "Creating..." or similar loading message is removed.
 				// Point 1.b (from review instructions): Ensure appendMessage("Model", "", "ai-message") is called.
 				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
@@ -1349,7 +1349,7 @@ if (
 				if (message.value !== undefined) {
 					typingBuffer += message.value; // REPLACED: currentAccumulatedText update with typingBuffer
 					if (typingTimer === null) {
-						// ADDED: Defensive start
+						// Defensive start
 						startTypingAnimation();
 					}
 					// The actual DOM update and scrolling are now handled by typeNextCharacters in the interval.
@@ -1357,11 +1357,11 @@ if (
 				break;
 			}
 			case "aiResponseEnd": {
-				stopTypingAnimation(); // ADDED: Stop typing animation
+				stopTypingAnimation(); // Stop typing animation
 				console.log("Received aiResponseEnd. Stream finished.");
 				// After stream ends, finalize the message content and handle UI updates
 				if (currentAiMessageContentElement) {
-					currentAccumulatedText += typingBuffer; // ADDED: Append any remaining buffered text
+					currentAccumulatedText += typingBuffer; // Append any remaining buffered text
 					// Finalize the content in the DOM using the accumulated text
 					const renderedHtml = md.render(currentAccumulatedText);
 					currentAiMessageContentElement.innerHTML = renderedHtml;
@@ -1391,7 +1391,7 @@ if (
 
 				// Point 3.c (from review instructions): Confirm that currentAiMessageContentElement = null; and currentAccumulatedText = ""; are always called
 				// to reset state for the next stream.
-				typingBuffer = ""; // ADDED: Clear typingBuffer here
+				typingBuffer = ""; // Clear typingBuffer here
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
 
@@ -1813,7 +1813,7 @@ if (
 
 				// Always set isLoading to false, as the operation that was loading is now considered finished or cancelled.
 				isLoading = false;
-				stopTypingAnimation(); // ADDED: Stop typing animation
+				stopTypingAnimation(); // Stop typing animation
 
 				// Remove any general "Creating..." or "Loading..." message from chat, similar to setLoadingState(false) logic.
 				// The loading message removal is handled by setLoadingState(false).
@@ -1824,7 +1824,7 @@ if (
 						"reenableInput received mid-stream. Resetting stream state."
 					);
 					// Finalize the current message with accumulated text before clearing state
-					currentAccumulatedText += typingBuffer; // ADDED: Append any remaining buffered text
+					currentAccumulatedText += typingBuffer; // Append any remaining buffered text
 					const renderedHtml = md.render(currentAccumulatedText);
 					currentAiMessageContentElement.innerHTML = renderedHtml;
 					const messageElement = currentAiMessageContentElement.parentElement;
@@ -1845,7 +1845,7 @@ if (
 				}
 
 				// Clear all streaming state variables regardless of whether currentAiMessageContentElement was active
-				typingBuffer = ""; // ADDED: Clear typingBuffer
+				typingBuffer = ""; // Clear typingBuffer
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
 
@@ -1870,7 +1870,7 @@ if (
 						failedJsonDisplay.textContent = "";
 					}
 				}
-				// ADDED: If commit review UI was active, hide it
+				// If commit review UI was active, hide it
 				if (
 					commitReviewContainer &&
 					commitReviewContainer.style.display !== "none"

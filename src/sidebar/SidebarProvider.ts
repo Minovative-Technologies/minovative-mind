@@ -8,6 +8,7 @@ import {
 } from "../ai/gemini";
 import { scanWorkspace } from "../context/workspaceScanner";
 import { buildContextString } from "../context/contextBuilder";
+import { buildDependencyGraph } from "../context/dependencyGraphBuilder"; // ADDED IMPORT
 import {
 	ExecutionPlan,
 	PlanStepAction,
@@ -2497,6 +2498,32 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			// Renamed variable from allPotentialFiles to allScannedFiles and declared here in try block
 			const allScannedFiles = await scanWorkspace({ respectGitIgnore: true });
 
+			// Build dependency graph
+			let fileDependencies: Map<string, string[]> | undefined = undefined;
+			try {
+				console.log("[_buildProjectContext] Building dependency graph...");
+				fileDependencies = await buildDependencyGraph(
+					allScannedFiles,
+					rootFolder.uri
+				);
+				console.log(
+					`[_buildProjectContext] Dependency graph built for ${fileDependencies.size} files.`
+				);
+			} catch (depGraphError: unknown) {
+				const err = depGraphError as Error;
+				console.error(
+					`[_buildProjectContext] Error building dependency graph: ${err.message}`,
+					err.stack
+				);
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Warning: Could not build dependency graph for smart context. Reason: ${err.message}`,
+					isError: false, // It's a warning, not a critical error that stops the whole process
+				});
+				// fileDependencies remains undefined
+			}
+			// END ADDED
+
 			if (allScannedFiles.length === 0) {
 				if (editorContext?.documentUri) {
 					try {
@@ -2554,6 +2581,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						modelName: this.settingsManager.getSelectedModelName(),
 						cancellationToken:
 							this._activeOperationCancellationTokenSource?.token, // Use _activeOperationCancellationTokenSource token for smart context
+						fileDependencies: fileDependencies, // Pass fileDependencies
 					};
 					const selectedFiles = await selectRelevantFilesAI(selectionOptions);
 

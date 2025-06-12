@@ -14,6 +14,7 @@ export interface SelectRelevantFilesAIOptions {
 	projectRoot: vscode.Uri;
 	activeEditorContext?: PlanGenerationContext["editorContext"];
 	diagnostics?: string;
+	fileDependencies?: Map<string, string[]>; // New optional property
 	aiModelCall: (
 		prompt: string,
 		modelName: string,
@@ -45,6 +46,7 @@ export async function selectRelevantFilesAI(
 		projectRoot,
 		activeEditorContext,
 		diagnostics,
+		fileDependencies, // Destructure new property
 		aiModelCall,
 		modelName,
 		cancellationToken,
@@ -89,24 +91,49 @@ export async function selectRelevantFilesAI(
 		});
 	}
 
+	let dependencyInfo = "";
+	if (fileDependencies && fileDependencies.size > 0) {
+		dependencyInfo += "\nInternal File Relationships:\n";
+		const MAX_DEPENDENCY_SECTION_CHARS = 100_000; // Limit for dependency section size
+		let currentLength = dependencyInfo.length;
+
+		for (const [sourceFile, importedFiles] of fileDependencies.entries()) {
+			const line = `- ${sourceFile} imports: ${importedFiles.join(", ")}\n`;
+			if (currentLength + line.length > MAX_DEPENDENCY_SECTION_CHARS) {
+				dependencyInfo += "(...truncated due to length limit)\n";
+				break;
+			}
+			dependencyInfo += line;
+			currentLength += line.length;
+		}
+	}
+
 	const fileListString = relativeFilePaths.map((p) => `- "${p}"`).join("\n");
 
 	const selectionPrompt = `
 	You are an AI assistant helping a developer focus on the most relevant parts of their codebase.
 	Based on the user's request, active editor context, and chat history provided below, please select a subset of files from the "Available Project Files" list that are most pertinent to fulfilling the user's request.
 
+	-- Context Prompt --
 	${contextPrompt}
+	-- End Context Prompt --
 
-	Available Project Files:
+	-- Dependency Info --
+	${dependencyInfo}
+	-- End Dependency Info --
+	
+	-- Available Project Files --
 	${fileListString}
+	-- End Available Project Files --
 
 	Instructions for your response:
 	1.  Analyze all the provided information to understand the user's goal.
-	2.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes.
-	3.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
-	4.  If no specific files from the list seem particularly relevant (e.g., the request is very general or can be answered without looking at other files beyond the active one), return an empty JSON array: [].
-	5.  Do NOT include any files not present in the "Available Project Files" list.
-	6.  Your entire response should be ONLY the JSON array. Do not include any other text, explanations, or markdown formatting.
+	2.  Carefully examine the 'Internal File Relationships' section if present, as it provides crucial context on how files relate to each other.
+	3.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes. Prioritize files that are imported by the active file, or by other files you deem highly relevant to the user's request.
+	4.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
+	5.  If no specific files from the list seem particularly relevant (e.g., the request is very general or can be answered without looking at other files beyond the active one), return an empty JSON array: [].
+	6.  Do NOT include any files not present in the "Available Project Files" list.
+	7.  Your entire response should be ONLY the JSON array. Do not include any other text, explanations, or markdown formatting.
 
 	JSON Array of selected file paths:
 `;
