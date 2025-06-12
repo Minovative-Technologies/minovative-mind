@@ -59,10 +59,36 @@ export async function generateFileChangeSummary(
 	oldContent: string,
 	newContent: string,
 	filePath: string
-): Promise<{ summary: string; addedLines: string[]; removedLines: string[] }> {
+): Promise<{
+	summary: string;
+	addedLines: string[];
+	removedLines: string[];
+	formattedDiff: string;
+}> {
 	const dmp = new diff_match_patch();
-	const diffs = dmp.diff_main(oldContent, newContent);
 
+	// 1. Convert the input strings (oldContent and newContent) from lines to a compact, character-based representation.
+	// This is crucial for efficient diffing on longer texts while preserving line integrity.
+	// The result `lineDiffResult` contains:
+	//   - `text1_chars`: a string representing oldContent mapped to unique characters.
+	//   - `text2_chars`: a string representing newContent mapped to unique characters.
+	//   - `line_array`: an array that maps the unique characters back to their original full lines.
+	const lineDiffResult = dmp.diff_linesToChars_(oldContent, newContent);
+	const {
+		chars1: text1_chars,
+		chars2: text2_chars,
+		lineArray: line_array,
+	} = lineDiffResult;
+
+	// 2. Perform the actual diff operation on the character-based representations.
+	// This is a much faster operation for large files.
+	let diffs = dmp.diff_main(text1_chars, text2_chars, false); // `false` for checklines optimization (optional, but good practice)
+
+	// 3. Convert the character-level diffs back to line-level diffs using the original `line_array`.
+	// This transforms the diff objects to contain actual lines rather than characters.
+	dmp.diff_charsToLines_(diffs, line_array);
+
+	let formattedDiffLines: string[] = [];
 	let addedLines: string[] = [];
 	let removedLines: string[] = [];
 	// totalInsertions and totalDeletions are not needed as we use addedLines.length and removedLines.length
@@ -71,17 +97,32 @@ export async function generateFileChangeSummary(
 
 	for (const diff of diffs) {
 		const [type, text] = diff;
+
+		// Split the text into lines. If the `text` from dmp is an empty string,
+		// `split('\n')` returns `['']`. This `['']` does not represent an actual line
+		// to be displayed in the diff or counted. Otherwise, all lines from `split`
+		// are processed, including empty strings that result from actual blank lines or trailing newlines.
+		const lines = text.split("\n");
+		const effectiveLines =
+			text === "" && lines.length === 1 && lines[0] === "" ? [] : lines;
+
 		if (type === diff_match_patch.DIFF_INSERT) {
-			// Ensure empty strings from split are filtered out for cleaner results
-			addedLines.push(...text.split("\n").filter((line) => line !== ""));
-			// totalInsertions += text.length;
+			// Ensure empty strings from split are filtered out for cleaner results in addedLines array
+			addedLines.push(...effectiveLines.filter((line) => line !== ""));
+			// Add to formattedDiffLines
+			effectiveLines.forEach((line) => formattedDiffLines.push(`+ ${line}`));
 		} else if (type === diff_match_patch.DIFF_DELETE) {
-			// Ensure empty strings from split are filtered out for cleaner results
-			removedLines.push(...text.split("\n").filter((line) => line !== ""));
-			// totalDeletions += text.length;
+			// Ensure empty strings from split are filtered out for cleaner results in removedLines array
+			removedLines.push(...effectiveLines.filter((line) => line !== ""));
+			// Add to formattedDiffLines
+			effectiveLines.forEach((line) => formattedDiffLines.push(`- ${line}`));
+		} else if (type === diff_match_patch.DIFF_EQUAL) {
+			// Add to formattedDiffLines
+			// Removed: effectiveLines.forEach((line) => formattedDiffLines.push(`  ${line}`));
 		}
 	}
 
+	const formattedDiff = formattedDiffLines.join("\n");
 	const addedContentFlat = addedLines.join("\n");
 	const removedContentFlat = removedLines.join("\n");
 
@@ -343,5 +384,6 @@ export async function generateFileChangeSummary(
 		summary: summaryWithFilePath,
 		addedLines: addedLines,
 		removedLines: removedLines,
+		formattedDiff: formattedDiff,
 	};
 }

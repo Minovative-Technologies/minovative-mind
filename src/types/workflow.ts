@@ -6,4 +6,5 @@ export interface FileChangeEntry {
 	timestamp: number; // Unix timestamp for chronological ordering
 	addedLines?: string[];
 	removedLines?: string[];
+	diffContent?: string; // Formatted diff content string (lines prefixed with '+', '-', or ' ')
 }

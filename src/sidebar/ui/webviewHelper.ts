@@ -13,7 +13,7 @@ export async function getHtmlForWebview(
 		vscode.Uri.joinPath(extensionUri, "dist", "webview.js")
 	);
 	const stylesUri = webview.asWebviewUri(
-		vscode.Uri.joinPath(extensionUri, "src", "sidebar", "webview", "style.css")
+		vscode.Uri.joinPath(extensionUri, "src", "sidebar", "webview", "styles.css")
 	);
 	const nonce = getNonce();
 

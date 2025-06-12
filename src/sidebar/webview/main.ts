@@ -223,7 +223,8 @@ if (
 		sender: string,
 		text: string,
 		className: string = "",
-		isHistoryMessage: boolean = false
+		isHistoryMessage: boolean = false,
+		diffContent?: string // NEW: Add diffContent parameter
 	) {
 		if (chatContainer) {
 			// Handle the "Creating..." loading message
@@ -289,6 +290,65 @@ if (
 			const textElement = document.createElement("span");
 			textElement.classList.add("message-text-content"); // class to identify the text span
 			messageElement.appendChild(textElement); // Always append text element
+
+			// Refactor the existing `if (diffContent)` block within the `appendMessage` function.
+			// It should now always create a `diff-container` div with class `diff-container` and append it to `messageElement`.
+			// Inside `diff-container`, create and append a `diff-header` div with class `diff-header`.
+			// Set its `textContent` to 'Code Changes:' if `diffContent` is not empty (after trimming whitespace using `diffContent.trim() !== ''`).
+			// If `diffContent` IS empty or just whitespace, set `diff-header`'s `textContent` to 'No Code Changes Detected (or no diff provided)' and add the class `no-diff-content` to the `diff-container`.
+			// The `pre` and `code` elements containing the actual diff lines (`span` elements with specific classes for added/removed/equal lines) should only be appended to `diff-container` if `diffContent` is non-empty, otherwise omit them.
+			// Ensure `br` elements are added after each span for line breaks.
+			if (diffContent !== undefined) {
+				const diffContainer = document.createElement("div");
+				diffContainer.classList.add("diff-container");
+
+				const diffHeader = document.createElement("div");
+				diffHeader.classList.add("diff-header");
+
+				const trimmedDiffContent = diffContent.trim();
+
+				if (trimmedDiffContent !== "") {
+					diffHeader.textContent = "Code Changes:";
+
+					const preCode = document.createElement("pre");
+					preCode.classList.add("diff-code");
+
+					const lines = diffContent.split("\n");
+					lines.forEach((line) => {
+						const span = document.createElement("span");
+						span.textContent = line;
+						if (line.startsWith("+ ")) {
+							span.classList.add("diff-line-added");
+						} else if (line.startsWith("- ")) {
+							span.classList.add("diff-line-removed");
+						} else if (line.startsWith("  ")) {
+							span.classList.add("diff-line-equal");
+						}
+						preCode.appendChild(span);
+						preCode.appendChild(document.createElement("br")); // Add <br> after each line
+					});
+
+					// Remove the last <br> if it exists
+					if (
+						preCode.lastChild instanceof Element &&
+						preCode.lastChild.tagName === "BR"
+					) {
+						preCode.removeChild(preCode.lastChild);
+					}
+
+					diffContainer.appendChild(diffHeader);
+					diffContainer.appendChild(preCode);
+				} else {
+					diffHeader.textContent =
+						"No Code Changes Detected (or no diff provided)";
+					diffContainer.classList.add("no-diff-content");
+					diffContainer.appendChild(diffHeader);
+					// pre and code elements are omitted as per instruction
+				}
+
+				messageElement.appendChild(diffContainer);
+			}
+			// END NEW DIFF CONTENT ADDITION
 
 			let copyButton: HTMLButtonElement | null = null;
 			let deleteButton: HTMLButtonElement | null = null;
@@ -762,7 +822,7 @@ if (
 						} else {
 							updateStatus("Error: No pending plan data to confirm.", true);
 						}
-					} else if (
+					} /* else if (
 						// This is the #cancel-plan-button logic being reviewed
 						target.id === "cancel-plan-button" ||
 						target.closest("#cancel-plan-button")
@@ -777,7 +837,7 @@ if (
 						pendingPlanData = null;
 						// Correctly re-enables inputs as plan flow is cancelled
 						setLoadingState(false); // This call now correctly manages all button states
-					}
+					} */
 				}
 			);
 		}
@@ -1454,7 +1514,8 @@ if (
 						"Model",
 						message.value.text,
 						`ai-message ${message.value.isError ? "error-message" : ""}`.trim(),
-						false // These are real-time, NOT history-backed messages
+						true, // Changed to true based on instructions
+						message.value.diffContent // NEW: Pass diffContent
 					);
 					// After adding a message, update button states based on content count, but only if not blocked
 					// Calling setLoadingState(isLoading) re-evaluates button states based on current state and UI visibility
@@ -1587,7 +1648,13 @@ if (
 						) {
 							// For restored messages, they are complete, so no streaming logic applies here.
 							// appendMessage will correctly add the copy button for AI messages here
-							appendMessage(msg.sender, msg.text, msg.className || "", true);
+							appendMessage(
+								msg.sender,
+								msg.text,
+								msg.className || "",
+								true,
+								msg.diffContent
+							); // NEW: Pass diffContent
 						}
 					});
 					updateStatus("Chat history restored.");

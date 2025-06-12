@@ -13,7 +13,11 @@ export class ChatHistoryManager {
 		return this._chatHistory;
 	}
 
-	public addHistoryEntry(role: "user" | "model", text: string): void {
+	public addHistoryEntry(
+		role: "user" | "model",
+		text: string,
+		diffContent?: string
+	): void {
 		// Existing logic for managing chat history and preventing duplicates
 		if (this._chatHistory.length > 0) {
 			const lastEntry = this._chatHistory[this._chatHistory.length - 1];
@@ -41,7 +45,11 @@ export class ChatHistoryManager {
 			}
 		}
 
-		this._chatHistory.push({ role, parts: [{ text }] });
+		this._chatHistory.push({
+			role,
+			parts: [{ text }],
+			...(diffContent && { diffContent }),
+		});
 		if (this._chatHistory.length > MAX_HISTORY_ITEMS) {
 			this._chatHistory.splice(0, this._chatHistory.length - MAX_HISTORY_ITEMS);
 		}
@@ -95,6 +103,7 @@ export class ChatHistoryManager {
 						sender: entry.role === "user" ? "User" : "Model",
 						text: entry.parts.map((p) => p.text).join(""),
 						className: entry.role === "user" ? "user-message" : "ai-message",
+						...(entry.diffContent && { diffContent: entry.diffContent }),
 					})
 				);
 				const contentString = JSON.stringify(saveableHistory, null, 2);
@@ -147,13 +156,16 @@ export class ChatHistoryManager {
 							typeof item.text === "string" &&
 							(item.sender === "User" ||
 								item.sender === "Model" ||
-								item.sender === "System")
+								item.sender === "System") &&
+							(item.diffContent === undefined ||
+								typeof item.diffContent === "string")
 					)
 				) {
 					this._chatHistory = loadedData.map(
 						(item: ChatMessage): HistoryEntry => ({
 							role: item.sender === "User" ? "user" : "model",
 							parts: [{ text: item.text }],
+							diffContent: item.diffContent,
 						})
 					);
 					this.restoreChatHistoryToWebview(); // Call this after updating internal history
@@ -187,6 +199,7 @@ export class ChatHistoryManager {
 			sender: entry.role === "user" ? "User" : "Model",
 			text: entry.parts.map((p) => p.text).join(""),
 			className: entry.role === "user" ? "user-message" : "ai-message",
+			...(entry.diffContent && { diffContent: entry.diffContent }),
 		}));
 		this.postMessageToWebview({
 			type: "restoreHistory",

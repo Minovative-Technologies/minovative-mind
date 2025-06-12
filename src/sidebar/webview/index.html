@@ -18,35 +18,33 @@
 
 <body>
   <div class="chat-controls">
-
     <div class="button-group">
       <button id="save-chat-button" title="Save Chat">S</button>
       <button id="load-chat-button" title="Load Chat">L</button>
       <button id="clear-chat-button" title="Clear Chat">C</button>
     </div>
   </div>
+
   <div id="status-area"></div>
+
   <div id="chat-area-wrapper">
     <div id="empty-chat-placeholder">
       <img class="empty-chat-logo" src="__LOGO_URI__">
       <p class="beta-text">BETA</p>
-      <p class="empty-chat-text">Start chatting or use /plan to generate code with natural language. AI can make
-        mistakes</p>
+      <p class="empty-chat-text">Start chatting or use <code>/plan</code> to generate code with natural language. AI can
+        make mistakes sometimes.</p>
     </div>
+
     <div id="chat-container">
-      <!-- AI messages will be dynamically added here by JavaScript.
-         A typical structure might look like this:
-         <div class="chat-message ai-message">
-           <span class="message-content">...AI message text...</span>
-           <button class="copy-button"></button> // The requested button is added here conceptually
-         </div>
-         The button element is added below within this container for dynamic use.
-    -->
+      <!-- AI messages will be dynamically added here by JavaScript. The button element is added below within this container for dynamic use. -->
     </div>
   </div>
+
   <div id="input-container">
     <textarea id="chat-input" rows="3" placeholder="Enter message or /plan [request]..."></textarea>
+
     <button id="send-button" title="Send Message">S</button>
+
     <!-- Added button to cancel ongoing generation -->
     <button id="cancel-generation-button" title="Cancel Generation" style="display: none;">
       <!-- Assuming Font Awesome is available via the stylesheet -->
@@ -57,9 +55,15 @@
   <!-- Added plan-parse-error-container as per instructions -->
   <div id="plan-parse-error-container" style="display: none;">
     <h3>Plan Generation Failed</h3>
+
     <p id="plan-parse-error-display" class="error-message-text"></p>
+
     <h4>Failed JSON (previous attempt):</h4>
-    <pre><code id="failed-json-display"></code></pre>
+
+    <pre>
+      <code id="failed-json-display"></code>
+    </pre>
+
     <div id="plan-parse-error-buttons-wrapper">
       <button id="retry-generation-button" title="Retry Plan Generation"></button>
       <button id="cancel-parse-error-button" title="Cancel Retry"></button>
@@ -73,21 +77,27 @@
       <select id="model-select" title="Select AI Model">__MODEL_OPTIONS_HTML__</select>
     </div>
   </div>
+
   <div class="section api-key-section">
     <h2>API Key Management</h2>
+
     <div class="key-management-controls">
       <span id="current-key-display">No keys stored</span>
       <button id="prev-key-button" title="Previous Key" disabled>&lt;</button>
       <button id="next-key-button" title="Next Key" disabled>&gt;</button>
       <button id="delete-key-button" title="Delete Current Key" disabled>Del</button>
     </div>
+
     <div class="add-key-container">
       <input type="password" id="add-key-input" placeholder="Add new Gemini API Key">
       <button id="add-key-button" title="Add API Key">Add</button>
     </div>
+
     <div id="api-key-status"></div>
+
     <p><small>Keys are stored securely using VS Code SecretStorage.</small></p>
   </div>
+
   <script type="module" nonce="__NONCE__" src="__SCRIPT_URI__"></script>
 </body>
 

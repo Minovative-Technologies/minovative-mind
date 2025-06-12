@@ -1,4 +1,4 @@
-/* src/sidebar/webview/style.css */
+/* src/sidebar/webview/styles.css */
 
 :root {
 	/* Define common spacings based on VS Code variables if possible, or sensible defaults */
@@ -189,14 +189,14 @@ h2 {
 }
 
 .empty-chat-logo {
-	width: 100px; /* Example size */
+	width: 70px; /* Example size */
 	height: auto; /* Maintain aspect ratio */
 	opacity: 0.5; /* Subtle appearance */
 	filter: grayscale(100%); /* Make it monochrome to fit theme */
 }
 
 .empty-chat-text {
-	font-size: 1.1em;
+	font-size: 0.9em;
 	color: var(--vscode-descriptionForeground); /* A subtle text color */
 	max-width: 80%; /* Prevent text from stretching too wide */
 	line-height: 1.5;
@@ -518,12 +518,11 @@ h2 {
 	); /* VSCode var for code block bg */
 	padding: 10px;
 	border-radius: var(--border-radius);
-	overflow-x: auto; /* Allow horizontal scrolling for long lines of code */
 	margin-top: 0.8em;
 	margin-bottom: 0.8em;
 	border: 1px solid var(--vscode-editorWidget-border, var(--border-color)); /* Subtle border */
 	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle inset shadow */
-	white-space: pre; /* Preserve whitespace and line breaks */
+	white-space: pre-wrap; /* Preserve whitespace and allow wrapping */
 }
 /* General styling for code elements (both inline and block) */
 .message code {
@@ -1235,4 +1234,79 @@ code#failed-json-display {
 	font-family: monospace;
 	font-weight: 600;
 	color: (--vscode-textCodeBlock-background);
+}
+
+/* Styles for the diff container */
+.diff-container {
+	background-color: var(
+		--vscode-editor-background
+	); /* Use VS Code editor background */
+	border-radius: 4px;
+	padding: 10px;
+	margin-top: 10px;
+	margin-bottom: 5px; /* Add some space below the diff */
+	font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; /* Monospaced font for code */
+	font-size: 13px;
+	border: 1px solid var(--vscode-editorGroup-border); /* Subtle border for clarity */
+}
+
+/* Styles for the pre/code block within the diff container */
+.diff-code {
+	width: 100%; /* Full width of the container */
+}
+
+/* Styles for the diff header */
+.diff-header {
+	font-weight: bold;
+	margin-bottom: 5px;
+	color: var(--vscode-editor-foreground);
+	border-bottom: 1px solid var(--vscode-editorGroup-border);
+	padding-bottom: 3px;
+	user-select: none;
+}
+
+/* Styles for individual lines within the diff (applied to spans) */
+.diff-line-added {
+	color: var(
+		--vscode-diffEditor-insertedText
+	); /* VS Code green for added text */
+	background-color: var(
+		--vscode-diffEditor-insertedTextBackground
+	); /* Subtle green background highlight */
+	display: inline-block; /* Ensure it behaves like a inline-block element */
+	/* Adjust padding/margin to align within the overall message content */
+}
+
+.diff-line-removed {
+	color: var(
+		--vscode-diffEditor-removedText
+	); /* VS Code red for removed text */
+	background-color: var(
+		--vscode-diffEditor-removedTextBackground
+	); /* Subtle red background highlight */
+	display: inline-block; /* Ensure it behaves like a inline-block element */
+}
+
+.diff-line-equal {
+	color: var(
+		--vscode-editor-foreground
+	); /* Default text color for unchanged lines */
+	background-color: transparent; /* No special background */
+	display: inline-block; /* Ensure it behaves like a inline-block element */
+}
+
+/* Styles for the diff container when there's no content */
+.diff-container.no-diff-content {
+	opacity: 0.7;
+	font-style: italic;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	border: none;
+	background-color: transparent;
+}
+
+/* Adjust header within no-diff-content state */
+.diff-container.no-diff-content .diff-header {
+	border-bottom: none;
+	padding-bottom: 0;
 }

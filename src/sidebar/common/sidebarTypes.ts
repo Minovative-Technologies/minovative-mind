@@ -4,7 +4,9 @@ import { Content } from "@google/generative-ai"; // Assuming History might be ne
 import { Timestamp } from "firebase/firestore"; // Import Timestamp for Firestore dates
 
 // Re-export or define as needed. If HistoryEntry is just Content, you can use Content directly.
-export type HistoryEntry = Content; // Or export type HistoryEntry = History; if more appropriate
+export interface HistoryEntry extends Content {
+	diffContent?: string;
+}
 
 // For Firebase User data from Firestore
 export interface UserSubscriptionData {
@@ -128,6 +130,7 @@ export interface ChatMessage {
 	sender: "User" | "Model" | "System";
 	text: string;
 	className: string;
+	diffContent?: string;
 }
 
 export interface PlanGenerationContext {

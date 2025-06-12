@@ -79,7 +79,12 @@ export async function executePlanStep(
 	step: PlanStep,
 	token: vscode.CancellationToken,
 	progress: vscode.Progress<{ message?: string; increment?: number }>,
-	changeLogger: ProjectChangeLogger
+	changeLogger: ProjectChangeLogger,
+	postChatUpdate: (message: {
+		type: string;
+		value: { text: string; isError?: boolean };
+		diffContent?: string;
+	}) => void
 ): Promise<void> {
 	progress.report({ message: step.description });
 
@@ -160,7 +165,12 @@ export async function executePlanStep(
 			);
 
 			const newContent = editor.document.getText();
-			const { summary, addedLines, removedLines } =
+			const {
+				summary,
+				addedLines,
+				removedLines,
+				formattedDiff,
+			} = // Modified: added formattedDiff
 				await generateFileChangeSummary(
 					originalContent,
 					newContent,
@@ -174,8 +184,25 @@ export async function executePlanStep(
 				addedLines: addedLines,
 				removedLines: removedLines,
 				timestamp: Date.now(),
+				diffContent: formattedDiff, // Added diffContent
 			};
 			changeLogger.logChange(newChangeEntry);
+
+			// Log diff content before posting
+			console.log(
+				`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file!}:\n---\n${formattedDiff}\n---`
+			);
+			// Added: postChatUpdate call
+			postChatUpdate({
+				type: "appendRealtimeModelMessage",
+				value: {
+					text: `Successfully applied modifications to \`${path.basename(
+						filePath
+					)}\`.`,
+					isError: false,
+				},
+				diffContent: formattedDiff,
+			});
 
 			progress.report({
 				message: `Successfully applied modifications to ${path.basename(
@@ -252,7 +279,12 @@ export async function executePlanStep(
 					);
 
 					const newContent = editorToUpdate.document.getText();
-					const { summary, addedLines, removedLines } =
+					const {
+						summary,
+						addedLines,
+						removedLines,
+						formattedDiff,
+					} = // Modified: added formattedDiff
 						await generateFileChangeSummary(
 							existingContent,
 							newContent,
@@ -266,8 +298,25 @@ export async function executePlanStep(
 						addedLines: addedLines,
 						removedLines: removedLines,
 						timestamp: Date.now(),
+						diffContent: formattedDiff, // Added diffContent
 					};
 					changeLogger.logChange(updateChangeEntry);
+
+					// Log diff content before posting
+					console.log(
+						`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file!}:\n---\n${formattedDiff}\n---`
+					);
+					// Added: postChatUpdate call
+					postChatUpdate({
+						type: "appendRealtimeModelMessage",
+						value: {
+							text: `Successfully updated file \`${path.basename(
+								targetFilePath
+							)}\`.`,
+							isError: false,
+						},
+						diffContent: formattedDiff,
+					});
 
 					progress.report({
 						message: `Successfully updated file ${path.basename(
@@ -292,8 +341,11 @@ export async function executePlanStep(
 
 					const newFileContent = step.content;
 
-					const { summary: createSummary, addedLines: createAddedLines } =
-						await generateFileChangeSummary("", newFileContent, step.file!);
+					const {
+						summary: createSummary,
+						addedLines: createAddedLines,
+						formattedDiff: createFormattedDiff,
+					} = await generateFileChangeSummary("", newFileContent, step.file!); // Modified: added formattedDiff
 
 					const createChangeEntry: FileChangeEntry = {
 						changeType: "created",
@@ -302,9 +354,27 @@ export async function executePlanStep(
 						addedLines: createAddedLines,
 						removedLines: [], // Explicitly set to [] for creation
 						timestamp: Date.now(),
+						diffContent: createFormattedDiff, // Added diffContent
 					};
 
 					changeLogger.logChange(createChangeEntry);
+
+					// Log diff content before posting
+					console.log(
+						`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file!}:\n---\n${createFormattedDiff}\n---`
+					);
+					// Added: postChatUpdate call
+					postChatUpdate({
+						type: "appendRealtimeModelMessage",
+						value: {
+							text: `Successfully created file \`${path.basename(
+								targetFilePath
+							)}\`.`,
+							isError: false,
+						},
+						diffContent: createFormattedDiff,
+					});
+
 					progress.report({
 						message: `Successfully created file ${path.basename(
 							targetFilePath
