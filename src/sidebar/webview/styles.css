@@ -523,6 +523,7 @@ h2 {
 	border: 1px solid var(--vscode-editorWidget-border, var(--border-color)); /* Subtle border */
 	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle inset shadow */
 	white-space: pre-wrap; /* Preserve whitespace and allow wrapping */
+	overflow-wrap: break-word; /* Ensure long lines and words wrap correctly within the code block, preventing horizontal scrolling. */
 }
 /* General styling for code elements (both inline and block) */
 .message code {
@@ -545,9 +546,7 @@ h2 {
 	border-radius: 0; /* No border radius for the code element itself */
 	box-shadow: none; /* No shadow for the code element itself */
 	border: none; /* No border for the code element itself */
-	white-space: pre; /* Ensure preformatting is respected, inheriting from pre */
-	/* Syntax highlighting classes like .language-javascript will be added by markdown-it.
-       VS Code's theming might apply styles to these. If not, text remains plain. */
+	white-space: pre-wrap; /* Allow wrapping within code blocks */
 }
 /* Inline code styling (code not inside a pre block) */
 .message :not(pre) > code {
