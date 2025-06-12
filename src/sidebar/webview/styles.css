@@ -55,18 +55,25 @@ h1,
 h2 {
 	color: var(--vscode-sideBar-titleForeground);
 	font-weight: 600;
-	margin: 0;
+	margin: 0; /* Reset default margin */
 	padding-bottom: 5px;
 	border-bottom: 1px solid var(--border-color);
 }
 h1 {
 	font-size: 1.2em;
-	padding: 0; /* Remove default padding */
+	margin-bottom: var(
+		--element-spacing
+	); /* Consistent bottom margin for main title */
+	/* padding-bottom is inherited and correct */
 }
 h2 {
 	font-size: 1.05em;
-	margin-top: calc(var(--container-padding) * 1.5);
-	margin-bottom: var(--element-spacing);
+	margin-top: calc(
+		var(--container-padding) * 1.5
+	); /* Top margin for section separation */
+	margin-bottom: var(
+		--element-spacing
+	); /* Bottom margin for section separation */
 }
 
 /* --- Chat Controls (Top Bar) --- */
@@ -85,6 +92,8 @@ h2 {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	margin-bottom: 0; /* Override general h1 margin for chat controls h1 */
+	padding-bottom: 0; /* Override general h1 padding for chat controls h1 */
 }
 .chat-controls .button-group {
 	display: flex;
@@ -100,7 +109,7 @@ h2 {
 	border-radius: var(--border-radius);
 	cursor: pointer;
 	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
-		border-color 0.1s ease-in-out;
+		border-color 0.1s ease-in-out; /* Ensured color transition */
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -285,6 +294,11 @@ h2 {
 	left: 0px;
 	right: auto;
 }
+/* Position for user message actions */
+.user-message .message-actions {
+	right: 0px;
+	left: auto;
+}
 
 /* --- Copy Button --- */
 /* Style for the copy button positioned within .message-actions */
@@ -302,7 +316,8 @@ h2 {
 	display: inline-flex; /* Use flexbox to center icon */
 	align-items: center; /* Vertically center icon */
 	justify-content: center;
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out; /* Smooth transitions */
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Smooth transitions */
 	user-select: none; /* Prevent text selection interference */
 	font-size: 0.8em; /* Make icon slightly smaller if needed */
 }
@@ -330,7 +345,8 @@ h2 {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Added color to transition */
 	user-select: none;
 	font-size: 0.8em;
 	/* Adjust colors for a subtle delete appearance */
@@ -341,13 +357,21 @@ h2 {
 
 /* Hover state for the delete button */
 .delete-button:hover {
-	background-color: rgba(var(--vscode-errorForeground), 0.15);
-	border-color: var(--vscode-errorForeground);
+	background-color: var(
+		--vscode-button-secondaryHoverBackground
+	); /* Use secondary hover background for consistency */
+	border-color: var(
+		--vscode-errorForeground
+	); /* Keep error border for visual cue */
+	color: var(--vscode-errorForeground); /* Ensure error color remains */
 }
 
 /* Active state for the delete button */
 .delete-button:active {
-	background-color: rgba(var(--vscode-errorForeground), 0.25);
+	background-color: rgba(
+		var(--vscode-errorForeground),
+		0.25
+	); /* Revert to a subtle active state */
 	border-color: var(--vscode-errorForeground);
 }
 
@@ -379,7 +403,7 @@ h2 {
 /* General styling for markdown rendered elements to ensure they fit well within messages */
 
 /* Headings */
-#chat-container .message h1,
+div#commit-message-display h1, div#commit-message-display h2, div#commit-message-display h3, div#commit-message-display h4, div#commit-message-display h5, div#commit-message-display h6, #chat-container .message h1,
 #chat-container .message h2,
 #chat-container .message h3,
 #chat-container .message h4, /* Added h4, h5, h6 for completeness */
@@ -393,27 +417,35 @@ h2 {
 	border-bottom: none; /* Override global header style */
 	padding-bottom: 0; /* Override global header style */
 	white-space: normal; /* Ensure headings wrap and don't inherit pre-like behavior */
+	word-wrap: break-word; /* Ensure headings wrap */
+	overflow-wrap: break-word; /* Ensure headings wrap */
 }
+div#commit-message-display h1,
 #chat-container .message h1 {
 	font-size: 1.1em; /* Slightly larger than body */
 	border-bottom: 1px solid
 		var(--vscode-editorWidget-border, var(--border-color)); /* Add a subtle separator for top-level headings */
 	padding-bottom: 0.3em;
 }
+div#commit-message-display h2,
 #chat-container .message h2 {
 	font-size: 1.05em; /* Slightly larger than body */
 }
+div#commit-message-display h3,
 #chat-container .message h3 {
 	font-size: 1em; /* Same size as body, but bold */
 }
+div#commit-message-display h4,
 #chat-container .message h4 {
 	font-size: 0.95em;
 	font-weight: 600;
 }
+div#commit-message-display h5,
 #chat-container .message h5 {
 	font-size: 0.9em;
 	font-weight: 600;
 }
+div#commit-message-display h6,
 #chat-container .message h6 {
 	font-size: 0.85em;
 	font-weight: 600;
@@ -424,6 +456,12 @@ h2 {
 }
 
 /* Remove top margin if heading is the very first element in the message content */
+div#commit-message-display *:first-child > h1,
+div#commit-message-display *:first-child > h2,
+div#commit-message-display *:first-child > h3,
+div#commit-message-display *:first-child > h4,
+div#commit-message-display *:first-child > h5,
+div#commit-message-display *:first-child > h6,
 #chat-container .message *:first-child > h1,
 #chat-container .message *:first-child > h2,
 #chat-container .message *:first-child > h3,
@@ -434,20 +472,26 @@ h2 {
 }
 
 /* Paragraphs */
+div#commit-message-display p,
 #chat-container .message p {
 	white-space: normal; /* Ensure paragraphs wrap */
 	word-wrap: break-word; /* Allow wrapping within paragraphs */
+	overflow-wrap: break-word; /* Allow wrapping within paragraphs */
 	margin-top: 0.5em;
 	margin-bottom: 0.5em;
 }
+div#commit-message-display p:first-child,
 #chat-container .message p:first-child {
 	margin-top: 0; /* Remove top margin for first paragraph */
 }
+div#commit-message-display p:last-child,
 #chat-container .message p:last-child {
 	margin-bottom: 0; /* Remove bottom margin for last paragraph */
 }
 
 /* Lists (ul, ol, li) */
+div#commit-message-display ul,
+div#commit-message-display ol,
 #chat-container .message ul,
 #chat-container .message ol {
 	margin-top: 0.5em;
@@ -455,21 +499,31 @@ h2 {
 	padding-left: 2em; /* Standard list indentation */
 	white-space: normal; /* Ensure lists wrap */
 	list-style-position: outside; /* Place markers outside the text flow */
+	word-wrap: break-word; /* Ensure list items wrap */
+	overflow-wrap: break-word; /* Ensure list items wrap */
 }
+div#commit-message-display ul,
 #chat-container .message ul {
 	list-style-type: disc; /* Standard bullet points */
 }
+div#commit-message-display ol,
 #chat-container .message ol {
 	list-style-type: decimal; /* Standard numbering */
 }
+div#commit-message-display li,
 #chat-container .message li {
 	margin-bottom: 0.3em; /* Spacing between list items */
 }
+div#commit-message-display li::marker,
 #chat-container .message li::marker {
 	/* Style list markers to match text color, if needed and supported */
 	color: var(--vscode-editor-foreground);
 }
 /* Nested lists */
+div#commit-message-display ul ul,
+div#commit-message-display ul ol,
+div#commit-message-display ol ol,
+div#commit-message-display ol ul,
 #chat-container .message ul ul,
 #chat-container .message ul ol,
 #chat-container .message ol ol,
@@ -477,24 +531,24 @@ h2 {
 	margin-top: 0.3em;
 	margin-bottom: 0.3em;
 }
+div#commit-message-display ul ul,
 #chat-container .message ul ul {
 	list-style-type: circle;
 }
+div#commit-message-display ul ul ul,
 #chat-container .message ul ul ul {
 	list-style-type: square;
 }
 
 /* Blockquotes */
+div#commit-message-display blockquote,
 #chat-container .message blockquote {
 	margin: 0.8em 0;
 	padding: 0.4em 1em;
 	border-left: 3px solid var(--vscode-focusBorder, #007fd4); /* Use focus border color for highlight */
-	background-color: rgba(
-		128,
-		128,
-		128,
-		0.1
-	); /* Subtle background, theme-agnostic */
+	background-color: var(
+		--vscode-editorWidget-background
+	); /* Use theme variable for background */
 	color: var(
 		--vscode-descriptionForeground,
 		inherit
@@ -502,15 +556,18 @@ h2 {
 	white-space: normal; /* Ensure blockquotes wrap */
 }
 /* Adjust spacing for paragraphs within blockquotes */
+div#commit-message-display blockquote p,
 #chat-container .message blockquote p {
 	margin-bottom: 0.3em;
 }
+div#commit-message-display blockquote p:last-child,
 #chat-container .message blockquote p:last-child {
 	margin-bottom: 0;
 }
 
 /* Code Blocks (pre, code) */
 /* Styling for preformatted text blocks, typically used for code */
+div#commit-message-display pre,
 .message pre {
 	background-color: var(
 		--vscode-textCodeBlock-background,
@@ -526,6 +583,7 @@ h2 {
 	overflow-wrap: break-word; /* Ensure long lines and words wrap correctly within the code block, preventing horizontal scrolling. */
 }
 /* General styling for code elements (both inline and block) */
+div#commit-message-display code,
 .message code {
 	font-family: var(
 		--vscode-editor-font-family,
@@ -537,6 +595,7 @@ h2 {
 	word-break: normal; /* Prevent breaking in middle of code tokens */
 }
 /* Specific styling for code inside pre blocks (markdown-it typically uses <pre><code class="language-..."></code></pre>) */
+div#commit-message-display pre code,
 .message pre code {
 	padding: 0; /* Remove padding, as 'pre' element handles it */
 	background: none; /* Transparent background, 'pre' has the background color */
@@ -549,6 +608,7 @@ h2 {
 	white-space: pre-wrap; /* Allow wrapping within code blocks */
 }
 /* Inline code styling (code not inside a pre block) */
+div#commit-message-display :not(pre) > code,
 .message :not(pre) > code {
 	background-color: var(
 		--vscode-textCodeBlock-background,
@@ -562,6 +622,7 @@ h2 {
 }
 
 /* Horizontal Rules */
+div#commit-message-display hr,
 #chat-container .message hr {
 	border: 0;
 	border-top: 1px solid var(--vscode-editorWidget-border, var(--border-color)); /* A subtle line */
@@ -569,11 +630,13 @@ h2 {
 }
 
 /* Links (<a> tags) */
+div#commit-message-display a,
 #chat-container .message a {
 	color: var(--vscode-textLink-foreground); /* Standard VS Code link color */
 	text-decoration: underline;
 	white-space: normal; /* Allow links to wrap if they are long */
 }
+div#commit-message-display a:hover,
 #chat-container .message a:hover {
 	color: var(
 		--vscode-textLink-activeForeground
@@ -582,6 +645,7 @@ h2 {
 }
 
 /* Tables (table, th, td) */
+div#commit-message-display table,
 #chat-container .message table {
 	border-collapse: collapse; /* Standard table border model */
 	margin: 1em 0; /* Spacing around tables */
@@ -590,8 +654,12 @@ h2 {
 	font-size: 0.95em; /* Slightly smaller text in tables */
 	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
 	white-space: normal; /* Ensure content within table cells wraps */
+	word-wrap: break-word; /* Ensure content within table cells wraps */
+	overflow-wrap: break-word; /* Ensure content within table cells wraps */
 	/* If table itself is too wide, .ai-message overflow-x:auto will handle scrolling */
 }
+div#commit-message-display th,
+div#commit-message-display td,
 #chat-container .message th,
 #chat-container .message td {
 	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
@@ -599,24 +667,20 @@ h2 {
 	text-align: left; /* Align text to the left by default */
 	word-wrap: break-word; /* Allow long words in cells to break and wrap */
 }
+div#commit-message-display th,
 #chat-container .message th {
-	background-color: rgba(
-		128,
-		128,
-		128,
-		0.07
-	); /* Subtle header background for table, theme-agnostic */
+	background-color: var(
+		--vscode-editorWidget-background
+	); /* Use theme variable for table header background */
 	font-weight: 600; /* Bold header text */
 	color: inherit; /* Inherit text color */
 }
 /* Optional: Alternate row striping for better readability in tables */
+div#commit-message-display tr:nth-child(even),
 #chat-container .message tr:nth-child(even) {
-	background-color: rgba(
-		128,
-		128,
-		128,
-		0.03
-	); /* Very subtle striping for even rows */
+	background-color: var(
+		--vscode-list-hoverBackground
+	); /* Use subtle striping for even rows */
 }
 
 /* --- Status Area --- */
@@ -637,7 +701,7 @@ h2 {
 	align-items: flex-end; /* Align items to the bottom */
 	margin-bottom: var(--element-spacing);
 	flex-shrink: 0;
-	border: 1px solid var(--border-color);
+	border: 1px solid var(--vscode-input-border); /* Changed border color */
 	border-radius: var(--border-radius);
 	background-color: var(--vscode-input-background);
 	transition: border-color 0.1s ease-in-out;
@@ -652,7 +716,7 @@ h2 {
 }
 #chat-input {
 	flex-grow: 1;
-	background-color: transparent;
+	background-color: transparent; /* Keep transparent as container has background */
 	border: none;
 	color: var(--vscode-input-foreground);
 	padding: 6px 8px; /* Adjusted padding */
@@ -685,7 +749,8 @@ h2 {
 	border: none;
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Ensured color and border-color transition */
 	display: inline-flex; /* Use flexbox for centering icon */
 	align-items: center;
 	justify-content: center;
@@ -721,7 +786,8 @@ h2 {
 	border: 1px solid var(--vscode-button-border, var(--border-color)); /* Add border for secondary style */
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Ensured color transition */
 	/* When visible, it should be display: inline-flex */
 	align-items: center;
 	justify-content: center;
@@ -821,7 +887,8 @@ h2 {
 	border: 1px solid var(--border-color);
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Ensured color transition */
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -849,7 +916,7 @@ h2 {
 	flex-grow: 1;
 	margin-right: 5px;
 	background-color: var(--vscode-input-background);
-	border: 1px solid var(--border-color);
+	border: 1px solid var(--vscode-input-border); /* Changed border color */
 	color: var(--vscode-input-foreground);
 	padding: 0 8px;
 	border-radius: var(--border-radius);
@@ -870,7 +937,8 @@ h2 {
 	border: none;
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Ensured color transition */
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -954,7 +1022,8 @@ h2 {
 	border: 1px solid var(--vscode-button-border, transparent); /* Standard button border (can be transparent) */
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out; /* Smooth transitions */
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Smooth transitions */
 	display: inline-flex; /* Use flexbox for content alignment (especially icons) */
 	align-items: center; /* Vertically align icon/text */
 	justify-content: center;
@@ -1092,7 +1161,8 @@ code#failed-json-display {
 	height: var(--icon-button-size); /* Fixed size for square buttons */
 	border-radius: var(--border-radius);
 	cursor: pointer;
-	transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out; /* Smooth transitions */
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Smooth transitions */
 	display: inline-flex; /* Use flexbox for content alignment (especially icons) */
 	align-items: center; /* Vertically align icon */
 	justify-content: center; /* Center icon horizontally */
@@ -1308,4 +1378,116 @@ code#failed-json-display {
 .diff-container.no-diff-content .diff-header {
 	border-bottom: none;
 	padding-bottom: 0;
+}
+
+/* --- Phase 2: Styling the Commit Review UI --- */
+
+#commit-review-container {
+	border: 1px solid var(--vscode-editorWidget-border);
+	background-color: var(--vscode-editorWidget-background);
+	padding: var(--container-padding);
+	margin: var(--element-spacing) 0;
+	border-radius: var(--border-radius);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	flex-shrink: 0;
+}
+
+#commit-review-container h3 {
+	color: var(--vscode-sideBar-titleForeground);
+	font-size: 1.1em;
+	margin-top: 5px;
+	margin-bottom: 5px;
+	border-bottom: none;
+	text-align: center;
+}
+
+.commit-message-section {
+	width: 100%;
+	background-color: var(--vscode-textCodeBlock-background);
+	border-top: 1px solid var(--vscode-editorWidget-border);
+	border-bottom: 1px solid var(--vscode-editorWidget-border);
+	padding: 10px;
+}
+
+.staged-files-section {
+	width: 100%;
+	list-style: decimal;
+	flex-direction: column;
+	overflow-wrap: break-word; /* Ensure long lines and words wrap correctly within the code */
+}
+
+.staged-files-section ol#staged-files-list {
+	padding-left: 1.5em;
+	list-style-type: decimal;
+	list-style-position: outside;
+}
+
+.staged-files-section ol#staged-files-list li {
+	margin-bottom: 0.5em; /* Add space below each list item */
+}
+
+.staged-files-section ol#staged-files-list li:last-child {
+	margin-bottom: 0; /* Remove space from the last item */
+}
+
+ul#staged-files-list li {
+	color: var(--vscode-descriptionForeground);
+}
+
+ul#staged-files-list li.empty-state {
+	font-style: italic;
+}
+
+.commit-review-buttons-wrapper {
+	display: flex;
+	gap: 10px;
+	justify-content: center;
+	width: 100%;
+}
+
+#confirm-commit-button {
+	padding: 8px 15px;
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: 1px solid transparent;
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Add transition */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: inherit; /* Inherit font size */
+}
+#confirm-commit-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+#confirm-commit-button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+#cancel-commit-button {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-button-border, var(--border-color));
+	padding: 8px 15px; /* Match padding of confirm button */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Add transition */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: inherit; /* Inherit font size */
+}
+#cancel-commit-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+#cancel-commit-button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
 }

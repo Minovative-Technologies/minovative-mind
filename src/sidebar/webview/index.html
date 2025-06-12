@@ -31,7 +31,8 @@
     <div id="empty-chat-placeholder">
       <img class="empty-chat-logo" src="__LOGO_URI__">
       <p class="beta-text">BETA</p>
-      <p class="empty-chat-text">Start chatting or use <code>/plan</code> to generate code with natural language. AI can
+      <p class="empty-chat-text">Start chatting or use <code>/plan</code> to generate code and use <code>/commit</code>
+        to generate a commit message. AI can
         make mistakes sometimes.</p>
     </div>
 
@@ -70,6 +71,21 @@
     </div>
   </div>
   <!-- END Added plan-parse-error-container as per instructions -->
+
+  <div id="commit-review-container" style="display: none;">
+    <h3>Review Your Commit</h3>
+    <div class="commit-message-section">
+      <div id="commit-message-display" class="markdown-rendered-content"></div>
+    </div>
+    <div class="staged-files-section">
+      <h3>Staged Files</h3>
+      <ol id="staged-files-list"></ol>
+    </div>
+    <div class="commit-review-buttons-wrapper">
+      <button id="confirm-commit-button">Confirm and Commit</button>
+      <button id="cancel-commit-button">Cancel Commit</button>
+    </div>
+  </div>
 
   <div class="section model-selection-section">
     <h2>AI Model Selection</h2>

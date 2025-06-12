@@ -130,6 +130,22 @@ const cancelParseErrorButton = document.getElementById(
 ) as HTMLButtonElement | null; // Added cancel button for parse error
 // END Declare new DOM element variables for the parse error UI
 
+const commitReviewContainer = document.getElementById(
+	"commit-review-container"
+) as HTMLDivElement | null;
+const commitMessageDisplay = document.getElementById(
+	"commit-message-display"
+) as HTMLDivElement | null;
+const stagedFilesList = document.getElementById(
+	"staged-files-list"
+) as HTMLUListElement | null;
+const confirmCommitButton = document.getElementById(
+	"confirm-commit-button"
+) as HTMLButtonElement | null;
+const cancelCommitButton = document.getElementById(
+	"cancel-commit-button"
+) as HTMLButtonElement | null;
+
 // State
 let isApiKeySet = false;
 let isLoading = false;
@@ -208,7 +224,12 @@ if (
 	!failedJsonDisplay || // Added failedJsonDisplay to critical elements check
 	!retryGenerationButton || // Added retryGenerationButton to critical elements check
 	!cancelParseErrorButton || // Added cancelParseErrorButton to critical elements check
-	!emptyChatPlaceholder // Added emptyChatPlaceholder to critical elements check
+	!emptyChatPlaceholder || // Added emptyChatPlaceholder to critical elements check
+	!commitReviewContainer ||
+	!commitMessageDisplay ||
+	!stagedFilesList ||
+	!confirmCommitButton ||
+	!cancelCommitButton
 ) {
 	// END Add new DOM elements to the critical elements null check
 	console.error("Required DOM elements not found!");
@@ -519,11 +540,14 @@ if (
 		const planParseErrorVisible =
 			planParseErrorContainer &&
 			planParseErrorContainer.style.display !== "none";
+		const commitReviewVisible =
+			commitReviewContainer && commitReviewContainer.style.display !== "none"; // ADDED
 
 		if (
 			isLoading ||
 			planConfirmationVisible ||
 			planParseErrorVisible ||
+			commitReviewVisible || // ADDED
 			!chatInput ||
 			!sendButton
 		) {
@@ -533,7 +557,9 @@ if (
 				"planConfirmationVisible",
 				planConfirmationVisible,
 				"planParseErrorVisible",
-				planParseErrorVisible
+				planParseErrorVisible,
+				"commitReviewVisible", // ADDED
+				commitReviewVisible // ADDED
 			);
 			return;
 		}
@@ -599,6 +625,8 @@ if (
 		const planParseErrorVisible =
 			planParseErrorContainer &&
 			planParseErrorContainer.style.display !== "none";
+		const commitReviewVisible =
+			commitReviewContainer && commitReviewContainer.style.display !== "none"; // ADDED
 
 		// Determine if general chat/send controls should be enabled
 		// Enabled only if not loading AND API key is set AND neither blocking UI is visible
@@ -606,7 +634,8 @@ if (
 			!loading &&
 			isApiKeySet &&
 			!planConfirmationVisible &&
-			!planParseErrorVisible;
+			!planParseErrorVisible &&
+			!commitReviewVisible; // MODIFIED
 
 		if (sendButton) {
 			sendButton.disabled = !enableSendControls;
@@ -617,13 +646,17 @@ if (
 		// Model selection should also be disabled while any operation is running or UI is blocked
 		if (modelSelect) {
 			modelSelect.disabled =
-				!!isLoading || !!planConfirmationVisible || !!planParseErrorVisible;
+				!!isLoading ||
+				!!planConfirmationVisible ||
+				!!planParseErrorVisible ||
+				!!commitReviewVisible; // MODIFIED
 		}
 		// API key management buttons should also be disabled while any operation is running or UI is blocked
 		const enableApiKeyControls =
 			!isLoading &&
 			!planConfirmationVisible &&
 			!planParseErrorVisible &&
+			!commitReviewVisible && // MODIFIED
 			totalKeys > 0;
 		if (prevKeyButton) {
 			prevKeyButton.disabled = !enableApiKeyControls || totalKeys <= 1;
@@ -635,7 +668,10 @@ if (
 			deleteKeyButton.disabled = !enableApiKeyControls || !isApiKeySet;
 		}
 		const enableAddKeyInputControls =
-			!loading && !planConfirmationVisible && !planParseErrorVisible;
+			!loading &&
+			!planConfirmationVisible &&
+			!planParseErrorVisible &&
+			!commitReviewVisible; // MODIFIED
 		if (addKeyInput) {
 			addKeyInput.disabled = !enableAddKeyInputControls;
 		}
@@ -646,7 +682,10 @@ if (
 		// Determine if chat history buttons can be interacted with
 		// Enabled only if not loading AND neither blocking UI is visible
 		const canInteractWithChatHistoryButtons =
-			!loading && !planConfirmationVisible && !planParseErrorVisible;
+			!loading &&
+			!planConfirmationVisible &&
+			!planParseErrorVisible &&
+			!commitReviewVisible; // MODIFIED
 
 		// Determine if there are messages in the chat container
 		const hasMessages = chatContainer
@@ -672,8 +711,8 @@ if (
 
 		// new console.log statements here
 		console.log(
-			`[setLoadingState] Status: loading=${loading}, planConfVis=${planConfirmationVisible}, planParseErrVis=${planParseErrorVisible}`
-		);
+			`[setLoadingState] Status: loading=${loading}, planConfVis=${planConfirmationVisible}, planParseErrVis=${planParseErrorVisible}, commitRevVis=${commitReviewVisible}`
+		); // MODIFIED
 		console.log(
 			`[setLoadingState] Chat: childCount=${chatContainer?.childElementCount}, hasMessages=${hasMessages}`
 		);
@@ -685,7 +724,13 @@ if (
 		if (cancelGenerationButton) {
 			// The button should be visible ONLY when loading is true AND neither
 			// plan confirmation container NOR plan parse error container is visible.
-			if (loading && !planConfirmationVisible && !planParseErrorVisible) {
+			if (
+				loading &&
+				!planConfirmationVisible &&
+				!planParseErrorVisible &&
+				!commitReviewVisible
+			) {
+				// MODIFIED
 				cancelGenerationButton.style.display = "inline-flex"; // Show the cancel button
 			} else {
 				// Hide the cancel button if not loading, or if a specific UI block is active
@@ -736,6 +781,16 @@ if (
 			// Optionally provide a status update
 			updateStatus("New request initiated, parse error UI hidden.");
 			// No need to explicitly re-enable buttons here; setLoadingState(true) will handle disabling them correctly.
+		}
+		// ADDED: Hide commitReviewContainer if a new request starts
+		if (
+			loading &&
+			commitReviewContainer &&
+			commitReviewContainer.style.display !== "none"
+		) {
+			commitReviewContainer.style.display = "none";
+			// Optionally provide a status update
+			updateStatus("New request initiated, commit review UI hidden.");
 		}
 		// END MODIFICATION
 	}
@@ -1453,6 +1508,50 @@ if (
 			}
 			// END MODIFICATION
 
+			// new case for 'commitReview'
+			case "commitReview": {
+				console.log("Received commitReview message:", message.value);
+				const { commitMessage, stagedFiles } = message.value;
+
+				if (
+					commitReviewContainer &&
+					commitMessageDisplay &&
+					stagedFilesList &&
+					confirmCommitButton &&
+					cancelCommitButton
+				) {
+					commitMessageDisplay.innerHTML = md.render(commitMessage);
+					stagedFilesList.innerHTML = ""; // Clear previous list items
+
+					if (stagedFiles && stagedFiles.length > 0) {
+						stagedFiles.forEach((file: string) => {
+							const li = document.createElement("li");
+							li.textContent = file;
+							stagedFilesList.appendChild(li);
+						});
+					} else {
+						const li = document.createElement("li");
+						li.textContent = "No files to commit.";
+						li.style.fontStyle = "italic";
+						stagedFilesList.appendChild(li);
+					}
+
+					commitReviewContainer.style.display = "flex";
+					updateStatus("Review commit details and confirm.", false);
+					setLoadingState(false); // This will disable chat inputs/general buttons because commitReviewVisible will be true
+					if (cancelGenerationButton) {
+						cancelGenerationButton.style.display = "none"; // Hide cancel generation button
+					}
+				} else {
+					console.error(
+						"Commit review UI elements not found. Cannot display commit details."
+					);
+					updateStatus("Error: UI for commit review is missing.", true);
+					setLoadingState(false); // Re-enable inputs as fallback
+				}
+				break;
+			}
+
 			// new case for 'restorePendingPlanConfirmation'
 			case "restorePendingPlanConfirmation":
 				if (message.value) {
@@ -1634,6 +1733,13 @@ if (
 						failedJsonDisplay.textContent = "";
 					}
 				}
+				// If commit review UI was active, hide it
+				if (
+					commitReviewContainer &&
+					commitReviewContainer.style.display !== "none"
+				) {
+					commitReviewContainer.style.display = "none";
+				}
 				updateEmptyChatPlaceholderVisibility(); // Call after chatCleared is processed (to show the placeholder).
 				break;
 			}
@@ -1687,6 +1793,13 @@ if (
 						failedJsonDisplay.textContent = "";
 					}
 				}
+				// If commit review UI was active, hide it
+				if (
+					commitReviewContainer &&
+					commitReviewContainer.style.display !== "none"
+				) {
+					commitReviewContainer.style.display = "none";
+				}
 				updateEmptyChatPlaceholderVisibility(); // Call after restoreHistory is processed (to show/hide based on loaded history).
 
 				document.documentElement.scrollTop = 0;
@@ -1735,6 +1848,35 @@ if (
 				typingBuffer = ""; // ADDED: Clear typingBuffer
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
+
+				// If plan confirmation was active, hide it
+				if (
+					planConfirmationContainer &&
+					planConfirmationContainer.style.display !== "none"
+				) {
+					planConfirmationContainer.style.display = "none";
+					pendingPlanData = null;
+				}
+				// If plan parse error UI was active, hide it
+				if (
+					planParseErrorContainer &&
+					planParseErrorContainer.style.display !== "none"
+				) {
+					planParseErrorContainer.style.display = "none";
+					if (planParseErrorDisplay) {
+						planParseErrorDisplay.textContent = "";
+					}
+					if (failedJsonDisplay) {
+						failedJsonDisplay.textContent = "";
+					}
+				}
+				// ADDED: If commit review UI was active, hide it
+				if (
+					commitReviewContainer &&
+					commitReviewContainer.style.display !== "none"
+				) {
+					commitReviewContainer.style.display = "none";
+				}
 
 				// Call setLoadingState(false) to re-evaluate all input and button states based on the new isLoading=false,
 				// current API key status, and visibility of blocking UI elements.
@@ -1822,6 +1964,10 @@ if (
 		if (planParseErrorContainer) {
 			planParseErrorContainer.style.display = "none";
 		}
+		// Ensure commit review container is hidden initially
+		if (commitReviewContainer) {
+			commitReviewContainer.style.display = "none";
+		}
 
 		// Set icons for buttons
 		setIconForButton(sendButton, faPaperPlane);
@@ -1864,6 +2010,35 @@ if (
 			});
 		}
 		// END Add click event listener for cancelParseErrorButton
+
+		// Add event listeners for commit review buttons
+		if (confirmCommitButton) {
+			confirmCommitButton.addEventListener("click", () => {
+				console.log("Confirm Commit button clicked.");
+				if (commitReviewContainer) {
+					commitReviewContainer.style.display = "none"; // Hide the commit review container
+				}
+				vscode.postMessage({ type: "confirmCommit" });
+				updateStatus("Committing changes...", false);
+				setLoadingState(true); // Set loading state while commit is in progress
+			});
+		}
+
+		if (cancelCommitButton) {
+			cancelCommitButton.addEventListener("click", () => {
+				console.log("Cancel Commit button clicked.");
+				if (commitReviewContainer) {
+					commitReviewContainer.style.display = "none"; // Hide the commit review container
+				}
+				vscode.postMessage({ type: "cancelCommit" });
+				updateStatus("Commit cancelled by user.", false);
+				setLoadingState(false); // Re-enable inputs
+			});
+		}
+
+		// Set icons for commit review buttons
+		setIconForButton(confirmCommitButton, faCheck);
+		setIconForButton(cancelCommitButton, faTimes);
 
 		// click event listener for cancelGenerationButton
 		if (cancelGenerationButton) {

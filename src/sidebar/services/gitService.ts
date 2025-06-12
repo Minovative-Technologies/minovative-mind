@@ -151,3 +151,20 @@ export function constructGitCommitCommand(commitMessage: string): {
 	}
 	return { command: gitCommitCommand, displayMessage: fullMessageForDisplay };
 }
+
+export async function getGitStagedFiles(rootPath: string): Promise<string[]> {
+	try {
+		const { stdout } = await execPromise("git diff --name-only --cached", {
+			cwd: rootPath,
+		});
+		return stdout
+			.trim()
+			.split("\n")
+			.filter((line) => line.length > 0);
+	} catch (error: any) {
+		console.error(
+			`Error getting staged files for ${rootPath}: ${error.message || error}`
+		);
+		return [];
+	}
+}

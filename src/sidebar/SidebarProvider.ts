@@ -36,6 +36,7 @@ import {
 	getGitStagedDiff,
 	stageAllChanges,
 	constructGitCommitCommand,
+	getGitStagedFiles, // Ensure this is imported for commit review
 } from "./services/gitService";
 import { getHtmlForWebview } from "./ui/webviewHelper";
 import * as sidebarTypes from "./common/sidebarTypes";
@@ -92,6 +93,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public _isSubscriptionActive: boolean = false;
 	public _userUid: string | undefined = undefined;
 	public _userEmail: string | undefined = undefined;
+	private _pendingCommitReviewData: {
+		commitMessage: string;
+		stagedFiles: string[];
+	} | null = null;
 
 	constructor(
 		private readonly _extensionUri_in: vscode.Uri, // Renamed to avoid clash
@@ -2261,11 +2266,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				throw new Error("No workspace folder open for git.");
 			}
 			const rootPath = workspaceFolders[0].uri.fsPath;
-			const terminal = vscode.window.createTerminal({
-				name: "Minovative Mind Git Ops",
-				cwd: rootPath,
-			});
-			terminal.show();
+			// The terminal is created later if the commit is confirmed
 
 			const onGitOutput = (
 				type: "stdout" | "stderr" | "status",
@@ -2300,6 +2301,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			if (token.isCancellationRequested) {
 				throw new Error("Operation cancelled by user.");
 			}
+
+			const stagedFiles = await getGitStagedFiles(rootPath);
 
 			// Get staged diff for commit message generation
 			onGitOutput("status", "Fetching staged changes for commit message...");
@@ -2363,33 +2366,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				displayMessage: fullMessageForDisplay,
 			} = constructGitCommitCommand(commitMessage); // Use imported
 
-			// Execute the commit command in the terminal
-			onGitOutput(
-				"status",
-				`Executing: ${gitCommitCommand.substring(0, 100)}${
-					gitCommitCommand.length > 100 ? "..." : ""
-				}`
-			);
-			terminal.sendText(gitCommitCommand);
-			this._postChatUpdateForPlanExecution({
-				// Use new function
-				type: "appendRealtimeModelMessage",
+			this._pendingCommitReviewData = {
+				commitMessage: fullMessageForDisplay,
+				stagedFiles: stagedFiles,
+			};
+
+			this.postMessageToWebview({
+				type: "commitReview",
 				value: {
-					text: `Attempting commit with message:\n---\n${fullMessageForDisplay}\n---\nCheck TERMINAL.`,
+					commitMessage: fullMessageForDisplay,
+					stagedFiles: stagedFiles,
 				},
 			});
-
-			// Commit operation is now sent to terminal. We don't wait for terminal completion here.
-			// Mark the overall commit operation as successful *from the extension's perspective*
-			// as it successfully staged changes, got a message, and sent the command.
-			// The user monitors the terminal for the actual git commit outcome.
-			this.postMessageToWebview({
-				type: "aiResponseEnd",
-				success: true,
-				error: null,
-				isPlanResponse: false,
-				planData: null,
-			});
+			return; // Exit _handleCommitCommand, awaiting user review.
 		} catch (error: any) {
 			removeProcess(); // Ensure any active process is removed from tracking
 			console.error("Error in _handleCommitCommand:", error.message);
@@ -2413,7 +2402,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			removeProcess();
 			this._activeOperationCancellationTokenSource?.dispose();
 			this._activeOperationCancellationTokenSource = undefined;
-			this.postMessageToWebview({ type: "reenableInput" });
 		}
 	}
 
@@ -2812,6 +2800,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"selectModel", // Allowed, updates settings but doesn't start AI task immediately
 				"requestAuthState", // Allowed, just requests current auth state
 				"deleteSpecificMessage", // Allowed, local state modification
+				"confirmCommit", // Allowed, as it's a follow-up action to a paused flow
+				"cancelCommit", // Allowed, as it's a follow-up action to a paused flow
 			];
 
 			if (
@@ -2971,6 +2961,113 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					await this._handleCommitCommand(activeKey, selectedModel);
 					break;
 				}
+				case "confirmCommit": {
+					if (this._pendingCommitReviewData) {
+						const { commitMessage } = this._pendingCommitReviewData;
+
+						const workspaceFolders = vscode.workspace.workspaceFolders;
+						if (!workspaceFolders || workspaceFolders.length === 0) {
+							const errorMsg =
+								"Error: No workspace folder open for git commit.";
+							this.postMessageToWebview({
+								type: "appendRealtimeModelMessage",
+								value: { text: `Commit Failed: ${errorMsg}`, isError: true },
+							});
+							this.postMessageToWebview({
+								type: "aiResponseEnd",
+								success: false,
+								error: errorMsg,
+								isPlanResponse: false,
+								planData: null,
+							});
+							this.postMessageToWebview({ type: "reenableInput" });
+							return;
+						}
+						const rootPath = workspaceFolders[0].uri.fsPath;
+
+						const { command: gitCommitCommand } =
+							constructGitCommitCommand(commitMessage);
+
+						try {
+							const terminal = vscode.window.createTerminal({
+								name: "Minovative Mind Git Commit",
+								cwd: rootPath,
+							});
+							terminal.show();
+							terminal.sendText(gitCommitCommand);
+
+							this._postChatUpdateForPlanExecution({
+								type: "appendRealtimeModelMessage",
+								value: {
+									text: `Commit confirmed and executed:\n---\n${commitMessage}\n---\nCheck TERMINAL for result.`,
+								},
+							});
+							this.postMessageToWebview({
+								type: "aiResponseEnd",
+								success: true,
+								error: null,
+								isPlanResponse: false,
+								planData: null,
+							});
+						} catch (error: any) {
+							const errorMsg =
+								error instanceof Error ? error.message : String(error);
+							this._postChatUpdateForPlanExecution({
+								type: "appendRealtimeModelMessage",
+								value: {
+									text: `Commit execution failed: ${errorMsg}`,
+									isError: true,
+								},
+							});
+							this.postMessageToWebview({
+								type: "aiResponseEnd",
+								success: false,
+								error: errorMsg,
+								isPlanResponse: false,
+								planData: null,
+							});
+						} finally {
+							this._pendingCommitReviewData = null;
+							this.postMessageToWebview({ type: "reenableInput" });
+						}
+					} else {
+						console.warn(
+							"[SidebarProvider] confirmCommit received but _pendingCommitReviewData is null."
+						);
+						this.postMessageToWebview({
+							type: "appendRealtimeModelMessage",
+							value: {
+								text: "Error: No pending commit review data to confirm.",
+								isError: true,
+							},
+						});
+						this.postMessageToWebview({
+							type: "aiResponseEnd",
+							success: false,
+							error: "No pending commit review data.",
+							isPlanResponse: false,
+							planData: null,
+						});
+						this.postMessageToWebview({ type: "reenableInput" });
+					}
+					break;
+				}
+				case "cancelCommit": {
+					this._pendingCommitReviewData = null;
+					this._postChatUpdateForPlanExecution({
+						type: "appendRealtimeModelMessage",
+						value: { text: "Commit review cancelled by user." },
+					});
+					this.postMessageToWebview({
+						type: "aiResponseEnd",
+						success: false,
+						error: "Commit cancelled.",
+						isPlanResponse: false,
+						planData: null,
+					});
+					this.postMessageToWebview({ type: "reenableInput" });
+					break;
+				}
 				case "addApiKey":
 					if (typeof data.value === "string") {
 						// Disable inputs before adding, they are re-enabled by updateKeyList via saveKeysToStorage
@@ -3065,15 +3162,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						// If no pending plan, just ensure inputs are enabled
 						this.postMessageToWebview({ type: "reenableInput" });
 					}
-					break;
-				case "reenableInput": // This message should generally be sent *to* the webview, not *from* it.
-					console.warn(
-						"[Provider] Received unexpected 'reenableInput' message FROM webview."
-					);
-					// If received, perhaps the webview is trying to force state reset?
-					// Delegate to the webview's own handler by posting it back.
-					// This is a bit hacky but might handle unexpected state synchronization issues.
-					this.postMessageToWebview({ type: "reenableInput" });
 					break;
 				default:
 					console.warn(`Unknown message type received: ${data.type}`);
