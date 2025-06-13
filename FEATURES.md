@@ -50,7 +50,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - Effortless Commit Messages: Generates descriptive and relevant `Git commit` messages automatically based on staged changes.
 - Quick Execution: Can be triggered by typing `/commit` in the chat or clicking a dedicated “Commit Changes” button in the sidebar.
 - Streamlined Process: Automatically stages pending changes (`git add .`), analyzes the diff, generates a conventional commit message, and executes the `git commit` command.
-- **Interactive Review**: A user-facing review step is provided for generated Git commit messages before they are actually executed.
+- Interactive Review: A user-facing review step is provided for generated Git commit messages before they are actually executed, allowing users to approve or modify.
 
 ## Account & Subscription Management
 
@@ -95,7 +95,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 ### Smart Context Awareness
 
-- Comprehensive Understanding: The AI intelligently considers the `active file content`, `selected code`, relevant `diagnostics` (warnings/errors) from `VS Code`, chat history, and the overall project structure to provide highly relevant and accurate responses.
+- Comprehensive Understanding: The AI intelligently considers the `active file content`, `selected code`, relevant `diagnostics` (warnings/errors) from `VS Code`, chat history, and the overall project structure, including **dependency graph analysis**, to provide highly relevant and accurate responses.
 
 ### Built-in Troubleshooting Guidance
 
