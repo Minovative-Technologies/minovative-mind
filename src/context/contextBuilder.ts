@@ -11,7 +11,7 @@ interface ContextConfig {
 }
 
 // Default configuration - Adjusted for ~1M token models
-const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
+export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
 	maxFileLength: 5 * 1024 * 1024, // Approx 5MB in characters
 	maxTotalLength: 5 * 1024 * 1024, // Approx 5MB in characters
 };
@@ -20,18 +20,19 @@ const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
  * Builds a textual context string from a list of file URIs.
  * Reads file content, formats it, and applies limits.
  * Now tailored for larger context window models.
- *
  * @param relevantFiles An array of vscode.Uri objects for relevant files.
  * @param workspaceRoot The root URI of the workspace for relative paths.
  * @param config Optional configuration for context building.
  * @param recentChanges Optional array of recent file changes to include.
+ * @param dependencyGraph Optional map representing file import/dependency relations.
  * @returns A promise that resolves to the generated context string.
  */
 export async function buildContextString(
 	relevantFiles: vscode.Uri[],
 	workspaceRoot: vscode.Uri,
 	config: ContextConfig = DEFAULT_CONTEXT_CONFIG,
-	recentChanges?: FileChangeEntry[] // Modified signature
+	recentChanges?: FileChangeEntry[], // Modified signature
+	dependencyGraph?: Map<string, string[]>
 ): Promise<string> {
 	let context = `Project Context (Workspace: ${path.basename(
 		workspaceRoot.fsPath
@@ -176,6 +177,31 @@ export async function buildContextString(
 			.relative(workspaceRoot.fsPath, fileUri.fsPath)
 			.replace(/\\/g, "/");
 		const fileHeader = `--- File: ${relativePath} ---\n`;
+
+		// BEGIN: Dependency Graph Logic
+		let importRelationsDisplay = "";
+		if (dependencyGraph) {
+			const imports = dependencyGraph.get(relativePath);
+			if (imports && imports.length > 0) {
+				const maxImportsToDisplay = 10;
+				const displayedImports = imports
+					.slice(0, maxImportsToDisplay)
+					.map((imp) => `'${imp}'`)
+					.join(", ");
+				const remainingImportsCount = imports.length - maxImportsToDisplay;
+				const suffix =
+					remainingImportsCount > 0
+						? ` (and ${remainingImportsCount} more)`
+						: "";
+				importRelationsDisplay = `imports: ${displayedImports}${suffix}\n`;
+			} else {
+				importRelationsDisplay = `imports: No Imports\n`;
+			}
+		} else {
+			importRelationsDisplay = `imports: No Imports (Dependency graph not provided)\n`;
+		}
+		// END: Dependency Graph Logic
+
 		let fileContent = "";
 		let truncated = false;
 
@@ -197,7 +223,11 @@ export async function buildContextString(
 		}
 
 		const contentToAdd =
-			fileHeader + fileContent + (truncated ? "\n[...truncated]" : "") + "\n\n";
+			fileHeader +
+			importRelationsDisplay +
+			fileContent +
+			(truncated ? "\n[...truncated]" : "") +
+			"\n\n";
 		const estimatedLengthIncrease = contentToAdd.length;
 
 		// Check if adding *this* file's content exceeds the total length limit
@@ -210,11 +240,13 @@ export async function buildContextString(
 				const maxAllowedContentLength =
 					availableContentSpace -
 					fileHeader.length -
+					importRelationsDisplay.length - // Account for new import relations
 					"\n[...truncated]\n\n".length;
 				if (maxAllowedContentLength > 50) {
 					// Only add if we can fit a reasonable snippet
 					const partialContentToAdd =
 						fileHeader +
+						importRelationsDisplay +
 						fileContent.substring(0, maxAllowedContentLength) +
 						"\n[...truncated]\n\n";
 					context += partialContentToAdd;

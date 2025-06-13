@@ -2,7 +2,6 @@
 import { HistoryEntry, PlanGenerationContext } from "../common/sidebarTypes";
 import * as vscode from "vscode";
 import { generateContentStream } from "../../ai/gemini";
-import { FileChangeEntry } from "../../types/workflow";
 import { TEMPERATURE } from "../common/sidebarConstants";
 
 export function createInitialPlanningExplanationPrompt(
@@ -114,7 +113,7 @@ export function createPlanningPrompt(
 	combinedDiagnosticsAndRetryString: string | undefined,
 	chatHistory: HistoryEntry[] | undefined,
 	textualPlanExplanation: string,
-	recentChanges: FileChangeEntry[] | undefined
+	recentChanges: string | undefined // Modified to accept pre-formatted string
 ): string {
 	let actualDiagnosticsString: string | undefined = undefined;
 	let extractedRetryInstruction: string | undefined = undefined;
@@ -350,12 +349,7 @@ export function createPlanningPrompt(
     **Important Context:** The "*** Recent Project Changes (During Current Workflow Execution) ***" section provides a summary of files that have already been modified or created in this current workflow. Use this information to inform your understanding of the evolving project state and ensure subsequent steps are coherent with these changes. For example, if a new function was added in a previous step, ensure your current plan step correctly references or imports it if necessary.
 
     *** Recent Project Changes (During Current Workflow Execution) ***
-    ${recentChanges
-			.map(
-				(entry) =>
-					`Change Type: ${entry.changeType}\nFile Path: ${entry.filePath}\nSummary: ${entry.summary}`
-			)
-			.join("\n---\n")}
+    ${recentChanges}
     --- End Recent Project Changes ---`
 			: "";
 
@@ -492,7 +486,7 @@ export async function _performModification(
 	const prompt = `You are an expert AI software developer. Your task is to modify the provided file content based on the given instructions.
     **Crucially, ensure the generated code is modular, readable, adheres to common coding standards for ${languageId}, and is production-ready, efficient, and maintainable.**
 
-    You MUST ONLY return the complete modified file content. Do NOT include any conversational text, explanations, or markdown code blocks (e.g., \`\`\`typescript\\n...\\n\`\`\`). Your response must start directly with the modified file content.
+    You MUST ONLY return the complete modified file content. Do NOT include any conversational text, explanations, or markdown code blocks (e.g., \`\`\`typescript\\n...\\n\`\`\`):. Your response must start directly with the modified file content.
 
     File Path: ${filePath}
     Language: ${languageId}

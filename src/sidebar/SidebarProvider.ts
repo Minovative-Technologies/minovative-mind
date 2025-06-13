@@ -8,7 +8,7 @@ import {
 } from "../ai/gemini";
 import { scanWorkspace } from "../context/workspaceScanner";
 import { buildContextString } from "../context/contextBuilder";
-import { buildDependencyGraph } from "../context/dependencyGraphBuilder"; // ADDED IMPORT
+import { buildDependencyGraph } from "../context/dependencyGraphBuilder"; // IMPORT
 import {
 	ExecutionPlan,
 	PlanStepAction,
@@ -46,7 +46,6 @@ import {
 	AuthStateUpdatePayload,
 	UserTier,
 	HistoryEntry,
-	HistoryEntryPart,
 } from "./common/sidebarTypes";
 import { isFeatureAllowed } from "./utils/featureGating";
 import {
@@ -60,8 +59,9 @@ import {
 	getFirebaseConfig,
 	FirebaseUser,
 } from "../firebase/firebaseService";
-import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger"; // Added import
+import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
 import { generateFileChangeSummary } from "../utils/diffingUtils";
+import { FileChangeEntry } from "../types/workflow";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -424,12 +424,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					throw new Error("API Key became invalid during retry loop.");
 				}
 
-				// ADDED LOGIC FOR HISTORY TRANSFORMATION
+				// LOGIC FOR HISTORY TRANSFORMATION
 				let historyForGemini: Content[] | undefined;
 				if (history && history.length > 0) {
 					historyForGemini = this._transformHistoryForGemini(history);
 				}
-				// END ADDED LOGIC FOR HISTORY TRANSFORMATION
+				// END LOGIC FOR HISTORY TRANSFORMATION
 
 				const stream = generateContentStream(
 					currentApiKey,
@@ -623,7 +623,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					),
 			};
 
-			// MODIFIED: Pass userRequest to _buildProjectContext
+			// Pass userRequest to _buildProjectContext
 			const projectContext = await this._buildProjectContext(userRequest);
 			if (projectContext.startsWith("[Error")) {
 				throw new Error(projectContext);
@@ -943,7 +943,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				selection,
 			};
 
-			// MODIFIED: Pass editorCtx.instruction, editorCtx, and finalDiagnosticsString
+			// Pass editorCtx.instruction, editorCtx, and finalDiagnosticsString
 			const projectContext = await this._buildProjectContext(
 				editorCtx.instruction,
 				editorCtx,
@@ -1106,6 +1106,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			};
 
 			const recentChanges = this.changeLogger.getChangeLog(); // Retrieve changes here
+			const formattedRecentChanges =
+				this._formatRecentChangesForPrompt(recentChanges);
 
 			const jsonPlanningPrompt = createPlanningPrompt(
 				planContext.type === "chat"
@@ -1116,7 +1118,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				planContext.diagnosticsString,
 				planContext.chatHistory,
 				planContext.textualPlanExplanation,
-				recentChanges // Pass recentChanges as a new argument
+				formattedRecentChanges // Pass the formatted string
 			);
 
 			// Redundant switchToNextApiKey removed here
@@ -2082,7 +2084,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		let finalAiResponseText: string | null = null;
 
 		try {
-			// MODIFIED: Pass userMessage
 			const projectContext = await this._buildProjectContext(userMessage);
 			// Error check for projectContext done by callers of _generateWithRetry or _handle...
 			// but good to have a direct check too for critical failures.
@@ -2522,7 +2523,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				});
 				// fileDependencies remains undefined
 			}
-			// END ADDED
 
 			if (allScannedFiles.length === 0) {
 				if (editorContext?.documentUri) {
@@ -2716,6 +2716,47 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 		this._view?.webview.postMessage(message); // Use _view.webview for consistency
 	};
+
+	private _formatRecentChangesForPrompt(changes: FileChangeEntry[]): string {
+		if (!changes || changes.length === 0) {
+			return ""; // Return an empty string if there are no changes
+		}
+
+		let formattedChangesString =
+			"--- Recent Project Changes (During Current Workflow Execution) ---\n";
+
+		const formattedEntries = changes
+			.map((change) => {
+				let entryString = `--- File ${change.changeType.toUpperCase()}: ${
+					change.filePath
+				} ---\n`;
+				if (change.summary) {
+					entryString += `Summary: ${change.summary}\n`;
+				}
+				if (change.diffContent) {
+					entryString += `Diff:\n\`\`\`diff\n${change.diffContent}\n\`\`\`\n`; // Use diff code block for clarity
+				} else if (change.addedLines || change.removedLines) {
+					// Fallback if diffContent isn't explicitly set but lines are
+					if (change.addedLines?.length) {
+						entryString += `Added Lines:\n\`\`\`\n${change.addedLines.join(
+							"\n"
+						)}\n\`\`\`\n`;
+					}
+					if (change.removedLines?.length) {
+						entryString += `Removed Lines:\n\`\`\`\n${change.removedLines.join(
+							"\n"
+						)}\n\`\`\`\n`;
+					}
+				}
+				return entryString.trim(); // Trim any trailing whitespace from the entry
+			})
+			.join("\n\n"); // Separate each change entry with a double newline for clear distinction
+
+		formattedChangesString += formattedEntries;
+		formattedChangesString += "\n--- End Recent Project Changes ---\n";
+
+		return formattedChangesString;
+	}
 
 	public postMessageToWebview(message: Record<string, unknown>): void {
 		if (this._view && this._view.visible) {

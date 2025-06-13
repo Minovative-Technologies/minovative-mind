@@ -98,7 +98,7 @@ async function executeExplainAction(
 
 	try {
 		// Use the retry wrapper from the provider for consistency
-		// MODIFIED: Removed activeApiKey (second argument) from the call
+		// Removed activeApiKey (second argument) from the call
 		// Signature: _generateWithRetry(prompt, modelName, history, requestType)
 		await sidebarProvider.switchToNextApiKey(); // Added as per instruction
 		const result = await sidebarProvider._generateWithRetry(

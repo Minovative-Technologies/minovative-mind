@@ -150,7 +150,7 @@ const cancelCommitButton = document.getElementById(
 let isApiKeySet = false;
 let isLoading = false;
 let totalKeys = 0;
-// MODIFIED: pendingPlanData now stores the simplified object from the provider
+// pendingPlanData now stores the simplified object from the provider
 // when a textual plan is awaiting confirmation.
 let pendingPlanData: {
 	type: string;
@@ -541,13 +541,13 @@ if (
 			planParseErrorContainer &&
 			planParseErrorContainer.style.display !== "none";
 		const commitReviewVisible =
-			commitReviewContainer && commitReviewContainer.style.display !== "none"; // ADDED
+			commitReviewContainer && commitReviewContainer.style.display !== "none"; //
 
 		if (
 			isLoading ||
 			planConfirmationVisible ||
 			planParseErrorVisible ||
-			commitReviewVisible || // ADDED
+			commitReviewVisible || //
 			!chatInput ||
 			!sendButton
 		) {
@@ -558,8 +558,8 @@ if (
 				planConfirmationVisible,
 				"planParseErrorVisible",
 				planParseErrorVisible,
-				"commitReviewVisible", // ADDED
-				commitReviewVisible // ADDED
+				"commitReviewVisible", //
+				commitReviewVisible //
 			);
 			return;
 		}
@@ -616,7 +616,7 @@ if (
 		if (loadingMsg) {
 			loadingMsg.remove();
 		}
-		console.log("setLoadingState:", loading); // ADDED console.log here
+		console.log("setLoadingState:", loading); // console.log here
 
 		// Check visibility of blocking UI elements
 		const planConfirmationVisible =
@@ -626,7 +626,7 @@ if (
 			planParseErrorContainer &&
 			planParseErrorContainer.style.display !== "none";
 		const commitReviewVisible =
-			commitReviewContainer && commitReviewContainer.style.display !== "none"; // ADDED
+			commitReviewContainer && commitReviewContainer.style.display !== "none"; //
 
 		// Determine if general chat/send controls should be enabled
 		// Enabled only if not loading AND API key is set AND neither blocking UI is visible
@@ -861,7 +861,7 @@ if (
 						target.id === "confirm-plan-button" ||
 						target.closest("#confirm-plan-button")
 					) {
-						console.log("Confirm Plan button clicked."); // ADDED console.log here
+						console.log("Confirm Plan button clicked."); // console.log here
 						if (pendingPlanData) {
 							vscode.postMessage({
 								type: "confirmPlanExecution",
@@ -882,7 +882,7 @@ if (
 						target.id === "cancel-plan-button" ||
 						target.closest("#cancel-plan-button")
 					) {
-						console.log("Cancel Plan button clicked."); // ADDED console.log here
+						console.log("Cancel Plan button clicked."); // console.log here
 						// Correctly sends the cancel message
 						vscode.postMessage({ type: "cancelPlanExecution" });
 						updateStatus("Plan cancelled.");
@@ -935,10 +935,10 @@ if (
 	sendButton.addEventListener("click", () => {
 		console.log("Send button clicked.");
 		sendMessage();
-	}); // ADDED console.log here
+	}); // console.log here
 	chatInput.addEventListener("keydown", (e) => {
 		if (e.key === "Enter" && !e.shiftKey) {
-			console.log("Chat input Enter key pressed."); // ADDED console.log here
+			console.log("Chat input Enter key pressed."); // console.log here
 			e.preventDefault();
 			sendMessage();
 		}
@@ -1215,16 +1215,16 @@ if (
 	// Clear/Save/Load listeners are correct, they trigger actions handled elsewhere.
 	// Button disabled states are managed by setLoadingState.
 	clearChatButton.addEventListener("click", () => {
-		console.log("Clear Chat button clicked."); // ADDED console.log here
+		console.log("Clear Chat button clicked."); // console.log here
 		vscode.postMessage({ type: "clearChatRequest" });
 	});
 	saveChatButton.addEventListener("click", () => {
-		console.log("Save Chat button clicked."); // ADDED console.log here
+		console.log("Save Chat button clicked."); // console.log here
 		vscode.postMessage({ type: "saveChatRequest" });
 		updateStatus("Requesting chat save...");
 	});
 	loadChatButton.addEventListener("click", () => {
-		console.log("Load Chat button clicked."); // ADDED console.log here
+		console.log("Load Chat button clicked."); // console.log here
 		vscode.postMessage({ type: "loadChatRequest" });
 		updateStatus("Requesting chat load...");
 	});
@@ -1232,7 +1232,7 @@ if (
 	// event listener for retryGenerationButton
 	if (retryGenerationButton) {
 		retryGenerationButton.addEventListener("click", () => {
-			console.log("Retry Generation button clicked."); // ADDED console.log here
+			console.log("Retry Generation button clicked."); // console.log here
 			// Hide the error container
 			if (planParseErrorContainer) {
 				planParseErrorContainer.style.display = "none";
@@ -1259,7 +1259,7 @@ if (
 
 	window.addEventListener("message", (event: MessageEvent) => {
 		const message = event.data;
-		console.log("Received message:", event.data); // ADDED console.log here
+		console.log("Received message:", event.data); // console.log here
 		console.log("[Webview] Message received from extension:", message.type);
 
 		switch (message.type) {
@@ -1385,7 +1385,7 @@ if (
 				} else {
 					// Handle cases where stream ended but we somehow lost the element reference
 					console.warn(
-						"aiResponseEnd received but currentAiMessageContentElement is null. Attempting to clear state." // MODIFIED: More specific warning
+						"aiResponseEnd received but currentAiMessageContentElement is null. Attempting to clear state." // More specific warning
 					);
 				}
 
@@ -1988,7 +1988,7 @@ if (
 		// This listener is added within initializeWebview as part of UI setup.
 		if (cancelParseErrorButton) {
 			cancelParseErrorButton.addEventListener("click", () => {
-				console.log("Cancel Parse Error button clicked."); // ADDED console.log here
+				console.log("Cancel Parse Error button clicked."); // console.log here
 				// 2a. Hide the error container
 				if (planParseErrorContainer) {
 					planParseErrorContainer.style.display = "none";
@@ -2043,7 +2043,7 @@ if (
 		// click event listener for cancelGenerationButton
 		if (cancelGenerationButton) {
 			cancelGenerationButton.addEventListener("click", () => {
-				console.log("Cancel Generation button clicked."); // ADDED console.log here
+				console.log("Cancel Generation button clicked."); // console.log here
 				// 1. Hide the button immediately (redundant as setLoadingState will hide it, but good for instant feedback)
 				// cancelGenerationButton.style.display = "none"; // Removed - setLoadingState(false) handles this
 				// 2. Send message to extension to cancel
@@ -2160,15 +2160,15 @@ if (
 					// New logic for delete button
 					const messageElementToDelete = deleteButton.closest(
 						".message[data-is-history='true']"
-					); // MODIFIED: Filter by data-is-history attribute
+					); // Filter by data-is-history attribute
 					if (messageElementToDelete) {
 						// Get all .message elements within chatContainer that are history messages
 						const allHistoryMessages = Array.from(
-							chatContainer.querySelectorAll(".message[data-is-history='true']") // MODIFIED: Filter by data-is-history attribute
+							chatContainer.querySelectorAll(".message[data-is-history='true']") // Filter by data-is-history attribute
 						);
 						const messageIndex = allHistoryMessages.indexOf(
 							messageElementToDelete
-						); // MODIFIED: Use allHistoryMessages
+						); // Use allHistoryMessages
 
 						if (messageIndex !== -1) {
 							vscode.postMessage({

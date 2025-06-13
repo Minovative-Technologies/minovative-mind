@@ -1070,7 +1070,7 @@ div#commit-message-display tr:nth-child(even),
 /* Styles for the container that shows up when plan parsing fails. */
 #plan-parse-error-container {
 	/* Styled similar to #plan-confirmation-container for visual consistency in UI sections. */
-	/* MODIFIED: Use error colors instead of active/focus colors for better visual distinction */
+	/* Use error colors instead of active/focus colors for better visual distinction */
 	border: 1px solid var(--vscode-inputValidation-errorBorder); /* Border color from theme */
 	background-color: var(
 		--vscode-inputValidation-errorBackground
@@ -1413,7 +1413,7 @@ code#failed-json-display {
 }
 
 .staged-files-section {
-	width: 100%;
+	width: fit-content;
 	list-style: decimal;
 	flex-direction: column;
 	overflow-wrap: break-word; /* Ensure long lines and words wrap correctly within the code */
