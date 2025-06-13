@@ -1070,7 +1070,7 @@ div#commit-message-display tr:nth-child(even),
 /* Styles for the container that shows up when plan parsing fails. */
 #plan-parse-error-container {
 	/* Styled similar to #plan-confirmation-container for visual consistency in UI sections. */
-	/* Use error colors instead of active/focus colors for better visual distinction */
+	/* MODIFIED: Use error colors instead of active/focus colors for better visual distinction */
 	border: 1px solid var(--vscode-inputValidation-errorBorder); /* Border color from theme */
 	background-color: var(
 		--vscode-inputValidation-errorBackground
@@ -1342,7 +1342,7 @@ code#failed-json-display {
 	background-color: var(
 		--vscode-diffEditor-insertedTextBackground
 	); /* Subtle green background highlight */
-	display: inline-block; /* Ensure it behaves like a inline-block element */
+	display: block; /* Ensure it behaves like a block element */
 	/* Adjust padding/margin to align within the overall message content */
 }
 
@@ -1353,7 +1353,7 @@ code#failed-json-display {
 	background-color: var(
 		--vscode-diffEditor-removedTextBackground
 	); /* Subtle red background highlight */
-	display: inline-block; /* Ensure it behaves like a inline-block element */
+	display: block; /* Ensure it behaves like a block element */
 }
 
 .diff-line-equal {
@@ -1361,7 +1361,7 @@ code#failed-json-display {
 		--vscode-editor-foreground
 	); /* Default text color for unchanged lines */
 	background-color: transparent; /* No special background */
-	display: inline-block; /* Ensure it behaves like a inline-block element */
+	display: block; /* Ensure it behaves like a block element */
 }
 
 /* Styles for the diff container when there's no content */
@@ -1413,7 +1413,7 @@ code#failed-json-display {
 }
 
 .staged-files-section {
-	width: fit-content;
+	width: 100%;
 	list-style: decimal;
 	flex-direction: column;
 	overflow-wrap: break-word; /* Ensure long lines and words wrap correctly within the code */
