@@ -73,11 +73,6 @@ export interface SignInRequestMessage {
 	payload: { email: string; password: string };
 }
 
-export interface SignUpRequestMessage {
-	command: "signUpRequest";
-	payload: { email: string; password: string };
-}
-
 export interface SignOutRequestMessage {
 	command: "signOutRequest";
 }
@@ -106,7 +101,6 @@ export interface InitializeSettingsViewMessage {
 export type SettingsWebviewIncomingMessage =
 	| SettingsWebviewReadyMessage
 	| SignInRequestMessage
-	| SignUpRequestMessage
 	| SignOutRequestMessage
 	| OpenUrlMessage
 	| ManageSubscriptionRequestMessage;

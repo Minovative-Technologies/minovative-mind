@@ -19,9 +19,6 @@ const passwordInput = document.getElementById(
 const signInButton = document.getElementById(
 	"sign-in-button"
 ) as HTMLButtonElement;
-const signUpButton = document.getElementById(
-	"sign-up-button"
-) as HTMLButtonElement;
 const signOutButton = document.getElementById(
 	"sign-out-button"
 ) as HTMLButtonElement;
@@ -107,10 +104,10 @@ function updateUIFromAuthState(payload: AuthStateUpdatePayload): void {
 		if (payload.tier === "pro") {
 			// Changed from "paid" to "pro"
 			if (payload.isSubscriptionActive) {
-				subscriptionStatusText = "Tier - Pro (Active)"; // Updated text
+				subscriptionStatusText = "Tier - Premium (Active)"; // Updated text
 			} else {
 				// If tier is 'pro' but not active, it's considered inactive or expired
-				subscriptionStatusText = "Tier - Pro (Inactive/Expired)"; // Updated text
+				subscriptionStatusText = "Tier - Premium (Inactive/Expired)"; // Updated text
 			}
 		} else {
 			// Free tier or no subscription data implies free tier
@@ -153,26 +150,6 @@ function updateUIFromAuthState(payload: AuthStateUpdatePayload): void {
 			userEmailDisplay.textContent = "N/A"; // Clear email display when signed out
 		}
 	}
-}
-
-// Removed the initializeFirebase function as Firebase is no longer initialized in the webview.
-
-// --- Event Listeners for Authentication Actions ---
-if (signUpButton) {
-	signUpButton.addEventListener("click", () => {
-		clearAuthError();
-		const email = emailInput.value;
-		const password = passwordInput.value;
-		if (!email || !password) {
-			showAuthError("Email and password are required.");
-			return;
-		}
-		// Send a structured message to the VS Code extension for sign-up
-		vscode.postMessage({
-			command: "signUpRequest",
-			payload: { email, password },
-		});
-	});
 }
 
 if (signInButton) {
@@ -232,7 +209,7 @@ if (minovativeMindWebsiteButton) {
 		vscode.postMessage({
 			type: "openUrl", // Kept for consistency, though 'command' is preferred
 			command: "openUrl",
-			url: "https://minovativemind.dev",
+			url: "https://minovativemind.dev/documentation",
 		});
 	});
 } else {

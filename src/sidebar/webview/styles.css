@@ -163,6 +163,8 @@ h2 {
 	display: flex;
 	flex-direction: column;
 	flex-grow: 1;
+	min-height: 415px;
+	max-height: 415px;
 }
 
 /* --- Chat Container --- */
@@ -186,15 +188,15 @@ h2 {
 	justify-content: center; /* Center content vertically */
 	align-items: center; /* Center content horizontally */
 	text-align: center; /* Center text within its own line */
-	padding: var(--element-spacing); /* Match chat container padding */
-	margin: var(--element-spacing) 0; /* Match chat container margin */
+	padding: 20px;
+	box-sizing: border-box; /* Ensures padding is included in the element's total width and height */
+	margin: var(--element-spacing) 0;
 	background-color: var(
 		--vscode-editorWidget-background
 	); /* Match chat container background */
 	border-radius: var(--border-radius); /* Match chat container border radius */
 	flex-grow: 1; /* Allow it to take up available space, like chat-container */
-	min-height: 415px;
-	max-height: 415px;
+	height: 100%; /* Ensures it fills the parent container's height */
 }
 
 .empty-chat-logo {
@@ -209,6 +211,28 @@ h2 {
 	color: var(--vscode-descriptionForeground); /* A subtle text color */
 	max-width: 80%; /* Prevent text from stretching too wide */
 	line-height: 1.5;
+}
+
+/* --- Sign Up Button --- */
+#signUpButton {
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: none;
+	padding: 8px 16px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: var(--vscode-font-size);
+	font-weight: 500;
+	margin-top: 15px;
+	transition: background-color 0.2s ease;
+}
+
+#signUpButton:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+#signUpButton:active {
+	transform: translateY(1px);
 }
 
 /* --- Chat Messages --- */

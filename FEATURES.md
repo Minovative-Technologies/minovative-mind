@@ -56,7 +56,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 ### User Accounts & Authentication
 
-- **Seamless Integration:** Users can effortlessly sign in and sign up for a Minovative Mind account directly within the VS Code sidebar.
+- **Seamless Integration:** Users can effortlessly sign in for a Minovative Mind account directly within the VS Code sidebar.
 - **Secure Sessions:** The extension securely manages user authentication sessions, enabling personalized feature access and preferences.
 
 ### Flexible Subscription Tiers

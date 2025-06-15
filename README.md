@@ -68,7 +68,7 @@ Minovative Mind requires a Google Gemini API key to function. To access advanced
 
 ### User Accounts & Authentication
 
-Users can now sign in/sign up directly within the VS Code sidebar, with secure session management ensuring a persistent and safe user experience.
+Users can now sign in directly within the VS Code sidebar, with secure session management ensuring a persistent and safe user experience.
 
 ### Flexible Subscription Tiers
 

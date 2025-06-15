@@ -228,44 +228,6 @@ export const signIn = async (
 };
 
 /**
- * Signs up a new user with email and password.
- * @param email User's email.
- * @param password User's password.
- * @returns Promise that resolves with the user credential.
- */
-export const signUp = async (
-	email: string,
-	password: string
-): Promise<User> => {
-	if (!auth) {
-		throw new Error(
-			"Firebase Auth not initialized. Call initializeFirebase first."
-		);
-	}
-	try {
-		const userCredential = await createUserWithEmailAndPassword(
-			auth,
-			email,
-			password
-		);
-		// Optionally create an initial user document in Firestore upon sign up
-		await setDoc(
-			doc(db, "users", userCredential.user.uid),
-			{
-				email: userCredential.user.email,
-				subscriptionStatus: "free",
-				subscriptionPeriodEnd: null,
-			},
-			{ merge: true }
-		);
-		return userCredential.user;
-	} catch (error) {
-		console.error("Error signing up:", error);
-		throw error;
-	}
-};
-
-/**
  * Signs out the current user.
  * @returns Promise that resolves when the user is signed out.
  */

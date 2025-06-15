@@ -146,6 +146,11 @@ const cancelCommitButton = document.getElementById(
 	"cancel-commit-button"
 ) as HTMLButtonElement | null;
 
+const signUpButton = document.getElementById(
+	"signUpButton"
+) as HTMLButtonElement | null;
+console.log("[main.ts] signUpButton element:", signUpButton); // ADDED
+
 // State
 let isApiKeySet = false;
 let isLoading = false;
@@ -229,7 +234,8 @@ if (
 	!commitMessageDisplay ||
 	!stagedFilesList ||
 	!confirmCommitButton ||
-	!cancelCommitButton
+	!cancelCommitButton ||
+	!signUpButton // MODIFIED: Added signUpButton to null check
 ) {
 	// END Add new DOM elements to the critical elements null check
 	console.error("Required DOM elements not found!");
@@ -1257,6 +1263,18 @@ if (
 	}
 	// END MODIFICATION
 
+	if (signUpButton) {
+		signUpButton.addEventListener("click", () => {
+			console.log(
+				"[main.ts] Sign Up button clicked. Posting openExternalLink message."
+			); // MODIFIED: Specific log message
+			vscode.postMessage({
+				type: "openExternalLink",
+				url: "https://www.minovativemind.dev/registration/signin",
+			});
+		});
+	}
+
 	window.addEventListener("message", (event: MessageEvent) => {
 		const message = event.data;
 		console.log("Received message:", event.data); // console.log here
@@ -1806,6 +1824,27 @@ if (
 
 				break;
 			}
+			case "authStateUpdate": {
+				// Added/verified logic for signUpButton visibility
+				const { isSignedIn, currentUserTier, isSubscriptionActive } =
+					message.value;
+				console.log(
+					`[main.ts] authStateUpdate received. isSignedIn: ${isSignedIn}, Tier: ${currentUserTier}, ActiveSub: ${isSubscriptionActive}`
+				); // ADDED
+
+				if (signUpButton) {
+					const newDisplay = isSignedIn ? "none" : "inline-block"; // Capture the new display value
+					signUpButton.style.display = newDisplay;
+					console.log(
+						`[main.ts] signUpButton display set to: '${newDisplay}' based on isSignedIn: ${isSignedIn}`
+					); // ADDED
+				} else {
+					console.warn(
+						"[main.ts] authStateUpdate: signUpButton element not found when trying to update visibility."
+					); // ADDED
+				}
+				break;
+			}
 			// Modify 'reenableInput' handler
 			case "reenableInput": {
 				console.log("Received reenableInput request from provider.");
@@ -1968,6 +2007,7 @@ if (
 		if (commitReviewContainer) {
 			commitReviewContainer.style.display = "none";
 		}
+		// Removed: signUpButton.style.display = "none";
 
 		// Set icons for buttons
 		setIconForButton(sendButton, faPaperPlane);

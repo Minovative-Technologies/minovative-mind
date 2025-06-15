@@ -125,7 +125,7 @@ Access and manage your Minovative Mind user account and subscription directly wi
 
 ### 4.1 User Accounts & Authentication
 
-- **Seamless Integration:** You can effortlessly sign in and sign up for a Minovative Mind account directly within the VS Code sidebar.
+- **Seamless Integration:** You can effortlessly sign in for a Minovative Mind account directly within the VS Code sidebar.
 - **Secure Sessions:** The extension securely manages user authentication sessions, enabling personalized feature access and preferences.
 
 ### 4.2 Flexible Subscription Tiers

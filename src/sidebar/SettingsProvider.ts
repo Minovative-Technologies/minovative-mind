@@ -112,15 +112,6 @@ export class SettingsProvider implements vscode.WebviewViewProvider {
 							message.payload.password
 						); // Assumes this method exists on SidebarProvider to trigger command
 						break;
-					case "signUpRequest":
-						console.log(
-							"Received signUpRequest from settings webview. Forwarding to SidebarProvider."
-						);
-						this._sidebarProviderInstance.triggerSignUp(
-							message.payload.email,
-							message.payload.password
-						); // Assumes this method exists on SidebarProvider to trigger command
-						break;
 					case "signOutRequest":
 						console.log(
 							"Received signOutRequest from settings webview. Forwarding to SidebarProvider."

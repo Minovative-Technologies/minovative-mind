@@ -54,7 +54,6 @@ import {
 } from "../context/smartContextSelector";
 import {
 	signIn,
-	signUp,
 	signOutUser,
 	getFirebaseConfig,
 	FirebaseUser,
@@ -186,7 +185,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		user: FirebaseUser | null,
 		subscriptionData: sidebarTypes.UserSubscriptionData | null
 	): void {
-		console.log("[SidebarProvider] Firebase Auth state update received.");
+		console.log(
+			"[SidebarProvider] Firebase Auth state update received, raw user:",
+			user ? user.uid : "null"
+		);
 
 		this._isUserSignedIn = user !== null;
 		this._userUid = user?.uid;
@@ -267,17 +269,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			vscode.window.showInformationMessage("Sign-in successful!");
 		} catch (error: any) {
 			vscode.window.showErrorMessage(`Sign-in failed: ${error.message}`);
-		}
-	}
-
-	public async triggerSignUp(email: string, password: string): Promise<void> {
-		try {
-			await signUp(email, password);
-			vscode.window.showInformationMessage(
-				"Sign-up successful! Go to the website and purchase the subscription to use premium features."
-			);
-		} catch (error: any) {
-			vscode.window.showErrorMessage(`Sign-up failed: ${error.message}`);
 		}
 	}
 
@@ -2897,6 +2888,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"deleteSpecificMessage", // Allowed, local state modification
 				"confirmCommit", // Allowed, as it's a follow-up action to a paused flow
 				"cancelCommit", // Allowed, as it's a follow-up action to a paused flow
+				"openExternalLink", // Allowed, opens an external link, doesn't interfere with AI operations
 			];
 
 			if (
@@ -3218,6 +3210,46 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 						// and updateWebviewModelList causes setLoadingState(false) in webview if appropriate.
 					}
 					break;
+				case "openExternalLink": {
+					const url = data.url as string;
+					if (!url) {
+						console.error(
+							"[SidebarProvider] openExternalLink: URL is missing."
+						);
+						vscode.window.showErrorMessage(
+							"Failed to open link: URL is missing."
+						);
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: "Failed to open link: URL is missing.",
+							isError: true,
+						});
+						break;
+					}
+					try {
+						const uri = vscode.Uri.parse(url, true);
+						await vscode.env.openExternal(uri);
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: `Opened external link: ${url}`,
+						});
+					} catch (error: any) {
+						console.error(
+							`[SidebarProvider] Failed to open external link ${url}:`,
+							error
+						);
+						const errorMessage = `Failed to open external link: ${
+							error.message || error
+						}. Please ensure the URL is valid.`;
+						vscode.window.showErrorMessage(errorMessage);
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: errorMessage,
+							isError: true,
+						});
+					}
+					break;
+				}
 				case "webviewReady":
 					console.log("[Provider] Webview ready. Updating UI.");
 					// Load state and update webview UI
