@@ -552,7 +552,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"[SidebarProvider] 'plan_from_chat' feature not allowed for current tier."
 			);
 			const restrictedMessage =
-				"This feature ('plan from chat') is currently in Beta and only available for Pro tier users or with an active subscription. Please upgrade to Pro or ensure your subscription is active for full functionality.";
+				"This feature ('plan from chat') is currently in Beta and only available for Premium tier users or with an active subscription. Please upgrade to Premium or ensure your subscription is active for full functionality.";
 			this.postMessageToWebview({
 				type: "aiResponseEnd",
 				value: null,
@@ -771,10 +771,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 
 		if (this._currentUserTier === "pro") {
-			// Pro tier has no restrictions for now, but this block is here for future expansion.
+			// Premium tier has no restrictions for now, but this block is here for future expansion.
 			// Currently, just proceed.
 			console.log(
-				"[SidebarProvider] Pro tier user, proceeding with instruction."
+				"[SidebarProvider] Premium tier user, proceeding with instruction."
 			);
 		} else {
 			// Unknown tier

@@ -132,11 +132,11 @@ Access and manage your Minovative Mind user account and subscription directly wi
 ### 4.2 Flexible Subscription Tiers
 
 - **Free Tier:** Provides foundational AI capabilities, including comprehensive AI chat, contextual code explanation, AI-generated documentation (`/docs` command), and automated Git commit message generation (`/commit` command).
-- **Pro Tier:** Unlocks the full suite of Minovative Mind's advanced AI-Agent features, such as intelligent code modification, automated code fixing (`/fix` command), sophisticated AI-driven planning & execution for multi-step tasks (`/plan` command), and real-time live code insertion with dynamic typing animations.
+- **Premium Tier:** Unlocks the full suite of Minovative Mind's advanced AI-Agent features, such as intelligent code modification, automated code fixing (`/fix` command), sophisticated AI-driven planning & execution for multi-step tasks (`/plan` command), and real-time live code insertion with dynamic typing animations.
 
 ### 4.3 Manage Your Subscription
 
-- **Customer Portal Access:** You can conveniently manage your Pro subscription details, view billing information, and update payment methods via a secure link to the Stripe Customer Portal, accessible directly from the extension's settings.
+- **Customer Portal Access:** You can conveniently manage your Premium subscription details, view billing information, and update payment methods via a secure link to the Stripe Customer Portal, accessible directly from the extension's settings.
 - **Transparent Feature Gating:** The extension clearly indicates which features are available or restricted based on your current authentication status and subscription tier.
 
 ## 5. Customization & Management

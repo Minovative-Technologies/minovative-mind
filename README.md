@@ -2,6 +2,61 @@
 
 Integrates Google Gemini directly into VS Code, providing an AI-powered assistant with project context awareness, intelligent code generation, and advanced workflow automation to supercharge your development process.
 
+## 🚧 Not Fully Launched Yet
+
+> Sign in and sign up are currently not allowed as we prepare for our full launch. If you’ve discovered this extension already—awesome! You’re one of the first to stumble upon our silent, early access release.
+> We’re hard at work behind the scenes to deliver something truly groundbreaking. Once we go live, this tool won’t just enhance your workflow—it’ll redefine how you build-everything. Stay tuned. 👀
+> For now, enjoy the free tier features and get a taste of what is to come - [Feature Comparison Table](#feature-comparison-table)
+
+## 🔑 Getting Started: Setting Up Your Gemini API Key
+
+Minovative Mind requires a Google Gemini API key to function. To access advanced features, you will also need to sign in with a Premium subscription.
+
+1.  **Obtain a Key:** If you don't have one, generate a Gemini API key from the [Google AI Studio](https://aistudio.google.com/app/apikey) or Google Cloud Console.
+2.  **Open Minovative Mind Sidebar:** Click on the "Minovative Mind" icon in the Activity Bar.
+3.  **Add Key:** In the sidebar, locate the API Key input field, paste your Gemini API key, and click "Add Key".
+
+**Security Note:** Your API keys are securely stored in VS Code's built-in secret storage and are never exposed or sent outside of your local environment except directly to Google's Gemini API endpoints.
+
+## 👤 Account & Subscription Management
+
+### User Accounts & Authentication
+
+Users can now sign in directly within the VS Code sidebar, with secure session management ensuring a persistent and safe user experience.
+
+### Flexible Subscription Tiers
+
+- **Free Tier:** Provides core functionalities including intelligent AI chat, contextual code explanation, AI-generated documentation via `/docs`, and automated Git commit messages via `/commit`.
+- **Premium Tier:** Unlocks advanced AI-Agent features such as intelligent code modification (e.g., custom refactoring), automated code fixing (`/fix`), sophisticated AI-driven planning & execution (`/plan`), and real-time live code insertion with dynamic typing animations.
+
+### Manage Your Subscription
+
+Subscription details can be securely managed via a dedicated link to the Stripe Customer Portal, accessible directly from the Minovative Mind Website
+
+### Transparent Feature Gating
+
+The extension clearly indicates feature availability based on your authentication status and current subscription tier, ensuring you always know what features are accessible.
+
+## Minovative Mind — Feature Comparison<a id="feature-comparison-table"></a>
+
+| **Feature Category**               | **Feature**                                                            | **Free Users** | **Paid Users ($10/mo)** |
+| :--------------------------------- | :--------------------------------------------------------------------- | :------------- | :---------------------- |
+| **Core AI Capabilities**           | AI Chat Interface (General Q&A, Contextual Awareness)                  | ✅ Yes         | ✅ Yes                  |
+|                                    | Contextual Code Explanation                                            | ✅ Yes         | ✅ Yes                  |
+|                                    | AI-Generated Documentation (`/docs` command)                           | ✅ Yes         | ✅ Yes                  |
+| **Advanced Workflow & Automation** | AI-Driven Planning & Execution (`/plan` command for multi-step tasks)  | ❌ No          | ✅ Yes                  |
+|                                    | Automated Code Fixing (`/fix` command)                                 | ❌ No          | ✅ Yes                  |
+|                                    | Intelligent Code Modification (free-form refactors, enhancements)      | ❌ No          | ✅ Yes                  |
+|                                    | Automated Git Commit Messages (`/commit` command)                      | ✅ Yes         | ✅ Yes                  |
+| **Customization & Management**     | Seamless API Key Setup (Add, Delete, Switch Keys)                      | ✅ Yes         | ✅ Yes                  |
+|                                    | Flexible AI Model Selection (Gemini 2.5 Flash / Pro)                   | ✅ Yes         | ✅ Yes                  |
+|                                    | Precise Context Control (Include/Exclude files & directories)          | ✅ Yes         | ✅ Yes                  |
+| **User Experience & Productivity** | Chat History Management (Save, Load, Clear)                            | ✅ Yes         | ✅ Yes                  |
+|                                    | Copy Message Button (from AI responses)                                | ✅ Yes         | ✅ Yes                  |
+|                                    | Live Code Insertion (Real-time typing animation for AI-generated code) | ❌ No          | ✅ Yes                  |
+|                                    | Smart Context Awareness (AI understands full project environment)      | ✅ Yes         | ✅ Yes                  |
+|                                    | Built-in Troubleshooting & Usage Guidance                              | ✅ Yes         | ✅ Yes                  |
+
 ## ✨ Key Features
 
 Minovative Mind is designed to streamline your coding tasks and boost productivity with cutting-edge AI capabilities:
@@ -18,12 +73,12 @@ Minovative Mind is designed to streamline your coding tasks and boost productivi
 
 - **Intelligent Code Modification & Generation:**
 
-  - Select code and provide free-form instructions (e.g., "Refactor this function," "Add input validation") (Pro Tier Feature).
-  - Trigger via keyboard shortcut (`Ctrl+M` / `Cmd+M`) or context menu (`Minovative Mind > Custom Modifications`) (Pro Tier Feature).
+  - Select code and provide free-form instructions (e.g., "Refactor this function," "Add input validation") (Premium Tier Feature).
+  - Trigger via keyboard shortcut (`Ctrl+M` / `Cmd+M`) or context menu (`Minovative Mind > Custom Modifications`) (Premium Tier Feature).
   - **Automated Documentation (`/docs`):** Type `/docs` for selected code to automatically generate and insert appropriate documentation (e.g., JSDoc, Python docstrings).
-  - **Automated Code Fixing (`/fix`):** Type `/fix` to prompt the AI to analyze selected code (including VS Code diagnostics like errors/warnings) and propose/apply fixes directly in the editor (Pro Tier Feature).
+  - **Automated Code Fixing (`/fix`):** Type `/fix` to prompt the AI to analyze selected code (including VS Code diagnostics like errors/warnings) and propose/apply fixes directly in the editor (Premium Tier Feature).
 
-- **Advanced AI-Driven Planning and Execution: (Pro Tier Feature)**
+- **Advanced AI-Driven Planning and Execution: (Premium Tier Feature)**
 
   - Describe complex development tasks (e.g., “Implement user authentication”) to the AI, and it will break them down into actionable, step-by-step plans.
   - _Ensures plan steps (like file creation/modification) adhere to the detected project framework's conventions for structure and naming._
@@ -43,48 +98,7 @@ Minovative Mind is designed to streamline your coding tasks and boost productivi
   - Select your preferred Gemini AI models (e.g., `gemini-2.5-pro`, `gemini-2.5-flash`) for optimized performance and cost.
 
 - **Smart Context Awareness:**
-
   - The AI intelligently identifies and leverages the most relevant files from your project, selected code, diagnostics, chat history, _and the detected project framework and its conventions_ for highly accurate and idiomatic responses. You can also configure inclusions/exclusions.
-
-- **Live Code Insertion & Visual Feedback:**
-  - Experience a dynamic, real-time "typing" animation as the AI generates and inserts code into your editor. (Live Code Insertion (Pro Tier Feature))
-  - Clear status updates and error indicators keep you informed.
-
-## 🚀 Installation
-
-1. **Open VS Code:** Launch Visual Studio Code.
-2. **Extensions View:** Go to the Extensions view by clicking the square icon on the Activity Bar on the side of the window or pressing `Ctrl+Shift+X` (Windows/Linux) / `Cmd+Shift+X` (macOS).
-3. **Search:** Search for "Minovative Mind".
-4. **Install:** Click the "Install" button for the Minovative Mind extension.
-
-## 🔑 Getting Started: Setting Up Your Gemini API Key
-
-Minovative Mind requires a Google Gemini API key to function. To access advanced features, you will also need to sign in with a Pro subscription.
-
-1. **Obtain a Key:** If you don't have one, generate a Gemini API key from the [Google AI Studio](https://aistudio.google.com/app/apikey) or Google Cloud Console.
-2. **Open Minovative Mind Sidebar:** Click on the "Minovative Mind" icon in the Activity Bar (it looks like a thought bubble with gears).
-3. **Add Key:** In the sidebar, locate the API Key input field, paste your Gemini API key, and click "Add Key".
-
-**Security Note:** Your API keys are securely stored in VS Code's built-in secret storage and are never exposed or sent outside of your local environment except directly to Google's Gemini API endpoints.
-
-## 👤 Account & Subscription Management
-
-### User Accounts & Authentication
-
-Users can now sign in directly within the VS Code sidebar, with secure session management ensuring a persistent and safe user experience.
-
-### Flexible Subscription Tiers
-
-- **Free Tier:** Provides core functionalities including intelligent AI chat, contextual code explanation, AI-generated documentation via `/docs`, and automated Git commit messages via `/commit`.
-- **Pro Tier:** Unlocks advanced AI-Agent features such as intelligent code modification (e.g., custom refactoring), automated code fixing (`/fix`), sophisticated AI-driven planning & execution (`/plan`), and real-time live code insertion with dynamic typing animations.
-
-### Manage Your Subscription
-
-Subscription details can be securely managed via a dedicated link to the Stripe Customer Portal, accessible directly from the Minovative Mind Website
-
-### Transparent Feature Gating
-
-The extension clearly indicates feature availability based on your authentication status and current subscription tier, ensuring you always know what features are accessible.
 
 ## 🧑‍💻 Basic Usage Examples
 
@@ -92,29 +106,29 @@ Here are a few quick ways to start using Minovative Mind:
 
 - **Chat with AI:**
 
-  1. Open the Minovative Mind sidebar.
-  2. Type your query in the chat input field and press Enter. The AI will respond, leveraging your project context.
+  1.  Open the Minovative Mind sidebar.
+  2.  Type your query in the chat input field and press Enter. The AI will respond, leveraging your project context.
 
 - **Explain Selected Code:**
 
-  1. Select a code snippet in your active editor.
-  2. Right-click on the selection.
-  3. Choose `Minovative Mind` > `Generate Explanation`.
-  4. A modal dialog will appear with the AI's explanation.
+  1.  Select a code snippet in your active editor.
+  2.  Right-click on the selection.
+  3.  Choose `Minovative Mind` > `Generate Explanation`.
+  4.  A modal dialog will appear with the AI's explanation.
 
-- **Custom Modifications (e.g., /docs, /fix, Refactor): (Note: /fix and custom refactoring are Pro Tier features.)**
+- **Custom Modifications (e.g., /docs, /fix, Refactor): (Note: /fix and custom refactoring are Premium Tier features.)**
 
-  1. Select the code you want to modify or apply an action to.
-  2. Press `Ctrl+M` (Windows/Linux) or `Cmd+M` (macOS) to activate the command.
-  3. In the quick input box:
-     - Type `/docs` to generate documentation for the selected code.
-     - Type `/fix` to analyze and fix the selected code.
-     - Type a custom prompt (e.g., "refactor this function to be more concise").
+  1.  Select the code you want to modify or apply an action to.
+  2.  Press `Ctrl+M` (Windows/Linux) or `Cmd+M` (macOS) to activate the command.
+  3.  In the quick input box:
+      - Type `/docs` to generate documentation for the selected code.
+      - Type `/fix` to analyze and fix the selected code.
+      - Type a custom prompt (e.g., "refactor this function to be more concise").
 
 - **Automated Git Commit:**
-  1. Ensure you have staged changes in your Git repository.
-  2. Open the Minovative Mind sidebar chat.
-  3. Type `/commit` and press Enter. Minovative Mind will stage changes, generate a conventional commit message, and commit them.
+  1.  Ensure you have staged changes in your Git repository.
+  2.  Open the Minovative Mind sidebar chat.
+  3.  Type `/commit` and press Enter. Minovative Mind will stage changes, generate a conventional commit message, and commit them.
 
 ## 📚 Comprehensive Documentation
 

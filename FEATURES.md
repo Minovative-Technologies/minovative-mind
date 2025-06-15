@@ -17,10 +17,10 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 ### Intelligent Code Modification & Generation
 
-- Flexible Instructions (Pro Tier): Users can select any code snippet or operate on the **entire active file if no selection is present**, and provide free-form instructions (e.g., “Refactor this function to use async/await”).
+- Flexible Instructions (Premium Tier): Users can select any code snippet or operate on the **entire active file if no selection is present**, and provide free-form instructions (e.g., “Refactor this function to use async/await”).
 - Quick Access: Triggered via a keyboard shortcut (`Ctrl+M` or `Cmd+M`) or the editor’s right-click context menu (`Minovative Mind > Custom Modifications`).
 - AI-Generated Documentation (`/docs`): Typing `/docs` for selected code automatically generates appropriate documentation (e.g., `JSDoc`, `Python docstrings`) and inserts it directly into the file.
-- Automated Code Fixing (`/fix`) (Pro Tier): Typing `/fix` prompts the AI to analyze selected code, or the **entire active file if no selection is present**, including relevant `VS Code` diagnostics (warnings, errors), and propose/apply fixes directly within the editor.
+- Automated Code Fixing (`/fix`) (Premium Tier): Typing `/fix` prompts the AI to analyze selected code, or the **entire active file if no selection is present**, including relevant `VS Code` diagnostics (warnings, errors), and propose/apply fixes directly within the editor.
 - Modular Code Generation: The AI is explicitly instructed to promote modular code generation principles, encouraging maintainable and scalable solutions, _now further enhanced by adhering to detected project framework conventions and best practices for file structure and naming._
 - **Diagnostic-Aware Modifications**: For both targeted selections and whole-file operations, the AI leverages relevant VS Code diagnostics (warnings, errors) to inform its custom modifications, leading to more accurate and problem-solving suggestions.
 
@@ -63,11 +63,11 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 ### Flexible Subscription Tiers
 
 - **Free Tier:** Provides foundational AI capabilities, including comprehensive AI chat, contextual code explanation, AI-generated documentation (`/docs` command), and automated Git commit message generation (`/commit` command).
-- **Pro Tier:** Unlocks the full suite of Minovative Mind's advanced AI-Agent features, such as intelligent code modification, automated code fixing (`/fix` command), sophisticated AI-driven planning & execution for multi-step tasks (`/plan` command), and real-time live code insertion with dynamic typing animations.
+- **Premium Tier:** Unlocks the full suite of Minovative Mind's advanced AI-Agent features, such as intelligent code modification, automated code fixing (`/fix` command), sophisticated AI-driven planning & execution for multi-step tasks (`/plan` command), and real-time live code insertion with dynamic typing animations.
 
 ### Manage Your Subscription
 
-- **Customer Portal Access:** Users can conveniently manage their Pro subscription details, view billing information, and update payment methods via a secure link to the Stripe Customer Portal, accessible directly from the extension's settings.
+- **Customer Portal Access:** Users can conveniently manage their Premium subscription details, view billing information, and update payment methods via a secure link to the Stripe Customer Portal, accessible directly from the extension's settings.
 - **Transparent Feature Gating:** The extension clearly indicates which features are available or restricted based on the user's current authentication status and subscription tier.
 
 ## Customization & Management
@@ -90,9 +90,9 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 ## User Experience & Productivity
 
-### Live Code Insertion (Real-time Code Generation) (Pro Tier)
+### Live Code Insertion (Real-time Code Generation) (Premium Tier)
 
-- Dynamic Typing: When the AI generates file content or modifications as part of a plan, users experience a dynamic, real-time “typing” animation as the code is written into the editor. This feature is exclusive to the Pro Tier.
+- Dynamic Typing: When the AI generates file content or modifications as part of a plan, users experience a dynamic, real-time “typing” animation as the code is written into the editor. This feature is exclusive to the Premium Tier.
 
 ### Smart Context Awareness
 
