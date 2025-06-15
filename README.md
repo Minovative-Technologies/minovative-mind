@@ -5,7 +5,9 @@ Integrates Google Gemini directly into VS Code, providing an AI-powered assistan
 ## 🚧 Not Fully Launched Yet
 
 > Sign in and sign up are currently not allowed as we prepare for our full launch. If you’ve discovered this extension already—awesome! You’re one of the first to stumble upon our silent, early access release.
+
 > We’re hard at work behind the scenes to deliver something truly groundbreaking. Once we go live, this tool won’t just enhance your workflow—it’ll redefine how you build-everything. Stay tuned. 👀
+
 > For now, enjoy the free tier features and get a taste of what is to come - [Feature Comparison Table](#feature-comparison-table)
 
 ## 🔑 Getting Started: Setting Up Your Gemini API Key
@@ -132,7 +134,7 @@ Here are a few quick ways to start using Minovative Mind:
 
 ## 📚 Comprehensive Documentation
 
-For a detailed guide on all features, advanced workflows (like AI-driven planning), customization options, troubleshooting tips, and more, please refer to our [Minovative Mind Learning Page](https://minovativemind.dev/learn/developer)
+For a detailed guide on all features, advanced workflows (like AI-driven planning), customization options, troubleshooting tips, and more, please refer to our [Minovative Mind Docs](https://minovativemind.dev/learn/developer)
 
 ## 📄 Change Log
 
@@ -148,4 +150,4 @@ For detailed information on the terms and conditions governing the use of the Mi
 
 ## 💬 Feedback & Support
 
-Your feedback is invaluable! If you encounter any bugs, have suggestions for new features, or just want to share your experience, please visit our [Minovative Mind Website](https://www.minovativemind.dev/) to submit an issue, feature request, or general feedback.
+Your feedback is invaluable! If you encounter any bugs, have suggestions for new features, or just want to share your experience, please visit our [Minovative Mind Feedback](https://www.minovativemind.dev/) to submit an issue, feature request, or general feedback.

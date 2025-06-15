@@ -1,6 +1,6 @@
 # PROPRIETARY LICENSE
 
-Copyright (c) 2024 Minovative Technologies. All Rights Reserved.
+Copyright (c) 2025 Minovative Technologies. All Rights Reserved.
 
 This project, including all its code, design, features, and content, is the exclusive property of Minovative Technologies.
 

@@ -6,7 +6,7 @@ Stay updated with the latest improvements and bug fixes: [Minovative Mind Update
 
 - First release of Minovative Mind in VS Code marketplace
 
-## [0.0.7-beta.0] - 2025-7-15
+## [0.0.7-beta.0] - 2025-6-15
 
 ## [0.0.6-beta.0] - 2025-6-12
 

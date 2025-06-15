@@ -1,40 +1,30 @@
 {
 	"name": "minovative-mind-vscode",
 	"displayName": "Minovative Mind",
-	"description": "Minovative Mind integrates Google's powerful AI models, providing core AI-Agent capabilities, and enables coding using natural language. (Beta)",
+	"description": "Minovative Mind integrates Google's powerful AI models, providing core AI-Agent capabilities, and enables coding using natural language.",
 	"keywords": [
 		"AI",
 		"VSCode",
 		"Minovative Mind",
 		"Google Gemini",
 		"AI Agent",
-		"Natural Language Processing",
-		"NLP",
 		"Coding Assistant",
-		"Machine Learning",
 		"Chat",
 		"VS Code Extension",
-		"Developer Tools",
-		"Beta"
+		"Developer Tools"
 	],
 	"version": "1.0.0",
 	"publisher": "MinovativeTechnologies",
-	"icon": "media/minovative-logo-192x192.png",
+	"icon": "media/mino-logo-dark.png",
 	"banner": {
 		"color": "#3A456C",
 		"theme": "dark"
-	},
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/Quarantiine/minovative-mind-vscode.git"
 	},
 	"engines": {
 		"vscode": "^1.80.0"
 	},
 	"categories": [
 		"Other",
-		"Machine Learning",
-		"Programming Languages",
 		"AI",
 		"Chat"
 	],
@@ -46,7 +36,7 @@
 				{
 					"id": "minovative-mind",
 					"title": "Minovative Mind",
-					"icon": "media/minovative-logo-192x192.png"
+					"icon": "media/mino-logo-dark.png"
 				}
 			]
 		},
@@ -57,14 +47,14 @@
 					"name": "Settings",
 					"type": "webview",
 					"contextualTitle": "Settings",
-					"icon": "media/minovative-logo-192x192.png"
+					"icon": "media/mino-logo-dark.png"
 				},
 				{
 					"id": "minovativeMindSidebarView",
 					"name": "Minovative Mind Tools",
 					"type": "webview",
 					"contextualTitle": "Minovative Mind",
-					"icon": "media/minovative-logo-192x192.png"
+					"icon": "media/mino-logo-dark.png"
 				}
 			]
 		},
