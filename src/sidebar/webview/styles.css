@@ -176,8 +176,7 @@ h2 {
 	border-radius: var(--border-radius);
 	display: flex;
 	flex-direction: column;
-	min-height: 415px;
-	max-height: 415px;
+	height: 100%;
 }
 
 /* --- Empty Chat Placeholder --- */
@@ -1407,7 +1406,7 @@ code#failed-json-display {
 /* --- Phase 2: Styling the Commit Review UI --- */
 
 #commit-review-container {
-	border: 1px solid var(--vscode-editorWidget-border);
+	border: 1px solid var(--vscode-textLink-activeForeground);
 	background-color: var(--vscode-editorWidget-background);
 	padding: var(--container-padding);
 	margin: var(--element-spacing) 0;
