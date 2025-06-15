@@ -3,6 +3,11 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { createAsciiTree } from "../utilities/treeFormatter";
 import { FileChangeEntry } from "../types/workflow"; // New import
+import { detectFramework, ProjectFramework } from "../utils/frameworkDetector";
+import {
+	getConvention,
+	FrameworkConvention,
+} from "../utils/frameworkConventions";
 
 // Configuration for context building - Adjusted for large context windows
 interface ContextConfig {
@@ -40,6 +45,64 @@ export async function buildContextString(
 	context += `Relevant files identified: ${relevantFiles.length}\n\n`;
 	let currentTotalLength = context.length;
 	let filesSkippedForTotalSize = 0; // For file *content* skipping
+
+	// --- Framework Detection and Convention Inclusion ---
+	const detectedFramework = await detectFramework(workspaceRoot);
+	let frameworkConvention: FrameworkConvention | undefined;
+
+	if (detectedFramework && detectedFramework !== ProjectFramework.Unknown) {
+		frameworkConvention = getConvention(detectedFramework);
+		let frameworkSection = `Detected Project Framework: **${detectedFramework}**\n`;
+		if (frameworkConvention) {
+			frameworkSection += `Description: ${frameworkConvention.description}\n`;
+			frameworkSection += `Typical Paths:\n`;
+			for (const [key, paths] of Object.entries(
+				frameworkConvention.typicalFilePaths || {}
+			)) {
+				frameworkSection += `- ${key}: ${paths
+					.map((p) => `'${p}'`)
+					.join(", ")}\n`;
+			}
+			frameworkSection += `Naming Conventions:\n`;
+			for (const [key, convention] of Object.entries(
+				frameworkConvention.namingConventions || {}
+			)) {
+				frameworkSection += `- ${key}: ${convention}\n`;
+			}
+			if (
+				frameworkConvention.bestPractices &&
+				frameworkConvention.bestPractices.length > 0
+			) {
+				frameworkSection += `Best Practices:\n`;
+				frameworkConvention.bestPractices.forEach((bp) => {
+					frameworkSection += `- ${bp}\n`;
+				});
+			}
+		} else {
+			frameworkSection +=
+				"No specific conventions documented for this framework.\n";
+		}
+		frameworkSection += "\n"; // Add a newline for separation
+
+		// Check if adding this section exceeds total context limit
+		if (currentTotalLength + frameworkSection.length > config.maxTotalLength) {
+			console.warn(
+				`Framework context section exceeds total context limit. Truncating.`
+			);
+			const availableLength = config.maxTotalLength - currentTotalLength - 50; // Reserve space for truncation message
+			frameworkSection =
+				frameworkSection.substring(
+					0,
+					availableLength > 0 ? availableLength : 0
+				) + "\n... (Framework context truncated due to size limit)\n\n";
+		}
+		context += frameworkSection;
+		currentTotalLength += frameworkSection.length;
+		console.log(
+			`Context size after adding framework info: ${currentTotalLength} chars.`
+		);
+	}
+	// --- END: Framework Detection and Convention Inclusion ---
 
 	// --- Generate ASCII Tree ---
 	context += "File Structure:\n";
