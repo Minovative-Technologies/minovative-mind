@@ -3257,6 +3257,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					this.settingsManager.updateWebviewModelList(); // Delegate (This calls updateWebviewModelList)
 					this.chatHistoryManager.restoreChatHistoryToWebview(); // Delegate
 
+					this.postMessageToWebview({
+						type: "authStateUpdate",
+						value: {
+							isSignedIn: this._isUserSignedIn,
+							currentUserTier: this._currentUserTier,
+							isSubscriptionActive: this._isSubscriptionActive,
+							userEmail: this._userEmail,
+						},
+					});
+
 					// Restore pending plan confirmation UI state if any
 					if (this._pendingPlanGenerationContext) {
 						const planCtx = this._pendingPlanGenerationContext;

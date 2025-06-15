@@ -4,23 +4,23 @@ Integrates Google Gemini directly into VS Code, providing an AI-powered assistan
 
 ## Table of Contents
 
-[Minovative Mind VS Code Extension](#minovative-mind-vs-code-extension)
+[Minovative Mind VS Code Extension]
 
-- [🚧 Not Fully Launched Yet](#-not-fully-launched-yet)
-- [🔑 Getting Started: Setting Up Your Gemini API Key](#-getting-started-setting-up-your-gemini-api-key)
-- [👤 Account & Subscription Management](#-account--subscription-management)
-  - [User Accounts & Authentication](#user-accounts--authentication)
-  - [Flexible Subscription Tiers](#flexible-subscription-tiers)
-  - [Manage Your Subscription](#manage-your-subscription)
-  - [Transparent Feature Gating](#transparent-feature-gating)
-- [Minovative Mind — Feature Comparison](#minovative-mind--feature-comparison)
-- [✨ Key Features](#-key-features)
-- [🧑‍💻 Basic Usage Examples](#-basic-usage-examples)
-- [📚 Comprehensive Documentation](#-comprehensive-documentation)
-- [📄 Change Log](#-change-log)
-- [🔒 Privacy Policy](#-privacy-policy)
-- [🔒 Terms of Use](#-terms-of-use)
-- [💬 Feedback & Support](#-feedback--support)
+- [🚧 Not Fully Launched Yet]
+- [🔑 Getting Started: Setting Up Your Gemini API Key]
+- [👤 Account & Subscription Management]
+  - [User Accounts & Authentication]
+  - [Flexible Subscription Tiers]
+  - [Manage Your Subscription]
+  - [Transparent Feature Gating]
+- [Minovative Mind — Feature Comparison]
+- [✨ Key Features]
+- [🧑‍💻 Basic Usage Examples]
+- [📚 Comprehensive Documentation]
+- [📄 Change Log]
+- [🔒 Privacy Policy]
+- [🔒 Terms of Use]
+- [💬 Feedback & Support]
 
 ## 🚧 Not Fully Launched Yet
 
@@ -47,7 +47,7 @@ Users can now sign in directly within the VS Code sidebar, with secure session m
 ### Flexible Subscription Tiers
 
 - **Free Tier:** Provides core functionalities including intelligent AI chat, contextual code explanation, AI-generated documentation via `/docs`, and automated Git commit messages via `/commit`.
-- **Premium Tier:** Unlocks advanced AI-Agent features such as intelligent code modification (e.g., custom refactoring), automated code fixing (`/fix`), sophisticated AI-driven planning & execution (`/plan`), and real-time live code insertion with dynamic typing animations.
+- **Premium Tier:** Unlocks advanced AI-Agent features suchs as intelligent code modification (e.g., custom refactoring), automated code fixing (`/fix`), sophisticated AI-driven planning & execution (`/plan`), and real-time live code insertion with dynamic typing animations.
 
 ### Manage Your Subscription
 
