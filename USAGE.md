@@ -89,6 +89,7 @@ Upon confirmation, the AI will convert the textual plan into a machine-readable 
     - **Important:** For any given file path, there will be at most **one** `modify_file` step within the entire plan. If multiple logical changes are needed for the same file, they are combined into a single, comprehensive `modification_prompt` for that file's step.
   - `run_command`: Executes a shell command in the integrated terminal (e.g., `npm install`, `git commit`).
     - **User Confirmation Required:** For security, you will be prompted with a confirmation dialog before any `run_command` step is executed. You can choose to "Allow Command" or "Skip Command".
+  - **Framework-Aware Path Validation:** For `create_directory`, `create_file`, and `modify_file` steps, the AI now performs an additional validation against the detected project framework's conventions. If a proposed path or file name (e.g., PascalCase for a React component, snake_case for a Python file) is inconsistent with the framework's best practices, the plan step will be flagged, and the AI will be instructed to correct it. This ensures that the generated code and project structure remain consistent and follow established guidelines for your specific technology stack.
 
 - **Interactive Execution:**
 
@@ -180,7 +181,7 @@ Enhance your development workflow with these helpful features and tips.
 
 ### 6.2 Smart Context Awareness
 
-- **Comprehensive Understanding:** The AI intelligently considers your active file content, selected code, relevant diagnostics (warnings/errors) from VS Code, chat history, and the overall project structure to provide highly relevant and accurate responses.
+- **Comprehensive Understanding:** The AI intelligently considers your active file content, selected code, relevant diagnostics (warnings/errors) from VS Code, chat history, and the overall project structure, _including automatically detecting your project's primary framework (e.g., Next.js, Django, .NET). This framework awareness allows the AI to provide highly relevant, idiomatic, and accurately structured responses and code suggestions that align with your project's conventions._
 
 ### 6.3 Built-in Troubleshooting Guidance
 
@@ -198,6 +199,7 @@ To get the best results from Minovative Mind, consider these tips:
 - **Utilize Multiple API Keys:** If you're a heavy user and frequently encounter "Quota Exceeded" errors, adding multiple API keys allows the extension to automatically switch to an available key, minimizing interruptions.
 - **Understand AI Limitations:** AI is a powerful tool, but it's not infallible. Always review and test AI-generated code or executed plan outcomes. Treat the AI as an expert assistant, not a replacement for your own judgment.
 - **Modularization:** The AI is explicitly instructed to follow modularization principles. When making complex requests, consider reminding the AI in your prompt to ensure new code adheres to best practices for separation of concerns and reusability.
+- **Trust Framework Conventions:** Minovative Mind automatically detects your project's framework and applies its conventions (e.g., file paths, naming). When requesting code generation or modifications, you can expect the AI to suggest and adhere to these best practices. For instance, in a Next.js project, it will favor `pages/` for routes and PascalCase for components. This reduces the need for explicit instructions on project structure.
 
 ### 6.5 Chat History Management
 
