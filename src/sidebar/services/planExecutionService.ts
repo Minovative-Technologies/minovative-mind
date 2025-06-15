@@ -102,32 +102,90 @@ export async function executePlanStep(
 			// Construct absolute file path, assuming step.file is relative to the workspace root
 			const filePath = path.join(vscode.workspace.rootPath || "", step.file);
 
-			progress.report({
-				message: `Opening file: ${path.basename(filePath)}...`,
-			});
 			let document: vscode.TextDocument;
+			let editor: vscode.TextEditor;
+			let originalContent: string;
+
 			try {
+				progress.report({
+					message: `Opening file: ${path.basename(filePath)}...`,
+				});
 				document = await vscode.workspace.openTextDocument(
 					vscode.Uri.file(filePath)
 				);
-			} catch (error) {
-				throw new Error(
-					`Failed to open document ${filePath}: ${(error as Error).message}`
-				);
-			}
 
-			progress.report({
-				message: `Showing document: ${path.basename(filePath)}...`,
-			});
-			const editor = await vscode.window.showTextDocument(document);
+				progress.report({
+					message: `Showing document: ${path.basename(filePath)}...`,
+				});
+				editor = await vscode.window.showTextDocument(document);
+
+				originalContent = editor.document.getText();
+			} catch (error) {
+				if (
+					error instanceof vscode.FileSystemError &&
+					(error.code === "FileNotFound" || error.code === "EntryNotFound")
+				) {
+					progress.report({
+						message: `File ${path.basename(
+							filePath
+						)} not found. Attempting to generate initial content and create it...`,
+					});
+
+					// Retrieve the Gemini API key
+					const geminiApiKey: string | undefined = vscode.workspace
+						.getConfiguration("minovativeMind")
+						.get("geminiApiKey");
+
+					// Check for Gemini API key configuration
+					if (geminiApiKey === undefined) {
+						throw new Error(
+							"Gemini API key is not configured. Please set 'minovativeMind.geminiApiKey' in your VS Code settings."
+						);
+					}
+
+					const aiGeneratedInitialContent = await _performModification(
+						"", // originalContent is empty as we're generating new content
+						step.modificationPrompt,
+						path.extname(filePath).substring(1), // Get language ID (e.g., 'ts' from 'file.ts')
+						filePath,
+						"default-model-name",
+						geminiApiKey,
+						token
+					);
+
+					const createStep: PlanStep = {
+						action: PlanStepAction.CreateFile,
+						file: step.file,
+						content: aiGeneratedInitialContent,
+						description: `Creating missing file ${path.basename(
+							filePath
+						)} from modification prompt.`,
+					};
+
+					// Delegate to the createFile action
+					await executePlanStep(
+						createStep,
+						token,
+						progress,
+						changeLogger,
+						postChatUpdate
+					);
+					return; // Exit to prevent further execution of modify logic that expects an existing file
+				} else {
+					// Re-throw other errors not related to file not found
+					throw new Error(
+						`Failed to access or open document ${filePath}: ${
+							(error as Error).message
+						}`
+					);
+				}
+			}
 
 			progress.report({
 				message: `Analyzing and modifying ${path.basename(
 					filePath
 				)} with AI...`,
 			});
-
-			const originalContent = editor.document.getText();
 
 			// Retrieve the Gemini API key
 			const geminiApiKey: string | undefined = vscode.workspace

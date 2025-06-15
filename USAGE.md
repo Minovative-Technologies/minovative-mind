@@ -85,7 +85,7 @@ Upon confirmation, the AI will convert the textual plan into a machine-readable 
 
   - `create_directory`: Creates a new folder at the specified relative path.
   - `create_file`: Creates a new file. It can either insert provided `content` directly, or it can use a `generate_prompt` where the AI itself generates the file's content based on your instructions.
-  - `modify_file`: Modifies an existing file. The AI uses a `modification_prompt` to generate the updated file content based on the original content and your instruction.
+  - `modify_file`: Modifies an existing file. The AI uses a `modification_prompt` to generate the updated file content based on the original content and your instruction. If the target file does not exist, the system will automatically create it and populate it with content generated from the `modification_prompt`, enhancing plan resilience and improving plan reliability.
     - **Important:** For any given file path, there will be at most **one** `modify_file` step within the entire plan. If multiple logical changes are needed for the same file, they are combined into a single, comprehensive `modification_prompt` for that file's step.
   - `run_command`: Executes a shell command in the integrated terminal (e.g., `npm install`, `git commit`).
     - **User Confirmation Required:** For security, you will be prompted with a confirmation dialog before any `run_command` step is executed. You can choose to "Allow Command" or "Skip Command".
