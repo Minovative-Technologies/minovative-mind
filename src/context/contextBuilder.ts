@@ -13,12 +13,16 @@ import {
 interface ContextConfig {
 	maxFileLength: number; // Maximum characters per file content
 	maxTotalLength: number; // Approximate total character limit for the context string
+	maxSymbolEntriesPerFile: number; // Maximum symbol entries to include per file
+	maxTotalSymbolChars: number; // Approximate total character limit for the symbol info block
 }
 
 // Default configuration - Adjusted for ~1M token models
 export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
 	maxFileLength: 5 * 1024 * 1024, // Approx 5MB in characters
 	maxTotalLength: 5 * 1024 * 1024, // Approx 5MB in characters
+	maxSymbolEntriesPerFile: 10, // Default to 10 symbols per file
+	maxTotalSymbolChars: 20000, // Default to 20KB for the entire symbols section
 };
 
 /**
@@ -30,14 +34,16 @@ export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
  * @param config Optional configuration for context building.
  * @param recentChanges Optional array of recent file changes to include.
  * @param dependencyGraph Optional map representing file import/dependency relations.
+ * @param documentSymbols Optional map containing document symbols for relevant files.
  * @returns A promise that resolves to the generated context string.
  */
 export async function buildContextString(
 	relevantFiles: vscode.Uri[],
 	workspaceRoot: vscode.Uri,
 	config: ContextConfig = DEFAULT_CONTEXT_CONFIG,
-	recentChanges?: FileChangeEntry[], // Modified signature
-	dependencyGraph?: Map<string, string[]>
+	recentChanges?: FileChangeEntry[],
+	dependencyGraph?: Map<string, string[]>,
+	documentSymbols?: Map<string, vscode.DocumentSymbol[] | undefined> // New parameter
 ): Promise<string> {
 	let context = `Project Context (Workspace: ${path.basename(
 		workspaceRoot.fsPath
@@ -218,6 +224,106 @@ export async function buildContextString(
 		`Context size after adding existing paths list: ${currentTotalLength} chars.`
 	);
 	// --- END: Direct list of existing relative file paths ---
+
+	// --- Symbol Information ---
+	let symbolInfoSection = "";
+	if (documentSymbols && documentSymbols.size > 0) {
+		symbolInfoSection += "Symbol Information:\n";
+		let currentSymbolSectionLength = symbolInfoSection.length;
+		let totalSymbolsAdded = 0;
+		let filesWithSymbolsAdded = 0;
+
+		for (const fileUri of relevantFiles) {
+			const relativePath = path
+				.relative(workspaceRoot.fsPath, fileUri.fsPath)
+				.replace(/\\/g, "/");
+			const symbolsForFile = documentSymbols.get(relativePath);
+
+			if (symbolsForFile && symbolsForFile.length > 0) {
+				let symbolsAddedToFile = 0;
+				let fileSymbolContent = `--- File: ${relativePath} ---\n`;
+				let fileSymbolContentLength = fileSymbolContent.length;
+
+				for (const symbol of symbolsForFile) {
+					if (
+						symbolsAddedToFile >= config.maxSymbolEntriesPerFile ||
+						currentSymbolSectionLength + fileSymbolContentLength + 50 >
+							config.maxTotalSymbolChars // 50 for truncation message and buffer
+					) {
+						fileSymbolContent += `... (${
+							symbolsForFile.length - symbolsAddedToFile
+						} more symbols omitted for this file)\n`;
+						fileSymbolContentLength += `... (${
+							symbolsForFile.length - symbolsAddedToFile
+						} more symbols omitted for this file)\n`.length;
+						break;
+					}
+
+					const symbolLine = `- [${vscode.SymbolKind[symbol.kind]}] ${
+						symbol.name
+					} (Line ${symbol.range.start.line + 1})\n`;
+
+					if (
+						currentSymbolSectionLength +
+							fileSymbolContentLength +
+							symbolLine.length >
+						config.maxTotalSymbolChars
+					) {
+						fileSymbolContent +=
+							"... (remaining symbols omitted due to total symbol context limit)\n";
+						fileSymbolContentLength +=
+							"... (remaining symbols omitted due to total symbol context limit)\n"
+								.length;
+						break; // Stop adding symbols to this file and overall
+					}
+					fileSymbolContent += symbolLine;
+					fileSymbolContentLength += symbolLine.length;
+					symbolsAddedToFile++;
+					totalSymbolsAdded++;
+				}
+				fileSymbolContent += "\n"; // Newline after each file's symbols
+
+				symbolInfoSection += fileSymbolContent;
+				currentSymbolSectionLength += fileSymbolContentLength;
+				filesWithSymbolsAdded++;
+
+				if (currentSymbolSectionLength >= config.maxTotalSymbolChars) {
+					symbolInfoSection =
+						symbolInfoSection.substring(
+							0,
+							config.maxTotalSymbolChars - 50 // Leave space for truncation message
+						) + "\n... (Symbol information truncated due to size limit)\n\n";
+					break; // Stop processing further files for symbols
+				}
+			}
+		}
+		if (filesWithSymbolsAdded > 0) {
+			symbolInfoSection += "\n"; // Add final newline if any symbols were added
+		} else {
+			symbolInfoSection = ""; // Clear section if no symbols were added at all
+		}
+	}
+
+	if (symbolInfoSection.length > 0) {
+		// Check if adding this section exceeds total context limit
+		if (currentTotalLength + symbolInfoSection.length > config.maxTotalLength) {
+			console.warn(
+				`Symbol information section exceeds total context limit. Truncating.`
+			);
+			const availableLength = config.maxTotalLength - currentTotalLength - 50; // Reserve space for truncation message
+			symbolInfoSection =
+				symbolInfoSection.substring(
+					0,
+					availableLength > 0 ? availableLength : 0
+				) + "\n... (Symbol information truncated due to size limit)\n\n";
+		}
+		context += symbolInfoSection;
+		currentTotalLength += symbolInfoSection.length;
+		console.log(
+			`Context size after adding symbol info: ${currentTotalLength} chars.`
+		);
+	}
+	// --- END: Symbol Information ---
 
 	context += "File Contents (partial):\n"; // This line is already there, ensure it follows the new section
 	const contentHeaderLength = "File Contents (partial):\n".length;

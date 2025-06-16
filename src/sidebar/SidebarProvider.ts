@@ -1,5 +1,6 @@
-// src/sidebar/SidebarProvider.ts
-
+import { DEFAULT_CONTEXT_CONFIG } from "../context/contextBuilder";
+import * as SymbolService from "../services/symbolService";
+import BPromise from "bluebird";
 import * as vscode from "vscode";
 import {
 	generateContentStream,
@@ -2677,7 +2678,53 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				return "[No relevant files selected for context. Active file might be used if applicable.]";
 			}
 
-			return await buildContextString(filesForContextBuilding, rootFolder.uri);
+			// START SYMBOL COLLECTION BLOCK
+			const documentSymbolsMap = new Map<
+				string,
+				vscode.DocumentSymbol[] | undefined
+			>();
+			const filesToProcessForSymbols =
+				filesForContextBuilding.length > 0
+					? filesForContextBuilding
+					: allScannedFiles;
+
+			await BPromise.map(
+				filesToProcessForSymbols,
+				async (fileUri: vscode.Uri) => {
+					if (
+						this._activeOperationCancellationTokenSource?.token
+							.isCancellationRequested
+					) {
+						console.log("[_buildProjectContext] Symbol collection cancelled.");
+						return; // Stop processing further files
+					}
+					try {
+						const symbols = await SymbolService.getSymbolsInDocument(fileUri);
+						if (symbols) {
+							const relativePath = path
+								.relative(rootFolder.uri.fsPath, fileUri.fsPath)
+								.replace(/\\/g, "/");
+							documentSymbolsMap.set(relativePath, symbols);
+						}
+					} catch (symbolError: unknown) {
+						const err = symbolError as Error;
+						console.warn(
+							`[_buildProjectContext] Failed to get symbols for ${fileUri.fsPath}: ${err.message}`
+						);
+					}
+				},
+				{ concurrency: 5 } // Concurrency limit for symbol service calls
+			);
+			// END SYMBOL COLLECTION BLOCK
+
+			return await buildContextString(
+				filesForContextBuilding,
+				rootFolder.uri,
+				DEFAULT_CONTEXT_CONFIG,
+				this.changeLogger.getChangeLog(),
+				fileDependencies,
+				documentSymbolsMap
+			);
 		} catch (scanOrBuildError: unknown) {
 			// Changed from any
 			const err = scanOrBuildError as Error;

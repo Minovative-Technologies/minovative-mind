@@ -6,6 +6,7 @@ import {
 	PlanGenerationContext,
 } from "../sidebar/common/sidebarTypes";
 import { TEMPERATURE } from "../sidebar/common/sidebarConstants";
+import * as SymbolService from "../services/symbolService";
 
 export interface SelectRelevantFilesAIOptions {
 	userRequest: string;
@@ -15,6 +16,7 @@ export interface SelectRelevantFilesAIOptions {
 	activeEditorContext?: PlanGenerationContext["editorContext"];
 	diagnostics?: string;
 	fileDependencies?: Map<string, string[]>; // New optional property
+	activeEditorSymbols?: vscode.DocumentSymbol[];
 	aiModelCall: (
 		prompt: string,
 		modelName: string,
@@ -47,6 +49,7 @@ export async function selectRelevantFilesAI(
 		activeEditorContext,
 		diagnostics,
 		fileDependencies, // Destructure new property
+		activeEditorSymbols,
 		aiModelCall,
 		modelName,
 		cancellationToken,
@@ -70,6 +73,70 @@ export async function selectRelevantFilesAI(
 		) {
 			const preview = activeEditorContext.selectedText.substring(0, 200);
 			contextPrompt += `Selected Text (preview): "${preview}"\n`;
+		}
+
+		if (activeEditorSymbols && activeEditorContext.selection.start) {
+			const position = activeEditorContext.selection.start;
+			const activeFileUri = vscode.Uri.file(activeEditorContext.filePath);
+
+			const symbolAtCursor = activeEditorSymbols.find((symbol) =>
+				symbol.range.contains(position)
+			);
+
+			if (symbolAtCursor) {
+				contextPrompt += `\nCursor is currently on symbol: "${
+					symbolAtCursor.name
+				}" (Type: ${vscode.SymbolKind[symbolAtCursor.kind]})\n`;
+				try {
+					// symbolLocation is not strictly needed if we can pass selectionRange.start directly
+					// const symbolLocation: vscode.Location = new vscode.Location(
+					// 	activeFileUri,
+					// 	symbolAtCursor.selectionRange
+					// );
+
+					const references = await SymbolService.findReferences(
+						activeFileUri,
+						symbolAtCursor.selectionRange.start,
+						cancellationToken
+					);
+
+					if (references) {
+						const relatedFilePaths: Set<string> = new Set();
+						const MAX_RELATED_FILES = 15; // Limit the number of related files to include
+
+						for (const ref of references) {
+							if (ref.uri.fsPath !== activeFileUri.fsPath) {
+								// Exclude the active file itself
+								const relativePath = path
+									.relative(projectRoot.fsPath, ref.uri.fsPath)
+									.replace(/\\/g, "/");
+								// Ensure the path is one of the allScannedFiles to avoid hallucinating
+								if (relativeFilePaths.includes(relativePath)) {
+									relatedFilePaths.add(relativePath);
+								}
+								if (relatedFilePaths.size >= MAX_RELATED_FILES) {
+									break; // Limit the number of files
+								}
+							}
+						}
+
+						if (relatedFilePaths.size > 0) {
+							contextPrompt += `This symbol is referenced in the following related files: ${Array.from(
+								relatedFilePaths
+							)
+								.map((p) => `"${p}"`)
+								.join(", ")}\n`;
+						}
+					}
+				} catch (error) {
+					console.error(
+						"[SmartContextSelector] Error finding references for symbol:",
+						symbolAtCursor.name,
+						error
+					);
+					// Continue without symbol reference info if error occurs
+				}
+			}
 		}
 	}
 

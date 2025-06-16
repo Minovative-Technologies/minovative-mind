@@ -82,7 +82,7 @@ export function createInitialPlanningExplanationPrompt(
     **Goal:** Provide a clear, readable, step-by-step explanation of your plan in great detail no matter what. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
 
     **Instructions for Plan Explanation:**
-    1.  Analyze Request & Context: ${mainInstructions}. Use the broader project context below for reference. ${
+    1.  Analyze Request & Context: ${mainInstructions}. Use the broader project context below for reference. The broader project context includes '**detailed symbol information** to help you understand code structure and relationships.'. ${
 		editorContext && diagnosticsString
 			? "**Pay very close attention to the 'Relevant Diagnostics' section and ensure your textual plan describes, in great detail, how you will address them for '/fix' requests.**"
 			: ""
@@ -426,7 +426,8 @@ export function createPlanningPrompt(
 		editorContext && actualDiagnosticsString
 			? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan, in great detail, addresses them for '/fix' requests.**"
 			: ""
-	} Also carefully review the 'Recent Chat History' if provided. This history contains previous interactions, including any steps already taken or files created/modified. Your plan MUST build upon these prior changes, avoid redundant operations (e.g., recreating existing files, reinstalling already installed dependencies), and correctly reference or import new entities (e.g., functions from newly created utility files) introduced in earlier steps or during the conversation.
+	} Also carefully review the 'Recent Chat History' if provided. This history contains previous interactions, including any steps already taken or files created/modified. Your plan MUST build upon these prior changes, avoid redundant operations (e.g., recreating existing files, reinstalling already installed dependencies), and correctly reference or import new entities (e.g., functions from newly created utility files) introduced in earlier steps or during the conversation. When planning \`modify_file\` actions, especially for refactoring, leverage the 'Symbol Information' section to ensure all related definitions and references are accurately considered for modification. Additionally, prioritize \`modify_file\` steps that account for global symbol impact when a symbol is refactored.
+    
     2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
     3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
     4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
