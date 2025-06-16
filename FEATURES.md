@@ -21,6 +21,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - Quick Access: Triggered via a keyboard shortcut (`Ctrl+M` or `Cmd+M`) or the editor’s right-click context menu (`Minovative Mind > Custom Modifications`).
 - AI-Generated Documentation (`/docs`): Typing `/docs` for selected code automatically generates appropriate documentation (e.g., `JSDoc`, `Python docstrings`) and inserts it directly into the file.
 - Automated Code Fixing (`/fix`) (Premium Tier): Typing `/fix` prompts the AI to analyze selected code, or the **entire active file if no selection is present**, including relevant `VS Code` diagnostics (warnings, errors), and propose/apply fixes directly within the editor.
+- **Symbol-Aware Refactoring**: Leverages VS Code's symbol information (functions, classes, variables, references, definitions, and types) to enable more precise, comprehensive, and robust refactorings and modifications across your entire project.
 - Modular Code Generation: The AI is explicitly instructed to promote modular code generation principles, encouraging maintainable and scalable solutions, _now further enhanced by adhering to detected project framework conventions and best practices for file structure and naming._
 - **Diagnostic-Aware Modifications**: For both targeted selections and whole-file operations, the AI leverages relevant VS Code diagnostics (warnings, errors) to inform its custom modifications, leading to more accurate and problem-solving suggestions.
 
@@ -96,7 +97,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 ### Smart Context Awareness
 
-- Comprehensive Understanding: The AI intelligently considers the `active file content`, `selected code`, relevant `diagnostics` (warnings/errors) from `VS Code`, chat history, and the overall project structure, including **dependency graph analysis**, to provide highly relevant and accurate responses.
+- **Comprehensive Understanding**: The AI intelligently considers the active file content, selected code, relevant diagnostics (warnings/errors) from VS Code, chat history, the overall project structure, detailed symbol information (definitions, references), and dependency graph analysis, to provide highly relevant and accurate responses.
 - **Intelligent Framework Detection & Convention Adherence:** The AI automatically detects your project's primary framework (e.g., `Next.js`, `Angular`, `Django`, `.NET`, `Python Flask`, `Unity`, `Docker Compose`, `Kubernetes`, etc.). This deep understanding allows the AI to generate code, suggest file paths, and validate plans that inherently adhere to the detected framework's established file structures, naming conventions, and best practices, promoting idiomatic and maintainable code.
 
 ### Built-in Troubleshooting Guidance
@@ -130,7 +131,7 @@ By combining these features, Minovative Mind aims to provide a comprehensive AI-
 ## Minovative Mind — Feature Comparison
 
 | **Feature Category**               | **Feature**                                                            | **Free Users** | **Paid Users ($10/mo)** |
-| ---------------------------------- | ---------------------------------------------------------------------- | -------------- | ----------------------- |
+| :--------------------------------- | :--------------------------------------------------------------------- | :------------- | :---------------------- |
 | **Core AI Capabilities**           | AI Chat Interface (General Q&A, Contextual Awareness)                  | ✅ Yes         | ✅ Yes                  |
 |                                    | Contextual Code Explanation                                            | ✅ Yes         | ✅ Yes                  |
 |                                    | AI-Generated Documentation (`/docs` command)                           | ✅ Yes         | ✅ Yes                  |
