@@ -92,6 +92,14 @@ export async function executePlanStep(
 		throw new Error("Operation cancelled by user.");
 	}
 
+	// Ensure a workspace folder is open to establish a reliable base URI
+	const workspaceRootUri = vscode.workspace.workspaceFolders?.[0]?.uri;
+	if (!workspaceRootUri) {
+		throw new Error(
+			"No workspace folder open. Cannot perform file operations."
+		);
+	}
+
 	switch (step.action) {
 		case PlanStepAction.ModifyFile:
 			if (!step.file || !step.modificationPrompt) {
@@ -100,7 +108,7 @@ export async function executePlanStep(
 				);
 			}
 			// Construct absolute file path, assuming step.file is relative to the workspace root
-			const filePath = path.join(vscode.workspace.rootPath || "", step.file);
+			const targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file!);
 
 			let document: vscode.TextDocument;
 			let editor: vscode.TextEditor;
@@ -108,14 +116,14 @@ export async function executePlanStep(
 
 			try {
 				progress.report({
-					message: `Opening file: ${path.basename(filePath)}...`,
+					message: `Opening file: ${path.basename(targetFileUri.fsPath)}...`,
 				});
-				document = await vscode.workspace.openTextDocument(
-					vscode.Uri.file(filePath)
-				);
+				document = await vscode.workspace.openTextDocument(targetFileUri);
 
 				progress.report({
-					message: `Showing document: ${path.basename(filePath)}...`,
+					message: `Showing document: ${path.basename(
+						targetFileUri.fsPath
+					)}...`,
 				});
 				editor = await vscode.window.showTextDocument(document);
 
@@ -127,7 +135,7 @@ export async function executePlanStep(
 				) {
 					progress.report({
 						message: `File ${path.basename(
-							filePath
+							targetFileUri.fsPath
 						)} not found. Attempting to generate initial content and create it...`,
 					});
 
@@ -146,8 +154,8 @@ export async function executePlanStep(
 					const aiGeneratedInitialContent = await _performModification(
 						"", // originalContent is empty as we're generating new content
 						step.modificationPrompt,
-						path.extname(filePath).substring(1), // Get language ID (e.g., 'ts' from 'file.ts')
-						filePath,
+						path.extname(targetFileUri.fsPath).substring(1), // Get language ID (e.g., 'ts' from 'file.ts')
+						targetFileUri.fsPath,
 						"default-model-name",
 						geminiApiKey,
 						token
@@ -158,7 +166,7 @@ export async function executePlanStep(
 						file: step.file,
 						content: aiGeneratedInitialContent,
 						description: `Creating missing file ${path.basename(
-							filePath
+							targetFileUri.fsPath
 						)} from modification prompt.`,
 					};
 
@@ -174,7 +182,7 @@ export async function executePlanStep(
 				} else {
 					// Re-throw other errors not related to file not found
 					throw new Error(
-						`Failed to access or open document ${filePath}: ${
+						`Failed to access or open document ${targetFileUri.fsPath}: ${
 							(error as Error).message
 						}`
 					);
@@ -183,7 +191,7 @@ export async function executePlanStep(
 
 			progress.report({
 				message: `Analyzing and modifying ${path.basename(
-					filePath
+					targetFileUri.fsPath
 				)} with AI...`,
 			});
 
@@ -255,7 +263,7 @@ export async function executePlanStep(
 				type: "appendRealtimeModelMessage",
 				value: {
 					text: `Successfully applied modifications to \`${path.basename(
-						filePath
+						targetFileUri.fsPath
 					)}\`.`,
 					isError: false,
 				},
@@ -264,7 +272,7 @@ export async function executePlanStep(
 
 			progress.report({
 				message: `Successfully applied modifications to ${path.basename(
-					filePath
+					targetFileUri.fsPath
 				)}.`,
 			});
 			break;
@@ -280,15 +288,12 @@ export async function executePlanStep(
 			await typeContentIntoEditor(editorToType, step.content, token, progress);
 			break;
 
-		case PlanStepAction.CreateFile:
+		case PlanStepAction.CreateFile: {
+			let targetFileUri: vscode.Uri;
 			if (!step.file || !step.content) {
 				throw new Error("Missing file path or content for CreateFile action.");
 			}
-			const targetFilePath = path.join(
-				vscode.workspace.rootPath || "",
-				step.file
-			);
-			const targetFileUri = vscode.Uri.file(targetFilePath);
+			targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file!);
 
 			try {
 				await vscode.workspace.fs.stat(targetFileUri); // Attempt to stat the file
@@ -302,14 +307,16 @@ export async function executePlanStep(
 				if (existingContent === step.content) {
 					progress.report({
 						message: `File ${path.basename(
-							targetFilePath
+							targetFileUri.fsPath
 						)} already has the target content. Skipping update.`,
 					});
 					return; // File exists and content is identical, do nothing.
 				} else {
 					// File exists but content differs, update it.
 					progress.report({
-						message: `Updating content of ${path.basename(targetFilePath)}...`,
+						message: `Updating content of ${path.basename(
+							targetFileUri.fsPath
+						)}...`,
 					});
 
 					let documentToUpdate: vscode.TextDocument;
@@ -319,7 +326,7 @@ export async function executePlanStep(
 						);
 					} catch (error) {
 						throw new Error(
-							`Failed to open document ${targetFilePath} for update: ${
+							`Failed to open document ${targetFileUri.fsPath} for update: ${
 								(error as Error).message
 							}`
 						);
@@ -369,7 +376,7 @@ export async function executePlanStep(
 						type: "appendRealtimeModelMessage",
 						value: {
 							text: `Successfully updated file \`${path.basename(
-								targetFilePath
+								targetFileUri.fsPath
 							)}\`.`,
 							isError: false,
 						},
@@ -378,7 +385,7 @@ export async function executePlanStep(
 
 					progress.report({
 						message: `Successfully updated file ${path.basename(
-							targetFilePath
+							targetFileUri.fsPath
 						)}.`,
 					});
 				}
@@ -390,7 +397,9 @@ export async function executePlanStep(
 				) {
 					// File does not exist, proceed with creation
 					progress.report({
-						message: `Creating new file: ${path.basename(targetFilePath)}...`,
+						message: `Creating new file: ${path.basename(
+							targetFileUri.fsPath
+						)}...`,
 					});
 					await vscode.workspace.fs.writeFile(
 						targetFileUri,
@@ -426,7 +435,7 @@ export async function executePlanStep(
 						type: "appendRealtimeModelMessage",
 						value: {
 							text: `Successfully created file \`${path.basename(
-								targetFilePath
+								targetFileUri.fsPath
 							)}\`.`,
 							isError: false,
 						},
@@ -435,19 +444,20 @@ export async function executePlanStep(
 
 					progress.report({
 						message: `Successfully created file ${path.basename(
-							targetFilePath
+							targetFileUri.fsPath
 						)}.`,
 					});
 				} else {
 					// Re-throw other errors encountered during stat or file system operations
 					throw new Error(
-						`Error accessing or creating file ${targetFilePath}: ${
+						`Error accessing or creating file ${targetFileUri.fsPath}: ${
 							(error as Error).message
 						}`
 					);
 				}
 			}
 			break;
+		} // End of CreateFile case block
 
 		default:
 			// For any action not explicitly implemented, throw an error.
