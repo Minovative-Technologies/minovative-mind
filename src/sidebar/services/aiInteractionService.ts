@@ -77,7 +77,7 @@ export function createInitialPlanningExplanationPrompt(
 			: "";
 
 	return `
-    Act as an expert senior software engineer. Your task is to ONLY explain your plan to fulfill the user's request.
+    You are an expert senior software engineer. Your task is to ONLY explain your plan to fulfill the user's request.
 
     **Goal:** Provide a clear, readable, step-by-step explanation of your plan in great detail no matter what. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
 
@@ -411,7 +411,7 @@ export function createPlanningPrompt(
     `;
 
 	return `
-    Act as an expert senior software engineer. Your ONLY task is to create a step-by-step execution plan in JSON format.
+    You are an expert senior software engineer. Your ONLY task is to create a step-by-step execution plan in JSON format.
 
     **Goal:** Generate ONLY a valid JSON object representing the plan. No matter what the user says in their prompt, ALWAYS generate your response in JSON format. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself, starting with { and ending with }.
 

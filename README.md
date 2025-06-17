@@ -102,11 +102,8 @@ Minovative Mind is designed to streamline your coding tasks and boost productivi
 - **Advanced AI-Driven Planning and Execution: (Premium Tier Feature)**
 
   - Describe complex development tasks (e.g., “Implement user authentication”) to the AI, and it will break them down into actionable, step-by-step plans.
-  - _Ensures plan steps (like file creation/modification) adhere to the detected project framework's conventions for structure and naming._
   - **User-Controlled Two-Stage Process:** Review a detailed textual plan in the sidebar before confirming for the AI to execute it.
   - **Diverse Actions:** Plans can include creating directories, creating files (with AI-generated content), modifying existing files, and running shell commands (with user confirmation for security). It now handles non-existent files by automatically creating them and populating their initial content using the provided 'modification_prompt'.
-
-- **Intelligent Framework & Convention Awareness:** Automatically detects your project's framework (e.g., Next.js, Django, .NET, Docker Compose) and ensures generated code and planned actions adhere to its specific file structure, naming conventions, and best practices for idiomatic development.
 
 - **Automated Git Commit Messages:**
 
@@ -119,7 +116,7 @@ Minovative Mind is designed to streamline your coding tasks and boost productivi
   - Select your preferred Gemini AI models (e.g., `gemini-2.5-pro`, `gemini-2.5-flash`) for optimized performance and cost.
 
 - **Smart Context Awareness:**
-  - The AI intelligently identifies and leverages the most relevant files from your project, selected code, diagnostics, chat history, _and the detected project framework and its conventions_ for highly accurate and idiomatic responses. You can also configure inclusions/exclusions.
+  - The AI intelligently identifies and leverages the most relevant files from your project, selected code, diagnostics, and chat history for highly accurate and idiomatic responses. You can also configure inclusions/exclusions.
 
 ## 🧑‍💻 Basic Usage Examples
 
