@@ -156,6 +156,13 @@ export interface PlanGenerationContext {
 	workspaceRootUri: vscode.Uri;
 }
 
+export interface PlanGenerationResult {
+	success: boolean;
+	textualPlanExplanation?: string;
+	context?: PlanGenerationContext;
+	error?: string;
+}
+
 export type ExecutionOutcome = "success" | "cancelled" | "failed";
 
 export interface EditorContext {

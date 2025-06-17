@@ -6,6 +6,7 @@ import { isFeatureAllowed } from "./sidebar/utils/featureGating";
 import { SettingsProvider } from "./sidebar/SettingsProvider";
 import { cleanCodeOutput } from "./utils/codeUtils";
 import { initializeFirebase } from "./firebase/firebaseService";
+import * as sidebarTypes from "./sidebar/common/sidebarTypes";
 
 // Helper function type definition for AI action results (kept for potential future use)
 type ActionResult =
@@ -29,8 +30,8 @@ async function executeExplainAction(
 	// Feature gating check for explain_selection
 	if (
 		!isFeatureAllowed(
-			sidebarProvider._currentUserTier,
-			sidebarProvider._isSubscriptionActive,
+			sidebarProvider.currentUserTier,
+			sidebarProvider.isSubscriptionActive,
 			"explain_selection"
 		)
 	) {
@@ -46,8 +47,8 @@ async function executeExplainAction(
 	const languageId = editor.document.languageId;
 	const fileName = editor.document.fileName;
 
-	const activeApiKey = sidebarProvider.getActiveApiKey(); // Still needed for initial check
-	const selectedModel = sidebarProvider.getSelectedModelName();
+	const activeApiKey = sidebarProvider.apiKeyManager.getActiveApiKey(); // Still needed for initial check
+	const selectedModel = sidebarProvider.settingsManager.getSelectedModelName();
 
 	if (!activeApiKey) {
 		// Keep this check as it's user-facing before the call
@@ -100,8 +101,7 @@ async function executeExplainAction(
 		// Use the retry wrapper from the provider for consistency
 		// Removed activeApiKey (second argument) from the call
 		// Signature: _generateWithRetry(prompt, modelName, history, requestType)
-		await sidebarProvider.switchToNextApiKey(); // Added as per instruction
-		const result = await sidebarProvider._generateWithRetry(
+		const result = await sidebarProvider.aiRequestService.generateWithRetry(
 			prompt, // 1st arg: prompt
 			// activeApiKey, // Removed 2nd arg: apiKey
 			selectedModel, // Now 2nd arg: modelName (was 3rd)
@@ -141,8 +141,8 @@ async function executeDocsAction(
 	// Feature gating check for generate_documentation
 	if (
 		!isFeatureAllowed(
-			sidebarProvider._currentUserTier,
-			sidebarProvider._isSubscriptionActive,
+			sidebarProvider.currentUserTier,
+			sidebarProvider.isSubscriptionActive,
 			"generate_documentation"
 		)
 	) {
@@ -153,8 +153,8 @@ async function executeDocsAction(
 		};
 	}
 
-	const activeApiKey = sidebarProvider.getActiveApiKey();
-	const selectedModel = sidebarProvider.getSelectedModelName();
+	const activeApiKey = sidebarProvider.apiKeyManager.getActiveApiKey();
+	const selectedModel = sidebarProvider.settingsManager.getSelectedModelName();
 
 	if (!activeApiKey) {
 		return {
@@ -200,8 +200,7 @@ async function executeDocsAction(
 	console.log(`--- End generate documentation Action Prompt ---`);
 
 	try {
-		await sidebarProvider.switchToNextApiKey();
-		const result = await sidebarProvider._generateWithRetry(
+		const result = await sidebarProvider.aiRequestService.generateWithRetry(
 			prompt,
 			selectedModel,
 			undefined, // No history needed for single documentation generation
@@ -230,6 +229,25 @@ async function executeDocsAction(
 			success: false,
 			error: `Failed to generate documentation: ${message}`,
 		};
+	}
+}
+
+// --- NEW Helper Function for Diagnostics Formatting ---
+async function _getFormattedDiagnostics(
+	documentUri: vscode.Uri
+): Promise<string> {
+	const diagnostics = vscode.languages.getDiagnostics(documentUri);
+	if (diagnostics.length > 0) {
+		return diagnostics
+			.map((d) => {
+				const line = d.range.start.line + 1; // VS Code lines are 0-indexed
+				const char = d.range.start.character + 1; // VS Code chars are 0-indexed
+				const severity = vscode.DiagnosticSeverity[d.severity]; // Convert enum to string (e.g., "Error", "Warning")
+				return `[${line}:${char}] ${severity}: ${d.message}`;
+			})
+			.join("\n");
+	} else {
+		return "No diagnostics found in the document.";
 	}
 }
 // --- End Helper Function ---
@@ -291,6 +309,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			const languageId = editor.document.languageId;
 			const documentUri = editor.document.uri;
 			const fileName = editor.document.fileName;
+			// Move `diagnosticsString` declaration and assign it by calling the new helper
+			const diagnosticsString: string = await _getFormattedDiagnostics(
+				documentUri
+			);
 
 			const instructionsInput = await vscode.window.showInputBox({
 				prompt:
@@ -305,8 +327,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 			const instruction = instructionsInput.trim();
 
-			let diagnosticsString: string | undefined = undefined; // Initialize for diagnostics
-
 			// NEW: Handle '/fix' with empty selection first
 			if (instruction === "/fix" && originalSelection.isEmpty) {
 				selectedText = fullText; // Set selectedText to the entire document
@@ -315,21 +335,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					editor.document.positionAt(0),
 					editor.document.positionAt(fullText.length)
 				);
-
-				// Retrieve and format diagnostics
-				const diagnostics = vscode.languages.getDiagnostics(documentUri);
-				if (diagnostics.length > 0) {
-					diagnosticsString = diagnostics
-						.map((d) => {
-							const line = d.range.start.line + 1; // VS Code lines are 0-indexed
-							const char = d.range.start.character + 1; // VS Code chars are 0-indexed
-							const severity = vscode.DiagnosticSeverity[d.severity]; // Convert enum to string (e.g., "Error", "Warning")
-							return `[${line}:${char}] ${severity}: ${d.message}`;
-						})
-						.join("\n");
-				} else {
-					diagnosticsString = "No diagnostics found in the document.";
-				}
+				// Diagnostics are now collected universally at the start, no need for redundant collection here.
 				// Crucially, for '/fix' with empty selection, we skip the "No text selected." warning.
 			} else if (instruction === "/docs" && originalSelection.isEmpty) {
 				// This is the check for /docs with empty selection
@@ -342,20 +348,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					editor.document.positionAt(0),
 					editor.document.positionAt(fullText.length)
 				);
-
-				const diagnostics = vscode.languages.getDiagnostics(documentUri);
-				if (diagnostics.length > 0) {
-					diagnosticsString = diagnostics
-						.map((d) => {
-							const line = d.range.start.line + 1;
-							const char = d.range.start.character + 1;
-							const severity = vscode.DiagnosticSeverity[d.severity];
-							return `[${line}:${char}] ${severity}: ${d.message}`;
-						})
-						.join("\n");
-				} else {
-					diagnosticsString = "No diagnostics found in the document.";
-				}
+				// Diagnostics are now collected universally at the start, no need for redundant collection here.
 				// Crucially, ensure no warning message is shown in this block, as the expanded scope is intentional.
 			} else {
 				// User has a non-empty originalSelection
@@ -365,7 +358,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			// New /docs instruction handling
 			if (instruction === "/docs") {
-				const selectedModel = sidebarProvider.getSelectedModelName();
+				const selectedModel =
+					sidebarProvider.settingsManager.getSelectedModelName();
 				if (!selectedModel) {
 					vscode.window.showErrorMessage(
 						"Minovative Mind: No AI model selected. Please check the sidebar."
@@ -430,8 +424,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			// Feature gating check
 			if (
 				!isFeatureAllowed(
-					sidebarProvider._currentUserTier,
-					sidebarProvider._isSubscriptionActive,
+					sidebarProvider.currentUserTier,
+					sidebarProvider.isSubscriptionActive,
 					actionTypeForGating,
 					instruction // Pass instruction as the fourth argument
 				)
@@ -441,6 +435,11 @@ export async function activate(context: vscode.ExtensionContext) {
 				);
 				return;
 			}
+
+			let result: sidebarTypes.PlanGenerationResult = {
+				success: false,
+				error: "Textual plan generation was cancelled or did not complete.",
+			}; // Declare and initialize result before withProgress
 
 			// Call the gated method on sidebarProvider
 			// Progress and CancellationToken are handled by withProgress
@@ -453,19 +452,40 @@ export async function activate(context: vscode.ExtensionContext) {
 				async (progress, token) => {
 					// The existing logic in your OCR shows SidebarProvider handles progress updates
 					// and token linking internally for initiatePlanFromEditorAction.
-					await sidebarProvider.initiatePlanFromEditorAction(
-						instruction,
-						selectedText, // Use the potentially modified selectedText
-						fullText,
-						languageId,
-						documentUri,
-						effectiveRange, // Use the potentially modified effectiveRange
-						progress, // Pass progress
-						token, // Pass cancellation token
-						diagnosticsString // NEW: Pass the diagnosticsString
-					);
+					result =
+						await sidebarProvider.planService.initiatePlanFromEditorAction(
+							instruction,
+							selectedText, // Use the potentially modified selectedText
+							fullText,
+							languageId,
+							documentUri,
+							effectiveRange, // Use the potentially modified effectiveRange
+							progress, // Pass progress
+							token, // Pass cancellation token
+							diagnosticsString // NEW: Pass the diagnosticsString
+						);
 				}
 			);
+			// After 'initiatePlanFromEditorAction' returns, the 'withProgress' callback completes,
+			// and the notification will automatically disappear here.
+
+			// Now, handle the subsequent UI for plan review or errors
+			if (result.success && result.context) {
+				// The pendingPlanGenerationContext is already set inside initiatePlanFromEditorAction
+				// Now trigger the UI to display the plan for review
+				await sidebarProvider.planService.triggerPostTextualPlanUI(
+					result.context
+				);
+			} else {
+				// Handle cases where the initial textual plan generation failed or was cancelled
+				vscode.window.showErrorMessage(
+					`Minovative Mind: ${
+						result.error ||
+						"An unknown error occurred during textual plan generation."
+					}`
+				);
+				sidebarProvider.postMessageToWebview({ type: "reenableInput" }); // Ensure input is re-enabled if an error occurred
+			}
 		}
 	);
 	context.subscriptions.push(modifySelectionDisposable);
@@ -474,7 +494,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const explainDisposable = vscode.commands.registerCommand(
 		"minovative-mind.explainSelection",
 		async () => {
-			const selectedModel = sidebarProvider.getSelectedModelName();
+			const selectedModel =
+				sidebarProvider.settingsManager.getSelectedModelName();
 			if (!selectedModel) {
 				vscode.window.showErrorMessage(
 					"Minovative Mind: No AI model selected. Please check the sidebar."

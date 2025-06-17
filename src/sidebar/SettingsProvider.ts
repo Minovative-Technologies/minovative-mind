@@ -24,8 +24,8 @@ export class SettingsProvider implements vscode.WebviewViewProvider {
 
 	public async resolveWebviewView(
 		webviewView: vscode.WebviewView,
-		context: vscode.WebviewViewResolveContext,
-		token: vscode.CancellationToken
+		_context: vscode.WebviewViewResolveContext,
+		_token: vscode.CancellationToken
 	): Promise<void> {
 		this._view = webviewView;
 		console.log(
@@ -107,7 +107,7 @@ export class SettingsProvider implements vscode.WebviewViewProvider {
 						console.log(
 							"Received signInRequest from settings webview. Forwarding to SidebarProvider."
 						);
-						this._sidebarProviderInstance.triggerSignIn(
+						this._sidebarProviderInstance.authService.triggerSignIn(
 							message.payload.email,
 							message.payload.password
 						); // Assumes this method exists on SidebarProvider to trigger command
@@ -116,24 +116,24 @@ export class SettingsProvider implements vscode.WebviewViewProvider {
 						console.log(
 							"Received signOutRequest from settings webview. Forwarding to SidebarProvider."
 						);
-						this._sidebarProviderInstance.triggerSignOut(); // Assumes this method exists on SidebarProvider to trigger command
+						this._sidebarProviderInstance.authService.triggerSignOut(); // Assumes this method exists on SidebarProvider to trigger command
 						break;
 					case "authStateUpdated":
-						this._sidebarProviderInstance.updateUserAuthAndTier(
-							message.payload
+						console.log(
+							"[SettingsProvider] Received authStateUpdated from webview. State handled by event subscription."
 						);
 						// You might want to confirm to the settings webview that state was received
 						// Or reflect some global state if needed
 						break;
 					case "manageSubscriptionRequest":
-						this._sidebarProviderInstance.openStripeCustomerPortal();
+						this._sidebarProviderInstance.authService.openStripeCustomerPortal();
 						break;
 					case "openUrl":
 						// Adjust the openUrl handler to ensure the correct Stripe portal URL is generated
 						if (message.url === "stripeCustomerPortal") {
 							console.log("Received request to open Stripe Customer Portal.");
 							// Delegate to SidebarProvider to get UID and open the correct URL
-							this._sidebarProviderInstance.openStripeCustomerPortal(); // Assumes this method exists on SidebarProvider
+							this._sidebarProviderInstance.authService.openStripeCustomerPortal(); // Assumes this method exists on SidebarProvider
 						} else {
 							try {
 								await vscode.env.openExternal(vscode.Uri.parse(message.url));

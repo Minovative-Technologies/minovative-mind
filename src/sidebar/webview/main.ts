@@ -617,12 +617,14 @@ if (
 
 	// Modified setLoadingState to control button states based on loading and UI visibility
 	function setLoadingState(loading: boolean) {
+		console.log(
+			`[setLoadingState] Call: loading=${loading}, current isLoading=${isLoading}, current isApiKeySet=${isApiKeySet}`
+		); // console.log here
 		isLoading = loading; // Keep track of overall loading state
 		const loadingMsg = chatContainer?.querySelector(".loading-message");
 		if (loadingMsg) {
 			loadingMsg.remove();
 		}
-		console.log("setLoadingState:", loading); // console.log here
 
 		// Check visibility of blocking UI elements
 		const planConfirmationVisible =
@@ -634,6 +636,10 @@ if (
 		const commitReviewVisible =
 			commitReviewContainer && commitReviewContainer.style.display !== "none"; //
 
+		console.log(
+			`[setLoadingState] UI Display States: planConfirmationContainer=${planConfirmationContainer?.style.display}, planParseErrorContainer=${planParseErrorContainer?.style.display}, commitReviewContainer=${commitReviewContainer?.style.display}`
+		);
+
 		// Determine if general chat/send controls should be enabled
 		// Enabled only if not loading AND API key is set AND neither blocking UI is visible
 		const enableSendControls =
@@ -642,6 +648,18 @@ if (
 			!planConfirmationVisible &&
 			!planParseErrorVisible &&
 			!commitReviewVisible; // MODIFIED
+
+		// Determine if chat history buttons can be interacted with
+		// Enabled only if not loading AND neither blocking UI is visible
+		const canInteractWithChatHistoryButtons =
+			!loading &&
+			!planConfirmationVisible &&
+			!planParseErrorVisible &&
+			!commitReviewVisible; // MODIFIED
+
+		console.log(
+			`[setLoadingState] Final computed enableSendControls=${enableSendControls}, canInteractWithChatHistoryButtons=${canInteractWithChatHistoryButtons}`
+		);
 
 		if (sendButton) {
 			sendButton.disabled = !enableSendControls;
@@ -684,14 +702,6 @@ if (
 		if (addKeyButton) {
 			addKeyButton.disabled = !enableAddKeyInputControls;
 		}
-
-		// Determine if chat history buttons can be interacted with
-		// Enabled only if not loading AND neither blocking UI is visible
-		const canInteractWithChatHistoryButtons =
-			!loading &&
-			!planConfirmationVisible &&
-			!planParseErrorVisible &&
-			!commitReviewVisible; // MODIFIED
 
 		// Determine if there are messages in the chat container
 		const hasMessages = chatContainer
@@ -950,54 +960,6 @@ if (
 		}
 	});
 	modelSelect.addEventListener("change", () => {
-		// Disable controls temporarily while switch is requested
-		// These will be re-enabled by updateModelList + setLoadingState
-		const enableSendControls =
-			!isLoading &&
-			isApiKeySet &&
-			!(
-				planConfirmationContainer &&
-				planConfirmationContainer.style.display !== "none"
-			) &&
-			!(
-				planParseErrorContainer &&
-				planParseErrorContainer.style.display !== "none"
-			);
-
-		if (sendButton) {
-			sendButton.disabled = true;
-		}
-		if (chatInput) {
-			chatInput.disabled = true;
-		}
-		if (modelSelect) {
-			modelSelect.disabled = true;
-		}
-		if (prevKeyButton) {
-			prevKeyButton.disabled = true;
-		}
-		if (nextKeyButton) {
-			nextKeyButton.disabled = true;
-		}
-		if (deleteKeyButton) {
-			deleteKeyButton.disabled = true;
-		}
-		if (addKeyInput) {
-			addKeyInput.disabled = true;
-		}
-		if (addKeyButton) {
-			addKeyButton.disabled = true;
-		}
-		if (loadChatButton) {
-			loadChatButton.disabled = true;
-		}
-		if (saveChatButton) {
-			saveChatButton.disabled = true;
-		}
-		if (clearChatButton) {
-			clearChatButton.disabled = true;
-		}
-
 		const selectedModel = modelSelect.value;
 		vscode.postMessage({ type: "selectModel", value: selectedModel });
 		updateStatus(`Requesting switch to model: ${selectedModel}...`);
@@ -1005,53 +967,6 @@ if (
 	addKeyButton.addEventListener("click", () => {
 		const apiKey = addKeyInput!.value.trim();
 		if (apiKey) {
-			// Disable controls temporarily while adding/switching is requested
-			const enableSendControls =
-				!isLoading &&
-				isApiKeySet &&
-				!(
-					planConfirmationContainer &&
-					planConfirmationContainer.style.display !== "none"
-				) &&
-				!(
-					planParseErrorContainer &&
-					planParseErrorContainer.style.display !== "none"
-				);
-
-			if (sendButton) {
-				sendButton.disabled = true;
-			}
-			if (chatInput) {
-				chatInput.disabled = true;
-			}
-			if (modelSelect) {
-				modelSelect.disabled = true;
-			}
-			if (prevKeyButton) {
-				prevKeyButton.disabled = true;
-			}
-			if (nextKeyButton) {
-				nextKeyButton.disabled = true;
-			}
-			if (deleteKeyButton) {
-				deleteKeyButton.disabled = true;
-			}
-			if (addKeyInput) {
-				addKeyInput.disabled = true;
-			}
-			if (addKeyButton) {
-				addKeyButton.disabled = true;
-			}
-			if (loadChatButton) {
-				loadChatButton.disabled = true;
-			}
-			if (saveChatButton) {
-				saveChatButton.disabled = true;
-			}
-			if (clearChatButton) {
-				clearChatButton.disabled = true;
-			}
-
 			vscode.postMessage({ type: "addApiKey", value: apiKey });
 			addKeyInput!.value = "";
 			updateApiKeyStatus("Adding key...");
@@ -1066,155 +981,16 @@ if (
 		}
 	});
 	prevKeyButton.addEventListener("click", () => {
-		// Disable controls temporarily while switching is requested
-		const enableSendControls =
-			!isLoading &&
-			isApiKeySet &&
-			!(
-				planConfirmationContainer &&
-				planConfirmationContainer.style.display !== "none"
-			) &&
-			!(
-				planParseErrorContainer &&
-				planParseErrorContainer.style.display !== "none"
-			);
-
-		if (sendButton) {
-			sendButton.disabled = true;
-		}
-		if (chatInput) {
-			chatInput.disabled = true;
-		}
-		if (modelSelect) {
-			modelSelect.disabled = true;
-		}
-		if (prevKeyButton) {
-			prevKeyButton.disabled = true;
-		}
-		if (nextKeyButton) {
-			nextKeyButton.disabled = true;
-		}
-		if (deleteKeyButton) {
-			deleteKeyButton.disabled = true;
-		}
-		if (addKeyInput) {
-			addKeyInput.disabled = true;
-		}
-		if (addKeyButton) {
-			addKeyButton.disabled = true;
-		}
-		if (loadChatButton) {
-			loadChatButton.disabled = true;
-		}
-		if (saveChatButton) {
-			saveChatButton.disabled = true;
-		}
-		if (clearChatButton) {
-			clearChatButton.disabled = true;
-		}
-
+		// Removed redundant explicit disables, setLoadingState will handle
 		vscode.postMessage({ type: "switchToPrevKey" });
 		updateApiKeyStatus("Switching key...");
 	});
 	nextKeyButton.addEventListener("click", () => {
-		// Disable controls temporarily while switching is requested
-		const enableSendControls =
-			!isLoading &&
-			isApiKeySet &&
-			!(
-				planConfirmationContainer &&
-				planConfirmationContainer.style.display !== "none"
-			) &&
-			!(
-				planParseErrorContainer &&
-				planParseErrorContainer.style.display !== "none"
-			);
-
-		if (sendButton) {
-			sendButton.disabled = true;
-		}
-		if (chatInput) {
-			chatInput.disabled = true;
-		}
-		if (modelSelect) {
-			modelSelect.disabled = true;
-		}
-		if (prevKeyButton) {
-			prevKeyButton.disabled = true;
-		}
-		if (nextKeyButton) {
-			nextKeyButton.disabled = true;
-		}
-		if (deleteKeyButton) {
-			deleteKeyButton.disabled = true;
-		}
-		if (addKeyInput) {
-			addKeyInput.disabled = true;
-		}
-		if (addKeyButton) {
-			addKeyButton.disabled = true;
-		}
-		if (loadChatButton) {
-			loadChatButton.disabled = true;
-		}
-		if (saveChatButton) {
-			saveChatButton.disabled = true;
-		}
-		if (clearChatButton) {
-			clearChatButton.disabled = true;
-		}
-
+		// Removed redundant explicit disables, setLoadingState will handle
 		vscode.postMessage({ type: "switchToNextKey" });
 		updateApiKeyStatus("Switching key...");
 	});
 	deleteKeyButton.addEventListener("click", () => {
-		// Disable controls temporarily while action is pending confirmation
-		const enableSendControls =
-			!isLoading &&
-			isApiKeySet &&
-			!(
-				planConfirmationContainer &&
-				planConfirmationContainer.style.display !== "none"
-			) &&
-			!(
-				planParseErrorContainer &&
-				planParseErrorContainer.style.display !== "none"
-			);
-
-		if (sendButton) {
-			sendButton.disabled = true;
-		}
-		if (chatInput) {
-			chatInput.disabled = true;
-		}
-		if (modelSelect) {
-			modelSelect.disabled = true;
-		}
-		if (prevKeyButton) {
-			prevKeyButton.disabled = true;
-		}
-		if (nextKeyButton) {
-			nextKeyButton.disabled = true;
-		}
-		if (deleteKeyButton) {
-			deleteKeyButton.disabled = true;
-		}
-		if (addKeyInput) {
-			addKeyInput.disabled = true;
-		}
-		if (addKeyButton) {
-			addKeyButton.disabled = true;
-		}
-		if (loadChatButton) {
-			loadChatButton.disabled = true;
-		}
-		if (saveChatButton) {
-			saveChatButton.disabled = true;
-		}
-		if (clearChatButton) {
-			clearChatButton.disabled = true;
-		}
-
 		vscode.postMessage({ type: "requestDeleteConfirmation" });
 		updateApiKeyStatus("Waiting for delete confirmation...");
 	});
@@ -1847,7 +1623,9 @@ if (
 			}
 			// Modify 'reenableInput' handler
 			case "reenableInput": {
-				console.log("Received reenableInput request from provider.");
+				console.log(
+					"[reenableInput] Received reenableInput request from provider."
+				);
 				// This message signals an operation was cancelled or an-error occurred requiring input re-enabling.
 
 				// Always set isLoading to false, as the operation that was loading is now considered finished or cancelled.
@@ -1888,6 +1666,11 @@ if (
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
 
+				if (planConfirmationContainer) {
+					console.log(
+						`[reenableInput] Hiding planConfirmationContainer. Current display: ${planConfirmationContainer.style.display}`
+					);
+				}
 				// If plan confirmation was active, hide it
 				if (
 					planConfirmationContainer &&
@@ -1895,6 +1678,11 @@ if (
 				) {
 					planConfirmationContainer.style.display = "none";
 					pendingPlanData = null;
+				}
+				if (planParseErrorContainer) {
+					console.log(
+						`[reenableInput] Hiding planParseErrorContainer. Current display: ${planParseErrorContainer.style.display}`
+					);
 				}
 				// If plan parse error UI was active, hide it
 				if (
@@ -1909,6 +1697,11 @@ if (
 						failedJsonDisplay.textContent = "";
 					}
 				}
+				if (commitReviewContainer) {
+					console.log(
+						`[reenableInput] Hiding commitReviewContainer. Current display: ${commitReviewContainer.style.display}`
+					);
+				}
 				// If commit review UI was active, hide it
 				if (
 					commitReviewContainer &&
@@ -1917,6 +1710,9 @@ if (
 					commitReviewContainer.style.display = "none";
 				}
 
+				console.log(
+					"[reenableInput] Calling setLoadingState(false); Confirming isLoading is now false."
+				);
 				// Call setLoadingState(false) to re-evaluate all input and button states based on the new isLoading=false,
 				// current API key status, and visibility of blocking UI elements.
 				setLoadingState(false); // This call now correctly manages all button states.

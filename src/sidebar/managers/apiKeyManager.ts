@@ -184,29 +184,92 @@ export class ApiKeyManager {
 		});
 	}
 
-	public async switchToNextApiKey(): Promise<string | undefined> {
-		if (this._apiKeyList.length <= 1) {
-			const currentKey = this.getActiveApiKey();
-			const reason =
-				this._apiKeyList.length === 0 ? "list is empty" : "only one key exists";
-			console.log(
-				`[ApiKeyManager] Not switching because API key ${reason}. Current active key: ${
-					currentKey ? "..." + currentKey.slice(-4) : "None"
-				}`
-			);
-			return currentKey;
+	public async switchToNextApiKey(
+		triedKeys?: Set<string>
+	): Promise<string | undefined> {
+		let newKey: string | undefined = undefined;
+		let foundNewKey: boolean = false;
+		let switchReason: "retry" | "next request" = "next request"; // Default to proactive
+
+		if (this._apiKeyList.length === 0) {
+			console.log(`[ApiKeyManager] Not switching API key: list is empty.`);
+			return undefined;
 		}
 
-		this._activeKeyIndex = (this._activeKeyIndex + 1) % this._apiKeyList.length;
-		await this.saveKeysToStorage(); // This calls resetClient() and updateWebviewKeyList()
+		if (triedKeys instanceof Set) {
+			// Scenario 1: Retry-based switching
+			switchReason = "retry";
+			// Determine the starting point for the search, wrapping around.
+			// If _activeKeyIndex is -1, it means no key is active, so we start search from index 0.
+			// Otherwise, we start from the next key after the current active one.
+			const startIndex =
+				(this._activeKeyIndex === -1 ? 0 : this._activeKeyIndex + 1) %
+				this._apiKeyList.length;
 
-		const newKey = this._apiKeyList[this._activeKeyIndex];
-		const message = `Proactively switched to key ...${newKey.slice(
-			-4
-		)} for the upcoming request.`;
-		console.log(`[ApiKeyManager] ${message}`);
-		this.postMessageToWebview({ type: "apiKeyStatus", value: message });
-		return newKey;
+			for (let i = 0; i < this._apiKeyList.length; i++) {
+				const currentIndex = (startIndex + i) % this._apiKeyList.length;
+				const candidateKey = this._apiKeyList[currentIndex];
+
+				if (!triedKeys.has(candidateKey)) {
+					this._activeKeyIndex = currentIndex;
+					newKey = candidateKey;
+					foundNewKey = true;
+					console.log(
+						`[ApiKeyManager] Switched to key ...${newKey.slice(
+							-4
+						)} for retry. (New Index: ${this._activeKeyIndex})`
+					);
+					break;
+				}
+			}
+
+			if (!foundNewKey) {
+				console.log(
+					`[ApiKeyManager] No new API key found for retry after trying all available keys.`
+				);
+				return undefined;
+			}
+		} else {
+			// Scenario 2: Proactive switching (original logic)
+			if (this._apiKeyList.length <= 1) {
+				const currentKey = this.getActiveApiKey();
+				const reason =
+					this._apiKeyList.length === 0
+						? "list is empty"
+						: "only one key exists";
+				console.log(
+					`[ApiKeyManager] Not proactively switching because API key ${reason}. Current active key: ${
+						currentKey ? "..." + currentKey.slice(-4) : "None"
+					}`
+				);
+				return currentKey; // Stay on current key or undefined if none
+			}
+
+			// If _activeKeyIndex is -1, this correctly sets it to 0.
+			this._activeKeyIndex =
+				(this._activeKeyIndex + 1) % this._apiKeyList.length;
+			newKey = this._apiKeyList[this._activeKeyIndex];
+			foundNewKey = true;
+			console.log(
+				`[ApiKeyManager] Proactively switched to key ...${newKey.slice(
+					-4
+				)} for the upcoming request. (New Index: ${this._activeKeyIndex})`
+			);
+		}
+
+		// Common actions if a new key was found and set
+		if (foundNewKey && newKey !== undefined) {
+			await this.saveKeysToStorage(); // This calls resetClient() and updateWebviewKeyList()
+			const message = `Switched to key ...${newKey.slice(
+				-4
+			)} for the ${switchReason}.`;
+			this.postMessageToWebview({ type: "apiKeyStatus", value: message });
+			return newKey;
+		} else {
+			// This path should ideally not be reached if foundNewKey logic is correct
+			// as it would have returned undefined earlier if no key was found.
+			return undefined;
+		}
 	}
 
 	public async switchToPreviousApiKey(): Promise<void> {
