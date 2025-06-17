@@ -2,7 +2,8 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { createAsciiTree } from "../utilities/treeFormatter";
-import { FileChangeEntry } from "../types/workflow"; // New import
+import { FileChangeEntry } from "../types/workflow";
+import { ActiveSymbolDetailedInfo } from "../services/contextService";
 
 // Configuration for context building - Adjusted for large context windows
 interface ContextConfig {
@@ -10,6 +11,7 @@ interface ContextConfig {
 	maxTotalLength: number; // Approximate total character limit for the context string
 	maxSymbolEntriesPerFile: number; // Maximum symbol entries to include per file
 	maxTotalSymbolChars: number; // Approximate total character limit for the symbol info block
+	maxActiveSymbolDetailChars: number;
 }
 
 // Default configuration - Adjusted for ~1M token models
@@ -18,6 +20,7 @@ export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
 	maxTotalLength: 5 * 1024 * 1024, // Approx 5MB in characters
 	maxSymbolEntriesPerFile: 10, // Default to 10 symbols per file
 	maxTotalSymbolChars: 20000, // Default to 20KB for the entire symbols section
+	maxActiveSymbolDetailChars: 20000,
 };
 
 /**
@@ -30,6 +33,7 @@ export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
  * @param recentChanges Optional array of recent file changes to include.
  * @param dependencyGraph Optional map representing file import/dependency relations.
  * @param documentSymbols Optional map containing document symbols for relevant files.
+ * @param activeSymbolDetailedInfo Optional detailed information about the active symbol.
  * @returns A promise that resolves to the generated context string.
  */
 export async function buildContextString(
@@ -38,7 +42,8 @@ export async function buildContextString(
 	config: ContextConfig = DEFAULT_CONTEXT_CONFIG,
 	recentChanges?: FileChangeEntry[],
 	dependencyGraph?: Map<string, string[]>,
-	documentSymbols?: Map<string, vscode.DocumentSymbol[] | undefined> // New parameter
+	documentSymbols?: Map<string, vscode.DocumentSymbol[] | undefined>,
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo
 ): Promise<string> {
 	let context = `Project Context (Workspace: ${path.basename(
 		workspaceRoot.fsPath
@@ -261,6 +266,154 @@ export async function buildContextString(
 		);
 	}
 	// --- END: Symbol Information ---
+
+	// --- Active Symbol Detailed Information ---
+	let activeSymbolDetailSection = "";
+	if (activeSymbolDetailedInfo && activeSymbolDetailedInfo.name) {
+		activeSymbolDetailSection += `Active Symbol Detail: ${activeSymbolDetailedInfo.name}\n`;
+
+		const formatLocation = (
+			location: vscode.Location | vscode.Location[] | undefined
+		): string => {
+			if (!location) {
+				return "N/A";
+			}
+			const actualLocation = Array.isArray(location)
+				? location.length > 0
+					? location[0]
+					: undefined
+				: location;
+			if (!actualLocation || !actualLocation.uri) {
+				// MODIFICATION HERE
+				return "N/A";
+			}
+
+			const relativePath = path
+				.relative(workspaceRoot.fsPath, actualLocation.uri.fsPath)
+				.replace(/\\/g, "/");
+			return `${relativePath}:${actualLocation.range.start.line + 1}`;
+		};
+
+		const formatLocations = (
+			locations: vscode.Location[] | undefined
+		): string => {
+			if (!locations || locations.length === 0) {
+				return "None";
+			}
+			return locations.map((loc) => formatLocation(loc)).join(", ");
+		};
+
+		const formatIncomingCalls = (
+			calls: vscode.CallHierarchyIncomingCall[] | undefined
+		): string => {
+			if (!calls || calls.length === 0) {
+				return `No Incoming Calls`;
+			}
+			const limitedCalls = calls.slice(0, 5); // Limit to top 5
+			const formatted = limitedCalls
+				.map((call) => {
+					// Use call.from.uri and the first range from call.fromRanges
+					if (!call.from || !call.from.uri) {
+						// MODIFICATION HERE
+						return `${call.from?.name || "Unknown"} (N/A:URI_Missing)`;
+					}
+					const relativePath = path
+						.relative(workspaceRoot.fsPath, call.from.uri.fsPath)
+						.replace(/\\/g, "/");
+					const lineNumber =
+						call.fromRanges.length > 0
+							? call.fromRanges[0].start.line + 1
+							: "N/A";
+					return `${call.from.name} (${relativePath}:${lineNumber})`;
+				})
+				.join("\n  - ");
+			const more = calls.length > 5 ? `\n  ... (${calls.length - 5} more)` : "";
+			return `  - ${formatted}${more}`;
+		};
+
+		const formatOutgoingCalls = (
+			calls: vscode.CallHierarchyOutgoingCall[] | undefined
+		): string => {
+			if (!calls || calls.length === 0) {
+				return `No Outgoing Calls`;
+			}
+			const limitedCalls = calls.slice(0, 5); // Limit to top 5
+			const formatted = limitedCalls
+				.map((call) => {
+					// Use call.to.uri and call.to.range
+					if (!call.to || !call.to.uri) {
+						// MODIFICATION HERE
+						return `${call.to?.name || "Unknown"} (N/A:URI_Missing)`;
+					}
+					const relativePath = path
+						.relative(workspaceRoot.fsPath, call.to.uri.fsPath)
+						.replace(/\\/g, "/");
+					return `${call.to.name} (${relativePath}:${
+						call.to.range.start.line + 1
+					})`;
+				})
+				.join("\n  - ");
+			const more = calls.length > 5 ? `\n  ... (${calls.length - 5} more)` : "";
+			return `  - ${formatted}${more}`;
+		};
+
+		activeSymbolDetailSection += `  Definition: ${formatLocation(
+			activeSymbolDetailedInfo.definition
+		)}\n`;
+		activeSymbolDetailSection += `  Type Definition: ${formatLocation(
+			activeSymbolDetailedInfo.typeDefinition
+		)}\n`;
+		activeSymbolDetailSection += `  Implementations: ${formatLocations(
+			activeSymbolDetailedInfo.implementations
+		)}\n`;
+		activeSymbolDetailSection += `  Incoming Calls:\n${formatIncomingCalls(
+			activeSymbolDetailedInfo.incomingCalls
+		)}\n`;
+		activeSymbolDetailSection += `  Outgoing Calls:\n${formatOutgoingCalls(
+			activeSymbolDetailedInfo.outgoingCalls
+		)}\n`;
+		activeSymbolDetailSection += `\n`; // Add a newline for separation
+
+		// Truncation logic for active symbol detail section
+		if (activeSymbolDetailSection.length > config.maxActiveSymbolDetailChars) {
+			const truncateMessage =
+				"\n... (Active symbol detail truncated due to section size limit)\n";
+			const availableLength =
+				config.maxActiveSymbolDetailChars - truncateMessage.length;
+			if (availableLength > 0) {
+				activeSymbolDetailSection =
+					activeSymbolDetailSection.substring(0, availableLength) +
+					truncateMessage;
+			} else {
+				activeSymbolDetailSection = truncateMessage; // If no space, just the message
+			}
+		}
+
+		// Add to total context if not empty after truncation
+		if (activeSymbolDetailSection.length > 0) {
+			if (
+				currentTotalLength + activeSymbolDetailSection.length >
+				config.maxTotalLength
+			) {
+				console.warn(
+					`Active symbol detail section exceeds total context limit. Truncating.`
+				);
+				const availableLength = config.maxTotalLength - currentTotalLength - 50; // Reserve space for truncation message
+				activeSymbolDetailSection =
+					activeSymbolDetailSection.substring(
+						0,
+						availableLength > 0 ? availableLength : 0
+					) +
+					"\n... (Active symbol detail truncated due to total size limit)\n\n";
+			}
+			context += activeSymbolDetailSection;
+			currentTotalLength += activeSymbolDetailSection.length;
+			console.log(
+				`Context size after adding active symbol detail: ${currentTotalLength} chars.`
+			);
+		}
+	}
+	// --- END: Active Symbol Detailed Information ---
 
 	context += "File Contents (partial):\n"; // This line is already there, ensure it follows the new section
 	const contentHeaderLength = "File Contents (partial):\n".length;

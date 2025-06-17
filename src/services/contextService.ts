@@ -19,6 +19,17 @@ import {
 } from "../context/contextBuilder";
 import * as SymbolService from "./symbolService";
 
+// 1. Define the ActiveSymbolDetailedInfo interface
+export interface ActiveSymbolDetailedInfo {
+	name?: string;
+	kind?: string;
+	definition?: vscode.Location | vscode.Location[];
+	implementations?: vscode.Location[];
+	typeDefinition?: vscode.Location | vscode.Location[];
+	incomingCalls?: vscode.CallHierarchyIncomingCall[];
+	outgoingCalls?: vscode.CallHierarchyOutgoingCall[];
+}
+
 export class ContextService {
 	constructor(
 		private settingsManager: SettingsManager,
@@ -35,6 +46,9 @@ export class ContextService {
 		diagnosticsString?: string
 	): Promise<string> {
 		try {
+			// 2a. Initialize activeSymbolDetailedInfo
+			let activeSymbolDetailedInfo: ActiveSymbolDetailedInfo | undefined;
+
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders || workspaceFolders.length === 0) {
 				return "[No workspace open]";
@@ -57,6 +71,119 @@ export class ContextService {
 					type: "statusUpdate",
 					value: `Warning: Could not build dependency graph. Reason: ${depGraphError.message}`,
 				});
+			}
+
+			// 2b. Add new conditional block for activeSymbolDetailedInfo
+			// This block is added after fileDependencies is built.
+			if (editorContext?.documentUri && editorContext?.selection) {
+				const activeFileUri = editorContext.documentUri;
+				try {
+					// 2b.iii. Call SymbolService.getSymbolsInDocument
+					const activeDocumentSymbols =
+						await SymbolService.getSymbolsInDocument(
+							activeFileUri,
+							cancellationToken
+						);
+
+					if (activeDocumentSymbols && activeDocumentSymbols.length > 0) {
+						// 2b.iv. Iterate through DocumentSymbols to find symbolAtCursor
+						const symbolAtCursor = activeDocumentSymbols.find((s) =>
+							s.range.contains(editorContext.selection!.start)
+						);
+
+						if (symbolAtCursor) {
+							// 2b.v. Populate activeSymbolDetailedInfo.name and activeSymbolDetailedInfo.kind
+							activeSymbolDetailedInfo = {
+								name: symbolAtCursor.name,
+								kind: vscode.SymbolKind[symbolAtCursor.kind], // Convert enum to string
+							};
+
+							// 2b.vi. Asynchronously call SymbolService functions, wrapping each in a try-catch
+							await Promise.allSettled([
+								(async () => {
+									try {
+										activeSymbolDetailedInfo!.definition =
+											await SymbolService.getDefinition(
+												activeFileUri,
+												symbolAtCursor.selectionRange.start,
+												cancellationToken
+											);
+									} catch (e: any) {
+										console.warn(
+											`[ContextService] Failed to get definition for ${symbolAtCursor.name}: ${e.message}`
+										);
+									}
+								})(),
+								(async () => {
+									try {
+										activeSymbolDetailedInfo!.implementations =
+											await SymbolService.getImplementations(
+												activeFileUri,
+												symbolAtCursor.selectionRange.start,
+												cancellationToken
+											);
+									} catch (e: any) {
+										console.warn(
+											`[ContextService] Failed to get implementations for ${symbolAtCursor.name}: ${e.message}`
+										);
+									}
+								})(),
+								(async () => {
+									try {
+										activeSymbolDetailedInfo!.typeDefinition =
+											await SymbolService.getTypeDefinition(
+												activeFileUri,
+												symbolAtCursor.selectionRange.start,
+												cancellationToken
+											);
+									} catch (e: any) {
+										console.warn(
+											`[ContextService] Failed to get type definition for ${symbolAtCursor.name}: ${e.message}`
+										);
+									}
+								})(),
+								(async () => {
+									try {
+										const callHierarchyItems =
+											await SymbolService.prepareCallHierarchy(
+												activeFileUri,
+												symbolAtCursor.selectionRange.start,
+												cancellationToken
+											);
+										if (callHierarchyItems && callHierarchyItems.length > 0) {
+											// Select a primary item (e.g., matching name or the first)
+											const primaryCallHierarchyItem =
+												callHierarchyItems.find(
+													(item) => item.name === symbolAtCursor.name
+												) || callHierarchyItems[0];
+
+											if (primaryCallHierarchyItem) {
+												activeSymbolDetailedInfo!.incomingCalls =
+													await SymbolService.resolveIncomingCalls(
+														primaryCallHierarchyItem,
+														cancellationToken
+													);
+												activeSymbolDetailedInfo!.outgoingCalls =
+													await SymbolService.resolveOutgoingCalls(
+														primaryCallHierarchyItem,
+														cancellationToken
+													);
+											}
+										}
+									} catch (e: any) {
+										console.warn(
+											`[ContextService] Failed to get call hierarchy for ${symbolAtCursor.name}: ${e.message}`
+										);
+									}
+								})(),
+							]);
+						}
+					}
+				} catch (e: any) {
+					console.error(
+						`[ContextService] Error getting detailed symbol info: ${e.message}`
+					);
+				}
 			}
 
 			if (allScannedFiles.length === 0) {
@@ -163,13 +290,15 @@ export class ContextService {
 				{ concurrency: 5 }
 			);
 
+			// 3. Update the final call to buildContextString to pass activeSymbolDetailedInfo
 			return await buildContextString(
 				filesForContextBuilding,
 				rootFolder.uri,
 				DEFAULT_CONTEXT_CONFIG,
 				this.changeLogger.getChangeLog(),
 				fileDependencies,
-				documentSymbolsMap
+				documentSymbolsMap,
+				activeSymbolDetailedInfo // Pass the new argument
 			);
 		} catch (error: any) {
 			console.error(`[ContextService] Error building project context:`, error);
