@@ -5,7 +5,10 @@ import { TextDecoder } from "util";
 
 export async function parseFileImports(
 	filePath: string,
-	projectRoot: vscode.Uri
+	projectRoot: vscode.Uri,
+	compilerOptions: ts.CompilerOptions,
+	compilerHost: ts.CompilerHost,
+	moduleResolutionCache: ts.ModuleResolutionCache
 ): Promise<string[]> {
 	const importedPaths = new Set<string>();
 
@@ -25,7 +28,6 @@ export async function parseFileImports(
 			ts.ScriptKind.TS
 		);
 
-		const fileDir = path.dirname(filePath);
 		const projectRootFsPath = projectRoot.fsPath;
 
 		// Traverse the AST
@@ -46,36 +48,41 @@ export async function parseFileImports(
 			}
 
 			if (moduleSpecifierText) {
-				// Filter out bare specifiers (external modules like 'react', 'lodash')
-				// These typically do not start with '.' or '/'
+				// Use ts.resolveModuleName for robust module resolution
+				const resolvedModule = ts.resolveModuleName(
+					moduleSpecifierText,
+					filePath,
+					compilerOptions,
+					compilerHost,
+					moduleResolutionCache
+				);
+
 				if (
-					!moduleSpecifierText.startsWith(".") &&
-					!moduleSpecifierText.startsWith("/")
+					!resolvedModule ||
+					!resolvedModule.resolvedModule ||
+					typeof resolvedModule.resolvedModule.resolvedFileName !== "string"
 				) {
-					return; // Skip external modules
+					return;
+				}
+
+				if (resolvedModule.resolvedModule.isExternalLibraryImport) {
+					return;
 				}
 
 				try {
-					// Resolve the module specifier into an absolute path
-					const absoluteResolvedPath = path.resolve(
-						fileDir,
-						moduleSpecifierText
-					);
-
-					// Make the path relative to the project root
 					let relativeToProjectRoot = path.relative(
 						projectRootFsPath,
-						absoluteResolvedPath
+						resolvedModule.resolvedModule.resolvedFileName
 					);
 
-					// Normalize path separators to use forward slashes for consistency across OS
+					// Normalize the resulting relative path to use forward slashes (`/`) consistently
 					relativeToProjectRoot = relativeToProjectRoot.replace(/\\/g, "/");
 
 					importedPaths.add(relativeToProjectRoot);
 				} catch (pathResolutionError) {
-					// Log error if path resolution fails for a specific specifier
+					// Log error if path conversion to relative fails for a specific specifier
 					console.error(
-						`Failed to resolve path for specifier '${moduleSpecifierText}' in file '${filePath}':`,
+						`Failed to make resolved path relative for specifier '${moduleSpecifierText}' in file '${filePath}':`,
 						pathResolutionError
 					);
 				}
