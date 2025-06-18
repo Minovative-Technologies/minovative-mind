@@ -92,6 +92,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.postMessageToWebview.bind(this)
 		);
 		this.chatHistoryManager = new ChatHistoryManager(
+			this.workspaceState,
 			this.postMessageToWebview.bind(this)
 		);
 		this.changeLogger = new ProjectChangeLogger();
@@ -232,10 +233,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					? {
 							originalRequest: planCtx.originalUserRequest,
 							type: "textualPlanPending",
+							relevantFiles: planCtx.relevantFiles,
 					  }
 					: {
 							originalInstruction: planCtx.editorContext?.instruction,
 							type: "textualPlanPending",
+							relevantFiles: planCtx.relevantFiles,
 					  };
 
 			this.postMessageToWebview({

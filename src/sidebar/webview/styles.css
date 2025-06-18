@@ -811,7 +811,7 @@ div#commit-message-display tr:nth-child(even),
 	cursor: pointer;
 	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
 		border-color 0.1s ease-in-out; /* Ensured color transition */
-	/* When visible, it should be display: inline-flex */
+	/* When visible, it should be display: inline-flex; */
 	align-items: center;
 	justify-content: center;
 	margin: 0; /* Ensure no extra margin */
@@ -1513,4 +1513,112 @@ ul#staged-files-list li.empty-state {
 #cancel-commit-button:focus {
 	border-color: var(--vscode-focusBorder);
 	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+/* --- AI Context Files Section --- */
+.ai-context-files {
+	display: flex;
+	flex-direction: column;
+	/* Visual appearance */
+	background-color: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-editorGroupHeader-tabsBorder); /* A subtle border */
+	border-radius: var(--border-radius);
+	padding: var(--message-padding); /* Similar to message padding */
+	margin-top: 5px; /* Space above */
+	margin-bottom: var(--element-spacing); /* Space below */
+	/* Collapsible behavior */
+	max-height: 500px; /* Default max height when expanded */
+	overflow: hidden; /* Hide overflow initially, list itself will scroll if needed */
+	transition: max-height 0.3s ease-out, padding 0.3s ease-out,
+		margin 0.3s ease-out; /* Smooth collapse/expand */
+}
+
+.ai-context-files.collapsed {
+	max-height: 2.5em;
+	padding-bottom: 0;
+	margin-bottom: 5px; /* to be tighter when collapsed */
+	overflow: hidden;
+}
+
+/* Header for the context files list */
+.context-files-header {
+	display: flex;
+	justify-content: flex-start;
+	align-items: center;
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--vscode-editor-paneBorder); /* A separator */
+	background-color: transparent; /* Keep transparent */
+	cursor: pointer; /* Indicates it's clickable to toggle */
+	user-select: none;
+	font-weight: 600;
+}
+
+.context-files-header::before {
+	content: "→"; /* default collapsed arrow */
+	margin-right: 8px;
+	display: inline-block;
+	transition: transform 0.2s ease-in-out;
+	font-weight: bold;
+	font-size: 1.1em;
+	min-width: 1em;
+	text-align: center;
+}
+
+.ai-context-files:not(.collapsed) .context-files-header::before {
+	content: "↓";
+	transform: rotate(0deg);
+}
+
+.context-files-header h4 {
+	margin: 0; /* Remove default margin */
+	font-size: 0.95em;
+	color: var(--vscode-editor-foreground); /* Main text color */
+	font-weight: 600;
+}
+
+/* List of context files */
+.context-file-list {
+	display: flex;
+	gap: 6px; /* Space between file items */
+	flex-direction: column;
+	padding: 0; /* Remove default padding */
+	margin: 0; /* Remove default margin */
+	max-height: 150px; /* Default max height for scrollable list when expanded */
+	overflow-y: auto; /* Scroll if too many files */
+	transition: max-height 0.3s ease-out, padding 0.3s ease-out,
+		margin 0.3s ease-out; /* Smooth collapse/expand */
+}
+
+/* Individual file item */
+.context-file-item {
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Subtle background */
+	border: 1px solid var(--vscode-button-border); /* Subtle border */
+	padding: 4px 8px;
+	border-radius: var(--border-radius);
+	font-size: 0.85em;
+	color: var(--vscode-editor-foreground); /* Text color */
+	white-space: nowrap; /* Prevent file path from wrapping */
+	text-overflow: ellipsis; /* Add ellipsis if path is too long */
+	overflow: hidden; /* Hide overflowed text */
+	max-width: 100%; /* Ensure it doesn't exceed parent width */
+	flex-shrink: 0; /* Don't shrink when wrapped */
+	cursor: pointer; /* Now directly clickable */
+	text-decoration: none; /* No underline */
+	transition: background-color 0.1s ease, border-color 0.1s ease;
+}
+
+.context-file-item:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+
+.context-file-item.selected {
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
+	border-color: var(
+		--vscode-list-activeSelectionBorder,
+		var(--vscode-focusBorder)
+	);
 }

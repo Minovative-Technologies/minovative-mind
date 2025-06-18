@@ -38,6 +38,12 @@ export interface ActiveSymbolDetailedInfo {
 	referencedTypeDefinitions?: { filePath: string; content: string }[]; // NEW
 }
 
+// Define a new interface 'BuildProjectContextResult'
+export interface BuildProjectContextResult {
+	contextString: string;
+	relevantFiles: string[];
+}
+
 export class ContextService {
 	constructor(
 		private settingsManager: SettingsManager,
@@ -52,14 +58,14 @@ export class ContextService {
 		userRequest?: string,
 		editorContext?: PlanGenerationContext["editorContext"],
 		diagnosticsString?: string
-	): Promise<string> {
+	): Promise<BuildProjectContextResult> {
 		try {
 			// 2a. Initialize activeSymbolDetailedInfo
 			let activeSymbolDetailedInfo: ActiveSymbolDetailedInfo | undefined;
 
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders || workspaceFolders.length === 0) {
-				return "[No workspace open]";
+				return { contextString: "[No workspace open]", relevantFiles: [] };
 			}
 			const rootFolder = workspaceFolders[0];
 
@@ -287,7 +293,10 @@ export class ContextService {
 			}
 
 			if (allScannedFiles.length === 0) {
-				return "[No relevant files found in workspace]";
+				return {
+					contextString: "[No relevant files found in workspace]",
+					relevantFiles: [],
+				};
 			}
 
 			let filesForContextBuilding = allScannedFiles;
@@ -358,11 +367,18 @@ export class ContextService {
 					);
 				}
 			} else if (currentQueryForSelection?.startsWith("/commit")) {
-				return "[Project context not applicable for git commit message generation]";
+				return {
+					contextString:
+						"[Project context not applicable for git commit message generation]",
+					relevantFiles: [],
+				};
 			}
 
 			if (filesForContextBuilding.length === 0) {
-				return "[No relevant files selected for context.]";
+				return {
+					contextString: "[No relevant files selected for context.]",
+					relevantFiles: [],
+				};
 			}
 
 			const documentSymbolsMap = new Map<
@@ -390,9 +406,15 @@ export class ContextService {
 				{ concurrency: 5 }
 			);
 
+			// Convert filesForContextBuilding (vscode.Uri[]) to relative string paths
+			const relativeFilesForContextBuilding: string[] =
+				filesForContextBuilding.map((uri: vscode.Uri) =>
+					path.relative(rootFolder.uri.fsPath, uri.fsPath).replace(/\\/g, "/")
+				);
+
 			// 3. Update the final call to buildContextString to pass activeSymbolDetailedInfo
-			return await buildContextString(
-				filesForContextBuilding,
+			const contextString = await buildContextString(
+				filesForContextBuilding, // Still pass URIs to buildContextString for content reading
 				rootFolder.uri,
 				DEFAULT_CONTEXT_CONFIG,
 				this.changeLogger.getChangeLog(),
@@ -400,6 +422,12 @@ export class ContextService {
 				documentSymbolsMap,
 				activeSymbolDetailedInfo // Pass the new argument
 			);
+
+			// Return the new object structure
+			return {
+				contextString: contextString,
+				relevantFiles: relativeFilesForContextBuilding,
+			};
 		} catch (error: any) {
 			console.error(`[ContextService] Error building project context:`, error);
 			this.postMessageToWebview({
@@ -407,7 +435,10 @@ export class ContextService {
 				value: `Error building project context: ${error.message}`,
 				isError: true,
 			});
-			return `[Error building project context: ${error.message}]`;
+			return {
+				contextString: `[Error building project context: ${error.message}]`,
+				relevantFiles: [],
+			};
 		}
 	}
 }

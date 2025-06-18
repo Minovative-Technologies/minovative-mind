@@ -1,6 +1,8 @@
 // src/services/webviewMessageHandler.ts
 import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
+import * as path from "path";
+import { ToggleRelevantFilesDisplayMessage } from "../sidebar/common/sidebarTypes";
 
 export async function handleWebviewMessage(
 	data: any,
@@ -35,6 +37,8 @@ export async function handleWebviewMessage(
 		"openExternalLink",
 		"confirmPlanExecution", // Allowed as a follow-up
 		"retryStructuredPlanGeneration", // Allowed as a follow-up
+		"openFile", // Allowed as a direct user interaction
+		"toggleRelevantFilesDisplay", // Allowed as a UI interaction
 	];
 
 	if (
@@ -187,6 +191,15 @@ export async function handleWebviewMessage(
 			provider.chatHistoryManager.deleteHistoryEntry(data.messageIndex);
 			break;
 
+		case "toggleRelevantFilesDisplay": {
+			const toggleMessage = data as ToggleRelevantFilesDisplayMessage;
+			provider.chatHistoryManager.updateMessageRelevantFilesExpandedState(
+				toggleMessage.messageIndex,
+				toggleMessage.isExpanded
+			);
+			break;
+		}
+
 		case "selectModel":
 			if (typeof data.value === "string") {
 				await provider.settingsManager.handleModelSelection(data.value);
@@ -197,6 +210,124 @@ export async function handleWebviewMessage(
 			const url = data.url as string;
 			if (url) {
 				await vscode.env.openExternal(vscode.Uri.parse(url, true));
+			}
+			break;
+		}
+
+		case "openFile": {
+			const relativeFilePathFromWebview = data.value; // Rename for clarity
+
+			// Crucial Security Check:
+			// 1. Verify filePath is a string.
+			if (
+				typeof relativeFilePathFromWebview !== "string" ||
+				relativeFilePathFromWebview.trim() === ""
+			) {
+				console.warn(
+					`[MessageHandler] Security Alert: Invalid filePath received for openFile: "${relativeFilePathFromWebview}"`
+				);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Security Error: Invalid file path provided for opening.",
+					isError: true,
+				});
+				return;
+			}
+
+			let isPathWithinWorkspace = false;
+			let absoluteFileUri: vscode.Uri | undefined;
+			let workspaceRoot: string | undefined; // Declare to hold the normalized workspace root
+
+			if (
+				vscode.workspace.workspaceFolders &&
+				vscode.workspace.workspaceFolders.length > 0
+			) {
+				const rootFolder = vscode.workspace.workspaceFolders[0]; // Assuming the first workspace folder is the relevant one
+				workspaceRoot = path.normalize(rootFolder.uri.fsPath);
+
+				try {
+					// Resolve the relative path from webview against the workspace root
+					absoluteFileUri = vscode.Uri.joinPath(
+						rootFolder.uri,
+						relativeFilePathFromWebview
+					);
+				} catch (uriError: any) {
+					console.error(
+						`[MessageHandler] Error resolving relative path to URI for ${relativeFilePathFromWebview}:`,
+						uriError
+					);
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: `Error: Could not resolve file path for opening. ${uriError.message}`,
+						isError: true,
+					});
+					return;
+				}
+
+				// Normalize the absolute file path for comparison
+				const absoluteNormalizedFilePath = path.normalize(
+					absoluteFileUri.fsPath
+				);
+
+				// Check if the absolute normalized file path is identical to the workspace root,
+				// or if it starts with the workspace root followed by a path separator.
+				if (
+					absoluteNormalizedFilePath === workspaceRoot ||
+					absoluteNormalizedFilePath.startsWith(workspaceRoot + path.sep)
+				) {
+					isPathWithinWorkspace = true;
+				}
+			} else {
+				// If no workspace is open, the file cannot be "within the current VS Code workspace".
+				console.warn(
+					`[MessageHandler] Security Alert: Cannot verify file path as no workspace is open. Attempted path: ${relativeFilePathFromWebview}`
+				);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value:
+						"Security Error: Cannot open file. No VS Code workspace is currently open.",
+					isError: true,
+				});
+				return;
+			}
+
+			if (!isPathWithinWorkspace || !absoluteFileUri) {
+				// Ensure absoluteFileUri is defined here
+				console.warn(
+					`[MessageHandler] Security Alert: Attempt to open file outside workspace: ${relativeFilePathFromWebview} (resolved to ${
+						absoluteFileUri?.fsPath || "N/A"
+					})`
+				);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value:
+						"Security Error: Attempted to open a file outside the current workspace. Operation blocked.",
+					isError: true,
+				});
+				return;
+			}
+
+			// If the path passes the security check, execute the VS Code command to open the file
+			try {
+				await vscode.commands.executeCommand("vscode.open", absoluteFileUri); // Use the absolute URI here
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: `File opened successfully: ${path.basename(
+						absoluteFileUri.fsPath
+					)}`,
+				});
+			} catch (openError: any) {
+				console.error(
+					`[MessageHandler] Error opening file ${absoluteFileUri.fsPath} in VS Code:`,
+					openError
+				);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Error opening file: ${
+						openError.message || String(openError)
+					}`,
+					isError: true,
+				});
 			}
 			break;
 		}

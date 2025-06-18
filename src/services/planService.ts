@@ -71,10 +71,7 @@ export class PlanService {
 			return;
 		}
 
-		this.provider.postMessageToWebview({
-			type: "aiResponseStart",
-			value: { modelName },
-		});
+		// Removed this.provider.postMessageToWebview for type: "aiResponseStart" here.
 
 		this.provider.activeOperationCancellationTokenSource =
 			new vscode.CancellationTokenSource();
@@ -98,17 +95,25 @@ export class PlanService {
 		try {
 			this.provider.pendingPlanGenerationContext = null;
 
-			const projectContext =
+			const buildContextResult =
 				await this.provider.contextService.buildProjectContext(
 					token,
 					userRequest
 				);
-			if (projectContext.startsWith("[Error")) {
-				throw new Error(projectContext);
+			const { contextString, relevantFiles } = buildContextResult;
+
+			// Add new aiResponseStart message here with relevantFiles
+			this.provider.postMessageToWebview({
+				type: "aiResponseStart",
+				value: { modelName, relevantFiles: relevantFiles },
+			});
+
+			if (contextString.startsWith("[Error")) {
+				throw new Error(contextString);
 			}
 
 			const textualPlanPrompt = createInitialPlanningExplanationPrompt(
-				projectContext,
+				contextString,
 				userRequest,
 				undefined,
 				undefined,
@@ -144,14 +149,18 @@ export class PlanService {
 
 			this.provider.chatHistoryManager.addHistoryEntry(
 				"model",
-				textualPlanResponse
+				textualPlanResponse,
+				undefined,
+				relevantFiles,
+				relevantFiles && relevantFiles.length <= 3
 			);
 			success = true;
 
 			this.provider.pendingPlanGenerationContext = {
 				type: "chat",
 				originalUserRequest: userRequest,
-				projectContext,
+				projectContext: contextString,
+				relevantFiles,
 				initialApiKey: apiKey,
 				modelName,
 				chatHistory: [...this.provider.chatHistoryManager.getChatHistory()],
@@ -160,6 +169,7 @@ export class PlanService {
 			};
 			this.provider.lastPlanGenerationContext = {
 				...this.provider.pendingPlanGenerationContext,
+				relevantFiles,
 			};
 
 			// Modified UI handling after plan generation
@@ -247,10 +257,7 @@ export class PlanService {
 		};
 
 		try {
-			this.provider.postMessageToWebview({
-				type: "aiResponseStart",
-				value: { modelName },
-			});
+			// Removed this.provider.postMessageToWebview for type: "aiResponseStart" here.
 			this.provider.pendingPlanGenerationContext = null;
 
 			const relativeFilePath = path
@@ -267,19 +274,27 @@ export class PlanService {
 				selection,
 			};
 
-			const projectContext =
+			const buildContextResult =
 				await this.provider.contextService.buildProjectContext(
 					activeOpToken,
 					editorCtx.instruction,
 					editorCtx,
 					diagnosticsString
 				);
-			if (projectContext.startsWith("[Error")) {
-				throw new Error(projectContext);
+			const { contextString, relevantFiles } = buildContextResult;
+
+			// Add new aiResponseStart message here with relevantFiles
+			this.provider.postMessageToWebview({
+				type: "aiResponseStart",
+				value: { modelName, relevantFiles: relevantFiles },
+			});
+
+			if (contextString.startsWith("[Error")) {
+				throw new Error(contextString);
 			}
 
 			const textualPlanPrompt = createInitialPlanningExplanationPrompt(
-				projectContext,
+				contextString,
 				undefined,
 				editorCtx,
 				diagnosticsString,
@@ -320,7 +335,10 @@ export class PlanService {
 
 			this.provider.chatHistoryManager.addHistoryEntry(
 				"model",
-				textualPlanResponse
+				textualPlanResponse,
+				undefined,
+				relevantFiles,
+				relevantFiles && relevantFiles.length <= 3
 			);
 			initialProgress?.report({
 				message: "Textual plan generated.",
@@ -330,7 +348,8 @@ export class PlanService {
 			this.provider.pendingPlanGenerationContext = {
 				type: "editor",
 				editorContext: editorCtx,
-				projectContext,
+				projectContext: contextString,
+				relevantFiles,
 				diagnosticsString,
 				initialApiKey: apiKey!,
 				modelName,
@@ -340,6 +359,7 @@ export class PlanService {
 			};
 			this.provider.lastPlanGenerationContext = {
 				...this.provider.pendingPlanGenerationContext,
+				relevantFiles,
 			};
 
 			// Removed UI handling block as per instructions
@@ -774,10 +794,12 @@ export class PlanService {
 					? {
 							type: "textualPlanPending",
 							originalRequest: planContext.originalUserRequest,
+							relevantFiles: planContext.relevantFiles,
 					  }
 					: {
 							type: "textualPlanPending",
 							originalInstruction: planContext.editorContext!.instruction,
+							relevantFiles: planContext.relevantFiles,
 					  };
 
 			this.provider.postMessageToWebview({

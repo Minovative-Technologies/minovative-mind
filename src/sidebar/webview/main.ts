@@ -161,6 +161,7 @@ let pendingPlanData: {
 	type: string;
 	originalRequest?: string;
 	originalInstruction?: string;
+	relevantFiles?: string[]; // Added relevantFiles to pendingPlanData
 } | null = null;
 
 console.log("Webview script loaded.");
@@ -251,7 +252,10 @@ if (
 		text: string,
 		className: string = "",
 		isHistoryMessage: boolean = false,
-		diffContent?: string // NEW: Add diffContent parameter
+		diffContent?: string, // NEW: Add diffContent parameter
+		relevantFiles?: string[], // NEW: Add relevantFiles parameter
+		messageIndexForHistory?: number, // ADDED
+		isRelevantFilesExpandedForHistory?: boolean // ADDED
 	) {
 		if (chatContainer) {
 			// Handle the "Creating..." loading message
@@ -284,6 +288,11 @@ if (
 			if (isHistoryMessage) {
 				// NEW: Add dataset.isHistory attribute
 				messageElement.dataset.isHistory = "true";
+				// NEW: Add messageIndexForHistory to dataset if provided
+				if (messageIndexForHistory !== undefined) {
+					messageElement.dataset.messageIndex =
+						messageIndexForHistory.toString();
+				}
 			}
 
 			const senderElement = document.createElement("strong");
@@ -376,6 +385,87 @@ if (
 				messageElement.appendChild(diffContainer);
 			}
 			// END NEW DIFF CONTENT ADDITION
+
+			// NEW: Logic for relevantFiles
+			if (sender === "Model" && relevantFiles && relevantFiles.length > 0) {
+				const contextFilesDiv = document.createElement("div");
+				contextFilesDiv.classList.add("ai-context-files");
+				// Determine initial expansion state
+				const shouldBeExpandedInitially =
+					isRelevantFilesExpandedForHistory !== undefined
+						? isRelevantFilesExpandedForHistory
+						: relevantFiles.length <= 3;
+
+				if (shouldBeExpandedInitially) {
+					contextFilesDiv.classList.add("expanded");
+				} else {
+					contextFilesDiv.classList.add("collapsed");
+				}
+
+				const filesHeader = document.createElement("div");
+				filesHeader.classList.add("context-files-header");
+				filesHeader.textContent = "AI Context Files"; // 2. Ensure filesHeader.textContent is exactly "AI Context Files:"
+				contextFilesDiv.appendChild(filesHeader);
+				// 4. Add an addEventListener("click", ...) to filesHeader that toggles the "collapsed" and "expanded" classes on the contextFilesDiv.
+				filesHeader.addEventListener("click", () => {
+					const currentIsExpanded =
+						contextFilesDiv.classList.contains("expanded");
+					const newIsExpanded = !currentIsExpanded; // The state after toggle
+
+					contextFilesDiv.classList.toggle("collapsed", !newIsExpanded);
+					contextFilesDiv.classList.toggle("expanded", newIsExpanded);
+
+					const parentMessageElement = filesHeader.closest(
+						".message[data-is-history='true']"
+					) as HTMLElement | null;
+					if (
+						parentMessageElement &&
+						parentMessageElement.dataset.messageIndex
+					) {
+						const messageIdx = parseInt(
+							parentMessageElement.dataset.messageIndex,
+							10
+						);
+						if (!isNaN(messageIdx)) {
+							vscode.postMessage({
+								type: "toggleRelevantFilesDisplay",
+								messageIndex: messageIdx,
+								isExpanded: newIsExpanded,
+							});
+						} else {
+							console.warn("Failed to parse messageIndex from dataset.");
+						}
+					} else {
+						console.warn(
+							"Parent message element or messageIndex dataset not found for relevant files toggle."
+						);
+					}
+				});
+
+				const fileList = document.createElement("ul");
+				fileList.classList.add("context-file-list");
+
+				relevantFiles.forEach((filePath) => {
+					const li = document.createElement("li");
+					li.classList.add("context-file-item");
+					li.textContent = filePath; // Directly apply to li
+					li.dataset.filepath = filePath; // Directly apply to li
+					li.title = `Open ${filePath}`; // Directly apply to li
+					fileList.appendChild(li);
+				});
+
+				contextFilesDiv.appendChild(fileList);
+
+				// Insert the relevant files div after the sender's strong tag
+				// if it's the start of a message and not a loading message
+				const senderStrongTag = messageElement.querySelector("strong");
+				if (senderStrongTag) {
+					senderStrongTag.insertAdjacentElement("afterend", contextFilesDiv);
+				} else {
+					messageElement.appendChild(contextFilesDiv); // Fallback to end of message
+				}
+			}
+			// END NEW: Logic for relevantFiles
 
 			let copyButton: HTMLButtonElement | null = null;
 			let deleteButton: HTMLButtonElement | null = null;
@@ -1069,7 +1159,9 @@ if (
 					"Model",
 					message.value,
 					`ai-message ${message.isError ? "error-message" : ""}`.trim(),
-					true // `aiResponse` is a complete message meant for history
+					true, // `aiResponse` is a complete message meant for history
+					undefined, // diffContent is not provided by this message type
+					message.relevantFiles // Pass relevantFiles
 				);
 
 				// Handle plan confirmation if this non-streamed message requires it.
@@ -1087,6 +1179,7 @@ if (
 							type: string;
 							originalRequest?: string;
 							originalInstruction?: string;
+							relevantFiles?: string[]; // Store relevantFiles
 						};
 						planConfirmationContainer.style.display = "flex";
 						updateStatus(
@@ -1131,7 +1224,14 @@ if (
 				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
 				// within the appendMessage function (see its definition) for a new AI stream.
 				// Note: aiResponseStart is only sent for *successful* starts. Errors would come as aiResponseEnd with !success.
-				appendMessage("Model", "", "ai-message", true); // This is a history message
+				appendMessage(
+					"Model",
+					"",
+					"ai-message",
+					true,
+					undefined,
+					message.value.relevantFiles
+				); // MODIFIED
 				// setLoadingState(true) was called when the user sent the message.
 				// We are now in the process of receiving the response, so loading is still active.
 				// No need to call setLoadingState(false) here. Button states are already handled by the initial setLoadingState(true).
@@ -1198,6 +1298,7 @@ if (
 					// Append the error message as a new system message or update status
 					// The provider's finally block often adds a history entry for errors,
 					// potentially including the failed response text. Appending here might be redundant
+					// or cause double messages depending on provider logic. Appending here might be redundant
 					// or cause double messages depending on provider logic. Let's rely on provider adding history.
 					// Just update status for immediate feedback.
 					updateStatus(`AI Stream Error: ${errorMessageContent}`, true);
@@ -1213,6 +1314,7 @@ if (
 							type: string;
 							originalRequest?: string;
 							originalInstruction?: string;
+							relevantFiles?: string[]; // Store relevantFiles
 						};
 
 						planConfirmationContainer.style.display = "flex"; // Show confirmation UI.
@@ -1355,6 +1457,7 @@ if (
 						type: string;
 						originalRequest?: string;
 						originalInstruction?: string;
+						relevantFiles?: string[]; // Store relevantFiles
 					};
 
 					createPlanConfirmationUI(); // Ensure UI elements are created
@@ -1408,7 +1511,8 @@ if (
 						message.value.text,
 						`ai-message ${message.value.isError ? "error-message" : ""}`.trim(),
 						true, // Changed to true based on instructions
-						message.value.diffContent // NEW: Pass diffContent
+						message.value.diffContent, // NEW: Pass diffContent
+						message.value.relevantFiles // NEW: Pass relevantFiles
 					);
 					// After adding a message, update button states based on content count, but only if not blocked
 					// Calling setLoadingState(isLoading) re-evaluates button states based on current state and UI visibility
@@ -1540,7 +1644,8 @@ if (
 			case "restoreHistory": {
 				if (chatContainer && Array.isArray(message.value)) {
 					chatContainer.innerHTML = ""; // Clear existing messages before restoring
-					message.value.forEach((msg: any) => {
+					message.value.forEach((msg: any, index: number) => {
+						// ADDED 'index'
 						if (
 							msg &&
 							typeof msg.sender === "string" &&
@@ -1553,8 +1658,11 @@ if (
 								msg.text,
 								msg.className || "",
 								true,
-								msg.diffContent
-							); // NEW: Pass diffContent
+								msg.diffContent,
+								msg.relevantFiles, // Pass relevantFiles
+								index, // Pass messageIndexForHistory
+								msg.isRelevantFilesExpanded // Pass isRelevantFilesExpandedForHistory
+							);
 						}
 					});
 					updateStatus("Chat history restored.");
@@ -1618,6 +1726,32 @@ if (
 					console.warn(
 						"[main.ts] authStateUpdate: signUpButton element not found when trying to update visibility."
 					); // ADDED
+				}
+				break;
+			}
+			case "updateRelevantFilesDisplay": {
+				const { messageIndex, isExpanded } = message.value;
+				if (chatContainer) {
+					const messageElement = chatContainer.querySelector(
+						`.message[data-message-index="${messageIndex}"]`
+					) as HTMLDivElement | null;
+					if (messageElement) {
+						const contextFilesDiv = messageElement.querySelector(
+							".ai-context-files"
+						) as HTMLDivElement | null;
+						if (contextFilesDiv) {
+							contextFilesDiv.classList.toggle("collapsed", !isExpanded);
+							contextFilesDiv.classList.toggle("expanded", isExpanded);
+						} else {
+							console.warn(
+								`[updateRelevantFilesDisplay] .ai-context-files div not found for message index ${messageIndex}.`
+							);
+						}
+					} else {
+						console.warn(
+							`[updateRelevantFilesDisplay] Message element with data-message-index="${messageIndex}" not found.`
+						);
+					}
 				}
 				break;
 			}
@@ -1884,11 +2018,6 @@ if (
 				// cancelGenerationButton.style.display = "none"; // Removed - setLoadingState(false) handles this
 				// 2. Send message to extension to cancel
 				vscode.postMessage({ type: "cancelGeneration" });
-				// 3. Call setLoadingState(false) to re-enable other inputs and clean up loading state
-				// The reenableInput message from the provider is the most reliable signal
-				// that cancellation has been fully processed. Removing this immediate setLoadingState(false)
-				// call here to avoid potential race conditions and rely on the provider's message.
-				// setLoadingState(false); // Removed - Rely on 'reenableInput' message
 
 				// Update status immediately
 				updateStatus("Cancelling operation...");
@@ -1908,6 +2037,22 @@ if (
 				const deleteButton = target.closest(
 					".delete-button"
 				) as HTMLButtonElement | null;
+				// NEW: Event listener for opening files
+				const fileItem = target.closest(
+					".context-file-item[data-filepath]" // Changed selector
+				) as HTMLLIElement | null; // Changed type annotation
+
+				if (fileItem) {
+					// Changed fileLink to fileItem
+					event.preventDefault(); // Stop default navigation
+					const filePath = fileItem.dataset.filepath; // Changed fileLink to fileItem
+					if (filePath) {
+						vscode.postMessage({ type: "openFile", value: filePath });
+						updateStatus(`Opening file: ${filePath}`);
+					}
+					return; // Consume the click event here
+				}
+				// END NEW: Event listener for opening files
 
 				// Check if a copy button was clicked and it's enabled
 				if (copyButton && !copyButton.disabled) {

@@ -14,6 +14,20 @@ export interface HistoryEntryPart {
 export interface HistoryEntry extends Omit<Content, "parts"> {
 	parts: HistoryEntryPart[];
 	diffContent?: string;
+	relevantFiles?: string[];
+	isRelevantFilesExpanded?: boolean;
+}
+
+export interface ToggleRelevantFilesDisplayMessage {
+	type: "toggleRelevantFilesDisplay";
+	messageIndex: number;
+	isExpanded: boolean;
+}
+
+export interface UpdateRelevantFilesDisplayMessage {
+	type: "updateRelevantFilesDisplay";
+	messageIndex: number;
+	isExpanded: boolean;
 }
 
 // For Firebase User data from Firestore
@@ -133,6 +147,7 @@ export interface ChatMessage {
 	text: string;
 	className: string;
 	diffContent?: string;
+	relevantFiles?: string[];
 }
 
 export interface PlanGenerationContext {
@@ -154,6 +169,7 @@ export interface PlanGenerationContext {
 	chatHistory?: HistoryEntry[];
 	textualPlanExplanation: string;
 	workspaceRootUri: vscode.Uri;
+	relevantFiles?: string[];
 }
 
 export interface PlanGenerationResult {

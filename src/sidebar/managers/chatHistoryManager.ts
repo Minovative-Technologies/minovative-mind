@@ -1,22 +1,103 @@
 // src/sidebar/managers/chatHistoryManager.ts
 import * as vscode from "vscode";
-import { HistoryEntry, ChatMessage } from "../common/sidebarTypes"; // Assuming ChatMessage is defined here for save/load
+import {
+	HistoryEntry,
+	ChatMessage,
+	UpdateRelevantFilesDisplayMessage,
+} from "../common/sidebarTypes"; // Assuming ChatMessage is defined here for save/load
 
-const MAX_HISTORY_ITEMS = 50;
+const CHAT_HISTORY_STORAGE_KEY = "minovativeMindChatHistory";
+const MAX_HISTORY_ITEMS = 100;
 
 export class ChatHistoryManager {
 	private _chatHistory: HistoryEntry[] = [];
+	private _workspaceState: vscode.Memento;
 
-	constructor(private readonly postMessageToWebview: (message: any) => void) {}
+	constructor(
+		workspaceState: vscode.Memento,
+		private readonly postMessageToWebview: (message: any) => void
+	) {
+		this._workspaceState = workspaceState;
+		this.loadHistoryFromStorage();
+	}
 
 	public getChatHistory(): readonly HistoryEntry[] {
 		return this._chatHistory;
 	}
 
+	private async loadHistoryFromStorage(): Promise<void> {
+		try {
+			const storedHistoryString = this._workspaceState.get<string>(
+				CHAT_HISTORY_STORAGE_KEY
+			);
+			if (storedHistoryString) {
+				const loadedHistory: HistoryEntry[] = JSON.parse(storedHistoryString);
+				if (
+					Array.isArray(loadedHistory) &&
+					loadedHistory.every(
+						(item) =>
+							typeof item === "object" &&
+							item !== null &&
+							typeof item.role === "string" &&
+							Array.isArray(item.parts) &&
+							item.parts.every((p) => typeof p.text === "string") &&
+							// Add validation for diffContent, relevantFiles, and isRelevantFilesExpanded
+							(item.diffContent === undefined ||
+								typeof item.diffContent === "string") &&
+							(item.relevantFiles === undefined ||
+								(Array.isArray(item.relevantFiles) &&
+									item.relevantFiles.every(
+										(f: any) => typeof f === "string"
+									))) &&
+							(item.isRelevantFilesExpanded === undefined ||
+								typeof item.isRelevantFilesExpanded === "boolean")
+					)
+				) {
+					// Map loaded history to apply defensive defaults where needed
+					this._chatHistory = loadedHistory.map((entry) => ({
+						...entry,
+						relevantFiles: entry.relevantFiles || [], // Defensive default for relevantFiles as per instruction
+						// isRelevantFilesExpanded does not need a defensive default per instruction and type
+					}));
+					this.restoreChatHistoryToWebview();
+					console.log("Chat history loaded from workspace state.");
+				} else {
+					console.warn(
+						"Stored chat history format is invalid. Clearing history."
+					);
+					this._chatHistory = [];
+					this.saveHistoryToStorage();
+				}
+			} else {
+				console.log("No chat history found in workspace state.");
+			}
+		} catch (error) {
+			console.error("Error loading chat history from storage:", error);
+			this._chatHistory = [];
+			this.saveHistoryToStorage();
+		}
+	}
+
+	private async saveHistoryToStorage(): Promise<void> {
+		try {
+			// HistoryEntry objects already contain relevantFiles and isRelevantFilesExpanded if present.
+			// JSON.stringify will correctly serialize these properties into the stored string.
+			await this._workspaceState.update(
+				CHAT_HISTORY_STORAGE_KEY,
+				JSON.stringify(this._chatHistory)
+			);
+			console.log("Chat history saved to workspace state.");
+		} catch (error) {
+			console.error("Error saving chat history to storage:", error);
+		}
+	}
+
 	public addHistoryEntry(
 		role: "user" | "model",
 		text: string,
-		diffContent?: string
+		diffContent?: string,
+		relevantFiles?: string[],
+		isRelevantFilesExpanded?: boolean // New optional parameter
 	): void {
 		// Existing logic for managing chat history and preventing duplicates
 		if (this._chatHistory.length > 0) {
@@ -45,16 +126,28 @@ export class ChatHistoryManager {
 			}
 		}
 
-		this._chatHistory.push({
+		const newEntry: HistoryEntry = {
 			role,
 			parts: [{ text }],
 			...(diffContent && { diffContent }),
-		});
+			// The existing logic correctly assigns relevantFiles and sets isRelevantFilesExpanded
+			// based on provided value or defaults it based on relevantFiles.length <= 3 if relevant files are present.
+			...(relevantFiles && {
+				relevantFiles,
+				isRelevantFilesExpanded:
+					isRelevantFilesExpanded !== undefined
+						? isRelevantFilesExpanded
+						: relevantFiles.length <= 3
+						? true
+						: false,
+			}),
+		};
+
+		this._chatHistory.push(newEntry);
 		if (this._chatHistory.length > MAX_HISTORY_ITEMS) {
 			this._chatHistory.splice(0, this._chatHistory.length - MAX_HISTORY_ITEMS);
 		}
-		// Note: Caller (SidebarProvider) should decide when to post updates to webview if needed,
-		// e.g., after an AI response is fully received.
+		this.saveHistoryToStorage();
 	}
 
 	public async clearChat(): Promise<void> {
@@ -62,6 +155,7 @@ export class ChatHistoryManager {
 		this.postMessageToWebview({ type: "chatCleared" });
 		this.postMessageToWebview({ type: "statusUpdate", value: "Chat cleared." });
 		this.postMessageToWebview({ type: "reenableInput" });
+		this.saveHistoryToStorage();
 	}
 
 	public deleteHistoryEntry(index: number): void {
@@ -79,7 +173,39 @@ export class ChatHistoryManager {
 
 		console.log(`Removing message at index ${index} from history.`);
 		this._chatHistory.splice(index, 1);
-		this.restoreChatHistoryToWebview(); // Update webview to reflect the change
+		this.saveHistoryToStorage();
+		this.restoreChatHistoryToWebview();
+	}
+
+	public updateMessageRelevantFilesExpandedState(
+		index: number,
+		isExpanded: boolean
+	): void {
+		if (index < 0 || index >= this._chatHistory.length) {
+			console.warn(
+				`Invalid index for updateMessageRelevantFilesExpandedState: ${index}. History length: ${this._chatHistory.length}`
+			);
+			return;
+		}
+		const entry = this._chatHistory[index];
+		if (entry.relevantFiles) {
+			const oldExpandedState = entry.isRelevantFilesExpanded;
+			entry.isRelevantFilesExpanded = isExpanded;
+			this.saveHistoryToStorage();
+			// Only send update to webview if the state actually changed
+			if (oldExpandedState !== isExpanded) {
+				const message: UpdateRelevantFilesDisplayMessage = {
+					type: "updateRelevantFilesDisplay",
+					messageIndex: index,
+					isExpanded: isExpanded,
+				};
+				this.postMessageToWebview(message);
+			}
+		} else {
+			console.warn(
+				`No relevantFiles found for entry at index ${index}, cannot update expanded state.`
+			);
+		}
 	}
 
 	public async saveChat(): Promise<void> {
@@ -104,6 +230,7 @@ export class ChatHistoryManager {
 						text: entry.parts.map((p) => p.text).join(""),
 						className: entry.role === "user" ? "user-message" : "ai-message",
 						...(entry.diffContent && { diffContent: entry.diffContent }),
+						...(entry.relevantFiles && { relevantFiles: entry.relevantFiles }),
 					})
 				);
 				const contentString = JSON.stringify(saveableHistory, null, 2);
@@ -145,7 +272,7 @@ export class ChatHistoryManager {
 			try {
 				const contentBytes = await vscode.workspace.fs.readFile(fileUri);
 				const contentString = Buffer.from(contentBytes).toString("utf-8");
-				const loadedData = JSON.parse(contentString) as ChatMessage[]; // Cast for type checking
+				const loadedData = JSON.parse(contentString) as ChatMessage[];
 
 				if (
 					Array.isArray(loadedData) &&
@@ -158,7 +285,10 @@ export class ChatHistoryManager {
 								item.sender === "Model" ||
 								item.sender === "System") &&
 							(item.diffContent === undefined ||
-								typeof item.diffContent === "string")
+								typeof item.diffContent === "string") &&
+							(item.relevantFiles === undefined ||
+								(Array.isArray(item.relevantFiles) &&
+									item.relevantFiles.every((f) => typeof f === "string")))
 					)
 				) {
 					this._chatHistory = loadedData.map(
@@ -166,9 +296,16 @@ export class ChatHistoryManager {
 							role: item.sender === "User" ? "user" : "model",
 							parts: [{ text: item.text }],
 							diffContent: item.diffContent,
+							relevantFiles: item.relevantFiles,
+							isRelevantFilesExpanded: item.relevantFiles
+								? item.relevantFiles.length <= 3
+									? true
+									: false
+								: undefined,
 						})
 					);
-					this.restoreChatHistoryToWebview(); // Call this after updating internal history
+					this.restoreChatHistoryToWebview();
+					this.saveHistoryToStorage();
 					this.postMessageToWebview({
 						type: "statusUpdate",
 						value: "Chat loaded successfully.",
@@ -200,6 +337,11 @@ export class ChatHistoryManager {
 			text: entry.parts.map((p) => p.text).join(""),
 			className: entry.role === "user" ? "user-message" : "ai-message",
 			...(entry.diffContent && { diffContent: entry.diffContent }),
+			...(entry.relevantFiles && { relevantFiles: entry.relevantFiles }),
+			...(entry.relevantFiles &&
+				entry.isRelevantFilesExpanded !== undefined && {
+					isRelevantFilesExpanded: entry.isRelevantFilesExpanded,
+				}),
 		}));
 		this.postMessageToWebview({
 			type: "restoreHistory",

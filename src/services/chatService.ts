@@ -23,16 +23,16 @@ export class ChatService {
 					token,
 					userMessage
 				);
-			if (projectContext.startsWith("[Error")) {
-				throw new Error(projectContext);
+			if (projectContext.contextString.startsWith("[Error")) {
+				throw new Error(projectContext.contextString);
 			}
 
 			this.provider.postMessageToWebview({
 				type: "aiResponseStart",
-				value: { modelName },
+				value: { modelName, relevantFiles: projectContext.relevantFiles },
 			});
 
-			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown. If the user wants you to implement code changes, guide them to use the /plan command with an example according to their query.\n\nProject Context:\n${projectContext}\n\nUser Query:\n${userMessage}\n\nAssistant Response:`;
+			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown. If the user wants you to implement code changes, guide them to use the /plan command with an example according to their query.\n\nProject Context:\n${projectContext.contextString}\n\nUser Query:\n${userMessage}\n\nAssistant Response:`;
 
 			let accumulatedResponse = "";
 			finalAiResponseText =
@@ -62,7 +62,11 @@ export class ChatService {
 			} else {
 				this.provider.chatHistoryManager.addHistoryEntry(
 					"model",
-					accumulatedResponse
+					accumulatedResponse,
+					undefined,
+					projectContext.relevantFiles,
+					projectContext.relevantFiles &&
+						projectContext.relevantFiles.length <= 3
 				);
 			}
 		} catch (error: any) {
