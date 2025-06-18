@@ -212,8 +212,18 @@ h2 {
 	line-height: 1.5;
 }
 
+/* --- Auth Button Group --- */
+.auth-button-group {
+	display: flex;
+	gap: 10px;
+	margin-top: 15px;
+	justify-content: center;
+	width: 100%;
+}
+
 /* --- Sign Up Button --- */
-#signUpButton {
+#signUpButton,
+#signInButton {
 	background-color: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
 	border: none;

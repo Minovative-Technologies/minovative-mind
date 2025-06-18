@@ -289,6 +289,16 @@ export async function activate(context: vscode.ExtensionContext) {
 			settingsProvider
 		)
 	);
+	context.subscriptions.push(
+		vscode.commands.registerCommand(
+			"minovative-mind.openSettingsPanel",
+			async () => {
+				vscode.window.showInformationMessage(
+					"Please open the Minovative Mind settings panel to sign in."
+				);
+			}
+		)
+	);
 
 	// Modify Selection Command
 	const modifySelectionDisposable = vscode.commands.registerCommand(

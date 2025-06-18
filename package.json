@@ -74,6 +74,11 @@
 				"command": "minovative-mind.explainSelection",
 				"title": "Generate Explanation",
 				"category": "Minovative Mind"
+			},
+			{
+				"command": "minovative-mind.openSettingsPanel",
+				"title": "Open Minovative Mind Settings Panel",
+				"category": "Minovative Mind"
 			}
 		],
 		"menus": {

@@ -150,6 +150,9 @@ const signUpButton = document.getElementById(
 	"signUpButton"
 ) as HTMLButtonElement | null;
 console.log("[main.ts] signUpButton element:", signUpButton); // ADDED
+const signInButton = document.getElementById(
+	"signInButton"
+) as HTMLButtonElement | null;
 
 // State
 let isApiKeySet = false;
@@ -236,7 +239,8 @@ if (
 	!stagedFilesList ||
 	!confirmCommitButton ||
 	!cancelCommitButton ||
-	!signUpButton // MODIFIED: Added signUpButton to null check
+	!signUpButton || // MODIFIED: Added signUpButton to null check
+	!signInButton
 ) {
 	// END Add new DOM elements to the critical elements null check
 	console.error("Required DOM elements not found!");
@@ -1145,6 +1149,17 @@ if (
 			});
 		});
 	}
+	if (signInButton) {
+		signInButton.addEventListener("click", () => {
+			console.log(
+				"[main.ts] Sign In button clicked. Posting openSettingsPanel message."
+			);
+			vscode.postMessage({
+				type: "openSettingsPanel",
+				panelId: "minovativeMindSidebarViewSettings",
+			});
+		});
+	}
 
 	window.addEventListener("message", (event: MessageEvent) => {
 		const message = event.data;
@@ -1731,6 +1746,17 @@ if (
 					console.warn(
 						"[main.ts] authStateUpdate: signUpButton element not found when trying to update visibility."
 					); // ADDED
+				}
+				if (signInButton) {
+					const newDisplay = isSignedIn ? "none" : "inline-block";
+					signInButton.style.display = newDisplay;
+					console.log(
+						`[main.ts] signInButton display set to: '${newDisplay}' based on isSignedIn: ${isSignedIn}`
+					);
+				} else {
+					console.warn(
+						"[main.ts] authStateUpdate: signInButton element not found when trying to update visibility."
+					);
 				}
 				break;
 			}

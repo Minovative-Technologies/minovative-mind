@@ -39,6 +39,7 @@ export async function handleWebviewMessage(
 		"retryStructuredPlanGeneration", // Allowed as a follow-up
 		"openFile", // Allowed as a direct user interaction
 		"toggleRelevantFilesDisplay", // Allowed as a UI interaction
+		"openSettingsPanel",
 	];
 
 	if (
@@ -210,6 +211,40 @@ export async function handleWebviewMessage(
 			const url = data.url as string;
 			if (url) {
 				await vscode.env.openExternal(vscode.Uri.parse(url, true));
+			}
+			break;
+		}
+
+		case "openSettingsPanel": {
+			const panelId = data.panelId as string;
+			if (panelId) {
+				try {
+					await vscode.commands.executeCommand(
+						"minovative-mind.openSettingsPanel"
+					);
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Please open the Minovative Mind settings panel to sign in.",
+					});
+				} catch (error: any) {
+					console.error(
+						`[MessageHandler] Error opening settings panel ${panelId}:`,
+						error
+					);
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: `Failed to open settings panel: ${
+							error.message || String(error)
+						}`,
+						isError: true,
+					});
+				}
+			} else {
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Error: No panel ID provided for settings panel.",
+					isError: true,
+				});
 			}
 			break;
 		}

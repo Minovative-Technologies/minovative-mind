@@ -10,7 +10,6 @@ import {
 
 export class SettingsProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarViewSettings";
-	private _view?: vscode.WebviewView;
 	private readonly _extensionUri: vscode.Uri;
 	private _sidebarProviderInstance: SidebarProvider; // Instance of the main sidebar
 
@@ -27,7 +26,6 @@ export class SettingsProvider implements vscode.WebviewViewProvider {
 		_context: vscode.WebviewViewResolveContext,
 		_token: vscode.CancellationToken
 	): Promise<void> {
-		this._view = webviewView;
 		console.log(
 			"[SettingsProvider] resolveWebviewView called. Setting webview options."
 		);
@@ -74,7 +72,7 @@ export class SettingsProvider implements vscode.WebviewViewProvider {
 					"[SettingsProvider] Auth state change detected, updating settings webview.",
 					payload
 				);
-				this._view?.webview.postMessage({
+				webviewView.webview.postMessage({
 					command: "authStateUpdated",
 					payload: payload,
 				});
@@ -98,7 +96,7 @@ export class SettingsProvider implements vscode.WebviewViewProvider {
 							"[SettingsProvider] Sending authStateUpdated with payload:",
 							authStatePayload
 						);
-						this._view?.webview.postMessage({
+						webviewView.webview.postMessage({
 							command: "authStateUpdated", // New command for the webview to receive auth state
 							payload: authStatePayload,
 						});
@@ -149,11 +147,5 @@ export class SettingsProvider implements vscode.WebviewViewProvider {
 				}
 			}
 		);
-	}
-
-	public updateView(/* data for update if needed */): void {
-		if (this._view) {
-			// Example: this._view.webview.postMessage({ command: 'someUpdate', ... });
-		}
 	}
 }
