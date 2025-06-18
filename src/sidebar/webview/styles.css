@@ -1325,19 +1325,6 @@ code#failed-json-display {
 	} /* Dot is visible in the middle of the cycle */
 }
 
-/* --- Beta Text Styling --- */
-.beta-text {
-	position: absolute;
-	top: 5px;
-	font-size: small;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	white-space: nowrap;
-	font-family: monospace;
-	font-weight: 600;
-	color: (--vscode-textCodeBlock-background);
-}
-
 /* Styles for the diff container */
 .diff-container {
 	background-color: var(
