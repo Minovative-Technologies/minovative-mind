@@ -8,17 +8,11 @@ export const GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY = "geminiActiveApiKeyIndex";
 export const MODEL_SELECTION_STORAGE_KEY = "geminiSelectedModel";
 
 // DONT CHANGE THESE MODELS (NEVER)
-export const AVAILABLE_GEMINI_MODELS = [
-	"gemini-2.5-pro-preview-06-05",
-	"gemini-2.5-pro-exp-03-25",
-	"gemini-2.5-flash-preview-05-20",
-];
+export const AVAILABLE_GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash"];
 
 export const DEFAULT_MODEL =
 	(AVAILABLE_GEMINI_MODELS.length > 0 &&
-		AVAILABLE_GEMINI_MODELS.find(
-			(model) => model === "gemini-2.5-flash-preview-05-20"
-		)) ||
+		AVAILABLE_GEMINI_MODELS.find((model) => model === "gemini-2.5-flash")) ||
 	AVAILABLE_GEMINI_MODELS[AVAILABLE_GEMINI_MODELS.length - 1];
 // Fallback if AVAILABLE_GEMINI_MODELS is empty.
 // Note: With the current constant definition of AVAILABLE_GEMINI_MODELS,
