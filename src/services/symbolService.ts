@@ -228,3 +228,72 @@ export async function resolveOutgoingCalls(
 		return undefined;
 	}
 }
+
+/**
+ * Retrieves the content of a document at a specific location.
+ * @param location The vscode.Location object specifying the document URI and range.
+ * @param cancellationToken An optional cancellation token to signal cancellation.
+ * @returns A promise that resolves to the string content within the location's range, or undefined if the document cannot be opened or an error occurs.
+ */
+export async function getDocumentContentAtLocation(
+	location: vscode.Location,
+	cancellationToken?: vscode.CancellationToken
+): Promise<string | undefined> {
+	try {
+		const document = await vscode.workspace.openTextDocument(location.uri);
+		if (cancellationToken?.isCancellationRequested) {
+			return undefined;
+		}
+		return document.getText(location.range);
+	} catch (error: any) {
+		console.warn(
+			`Error getting document content at ${location.uri.fsPath}:${
+				location.range.start.line + 1
+			}:${location.range.start.character + 1}: ${error.message}`
+		);
+		return undefined;
+	}
+}
+
+/**
+ * Recursively serializes a vscode.DocumentSymbol and its children into a human-readable string hierarchy.
+ * @param symbol The vscode.DocumentSymbol to serialize.
+ * @param relativePath The relative path of the document containing the symbol. This is included once at the top level.
+ * @param currentDepth The current depth of the recursion, used for indentation.
+ * @param maxDepth The maximum depth to serialize symbols. Children beyond this depth will not be included.
+ * @returns A formatted string representing the symbol hierarchy.
+ */
+export function serializeDocumentSymbolHierarchy(
+	symbol: vscode.DocumentSymbol,
+	relativePath: string,
+	currentDepth: number = 0,
+	maxDepth: number = 2
+): string {
+	let result = "";
+	const indent = "  ".repeat(currentDepth);
+
+	if (currentDepth === 0) {
+		// Only prepend the relative path for the top-level symbol being serialized
+		// This uses the relativePath as a contextual header for the file's symbol hierarchy.
+		result += `${relativePath}\n`;
+	}
+
+	const kindName = vscode.SymbolKind[symbol.kind];
+	const detail = symbol.detail ? ` - ${symbol.detail}` : "";
+	result += `${indent}${symbol.name} (${kindName}) [Line: ${
+		symbol.range.start.line + 1
+	}]${detail}\n`;
+
+	if (currentDepth < maxDepth) {
+		for (const child of symbol.children) {
+			result += serializeDocumentSymbolHierarchy(
+				child,
+				relativePath, // Pass relativePath down, though it's only used at depth 0 for prefixing.
+				currentDepth + 1,
+				maxDepth
+			);
+		}
+	}
+
+	return result;
+}

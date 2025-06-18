@@ -19,15 +19,23 @@ import {
 } from "../context/contextBuilder";
 import * as SymbolService from "./symbolService";
 
+// Constants for symbol processing
+const MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT = 6; // Example depth for symbol hierarchy serialization
+const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 5000; // Truncation limit for referenced type content preview
+
 // 1. Define the ActiveSymbolDetailedInfo interface
 export interface ActiveSymbolDetailedInfo {
 	name?: string;
 	kind?: string;
+	detail?: string; // Added optional detail property
+	fullRange?: vscode.Range; // NEW
 	definition?: vscode.Location | vscode.Location[];
 	implementations?: vscode.Location[];
 	typeDefinition?: vscode.Location | vscode.Location[];
 	incomingCalls?: vscode.CallHierarchyIncomingCall[];
 	outgoingCalls?: vscode.CallHierarchyOutgoingCall[];
+	childrenHierarchy?: any; // NEW (e.g., a serialized tree structure of children)
+	referencedTypeDefinitions?: { filePath: string; content: string }[]; // NEW
 }
 
 export class ContextService {
@@ -96,7 +104,30 @@ export class ContextService {
 							activeSymbolDetailedInfo = {
 								name: symbolAtCursor.name,
 								kind: vscode.SymbolKind[symbolAtCursor.kind], // Convert enum to string
+								fullRange: symbolAtCursor.range, // Modification 1
 							};
+
+							// Assign symbolAtCursor.detail if it exists
+							if (symbolAtCursor.detail) {
+								activeSymbolDetailedInfo.detail = symbolAtCursor.detail;
+							}
+
+							// Modification 2: Populate childrenHierarchy if symbol has children
+							const relativePathOfTheActiveFile = path
+								.relative(rootFolder.uri.fsPath, activeFileUri.fsPath)
+								.replace(/\\/g, "/");
+							if (
+								symbolAtCursor.children &&
+								symbolAtCursor.children.length > 0
+							) {
+								activeSymbolDetailedInfo.childrenHierarchy =
+									SymbolService.serializeDocumentSymbolHierarchy(
+										symbolAtCursor,
+										relativePathOfTheActiveFile,
+										0, // initial depth
+										MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT
+									);
+							}
 
 							// 2b.vi. Asynchronously call SymbolService functions, wrapping each in a try-catch
 							await Promise.allSettled([
@@ -139,6 +170,75 @@ export class ContextService {
 									} catch (e: any) {
 										console.warn(
 											`[ContextService] Failed to get type definition for ${symbolAtCursor.name}: ${e.message}`
+										);
+									}
+								})(),
+								// Modification 3: Add logic for referenced type definitions
+								(async () => {
+									try {
+										if (activeSymbolDetailedInfo!.typeDefinition) {
+											const locations = Array.isArray(
+												activeSymbolDetailedInfo!.typeDefinition
+											)
+												? activeSymbolDetailedInfo!.typeDefinition
+												: [activeSymbolDetailedInfo!.typeDefinition];
+
+											const referencedTypeContents: {
+												filePath: string;
+												content: string;
+											}[] = [];
+											const processedFilePaths = new Set<string>(); // To ensure uniqueness of files
+
+											await BPromise.map(
+												locations,
+												async (location: vscode.Location) => {
+													if (cancellationToken?.isCancellationRequested) {
+														return;
+													}
+													const relativeFilePath = path
+														.relative(
+															rootFolder.uri.fsPath,
+															location.uri.fsPath
+														)
+														.replace(/\\/g, "/");
+
+													// Only process each unique file path once
+													if (processedFilePaths.has(relativeFilePath)) {
+														return;
+													}
+													processedFilePaths.add(relativeFilePath);
+
+													const content =
+														await SymbolService.getDocumentContentAtLocation(
+															location,
+															cancellationToken
+														);
+													if (content) {
+														let truncatedContent = content;
+														if (
+															truncatedContent.length >
+															MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT
+														) {
+															truncatedContent =
+																truncatedContent.substring(
+																	0,
+																	MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT
+																) + "\n... (content truncated)";
+														}
+														referencedTypeContents.push({
+															filePath: relativeFilePath,
+															content: truncatedContent,
+														});
+													}
+												},
+												{ concurrency: 5 } // Limit concurrent file reads
+											);
+											activeSymbolDetailedInfo!.referencedTypeDefinitions =
+												referencedTypeContents;
+										}
+									} catch (e: any) {
+										console.warn(
+											`[ContextService] Failed to get referenced type definitions for ${symbolAtCursor.name}: ${e.message}`
 										);
 									}
 								})(),

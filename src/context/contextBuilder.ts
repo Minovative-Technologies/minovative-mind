@@ -5,6 +5,10 @@ import { createAsciiTree } from "../utilities/treeFormatter";
 import { FileChangeEntry } from "../types/workflow";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 
+// Constants for context building
+const MAX_REFERENCED_TYPE_CONTENT_CHARS = 5000; // Adjust for desired content length
+const MAX_REFERENCED_TYPES_TO_INCLUDE = 10; // To limit the number of definitions included
+
 // Configuration for context building - Adjusted for large context windows
 interface ContextConfig {
 	maxFileLength: number; // Maximum characters per file content
@@ -19,8 +23,8 @@ export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
 	maxFileLength: 5 * 1024 * 1024, // Approx 5MB in characters
 	maxTotalLength: 5 * 1024 * 1024, // Approx 5MB in characters
 	maxSymbolEntriesPerFile: 10, // Default to 10 symbols per file
-	maxTotalSymbolChars: 20000, // Default to 20KB for the entire symbols section
-	maxActiveSymbolDetailChars: 20000,
+	maxTotalSymbolChars: 100000, // Default to 100KB for the entire symbols section
+	maxActiveSymbolDetailChars: 100000, // Default to 100KB
 };
 
 /**
@@ -201,9 +205,12 @@ export async function buildContextString(
 						break;
 					}
 
+					const symbolDetail = symbol.detail
+						? ` (Detail: ${symbol.detail})`
+						: "";
 					const symbolLine = `- [${vscode.SymbolKind[symbol.kind]}] ${
 						symbol.name
-					} (Line ${symbol.range.start.line + 1})\n`;
+					} (Line ${symbol.range.start.line + 1})${symbolDetail}\n`;
 
 					if (
 						currentSymbolSectionLength +
@@ -284,7 +291,6 @@ export async function buildContextString(
 					: undefined
 				: location;
 			if (!actualLocation || !actualLocation.uri) {
-				// MODIFICATION HERE
 				return "N/A";
 			}
 
@@ -314,7 +320,6 @@ export async function buildContextString(
 				.map((call) => {
 					// Use call.from.uri and the first range from call.fromRanges
 					if (!call.from || !call.from.uri) {
-						// MODIFICATION HERE
 						return `${call.from?.name || "Unknown"} (N/A:URI_Missing)`;
 					}
 					const relativePath = path
@@ -324,7 +329,10 @@ export async function buildContextString(
 						call.fromRanges.length > 0
 							? call.fromRanges[0].start.line + 1
 							: "N/A";
-					return `${call.from.name} (${relativePath}:${lineNumber})`;
+					const fromDetail = call.from.detail
+						? ` (Detail: ${call.from.detail})`
+						: "";
+					return `${call.from.name} (${relativePath}:${lineNumber})${fromDetail}`;
 				})
 				.join("\n  - ");
 			const more = calls.length > 5 ? `\n  ... (${calls.length - 5} more)` : "";
@@ -342,15 +350,15 @@ export async function buildContextString(
 				.map((call) => {
 					// Use call.to.uri and call.to.range
 					if (!call.to || !call.to.uri) {
-						// MODIFICATION HERE
 						return `${call.to?.name || "Unknown"} (N/A:URI_Missing)`;
 					}
 					const relativePath = path
 						.relative(workspaceRoot.fsPath, call.to.uri.fsPath)
 						.replace(/\\/g, "/");
+					const toDetail = call.to.detail ? ` (Detail: ${call.to.detail})` : "";
 					return `${call.to.name} (${relativePath}:${
 						call.to.range.start.line + 1
-					})`;
+					})${toDetail}`;
 				})
 				.join("\n  - ");
 			const more = calls.length > 5 ? `\n  ... (${calls.length - 5} more)` : "";
@@ -366,6 +374,50 @@ export async function buildContextString(
 		activeSymbolDetailSection += `  Implementations: ${formatLocations(
 			activeSymbolDetailedInfo.implementations
 		)}\n`;
+		activeSymbolDetailSection += `  Detail: ${
+			activeSymbolDetailedInfo.detail || "N/A"
+		}\n`;
+
+		// 1. Add fullRange
+		if (activeSymbolDetailedInfo.fullRange) {
+			activeSymbolDetailSection += `  Full Range: Lines ${
+				activeSymbolDetailedInfo.fullRange.start.line + 1
+			}-${activeSymbolDetailedInfo.fullRange.end.line + 1}\n`;
+		}
+
+		// 2. Add childrenHierarchy
+		if (activeSymbolDetailedInfo.childrenHierarchy) {
+			activeSymbolDetailSection += `  Children Hierarchy:\n${activeSymbolDetailedInfo.childrenHierarchy}\n`;
+		}
+
+		// 3. Add referencedTypeDefinitions
+		if (
+			activeSymbolDetailedInfo.referencedTypeDefinitions &&
+			activeSymbolDetailedInfo.referencedTypeDefinitions.length > 0
+		) {
+			activeSymbolDetailSection += `  Referenced Type Definitions:\n`;
+			let count = 0;
+			for (const def of activeSymbolDetailedInfo.referencedTypeDefinitions) {
+				if (count >= MAX_REFERENCED_TYPES_TO_INCLUDE) {
+					activeSymbolDetailSection += `    ... (${
+						activeSymbolDetailedInfo.referencedTypeDefinitions.length - count
+					} more referenced types omitted)\n`;
+					break;
+				}
+
+				const relativePath = def.filePath;
+				let contentPreview = def.content;
+				if (contentPreview.length > MAX_REFERENCED_TYPE_CONTENT_CHARS) {
+					contentPreview =
+						contentPreview.substring(0, MAX_REFERENCED_TYPE_CONTENT_CHARS) +
+						"\n... (content truncated)";
+				}
+				activeSymbolDetailSection += `    File: ${relativePath}\n`;
+				activeSymbolDetailSection += `    Content:\n\`\`\`\n${contentPreview}\n\`\`\`\n`;
+				count++;
+			}
+		}
+
 		activeSymbolDetailSection += `  Incoming Calls:\n${formatIncomingCalls(
 			activeSymbolDetailedInfo.incomingCalls
 		)}\n`;

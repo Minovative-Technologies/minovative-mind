@@ -141,7 +141,7 @@ export async function selectRelevantFilesAI(
 	}
 
 	if (diagnostics && diagnostics.trim().length > 0) {
-		contextPrompt += `\nRelevant Diagnostics:\n${diagnostics}\n`;
+		contextPrompt += `\nRelevant Diagnostics - Fix all Diagnostics:\n${diagnostics}\n`;
 	}
 
 	if (chatHistory.length > 0) {
