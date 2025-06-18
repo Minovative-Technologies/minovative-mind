@@ -9,6 +9,8 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - Direct Interaction: Users can chat directly with the AI assistant via a dedicated sidebar view.
 - Contextual Awareness: The AI intelligently understands the active file, selected code, current workspace, and relevant project files, providing highly contextual responses to queries.
 - General Q&A: Supports general programming questions, debugging help, and conceptual inquiries.
+- Displays relevant file paths within AI chat responses, providing interactive elements to collapse/expand the file list and open files directly.
+- Enables HTML rendering in MarkdownIt parser for richer content and updates the 'Generating...' loading message to include an animated ellipsis effect.
 
 ### Contextual Code Explanation
 
@@ -24,6 +26,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - **Symbol-Aware Refactoring**: Leverages VS Code's symbol information (functions, classes, variables, references, definitions, and types) to enable more precise, comprehensive, and robust refactorings and modifications across your entire project.
 - Modular Code Generation: The AI is explicitly instructed to promote modular code generation principles, encouraging maintainable and scalable solutions
 - **Diagnostic-Aware Modifications**: For both targeted selections and whole-file operations, the AI leverages relevant VS Code diagnostics (warnings, errors) to inform its custom modifications, leading to more accurate and problem-solving suggestions.
+- AI persona updated to focus on generating production-ready, robust, and secure code.
 
 ## Advanced Workflow & Automation
 
@@ -42,7 +45,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 - User Confirmation for Commands: For security, users are prompted with a confirmation dialog before any `run_command` step is executed, allowing them to “Allow Command” or “Skip Command”.
 - Interactive Execution Feedback: Provides real-time progress updates in `VS Code` notifications and the sidebar chat. Includes a simulated “typing” animation for AI-generated content in the editor.
-- **File Diffs in Chat**: Displays real-time file changes (diffs) directly within the chat interface for `create_file` and `modify_file` plan steps.
+- **File Diffs in Chat**: Displays real-time file changes (diffs) directly within the chat interface for `create_file` and `modify_file` plan steps, with enhanced execution messages indicating diff availability.
 - Cancellation: Users can cancel an ongoing plan execution at any time via the `VS Code` progress notification.
 - Retry Mechanism: If the AI fails to generate a valid `JSON` plan due to parsing errors, a “Retry” option is provided in the sidebar to re-attempt generation.
 - **Dynamic Context Awareness:** The AI maintains a robust and adaptive understanding of ongoing project changes, including newly created files and recent modifications, throughout a multi-step workflow. This ensures that subsequent planned actions are highly coherent and build accurately upon previous steps, leading to more reliable and contextually aware solutions that reflect the evolving state of your codebase.
@@ -59,7 +62,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 ### User Accounts & Authentication
 
-- **Seamless Integration:** Users can effortlessly sign in for a Minovative Mind account directly within the VS Code sidebar.
+- **Seamless Integration:** A dedicated 'Sign In' button triggers a command that guides users to the Minovative Mind settings panel, allowing them to effortlessly authenticate their Minovative Mind account directly within VS Code.
 - **Secure Sessions:** The extension securely manages user authentication sessions, enabling personalized feature access and preferences.
 
 ### Flexible Subscription Tiers
@@ -98,7 +101,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 ### Smart Context Awareness
 
-- **Comprehensive Understanding**: The AI intelligently considers the active file content, selected code, relevant diagnostics (warnings/errors) from VS Code, chat history, the overall project structure, detailed symbol information (definitions, references), and dependency graph analysis, to provide highly relevant and accurate responses.
+- **Comprehensive Understanding**: The AI intelligently considers the active file content, selected code, relevant diagnostics (warnings/errors) from VS Code, chat history, the overall project structure, enhanced detailed symbol information (definitions, references), and TypeScript-aware dependency graph analysis (respecting `tsconfig.json`/`jsconfig.json` for accurate module resolution), to provide highly relevant and accurate responses.
 
 ### Built-in Troubleshooting Guidance
 
@@ -112,7 +115,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 ### Chat History Management
 
 - Persistence: Users can save their entire chat history, including displayed file diffs, to a `JSON` file on their local machine for later review or to preserve important discussions/AI-generated content.
-- Restoration: Previously saved chat histories can be loaded, providing the AI with context from past conversations for more coherent follow-ups across sessions.
+- Restoration: Previously saved chat histories can be loaded, providing the AI with context from past conversations for more coherent follow-ups across sessions. Chat history also automatically restores to the webview following actions like commit confirmation, cancellation, and plan execution updates.
 - Clear Chat: Option to clear the current conversation.
 
 ### Copy Message Feature

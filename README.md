@@ -6,8 +6,7 @@ Integrates Google Gemini directly into VS Code, providing an AI-powered assistan
 
 [Minovative Mind VS Code Extension]
 
-- [🚧 Not Fully Launched Yet]
-- [🔑 Getting Started: Setting Up Your Gemini API Key]
+- [ Getting Started: Setting Up Your Gemini API Key]
 - [👤 Account & Subscription Management]
   - [User Accounts & Authentication]
   - [Flexible Subscription Tiers]
@@ -22,20 +21,13 @@ Integrates Google Gemini directly into VS Code, providing an AI-powered assistan
 - [🔒 Terms of Use]
 - [💬 Feedback & Support]
 
-## 🚧 Not Fully Launched Yet
-
-> Sign in and sign up are currently not allowed as we prepare for our full launch. If you’ve discovered this extension already—awesome! You’re one of the first to stumble upon our silent, early access release.
-> We’re hard at work behind the scenes to deliver something truly groundbreaking. Once we go live, this tool won’t just enhance your workflow—it’ll redefine how you build——verything. Stay tuned. 👀
-
-- > For now, enjoy the free tier features and get a taste of what is to come - [Minovative Mind — Feature Comparison]
-
 ## 🔑 Getting Started: Setting Up Your Gemini API Key
 
 Minovative Mind requires a Google Gemini API key to function. To access advanced features, you will also need to sign in with a Premium subscription.
 
-1. **Obtain a Key:** If you don't have one, generate a Gemini API key from the [Google AI Studio](https://aistudio.google.com/app/apikey) or Google Cloud Console.
-2. **Open Minovative Mind Sidebar:** Click on the "Minovative Mind" icon in the Activity Bar.
-3. **Add Key:** In the sidebar, locate the API Key input field, paste your Gemini API key, and click "Add Key".
+1.  **Obtain a Key:** If you don't have one, generate a Gemini API key from the [Google AI Studio](https://aistudio.google.com/app/apikey) or Google Cloud Console.
+2.  **Open Minovative Mind Sidebar:** Click on the "Minovative Mind" icon in the Activity Bar.
+3.  **Add Key:** In the sidebar, locate the API Key input field, paste your Gemini API key, and click "Add Key".
 
 **Security Note:** Your API keys are securely stored in VS Code's built-in secret storage and are never exposed or sent outside of your local environment except directly to Google's Gemini API endpoints.
 
@@ -43,7 +35,7 @@ Minovative Mind requires a Google Gemini API key to function. To access advanced
 
 ### User Accounts & Authentication
 
-Users can now sign in directly within the VS Code sidebar, with secure session management ensuring a persistent and safe user experience.
+Users can now sign in directly within the VS Code sidebar, with a dedicated 'Sign In' button and a command guiding them to the Minovative Mind settings panel for authentication. Secure session management ensures a persistent and safe user experience.
 
 ### Flexible Subscription Tiers
 
@@ -87,6 +79,7 @@ Minovative Mind is designed to streamline your coding tasks and boost productivi
   - Engage directly with the AI assistant in a dedicated sidebar.
   - Benefit from contextual awareness, where the AI understands your active file, selected code, workspace, and relevant project files.
   - Ask general programming questions, debug issues, or inquire about concepts.
+  - Now displays relevant file paths within chat responses, allowing users to collapse/expand the file list and open files directly.
 
 - **Contextual Code Explanation:**
 
@@ -96,6 +89,7 @@ Minovative Mind is designed to streamline your coding tasks and boost productivi
 
   - Select code and provide free-form instructions (e.g., "Refactor this function," "Add input validation") (Premium Tier Feature).
   - Trigger via keyboard shortcut (`Ctrl+M` / `Cmd+M`) or context menu (`Minovative Mind > Custom Modifications`) (Premium Tier Feature).
+  - AI persona updated to focus on generating production-ready, robust, and secure code.
   - **Automated Documentation (`/docs`):** Type `/docs` for selected code to automatically generate and insert appropriate documentation (e.g., JSDoc, Python docstrings).
   - **Automated Code Fixing (`/fix`):** Type `/fix` to prompt the AI to analyze selected code (including VS Code diagnostics like errors/warnings) and propose/apply fixes directly in the editor (Premium Tier Feature).
 
@@ -104,6 +98,7 @@ Minovative Mind is designed to streamline your coding tasks and boost productivi
   - Describe complex development tasks (e.g., “Implement user authentication”) to the AI, and it will break them down into actionable, step-by-step plans.
   - **User-Controlled Two-Stage Process:** Review a detailed textual plan in the sidebar before confirming for the AI to execute it.
   - **Diverse Actions:** Plans can include creating directories, creating files (with AI-generated content), modifying existing files, and running shell commands (with user confirmation for security). It now handles non-existent files by automatically creating them and populating their initial content using the provided 'modification_prompt'.
+  - Enhances real-time execution messages to indicate diff availability for file operations.
 
 - **Automated Git Commit Messages:**
 
@@ -116,7 +111,7 @@ Minovative Mind is designed to streamline your coding tasks and boost productivi
   - Select your preferred Gemini AI models (e.g., `gemini-2.5-pro`, `gemini-2.5-flash`) for optimized performance and cost.
 
 - **Smart Context Awareness:**
-  - The AI intelligently identifies and leverages the most relevant files from your project, selected code, diagnostics, and chat history for highly accurate and idiomatic responses. You can also configure inclusions/exclusions.
+  - The AI intelligently identifies and leverages the most relevant files from your project, including overall project structure, TypeScript-aware module resolution for enhanced dependency parsing, detailed symbol information, selected code, diagnostics, and chat history for highly accurate and idiomatic responses. You can also configure inclusions/exclusions.
 
 ## 🧑‍💻 Basic Usage Examples
 
@@ -124,29 +119,29 @@ Here are a few quick ways to start using Minovative Mind:
 
 - **Chat with AI:**
 
-  1. Open the Minovative Mind sidebar.
-  2. Type your query in the chat input field and press Enter. The AI will respond, leveraging your project context.
+  1.  Open the Minovative Mind sidebar.
+  2.  Type your query in the chat input field and press Enter. The AI will respond, leveraging your project context.
 
 - **Explain Selected Code:**
 
-  1. Select a code snippet in your active editor.
-  2. Right-click on the selection.
-  3. Choose `Minovative Mind` > `Generate Explanation`.
-  4. A modal dialog will appear with the AI's explanation.
+  1.  Select a code snippet in your active editor.
+  2.  Right-click on the selection.
+  3.  Choose `Minovative Mind` > `Generate Explanation`.
+  4.  A modal dialog will appear with the AI's explanation.
 
 - **Custom Modifications (e.g., /docs, /fix, Refactor): (Note: /fix and custom refactoring are Premium Tier features.)**
 
-  1. Select the code you want to modify or apply an action to.
-  2. Press `Ctrl+M` (Windows/Linux) or `Cmd+M` (macOS) to activate the command.
-  3. In the quick input box:
-     - Type `/docs` to generate documentation for the selected code.
-     - Type `/fix` to analyze and fix the selected code.
-     - Type a custom prompt (e.g., "refactor this function to be more concise").
+  1.  Select the code you want to modify or apply an action to.
+  2.  Press `Ctrl+M` (Windows/Linux) or `Cmd+M` (macOS) to activate the command.
+  3.  In the quick input box:
+      - Type `/docs` to generate documentation for the selected code.
+      - Type `/fix` to analyze and fix the selected code.
+      - Type a custom prompt (e.g., "refactor this function to be more concise").
 
 - **Automated Git Commit:**
-  1. Ensure you have staged changes in your Git repository.
-  2. Open the Minovative Mind sidebar chat.
-  3. Type `/commit` and press Enter. Minovative Mind will stage changes, generate a conventional commit message, and commit them.
+  1.  Ensure you have staged changes in your Git repository.
+  2.  Open the Minovative Mind sidebar chat.
+  3.  Type `/commit` and press Enter. Minovative Mind will stage changes, generate a conventional commit message, and commit them.
 
 ## 📚 Comprehensive Documentation
 
