@@ -6,7 +6,8 @@ Integrates Google Gemini directly into VS Code, providing an AI-powered assistan
 
 [Minovative Mind VS Code Extension]
 
-- [ Getting Started: Setting Up Your Gemini API Key]
+- [🚧 Not Fully Launched Yet]
+- [🔑 Getting Started: Setting Up Your Gemini API Key]
 - [👤 Account & Subscription Management]
   - [User Accounts & Authentication]
   - [Flexible Subscription Tiers]
@@ -20,6 +21,13 @@ Integrates Google Gemini directly into VS Code, providing an AI-powered assistan
 - [🔒 Privacy Policy]
 - [🔒 Terms of Use]
 - [💬 Feedback & Support]
+
+## 🚧 Not Fully Launched Yet
+
+> Sign in and sign up are currently not allowed as we prepare for our full launch. If you’ve discovered this extension already—awesome! You’re one of the first to stumble upon our silent, early access release.
+> We’re hard at work behind the scenes to deliver something truly groundbreaking. Once we go live, this tool won’t just enhance your workflow—it’ll redefine how you build——verything. Stay tuned. 👀
+
+- > For now, enjoy the free tier features and get a taste of what is to come - [Minovative Mind — Feature Comparison]
 
 ## 🔑 Getting Started: Setting Up Your Gemini API Key
 
