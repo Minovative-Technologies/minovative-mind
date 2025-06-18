@@ -463,8 +463,7 @@ export class PlanService {
 
 			await this._executePlan(
 				executablePlan,
-				planContext.initialApiKey,
-				planContext.modelName,
+				planContext,
 				token ?? new vscode.CancellationTokenSource().token
 			);
 		} catch (error: any) {
@@ -487,8 +486,7 @@ export class PlanService {
 
 	private async _executePlan(
 		plan: ExecutionPlan,
-		initialApiKey: string,
-		modelName: string,
+		planContext: sidebarTypes.PlanGenerationContext,
 		operationToken: vscode.CancellationToken
 	): Promise<void> {
 		this.provider.currentExecutionOutcome = undefined;
@@ -533,6 +531,7 @@ export class PlanService {
 						executionOk = await this._executePlanSteps(
 							plan.steps!,
 							rootUri,
+							planContext,
 							progress,
 							combinedToken
 						);
@@ -575,6 +574,7 @@ export class PlanService {
 	private async _executePlanSteps(
 		steps: PlanStep[],
 		rootUri: vscode.Uri,
+		planContext: sidebarTypes.PlanGenerationContext,
 		progress: vscode.Progress<{ message?: string; increment?: number }>,
 		combinedToken: vscode.CancellationToken
 	): Promise<boolean> {
@@ -615,7 +615,23 @@ export class PlanService {
 
 					let content = step.content;
 					if (step.generate_prompt) {
-						const generationPrompt = `You are an expert software developer. Your ONLY task is to generate the full content for a file. Do NOT include markdown code block formatting. Provide only the file content.\nFile Path:\n${step.path}\n\nInstructions:\n${step.generate_prompt}\n\nComplete File Content:`;
+						const generationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the full file content. Do NOT include markdown code block formatting. Provide only the file content.\n\nThe generated code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.\n\nFile Path:\n${
+							step.path
+						}\n\nInstructions:\n${
+							step.generate_prompt
+						}\n\n--- Broader Project Context ---\n${
+							planContext.projectContext
+						}\n--- End Broader Project Context ---\n\n${
+							planContext.editorContext
+								? `--- Editor Context ---\n${JSON.stringify(
+										planContext.editorContext,
+										null,
+										2
+								  )}\n--- End Editor Context ---\n\n`
+								: ""
+						}${this._formatChatHistoryForPrompt(
+							planContext.chatHistory
+						)}\n\nComplete File Content:`;
 						content = await this.provider.aiRequestService.generateWithRetry(
 							generationPrompt,
 							settingsManager.getSelectedModelName(),
@@ -635,7 +651,7 @@ export class PlanService {
 					this._postChatUpdateForPlanExecution({
 						type: "appendRealtimeModelMessage",
 						value: {
-							text: `Step ${stepNumber} OK: Created file \`${step.path}\``,
+							text: `Step ${stepNumber} OK: Created file \`${step.path}\` (See diff below)`,
 						},
 						diffContent: formattedDiff,
 					});
@@ -651,7 +667,23 @@ export class PlanService {
 					const existingContent = Buffer.from(
 						await vscode.workspace.fs.readFile(fileUri)
 					).toString("utf-8");
-					const modificationPrompt = `You are an expert software developer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.\n\nFile Path:\n${step.path}\n\nModification Instructions:\n${step.modification_prompt}\n--- Existing File Content ---\n${existingContent}\n--- End Existing File Content ---\n\nComplete Modified File Content:`;
+					const modificationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.\n\nThe modified code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.\n\nFile Path:\n${
+						step.path
+					}\n\nModification Instructions:\n${
+						step.modification_prompt
+					}\n\n--- Broader Project Context ---\n${
+						planContext.projectContext
+					}\n--- End Broader Project Context ---\n\n${
+						planContext.editorContext
+							? `--- Editor Context ---\n${JSON.stringify(
+									planContext.editorContext,
+									null,
+									2
+							  )}\n--- End Editor Context ---\n\n`
+							: ""
+					}${this._formatChatHistoryForPrompt(
+						planContext.chatHistory
+					)}\n\n--- Existing File Content ---\n${existingContent}\n--- End Existing File Content ---\n\nComplete Modified File Content:`;
 
 					let modifiedContent =
 						await this.provider.aiRequestService.generateWithRetry(
@@ -688,7 +720,7 @@ export class PlanService {
 						this._postChatUpdateForPlanExecution({
 							type: "appendRealtimeModelMessage",
 							value: {
-								text: `Step ${stepNumber} OK: Modified file \`${step.path}\``,
+								text: `Step ${stepNumber} OK: Modified file \`${step.path}\` (See diff below)`,
 							},
 							diffContent: formattedDiff,
 						});
@@ -785,7 +817,7 @@ export class PlanService {
 			message.value.text,
 			message.diffContent
 		);
-		this.provider.postMessageToWebview(message);
+		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 	}
 
 	private _formatRecentChangesForPrompt(changes: FileChangeEntry[]): string {
@@ -805,6 +837,22 @@ export class PlanService {
 			)
 			.join("\n");
 		return formattedString + "--- End Recent Project Changes ---\n";
+	}
+
+	private _formatChatHistoryForPrompt(
+		chatHistory: sidebarTypes.HistoryEntry[] | undefined
+	): string {
+		if (!chatHistory || chatHistory.length === 0) {
+			return "";
+		}
+		return `\n--- Recent Chat History (for additional context on user's train of thought and previous conversations with a AI model) ---\n${chatHistory
+			.map(
+				(entry) =>
+					`Role: ${entry.role}\nContent:\n${entry.parts
+						.map((p) => p.text)
+						.join("\n")}`
+			)
+			.join("\n---\n")}\n--- End Recent Chat History ---`;
 	}
 
 	private async _showPlanCompletionNotification(
@@ -830,6 +878,7 @@ export class PlanService {
 		}
 
 		this.provider.chatHistoryManager.addHistoryEntry("model", message);
+		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 
 		if (this.provider.isSidebarVisible === true) {
 			this.provider.postMessageToWebview({

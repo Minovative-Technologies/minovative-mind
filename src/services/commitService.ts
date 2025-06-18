@@ -157,11 +157,13 @@ export class CommitService {
 			"model",
 			`Commit confirmed and executed:\n---\n${commitMessage}\n---\nCheck TERMINAL for result.`
 		);
+		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		this.provider.pendingCommitReviewData = null;
 		this.provider.postMessageToWebview({ type: "aiResponseEnd" });
 	}
 
 	public cancelCommit(): void {
+		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		this.provider.pendingCommitReviewData = null;
 		this.provider.chatHistoryManager.addHistoryEntry(
 			"model",
