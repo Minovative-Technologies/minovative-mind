@@ -224,7 +224,7 @@ if (discordButton) {
 		vscode.postMessage({
 			type: "openUrl",
 			command: "openUrl",
-			url: "https://discord.gg/VYkd3McEXe",
+			url: "https://discord.com/channels/1384794415939194921/1384830913460048032",
 		});
 	});
 } else {
