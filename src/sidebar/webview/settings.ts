@@ -53,6 +53,9 @@ const apiUsageButton = document.getElementById(
 const minovativeMindWebsiteButton = document.getElementById(
 	"minovativeMindWebsiteButton"
 ) as HTMLButtonElement;
+const discordButton = document.getElementById(
+	"discordButton"
+) as HTMLButtonElement;
 
 // Removed all Firebase related variables (fbApp, fbAuth, fbDb, currentFirebaseUser, unsubscribeSubscription).
 
@@ -214,6 +217,18 @@ if (minovativeMindWebsiteButton) {
 	});
 } else {
 	console.warn("Minovative Mind Website button not found.");
+}
+
+if (discordButton) {
+	discordButton.addEventListener("click", () => {
+		vscode.postMessage({
+			type: "openUrl",
+			command: "openUrl",
+			url: "https://discord.gg/VYkd3McEXe",
+		});
+	});
+} else {
+	console.warn("Discord button not found.");
 }
 
 // --- Handle messages from the VS Code extension ---
