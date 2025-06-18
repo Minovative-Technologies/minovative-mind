@@ -42,7 +42,7 @@ interface VsCodeApi {
 declare const acquireVsCodeApi: () => VsCodeApi;
 const vscode = acquireVsCodeApi();
 
-const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
+const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
 
 // --- Global variables for streaming responses ---
 let currentAiMessageContentElement: HTMLSpanElement | null = null;
@@ -850,7 +850,12 @@ if (
 				!currentAiMessageContentElement &&
 				!chatContainer?.querySelector(".loading-message")
 			) {
-				appendMessage("Model", "Generating...", "loading-message", false); // Loading messages are not history
+				appendMessage(
+					"Model",
+					'<span class="loading-text">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>',
+					"loading-message",
+					false
+				); // Loading messages are not history
 			}
 		} else {
 			updateEmptyChatPlaceholderVisibility(); // Call when isLoading becomes false
