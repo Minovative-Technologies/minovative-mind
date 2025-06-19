@@ -2,6 +2,16 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.2.6] - 2025-06-19
+
+- **feat(ui/settings): Implement responsive grid for Useful Links**
+  Applies a new CSS Grid-based layout to the 'Useful Links' section in the settings webview. This change replaces the previous generic button group with a responsive grid, ensuring buttons are well-organized and adapt efficiently to different screen sizes.
+
+## [1.2.5] - 2025-06-18
+
+- **fix: Improve AI plan parsing resilience and escape backticks in git commands**
+  This commit enhances the reliability of the AI plan generation and parsing process by introducing a retry mechanism with feedback to the AI for failed JSON parsing attempts. It also fixes an issue where backticks in git commit messages could cause shell interpretation errors by ensuring they are properly escaped.
+
 ## [1.2.4] - 2025-06-18
 
 ## [1.2.3] - 2025-06-18
