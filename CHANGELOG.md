@@ -2,6 +2,13 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.2.7] - 2025-06-19
+
+- **feat(plan): Implement robust step execution with auto-retries and user intervention**
+  - Introduce automatic retry mechanism for transient errors during plan step execution (e.g., API rate limits, network issues, 5xx responses).
+  - Add user-prompted intervention for failed steps, allowing users to retry, skip, or cancel the plan.
+  - Enhance the reliability and user experience by making plan execution more resilient to temporary failures and providing granular control over problematic steps.
+
 ## [1.2.6] - 2025-06-19
 
 - **feat(ui/settings): Implement responsive grid for Useful Links**
