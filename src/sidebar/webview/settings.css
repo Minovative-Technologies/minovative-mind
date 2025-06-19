@@ -144,6 +144,30 @@ button:active {
 	flex-grow: 1;
 }
 
+/* New styles for "Useful Links" button grid */
+.useful-links-grid {
+	display: grid;
+	/* Responsive columns: auto-fit creates as many columns as fit.
+       minmax(min(100%, 150px), 1fr) ensures each column is at least 150px wide (or 100% if container is smaller),
+       and expands to fill available space equally. */
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+	gap: var(
+		--element-spacing
+	); /* Use existing spacing variable for consistency */
+	/* Inherits margin-top, margin-bottom, width: 100% from .button-group */
+}
+
+/* Ensure buttons within the grid fill their cell and handle text alignment */
+.useful-links-grid button {
+	width: 100%; /* Ensure button fills its grid cell horizontally */
+	height: auto; /* Allow height to adjust based on content */
+	display: flex; /* Enable flexbox for icon-text alignment */
+	justify-content: center; /* Center content horizontally */
+	align-items: center; /* Center content vertically */
+	gap: 5px; /* Space between icon and text */
+	/* text-align: center; is no longer needed as flexbox handles alignment */
+}
+
 /* Styling for authentication forms container */
 #auth-forms {
 	overflow-x: auto;
