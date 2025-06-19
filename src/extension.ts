@@ -261,7 +261,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// --- Sidebar Setup ---
 	const sidebarProvider = new SidebarProvider(context.extensionUri, context);
 
-	// PROMPT MODIFICATION: Call initializeFirebase before sidebarProvider.initialize()
+	// PROMPT Call initializeFirebase before sidebarProvider.initialize()
 	// to proactively load user data and link the callback.
 	await initializeFirebase(
 		sidebarProvider.updateUserAuthAndTierFromFirebase.bind(sidebarProvider)
@@ -324,20 +324,78 @@ export async function activate(context: vscode.ExtensionContext) {
 				documentUri
 			);
 
-			const instructionsInput = await vscode.window.showInputBox({
-				prompt:
-					"Enter instructions (e.g., /fix, /docs, or custom modification):",
-				placeHolder: "Type /fix, /docs or custom prompt",
-				title: "Minovative Mind: Modify Code",
-			});
+			// START Replace showInputBox with showQuickPick
+			const quickPickItems: vscode.QuickPickItem[] = [
+				{
+					label: "/fix",
+					description:
+						"Apply AI suggestions to fix code issues (whole file if no selection)",
+				},
+				{
+					label: "/docs",
+					description: "Generate documentation for the selected code",
+				},
+				{
+					label: "custom prompt",
+					description: "Enter a custom instruction for Minovative Mind",
+				},
+			];
 
-			if (!instructionsInput) {
+			const selectedCommand = await vscode.window.showQuickPick(
+				quickPickItems,
+				{
+					placeHolder: "Select a command or type a custom prompt...",
+					title: "Minovative Mind: Modify Code",
+				}
+			);
+
+			let instruction: string | undefined;
+
+			if (!selectedCommand) {
 				vscode.window.showInformationMessage("Modification cancelled.");
+				return; // User cancelled QuickPick
+			}
+
+			if (selectedCommand.label === "Custom Prompt...") {
+				const customPromptInput = await vscode.window.showInputBox({
+					prompt: "Enter your custom instruction:",
+					placeHolder: "e.g., refactor this function to be more concise",
+					title: "Minovative Mind: Custom Prompt",
+				});
+				if (!customPromptInput) {
+					vscode.window.showInformationMessage("Modification cancelled.");
+					return; // User cancelled custom prompt input
+				}
+				instruction = customPromptInput.trim();
+			} else {
+				instruction = selectedCommand.label.trim();
+			}
+
+			if (!instruction) {
+				// This could happen if Custom Prompt... was chosen but then an empty string was entered.
+				vscode.window.showInformationMessage(
+					"Modification cancelled. No instruction provided."
+				);
 				return;
 			}
-			const instruction = instructionsInput.trim();
 
-			// NEW: Handle '/fix' with empty selection first
+			// START New confirmation dialog for custom prompts
+			if (selectedCommand.label === "Custom Prompt..." && instruction) {
+				const confirmation = await vscode.window.showInformationMessage(
+					`You entered: "${instruction}". Do you want to proceed with this custom command?`,
+					{ modal: true },
+					"Yes",
+					"No"
+				);
+				if (confirmation !== "Yes") {
+					vscode.window.showInformationMessage(
+						"Custom command execution cancelled."
+					);
+					return; // Stop execution if not confirmed
+				}
+			}
+
+			// Handle '/fix' with empty selection first
 			if (instruction === "/fix" && originalSelection.isEmpty) {
 				selectedText = fullText; // Set selectedText to the entire document
 				// Set effectiveRange to cover the entire document
@@ -472,7 +530,7 @@ export async function activate(context: vscode.ExtensionContext) {
 							effectiveRange, // Use the potentially modified effectiveRange
 							progress, // Pass progress
 							token, // Pass cancellation token
-							diagnosticsString // NEW: Pass the diagnosticsString
+							diagnosticsString // Pass the diagnosticsString
 						);
 				}
 			);
