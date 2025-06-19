@@ -2,6 +2,16 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.2.4] - 2025-06-18
+
+## [1.2.3] - 2025-06-18
+
+## [1.2.2] - 2025-06-18
+
+## [1.2.1] - 2025-06-18
+
+- Small bug fix and changes
+
 ## [1.2.0] - 2025-06-18
 
 - **feat: Add Sign In button and settings panel command**

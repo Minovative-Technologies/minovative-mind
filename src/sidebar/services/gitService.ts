@@ -129,6 +129,7 @@ export function constructGitCommitCommand(commitMessage: string): {
 
 	const messageParts = cleanedCommitMessage.split(/\r?\n\r?\n/, 2);
 	let subject = messageParts[0]
+		.replace(/`/g, "\\`") // Escape backticks for shell interpretation
 		.replace(/"/g, '\\"')
 		.replace(/\r?\n/g, " ")
 		.trim();
@@ -143,7 +144,10 @@ export function constructGitCommitCommand(commitMessage: string): {
 	let fullMessageForDisplay = subject;
 
 	if (messageParts.length > 1) {
-		let body = messageParts[1].replace(/"/g, '\\"').trim();
+		let body = messageParts[1]
+			.replace(/`/g, "\\`") // Escape backticks for shell interpretation
+			.replace(/"/g, '\\"')
+			.trim();
 		if (body) {
 			gitCommitCommand += ` -m "${body}"`;
 			fullMessageForDisplay += `\n\n${body}`;
