@@ -23,6 +23,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - Quick Access: Triggered via a keyboard shortcut (`Ctrl+M` or `Cmd+M`) or the editor’s right-click context menu (`Minovative Mind > Custom Modifications`).
 - AI-Generated Documentation (`/docs`): Typing `/docs` for selected code automatically generates appropriate documentation (e.g., `JSDoc`, `Python docstrings`) and inserts it directly into the file.
 - Automated Code Fixing (`/fix`) (Premium Tier): Typing `/fix` prompts the AI to analyze selected code, or the **entire active file if no selection is present**, including relevant `VS Code` diagnostics (warnings, errors), and propose/apply fixes directly within the editor.
+- **AI Merge Conflict Resolution (`/merge`)** (Premium Tier): Automatically detects and resolves Git merge conflicts in the active file. The AI analyzes conflict markers, generates a semantically coherent merged version, applies the resolution, and unmarks the file as conflicted, streamlining a common tedious task.
 - **Symbol-Aware Refactoring**: Leverages VS Code's symbol information (functions, classes, variables, references, definitions, and types) to enable more precise, comprehensive, and robust refactorings and modifications across your entire project.
 - Modular Code Generation: The AI is explicitly instructed to promote modular code generation principles, encouraging maintainable and scalable solutions
 - **Diagnostic-Aware Modifications**: For both targeted selections and whole-file operations, the AI leverages relevant VS Code diagnostics (warnings, errors) to inform its custom modifications, leading to more accurate and problem-solving suggestions.
@@ -69,7 +70,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 ### Flexible Subscription Tiers
 
 - **Free Tier:** Provides foundational AI capabilities, including comprehensive AI chat, contextual code explanation, AI-generated documentation (`/docs` command), and automated Git commit message generation (`/commit` command).
-- **Premium Tier:** Unlocks the full suite of Minovative Mind's advanced AI-Agent features, such as intelligent code modification, automated code fixing (`/fix` command), sophisticated AI-driven planning & execution for multi-step tasks (`/plan` command), and real-time live code insertion with dynamic typing animations.
+- **Premium Tier:** Unlocks the full suite of Minovative Mind's advanced AI-Agent features, such as intelligent code modification, automated code fixing (`/fix` command), AI merge conflict resolution (`/merge` command), sophisticated AI-driven planning & execution for multi-step tasks (`/plan` command), and real-time live code insertion with dynamic typing animations.
 
 ### Manage Your Subscription
 
@@ -141,6 +142,7 @@ By combining these features, Minovative Mind aims to provide a comprehensive AI-
 |                                    | AI-Generated Documentation (`/docs` command)                           | ✅ Yes         | ✅ Yes                  |
 |                                    | Intelligent Code Modification (free-form refactors, enhancements)      | ❌ No          | ✅ Yes                  |
 |                                    | Automated Code Fixing (`/fix` command)                                 | ❌ No          | ✅ Yes                  |
+|                                    | AI Merge Conflict Resolution (`/merge` command)                        | ❌ No          | ✅ Yes                  |
 | **Advanced Workflow & Automation** | AI-Driven Planning & Execution (`/plan` command for multi-step tasks)  | ❌ No          | ✅ Yes                  |
 |                                    | Automated Git Commit Messages (`/commit` command)                      | ✅ Yes         | ✅ Yes                  |
 | **Customization & Management**     | Seamless API Key Setup (Add, Delete, Switch Keys)                      | ✅ Yes         | ✅ Yes                  |

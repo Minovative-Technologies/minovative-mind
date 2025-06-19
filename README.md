@@ -65,9 +65,10 @@ The extension clearly indicates feature availability based on your authenticatio
 | **Core AI Capabilities**           | AI Chat Interface (General Q&A, Contextual Awareness)                  | ✅ Yes         | ✅ Yes                  |
 |                                    | Contextual Code Explanation                                            | ✅ Yes         | ✅ Yes                  |
 |                                    | AI-Generated Documentation (`/docs` command)                           | ✅ Yes         | ✅ Yes                  |
-| **Advanced Workflow & Automation** | AI-Driven Planning & Execution (`/plan` command for multi-step tasks)  | ❌ No          | ✅ Yes                  |
-|                                    | Automated Code Fixing (`/fix` command)                                 | ❌ No          | ✅ Yes                  |
 |                                    | Intelligent Code Modification (free-form refactors, enhancements)      | ❌ No          | ✅ Yes                  |
+|                                    | Automated Code Fixing (`/fix` command)                                 | ❌ No          | ✅ Yes                  |
+|                                    | AI Merge Conflict Resolution (`/merge` command)                        | ❌ No          | ✅ Yes                  |
+| **Advanced Workflow & Automation** | AI-Driven Planning & Execution (`/plan` command for multi-step tasks)  | ❌ No          | ✅ Yes                  |
 |                                    | Automated Git Commit Messages (`/commit` command)                      | ✅ Yes         | ✅ Yes                  |
 | **Customization & Management**     | Seamless API Key Setup (Add, Delete, Switch Keys)                      | ✅ Yes         | ✅ Yes                  |
 |                                    | Flexible AI Model Selection (Gemini 2.5 Flash / Pro)                   | ✅ Yes         | ✅ Yes                  |
