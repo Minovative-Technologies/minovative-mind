@@ -41,7 +41,8 @@ export class AIRequestService {
 			onChunk: (chunk: string) => Promise<void> | void;
 			onComplete?: () => void;
 		},
-		token?: vscode.CancellationToken
+		token?: vscode.CancellationToken,
+		isMergeOperation: boolean = false // NEW: Add this parameter
 	): Promise<string> {
 		await this.apiKeyManager.switchToNextApiKey();
 		let currentApiKey = this.apiKeyManager.getActiveApiKey();
@@ -98,7 +99,8 @@ export class AIRequestService {
 					prompt,
 					historyForGemini,
 					generationConfig,
-					token
+					token,
+					isMergeOperation // NEW: Pass the flag to generateContentStream
 				);
 
 				for await (const chunk of stream) {

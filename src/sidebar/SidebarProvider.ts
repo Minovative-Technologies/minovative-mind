@@ -20,6 +20,7 @@ import { PlanService } from "../services/planService";
 import { ChatService } from "../services/chatService";
 import { CommitService } from "../services/commitService";
 import { AuthService } from "../services/authService";
+import { GitConflictResolutionService } from "../services/gitConflictResolutionService"; // NEW Import
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -29,6 +30,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public readonly extensionUri: vscode.Uri;
 	public readonly secretStorage: vscode.SecretStorage;
 	public readonly workspaceState: vscode.Memento;
+	public readonly workspaceRootUri: vscode.Uri | undefined; // NEW: Make it readonly and optional
 
 	// New getter
 	public get isSidebarVisible(): boolean {
@@ -76,11 +78,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public chatService: ChatService;
 	public commitService: CommitService;
 	public authService: AuthService;
+	public gitConflictResolutionService: GitConflictResolutionService; // NEW: Service instance
 
-	constructor(extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
+	constructor(
+		extensionUri: vscode.Uri,
+		context: vscode.ExtensionContext,
+		workspaceRootUri: vscode.Uri | undefined
+	) {
+		// Add workspaceRootUri
 		this.extensionUri = extensionUri;
 		this.secretStorage = context.secrets;
 		this.workspaceState = context.workspaceState;
+		this.workspaceRootUri = workspaceRootUri; // Assign workspaceRootUri
 
 		// Instantiate managers
 		this.apiKeyManager = new ApiKeyManager(
@@ -110,9 +119,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.postMessageToWebview.bind(this)
 		);
 
+		this.gitConflictResolutionService = new GitConflictResolutionService(
+			context
+		); // NEW: Instantiate before PlanService
+
 		// These services need access to the provider's state and other services.
 		// You would create these files following the same pattern.
-		this.planService = new PlanService(this);
+		this.planService = new PlanService(
+			this,
+			this.workspaceRootUri, // Pass workspaceRootUri
+			this.gitConflictResolutionService // NEW: Pass the GitConflictResolutionService
+		);
 		this.chatService = new ChatService(this);
 		this.commitService = new CommitService(this);
 		this.authService = new AuthService(this);

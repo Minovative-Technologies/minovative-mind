@@ -1,4 +1,3 @@
-// src/extension.ts
 import * as vscode from "vscode";
 import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
@@ -7,6 +6,7 @@ import { SettingsProvider } from "./sidebar/SettingsProvider";
 import { cleanCodeOutput } from "./utils/codeUtils";
 import { initializeFirebase } from "./firebase/firebaseService";
 import * as sidebarTypes from "./sidebar/common/sidebarTypes";
+import { hasMergeConflicts } from "./utils/mergeUtils"; // Added import for mergeUtils
 
 // Helper function type definition for AI action results (kept for potential future use)
 type ActionResult =
@@ -259,7 +259,22 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	// --- Sidebar Setup ---
-	const sidebarProvider = new SidebarProvider(context.extensionUri, context);
+	let workspaceRootUri: vscode.Uri | undefined;
+	if (
+		vscode.workspace.workspaceFolders &&
+		vscode.workspace.workspaceFolders.length > 0
+	) {
+		workspaceRootUri = vscode.workspace.workspaceFolders[0].uri;
+	} else {
+		// Handle case with no open folder, though /merge implies a Git repo.
+		// For robustness, provide a fallback.
+		workspaceRootUri = undefined;
+	}
+	const sidebarProvider = new SidebarProvider(
+		context.extensionUri,
+		context,
+		workspaceRootUri
+	);
 
 	// PROMPT Call initializeFirebase before sidebarProvider.initialize()
 	// to proactively load user data and link the callback.
@@ -324,7 +339,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				documentUri
 			);
 
-			// START Replace showInputBox with showQuickPick
+			// Replace showInputBox with showQuickPick
 			const quickPickItems: vscode.QuickPickItem[] = [
 				{
 					label: "/fix",
@@ -334,6 +349,11 @@ export async function activate(context: vscode.ExtensionContext) {
 				{
 					label: "/docs",
 					description: "Generate documentation for the selected code",
+				},
+				{
+					label: "/merge",
+					description:
+						"Use AI to help resolve merge conflicts in the current file",
 				},
 				{
 					label: "custom prompt",
@@ -356,7 +376,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				return; // User cancelled QuickPick
 			}
 
-			if (selectedCommand.label === "Custom Prompt...") {
+			if (selectedCommand.label === "custom prompt") {
 				const customPromptInput = await vscode.window.showInputBox({
 					prompt: "Enter your custom instruction:",
 					placeHolder: "e.g., refactor this function to be more concise",
@@ -379,8 +399,9 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			// START New confirmation dialog for custom prompts
-			if (selectedCommand.label === "Custom Prompt..." && instruction) {
+			// New confirmation dialog for custom prompts
+			if (selectedCommand.label === "custom prompt" && instruction) {
+				// Changed from "Custom Prompt..."
 				const confirmation = await vscode.window.showInformationMessage(
 					`You entered: "${instruction}". Do you want to proceed with this custom command?`,
 					{ modal: true },
@@ -409,6 +430,25 @@ export async function activate(context: vscode.ExtensionContext) {
 				// This is the check for /docs with empty selection
 				vscode.window.showWarningMessage("No text selected.");
 				return;
+			}
+
+			// Handle '/merge' command
+			else if (instruction === "/merge") {
+				// editor, documentUri, fileName, fullText, languageId, diagnosticsString are already available from above.
+				// Just need to ensure `selectedText` and `effectiveRange` are set and check for conflicts.
+
+				if (!hasMergeConflicts(fullText)) {
+					vscode.window.showInformationMessage(
+						`No active merge conflicts detected in '${fileName}'.`
+					);
+					return; // Exit if no conflicts
+				}
+
+				selectedText = fullText; // Always operate on full file for merge conflicts
+				effectiveRange = new vscode.Range(
+					editor.document.positionAt(0),
+					editor.document.positionAt(fullText.length)
+				);
 			} else if (originalSelection.isEmpty) {
 				// This new block handles all other instructions (custom requests) when no selection is present.
 				selectedText = fullText;
@@ -484,6 +524,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			let actionTypeForGating: string;
 			if (instruction === "/fix") {
 				actionTypeForGating = "plan_from_editor_fix";
+			} else if (instruction === "/merge") {
+				// Set actionTypeForGating for /merge
+				actionTypeForGating = "plan_from_editor_merge";
 			} else {
 				// Any other instruction, including custom prompts, will use plan_from_editor_custom
 				actionTypeForGating = "plan_from_editor_custom";
@@ -530,7 +573,8 @@ export async function activate(context: vscode.ExtensionContext) {
 							effectiveRange, // Use the potentially modified effectiveRange
 							progress, // Pass progress
 							token, // Pass cancellation token
-							diagnosticsString // Pass the diagnosticsString
+							diagnosticsString, // Pass the diagnosticsString
+							instruction === "/merge" // Append true if it's a merge operation
 						);
 				}
 			);

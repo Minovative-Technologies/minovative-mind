@@ -13,14 +13,12 @@ export function createInitialPlanningExplanationPrompt(
 ): string {
 	let specificContextPrompt = "";
 	let mainInstructions = "";
+	let instructionType: string = ""; // Initialize to avoid 'undefined' if no editorContext
 
 	if (editorContext) {
-		const instructionType =
-			editorContext.instruction.toLowerCase() === "/fix"
-				? `The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix.`
-				: `The user provided the custom instruction for you to complete for you to complete: "${editorContext.instruction}".`;
-
-		specificContextPrompt = `
+		if (editorContext.instruction.toLowerCase() === "/fix") {
+			instructionType = `The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix.`;
+			specificContextPrompt = `
         --- Specific User Request Context from Editor ---
         File Path: ${editorContext.filePath}
         Language: ${editorContext.languageId}
@@ -47,11 +45,62 @@ export function createInitialPlanningExplanationPrompt(
         \`\`\`
         --- End Full Content ---`;
 
-		mainInstructions = `Based on the user's request from the editor (${
-			editorContext.instruction.toLowerCase() === "/fix"
-				? "'/fix' command"
-				: "custom instruction"
-		}) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For '/fix', the plan should ONLY clearly address the 'Relevant Diagnostics' listed. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
+			mainInstructions = `Based on the user's request from the editor ('/fix' command) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For '/fix', the plan should ONLY clearly address the 'Relevant Diagnostics' listed.`;
+		} else if (editorContext.instruction.toLowerCase() === "/merge") {
+			instructionType = `The user triggered the '/merge' command to resolve Git merge conflicts in the selected file.`;
+			specificContextPrompt = `
+        --- Specific User Request Context from Editor ---
+        File Path: ${editorContext.filePath}
+        Language: ${editorContext.languageId}
+
+        --- Instruction Type ---
+        ${instructionType}
+        --- End Instruction Type ---
+
+        --- Selected Code in Editor ---
+        \`\`\`${editorContext.languageId}
+        ${editorContext.fullText}
+        \`\`\`
+        --- End Selected Code ---
+
+        --- Full Content of Affected File (${editorContext.filePath}) ---
+        \`\`\`${editorContext.languageId}
+        ${editorContext.fullText}
+        \`\`\`
+        --- End Full Content ---`;
+
+			mainInstructions = `Based on the user's request to resolve Git merge conflicts in the provided file, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to resolve all conflicts and produce a clean, merged file. Your plan must identify and resolve all '<<<<<<<', '=======', and '>>>>>>>' markers. Make sure the AI produces a single 'modify_file' step to resolve all conflicts.`;
+		} else {
+			instructionType = `The user provided the custom instruction for you to complete: "${editorContext.instruction}".`;
+			specificContextPrompt = `
+        --- Specific User Request Context from Editor ---
+        File Path: ${editorContext.filePath}
+        Language: ${editorContext.languageId}
+
+        --- Instruction Type ---
+        ${instructionType}
+        --- End Instruction Type ---
+
+        --- Selected Code in Editor ---
+        \`\`\`${editorContext.languageId}
+        ${editorContext.selectedText}
+        \`\`\`
+        --- End Selected Code ---
+
+        ${
+					diagnosticsString
+						? `\n--- Relevant Diagnostics in Selection ---\n${diagnosticsString}\n--- End Relevant Diagnostics ---\n`
+						: ""
+				}
+
+        --- Full Content of Affected File (${editorContext.filePath}) ---
+        \`\`\`${editorContext.languageId}
+        ${editorContext.fullText}
+        \`\`\`
+        --- End Full Content ---`;
+
+			mainInstructions = `Based on the user's request from the editor (custom instruction) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
+		}
 	} else if (userRequest) {
 		specificContextPrompt = `
         --- User Request from Chat ---
@@ -357,18 +406,14 @@ export function createPlanningPrompt(
 	let mainInstructions = "";
 
 	if (editorContext) {
-		const instructionType =
-			editorContext.instruction.toLowerCase() === "/fix"
-				? `The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix`
-				: `The user provided the custom instruction for you to complete: "${editorContext.instruction}".`;
-
-		specificContextPrompt = `
+		if (editorContext.instruction.toLowerCase() === "/fix") {
+			specificContextPrompt = `
         --- Specific User Request Context from Editor ---
         File Path: ${editorContext.filePath}
         Language: ${editorContext.languageId}
         
         --- Instruction Type ---
-        ${instructionType}
+        The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix
         --- End Instruction Type ---
 
         --- Selected Code in Editor ---
@@ -389,11 +434,62 @@ export function createPlanningPrompt(
         \`\`\`
         --- End Full Content ---`;
 
-		mainInstructions = `Based on the user's request from the editor (${
-			editorContext.instruction.toLowerCase() === "/fix"
-				? "'/fix' command"
-				: "custom instruction"
-		}), the provided file/selection context, and any relevant chat history, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
+			mainInstructions = `Based on the user's request from the editor ('/fix' command), the provided file/selection context, and any relevant chat history, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
+		} else if (editorContext.instruction.toLowerCase() === "/merge") {
+			specificContextPrompt = `
+        --- Specific User Request Context from Editor ---
+        File Path: ${editorContext.filePath}
+        Language: ${editorContext.languageId}
+        
+        --- Instruction Type ---
+        The user triggered the '/merge' command to resolve Git merge conflicts in the selected file.
+        --- End Instruction Type ---
+
+        --- Selected Code in Editor ---
+        \`\`\`${editorContext.languageId}
+        ${editorContext.fullText}
+        \`\`\`
+        --- End Selected Code ---
+
+        --- Full Content of Affected File (${editorContext.filePath}) ---
+        \`\`\`${editorContext.languageId}
+        ${editorContext.fullText}
+        \`\`\`
+        --- End Full Content ---`;
+
+			mainInstructions = `Based on the user's request to resolve Git merge conflicts in the provided file, and any relevant chat history, generate a structured plan (JSON steps) with a 'modify_file' action. Your plan must produce a clean, merged file without any '<<<<<<<', '=======', or '>>>>>>>' conflict markers. The 'modification_prompt' for this 'modify_file' step should describe the exact merge resolution strategy, such as: "Resolve all Git merge conflicts in the provided content. Analyze each conflict block (<<<<<<<, =======, >>>>>>>). For simple conflicts, combine changes intelligently. For complex conflicts, prioritize changes from the 'HEAD' section unless the 'incoming' section contains critical additions. Remove all conflict markers upon completion. The goal is a fully merged, syntactically correct, and functional file.". Reiterate the "Single Modify Step Per File" instruction to ensure the AI combines all conflict resolutions for the active file into one 'modify_file' step. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section to understand project conventions. Ensure any generated 'path' values adhere to standard practices and are relative to the workspace root.`;
+		} else {
+			specificContextPrompt = `
+        --- Specific User Request Context from Editor ---
+        File Path: ${editorContext.filePath}
+        Language: ${editorContext.languageId}
+        
+        --- Instruction Type ---
+        The user provided the custom instruction for you to complete: "${
+					editorContext.instruction
+				}".
+        --- End Instruction Type ---
+
+        --- Selected Code in Editor ---
+        \`\`\`${editorContext.languageId}
+        ${editorContext.selectedText}
+        \`\`\`
+        --- End Selected Code ---
+
+        ${
+					actualDiagnosticsString
+						? `\n--- Relevant Diagnostics in Selection ---\n${actualDiagnosticsString}\n--- End Relevant Diagnostics ---`
+						: ""
+				}
+
+        --- Full Content of Affected File (${editorContext.filePath}) ---
+        \`\`\`${editorContext.languageId}
+        ${editorContext.fullText}
+        \`\`\`
+        --- End Full Content ---`;
+
+			mainInstructions = `Based on the user's request from the editor (custom instruction), the provided file/selection context, and any relevant chat history, generate a plan to fulfill the request. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
+		}
 	} else if (userRequest) {
 		specificContextPrompt = `
         --- User Request from Chat ---
@@ -482,9 +578,30 @@ export async function _performModification(
 	filePath: string,
 	modelName: string,
 	apiKey: string,
-	token: vscode.CancellationToken
+	token: vscode.CancellationToken,
+	isMergeOperation: boolean = false // NEW: isMergeOperation parameter
 ): Promise<string> {
+	let specializedMergeInstruction = "";
+	if (isMergeOperation) {
+		// This is the core enhancement: detailed merge instructions for the AI
+		specializedMergeInstruction = `
+            You are currently resolving Git merge conflicts. Your absolute primary goal is to produce a single, coherent, and syntactically correct file with **ALL** merge conflict markers (\`<<<<<<<\`, \`=======\`, \`>>>>>>>\`, \`|||||||\`) completely removed.
+
+            When analyzing conflict blocks:
+            -   **Prioritize Semantic Coherence:** Understand the purpose of the code and how the changes from both sides (HEAD and incoming) might interact.
+            -   **Intelligently Integrate:** For simple, non-overlapping changes, combine them.
+            -   **Handle Overlaps Carefully:** For directly conflicting lines, decide based on which change appears to be more complete, critical, or aligns better with the overall project logic. The \`Modification Instruction\` below will guide your high-level strategy.
+            -   **Syntax and Structure:** Ensure the final code is syntactically valid for ${languageId} and maintains consistent indentation and coding style.
+            -   **No Partial Conflicts:** Do not leave any partial markers or unresolved sections. The file must be fully merged.
+            `;
+	}
+
 	const prompt = `You are an expert AI software developer. Your task is to modify the provided file content based on the given instructions.
+
+    --- Specialized Merge Instruction ---
+    ${specializedMergeInstruction}
+    --- End Specialized Merge Instruction ---
+
     **Crucially, ensure the generated code is modular, readable, adheres to common coding standards for ${languageId}, and is production-ready, efficient, and maintainable.**
 
     You MUST ONLY return the complete modified file content. Do NOT include any conversational text, explanations, or markdown code blocks (e.g., \`\`\`typescript\\n...\\n\`\`\`):. Your response must start directly with the modified file content.
@@ -515,7 +632,8 @@ export async function _performModification(
 		prompt,
 		undefined,
 		generationConfig,
-		token
+		token,
+		isMergeOperation // Pass isMergeOperation to the underlying AI call
 	);
 
 	for await (const chunk of contentStream) {

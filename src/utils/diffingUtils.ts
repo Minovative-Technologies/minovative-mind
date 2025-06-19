@@ -215,7 +215,7 @@ export async function generateFileChangeSummary(
 		}
 		enumRegex.lastIndex = 0;
 
-		// NEW: Regex for import statements. Count each line that starts with 'import'.
+		// Regex for import statements. Count each line that starts with 'import'.
 		const importLineRegex = /^\s*import\s+\S/gm; // Matches lines starting with 'import ' (and not just 'import')
 		let importStatementCount = 0;
 		while ((match = importLineRegex.exec(content)) !== null) {
@@ -226,7 +226,7 @@ export async function generateFileChangeSummary(
 		}
 		importLineRegex.lastIndex = 0;
 
-		// NEW: Regex for export statements. Count each line that starts with 'export'.
+		// Regex for export statements. Count each line that starts with 'export'.
 		const exportLineRegex = /^\s*export\s+\S/gm; // Matches lines starting with 'export '
 		let exportStatementCount = 0;
 		while ((match = exportLineRegex.exec(content)) !== null) {

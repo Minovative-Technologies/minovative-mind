@@ -239,7 +239,7 @@ if (
 	!stagedFilesList ||
 	!confirmCommitButton ||
 	!cancelCommitButton ||
-	!signUpButton || // MODIFIED: Added signUpButton to null check
+	!signUpButton || // Added signUpButton to null check
 	!signInButton
 ) {
 	// END Add new DOM elements to the critical elements null check
@@ -256,8 +256,8 @@ if (
 		text: string,
 		className: string = "",
 		isHistoryMessage: boolean = false,
-		diffContent?: string, // NEW: Add diffContent parameter
-		relevantFiles?: string[], // NEW: Add relevantFiles parameter
+		diffContent?: string, // Add diffContent parameter
+		relevantFiles?: string[], // Add relevantFiles parameter
 		messageIndexForHistory?: number, // ADDED
 		isRelevantFilesExpandedForHistory?: boolean // ADDED
 	) {
@@ -290,9 +290,9 @@ if (
 					.forEach((cls) => messageElement.classList.add(cls));
 			}
 			if (isHistoryMessage) {
-				// NEW: Add dataset.isHistory attribute
+				// Add dataset.isHistory attribute
 				messageElement.dataset.isHistory = "true";
-				// NEW: Add messageIndexForHistory to dataset if provided
+				// Add messageIndexForHistory to dataset if provided
 				if (messageIndexForHistory !== undefined) {
 					messageElement.dataset.messageIndex =
 						messageIndexForHistory.toString();
@@ -390,7 +390,7 @@ if (
 			}
 			// END NEW DIFF CONTENT ADDITION
 
-			// NEW: Logic for relevantFiles
+			// Logic for relevantFiles
 			if (sender === "Model" && relevantFiles && relevantFiles.length > 0) {
 				const contextFilesDiv = document.createElement("div");
 				contextFilesDiv.classList.add("ai-context-files");
@@ -469,7 +469,7 @@ if (
 					messageElement.appendChild(contextFilesDiv); // Fallback to end of message
 				}
 			}
-			// END NEW: Logic for relevantFiles
+			// END Logic for relevantFiles
 
 			let copyButton: HTMLButtonElement | null = null;
 			let deleteButton: HTMLButtonElement | null = null;
@@ -1142,7 +1142,7 @@ if (
 		signUpButton.addEventListener("click", () => {
 			console.log(
 				"[main.ts] Sign Up button clicked. Posting openExternalLink message."
-			); // MODIFIED: Specific log message
+			); // Specific log message
 			vscode.postMessage({
 				type: "openExternalLink",
 				url: "https://www.minovativemind.dev/registration/signin",
@@ -1531,8 +1531,8 @@ if (
 						message.value.text,
 						`ai-message ${message.value.isError ? "error-message" : ""}`.trim(),
 						true, // Changed to true based on instructions
-						message.value.diffContent, // NEW: Pass diffContent
-						message.value.relevantFiles // NEW: Pass relevantFiles
+						message.value.diffContent, // Pass diffContent
+						message.value.relevantFiles // Pass relevantFiles
 					);
 					// After adding a message, update button states based on content count, but only if not blocked
 					// Calling setLoadingState(isLoading) re-evaluates button states based on current state and UI visibility
@@ -2068,7 +2068,7 @@ if (
 				const deleteButton = target.closest(
 					".delete-button"
 				) as HTMLButtonElement | null;
-				// NEW: Event listener for opening files
+				// Event listener for opening files
 				const fileItem = target.closest(
 					".context-file-item[data-filepath]" // Changed selector
 				) as HTMLLIElement | null; // Changed type annotation
@@ -2083,7 +2083,7 @@ if (
 					}
 					return; // Consume the click event here
 				}
-				// END NEW: Event listener for opening files
+				// END Event listener for opening files
 
 				// Check if a copy button was clicked and it's enabled
 				if (copyButton && !copyButton.disabled) {

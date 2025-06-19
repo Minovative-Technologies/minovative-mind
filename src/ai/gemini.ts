@@ -91,6 +91,7 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
  * @param history Optional chat history for context.
  * @param generationConfig Optional configuration for this generation request (e.g., for JSON mode).
  * @param token Optional cancellation token from VS Code.
+ * @param isMergeOperation Optional boolean, true if this generation is for a merge conflict resolution.
  * @returns An AsyncIterableIterator yielding generated text chunks.
  * @throws Will throw `ERROR_OPERATION_CANCELLED` if the operation is cancelled by the user.
  *         Will throw an error if initialization fails, the request is blocked before yielding any content,
@@ -102,7 +103,8 @@ export async function* generateContentStream(
 	prompt: string,
 	history?: Content[],
 	generationConfig?: GenerationConfig,
-	token?: vscode.CancellationToken // Added optional cancellation token parameter
+	token?: vscode.CancellationToken,
+	isMergeOperation: boolean = false // Added optional cancellation token parameter
 ): AsyncIterableIterator<string> {
 	// 1. Initial cancellation check (before any significant work)
 	if (token?.isCancellationRequested) {
@@ -150,6 +152,9 @@ export async function* generateContentStream(
 					generationConfig
 				)}`
 			);
+		}
+		if (isMergeOperation) {
+			console.log(`Gemini (${modelName}): This is a merge operation.`);
 		}
 
 		// Validation loop for requestContents

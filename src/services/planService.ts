@@ -3,7 +3,7 @@ import * as path from "path";
 import { GenerationConfig } from "@google/generative-ai";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import { isFeatureAllowed } from "../sidebar/utils/featureGating";
-import * as sidebarTypes from "../sidebar/common/sidebarTypes";
+import * as sidebarTypes from "../sidebar/common/sidebarTypes"; // Import sidebarTypes
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
 import {
 	createInitialPlanningExplanationPrompt,
@@ -23,12 +23,17 @@ import {
 import { typeContentIntoEditor } from "../sidebar/services/planExecutionService";
 import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
+import { GitConflictResolutionService } from "./gitConflictResolutionService"; // NEW Import
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
 	private readonly MAX_TRANSIENT_STEP_RETRIES = 3;
 
-	constructor(private provider: SidebarProvider) {}
+	constructor(
+		private provider: SidebarProvider,
+		private workspaceRootUri: vscode.Uri | undefined, // Add workspaceRootUri
+		private gitConflictResolutionService: GitConflictResolutionService // Add GitConflictResolutionService
+	) {}
 
 	/**
 	 * Triggers the UI to display the textual plan for review.
@@ -205,7 +210,8 @@ export class PlanService {
 		selection: vscode.Range,
 		initialProgress?: vscode.Progress<{ message?: string; increment?: number }>,
 		initialToken?: vscode.CancellationToken,
-		diagnosticsString?: string
+		diagnosticsString?: string,
+		isMergeOperation: boolean = false // Added isMergeOperation parameter
 	): Promise<sidebarTypes.PlanGenerationResult> {
 		const {
 			settingsManager,
@@ -359,6 +365,7 @@ export class PlanService {
 				chatHistory: [...this.provider.chatHistoryManager.getChatHistory()],
 				textualPlanExplanation: textualPlanResponse,
 				workspaceRootUri: rootFolder.uri,
+				isMergeOperation: isMergeOperation,
 			};
 			this.provider.lastPlanGenerationContext = {
 				...this.provider.pendingPlanGenerationContext,
@@ -588,7 +595,8 @@ export class PlanService {
 		let executionOk = true;
 		this.provider.activeChildProcesses = [];
 
-		const rootUri = vscode.workspace.workspaceFolders?.[0]?.uri;
+		// Use the workspaceRootUri from the class property, which is passed during instantiation
+		const rootUri = this.workspaceRootUri;
 		if (!rootUri) {
 			this.provider.postMessageToWebview({
 				type: "statusUpdate",
@@ -669,7 +677,7 @@ export class PlanService {
 	private async _executePlanSteps(
 		steps: PlanStep[],
 		rootUri: vscode.Uri,
-		planContext: sidebarTypes.PlanGenerationContext,
+		context: sidebarTypes.PlanGenerationContext, // Renamed to context for clarity
 		progress: vscode.Progress<{ message?: string; increment?: number }>,
 		combinedToken: vscode.CancellationToken
 	): Promise<boolean> {
@@ -729,17 +737,17 @@ export class PlanService {
 							}\n\nInstructions:\n${
 								step.generate_prompt
 							}\n\n--- Broader Project Context ---\n${
-								planContext.projectContext
+								context.projectContext
 							}\n--- End Broader Project Context ---\n\n${
-								planContext.editorContext
+								context.editorContext
 									? `--- Editor Context ---\n${JSON.stringify(
-											planContext.editorContext,
+											context.editorContext,
 											null,
 											2
 									  )}\n--- End Editor Context ---\n\n`
 									: ""
 							}${this._formatChatHistoryForPrompt(
-								planContext.chatHistory
+								context.chatHistory
 							)}\n\nComplete File Content:`;
 							content = await this.provider.aiRequestService.generateWithRetry(
 								generationPrompt,
@@ -783,17 +791,17 @@ export class PlanService {
 						}\n\nModification Instructions:\n${
 							step.modification_prompt
 						}\n\n--- Broader Project Context ---\n${
-							planContext.projectContext
+							context.projectContext
 						}\n--- End Broader Project Context ---\n\n${
-							planContext.editorContext
+							context.editorContext
 								? `--- Editor Context ---\n${JSON.stringify(
-										planContext.editorContext,
+										context.editorContext,
 										null,
 										2
 								  )}\n--- End Editor Context ---\n\n`
 								: ""
 						}${this._formatChatHistoryForPrompt(
-							planContext.chatHistory
+							context.chatHistory
 						)}\n\n--- Existing File Content ---\n${existingContent}\n--- End Existing File Content ---\n\nComplete Modified File Content:`;
 
 						let modifiedContent =
@@ -804,7 +812,8 @@ export class PlanService {
 								`plan step ${index + 1}`,
 								undefined,
 								undefined,
-								combinedToken
+								combinedToken,
+								context.isMergeOperation // NEW: Pass isMergeOperation
 							);
 						modifiedContent = modifiedContent
 							.replace(/^```[a-z]*\n?/, "")
@@ -822,28 +831,62 @@ export class PlanService {
 								),
 								modifiedContent
 							);
-							await vscode.workspace.applyEdit(edit);
-							const { formattedDiff, summary } =
-								await generateFileChangeSummary(
-									existingContent,
-									modifiedContent,
-									step.path
-								);
-							this._postChatUpdateForPlanExecution({
+							const success = await vscode.workspace.applyEdit(edit);
+
+							if (success) {
+								// Added if condition for merge operations
+								if (
+									context.isMergeOperation &&
+									context.editorContext &&
+									fileUri.toString() ===
+										context.editorContext.documentUri.toString()
+								) {
+									await this.gitConflictResolutionService.unmarkFileAsResolved(
+										fileUri
+									);
+								}
+								// END MODIFIED
+
+								const { formattedDiff, summary } =
+									await generateFileChangeSummary(
+										existingContent,
+										modifiedContent,
+										step.path
+									);
+								this._postChatUpdateForPlanExecution({
+									type: "appendRealtimeModelMessage",
+									value: {
+										text: `Step ${index + 1} OK: Modified file \`${
+											step.path
+										}\` (See diff below)`,
+									},
+									diffContent: formattedDiff,
+								});
+								changeLogger.logChange({
+									filePath: step.path,
+									changeType: "modified",
+									summary,
+									diffContent: formattedDiff,
+									timestamp: Date.now(),
+								});
+							} else {
+								this.provider.postMessageToWebview({
+									type: "statusUpdate",
+									value: `Error applying modification to ${step.path}.`,
+									isError: true,
+								});
+								// Fall through to error handling of the outer catch, or explicitly fail.
+								throw new Error(`Failed to apply edit for ${step.path}.`);
+							}
+						} else {
+							// If content is identical, still count as success, but no diff/change log
+							this.provider.postMessageToWebview({
 								type: "appendRealtimeModelMessage",
 								value: {
-									text: `Step ${index + 1} OK: Modified file \`${
+									text: `Step ${index + 1} OK: File \`${
 										step.path
-									}\` (See diff below)`,
+									}\` content is already as desired, no modification applied.`,
 								},
-								diffContent: formattedDiff,
-							});
-							changeLogger.logChange({
-								filePath: step.path,
-								changeType: "modified",
-								summary,
-								diffContent: formattedDiff,
-								timestamp: Date.now(),
 							});
 						}
 					} else if (isRunCommandStep(step)) {
@@ -860,6 +903,7 @@ export class PlanService {
 							});
 							term.show();
 							term.sendText(step.command);
+							// Consider adding a way to await command completion or handle its output
 						} else {
 							currentStepCompletedSuccessfullyOrSkipped = true; // User chose to skip the command
 							this._postChatUpdateForPlanExecution({

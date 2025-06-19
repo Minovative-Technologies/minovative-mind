@@ -170,6 +170,7 @@ export interface PlanGenerationContext {
 	textualPlanExplanation: string;
 	workspaceRootUri: vscode.Uri;
 	relevantFiles?: string[];
+	isMergeOperation?: boolean; // New optional property for merge conflict resolution
 }
 
 export interface PlanGenerationResult {
