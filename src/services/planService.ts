@@ -26,6 +26,7 @@ import { FileChangeEntry } from "../types/workflow";
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
+	private readonly MAX_TRANSIENT_STEP_RETRIES = 3;
 
 	constructor(private provider: SidebarProvider) {}
 
@@ -676,43 +677,111 @@ export class PlanService {
 		const totalSteps = steps.length;
 		const { settingsManager, changeLogger } = this.provider;
 
-		for (const [index, step] of steps.entries()) {
-			if (combinedToken.isCancellationRequested) {
-				return false;
-			}
+		let index = 0; // Initialize index for while loop
+		while (index < totalSteps) {
+			// Outer while loop
+			const step = steps[index];
+			let currentStepCompletedSuccessfullyOrSkipped = false; // Flag for current step's success/skip
+			let currentTransientAttempt = 0; // Auto-retry counter for the current step
 
-			const stepNumber = index + 1;
-			const stepMessageTitle = `Step ${stepNumber}/${totalSteps}: ${
-				step.description || step.action.replace(/_/g, " ")
-			}`;
-			progress.report({ message: `${stepMessageTitle}...` });
+			// Inner loop for auto-retries and user intervention for the *current* step
+			while (!currentStepCompletedSuccessfullyOrSkipped) {
+				if (combinedToken.isCancellationRequested) {
+					executionOk = false;
+					return false; // Plan cancelled
+				}
 
-			try {
-				if (isCreateDirectoryStep(step)) {
-					await vscode.workspace.fs.createDirectory(
-						vscode.Uri.joinPath(rootUri, step.path)
-					);
-					changeLogger.logChange({
-						filePath: step.path,
-						changeType: "created",
-						summary: `Created directory: '${step.path}'`,
-						timestamp: Date.now(),
-					});
-				} else if (isCreateFileStep(step)) {
-					const fileUri = vscode.Uri.joinPath(rootUri, step.path);
-					// 1. Create the empty file
-					await vscode.workspace.fs.writeFile(fileUri, Buffer.from(""));
-					// 2. Open the newly created document
-					const document = await vscode.workspace.openTextDocument(fileUri);
-					// 3. Show the document in the editor
-					const editor = await vscode.window.showTextDocument(document);
+				const stepMessageTitle = `Step ${index + 1}/${totalSteps}: ${
+					step.description || step.action.replace(/_/g, " ")
+				}`;
+				progress.report({
+					message: `${stepMessageTitle}${
+						currentTransientAttempt > 0
+							? ` (Auto-retry ${currentTransientAttempt}/${this.MAX_TRANSIENT_STEP_RETRIES})`
+							: ""
+					}...`,
+				});
 
-					let content = step.content;
-					if (step.generate_prompt) {
-						const generationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the full file content. Do NOT include markdown code block formatting. Provide only the file content.\n\nThe generated code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.\n\nFile Path:\n${
+				try {
+					if (isCreateDirectoryStep(step)) {
+						await vscode.workspace.fs.createDirectory(
+							vscode.Uri.joinPath(rootUri, step.path)
+						);
+						changeLogger.logChange({
+							filePath: step.path,
+							changeType: "created",
+							summary: `Created directory: '${step.path}'`,
+							timestamp: Date.now(),
+						});
+					} else if (isCreateFileStep(step)) {
+						const fileUri = vscode.Uri.joinPath(rootUri, step.path);
+						// 1. Create the empty file
+						await vscode.workspace.fs.writeFile(fileUri, Buffer.from(""));
+						// 2. Open the newly created document
+						const document = await vscode.workspace.openTextDocument(fileUri);
+						// 3. Show the document in the editor
+						const editor = await vscode.window.showTextDocument(document);
+
+						let content = step.content;
+						if (step.generate_prompt) {
+							const generationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the full file content. Do NOT include markdown code block formatting. Provide only the file content.\n\nThe generated code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.\n\nFile Path:\n${
+								step.path
+							}\n\nInstructions:\n${
+								step.generate_prompt
+							}\n\n--- Broader Project Context ---\n${
+								planContext.projectContext
+							}\n--- End Broader Project Context ---\n\n${
+								planContext.editorContext
+									? `--- Editor Context ---\n${JSON.stringify(
+											planContext.editorContext,
+											null,
+											2
+									  )}\n--- End Editor Context ---\n\n`
+									: ""
+							}${this._formatChatHistoryForPrompt(
+								planContext.chatHistory
+							)}\n\nComplete File Content:`;
+							content = await this.provider.aiRequestService.generateWithRetry(
+								generationPrompt,
+								settingsManager.getSelectedModelName(),
+								undefined,
+								`plan step ${index + 1}`,
+								undefined,
+								undefined,
+								combinedToken
+							);
+						}
+						await typeContentIntoEditor(editor, content ?? "", combinedToken);
+						const { formattedDiff, summary } = await generateFileChangeSummary(
+							"",
+							content ?? "",
 							step.path
-						}\n\nInstructions:\n${
-							step.generate_prompt
+						);
+						this._postChatUpdateForPlanExecution({
+							type: "appendRealtimeModelMessage",
+							value: {
+								text: `Step ${index + 1} OK: Created file \`${
+									step.path
+								}\` (See diff below)`,
+							},
+							diffContent: formattedDiff,
+						});
+						changeLogger.logChange({
+							filePath: step.path,
+							changeType: "created",
+							summary,
+							diffContent: formattedDiff,
+							timestamp: Date.now(),
+						});
+					} else if (isModifyFileStep(step)) {
+						const fileUri = vscode.Uri.joinPath(rootUri, step.path);
+						const existingContent = Buffer.from(
+							await vscode.workspace.fs.readFile(fileUri)
+						).toString("utf-8");
+						const modificationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.\n\nThe modified code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.\n\nFile Path:\n${
+							step.path
+						}\n\nModification Instructions:\n${
+							step.modification_prompt
 						}\n\n--- Broader Project Context ---\n${
 							planContext.projectContext
 						}\n--- End Broader Project Context ---\n\n${
@@ -725,136 +794,175 @@ export class PlanService {
 								: ""
 						}${this._formatChatHistoryForPrompt(
 							planContext.chatHistory
-						)}\n\nComplete File Content:`;
-						content = await this.provider.aiRequestService.generateWithRetry(
-							generationPrompt,
-							settingsManager.getSelectedModelName(),
-							undefined,
-							`plan step ${stepNumber}`,
-							undefined,
-							undefined,
-							combinedToken
+						)}\n\n--- Existing File Content ---\n${existingContent}\n--- End Existing File Content ---\n\nComplete Modified File Content:`;
+
+						let modifiedContent =
+							await this.provider.aiRequestService.generateWithRetry(
+								modificationPrompt,
+								settingsManager.getSelectedModelName(),
+								undefined,
+								`plan step ${index + 1}`,
+								undefined,
+								undefined,
+								combinedToken
+							);
+						modifiedContent = modifiedContent
+							.replace(/^```[a-z]*\n?/, "")
+							.replace(/\n?```$/, "")
+							.trim();
+
+						if (modifiedContent !== existingContent) {
+							const edit = new vscode.WorkspaceEdit();
+							const document = await vscode.workspace.openTextDocument(fileUri);
+							edit.replace(
+								fileUri,
+								new vscode.Range(
+									document.positionAt(0),
+									document.positionAt(document.getText().length)
+								),
+								modifiedContent
+							);
+							await vscode.workspace.applyEdit(edit);
+							const { formattedDiff, summary } =
+								await generateFileChangeSummary(
+									existingContent,
+									modifiedContent,
+									step.path
+								);
+							this._postChatUpdateForPlanExecution({
+								type: "appendRealtimeModelMessage",
+								value: {
+									text: `Step ${index + 1} OK: Modified file \`${
+										step.path
+									}\` (See diff below)`,
+								},
+								diffContent: formattedDiff,
+							});
+							changeLogger.logChange({
+								filePath: step.path,
+								changeType: "modified",
+								summary,
+								diffContent: formattedDiff,
+								timestamp: Date.now(),
+							});
+						}
+					} else if (isRunCommandStep(step)) {
+						const userChoice = await vscode.window.showWarningMessage(
+							`The plan wants to run a command: \`${step.command}\`\n\nAllow?`,
+							{ modal: true },
+							"Allow",
+							"Skip"
 						);
+						if (userChoice === "Allow") {
+							const term = vscode.window.createTerminal({
+								name: `Minovative Mind Step ${index + 1}`,
+								cwd: rootUri.fsPath,
+							});
+							term.show();
+							term.sendText(step.command);
+						} else {
+							currentStepCompletedSuccessfullyOrSkipped = true; // User chose to skip the command
+							this._postChatUpdateForPlanExecution({
+								type: "appendRealtimeModelMessage",
+								value: { text: `Step ${index + 1} SKIPPED by user.` },
+							});
+						}
 					}
-					await typeContentIntoEditor(editor, content ?? "", combinedToken);
-					const { formattedDiff, summary } = await generateFileChangeSummary(
-						"",
-						content ?? "",
-						step.path
-					);
-					this._postChatUpdateForPlanExecution({
-						type: "appendRealtimeModelMessage",
-						value: {
-							text: `Step ${stepNumber} OK: Created file \`${step.path}\` (See diff below)`,
-						},
-						diffContent: formattedDiff,
-					});
-					changeLogger.logChange({
-						filePath: step.path,
-						changeType: "created",
-						summary,
-						diffContent: formattedDiff,
-						timestamp: Date.now(),
-					});
-				} else if (isModifyFileStep(step)) {
-					const fileUri = vscode.Uri.joinPath(rootUri, step.path);
-					const existingContent = Buffer.from(
-						await vscode.workspace.fs.readFile(fileUri)
-					).toString("utf-8");
-					const modificationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.\n\nThe modified code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.\n\nFile Path:\n${
-						step.path
-					}\n\nModification Instructions:\n${
-						step.modification_prompt
-					}\n\n--- Broader Project Context ---\n${
-						planContext.projectContext
-					}\n--- End Broader Project Context ---\n\n${
-						planContext.editorContext
-							? `--- Editor Context ---\n${JSON.stringify(
-									planContext.editorContext,
-									null,
-									2
-							  )}\n--- End Editor Context ---\n\n`
-							: ""
-					}${this._formatChatHistoryForPrompt(
-						planContext.chatHistory
-					)}\n\n--- Existing File Content ---\n${existingContent}\n--- End Existing File Content ---\n\nComplete Modified File Content:`;
+					currentStepCompletedSuccessfullyOrSkipped = true; // Step succeeded or was explicitly skipped (e.g., user skipped command)
+				} catch (error: any) {
+					const errorMsg =
+						error instanceof Error ? error.message : String(error);
+					let isRetryableTransientError = false;
 
-					let modifiedContent =
-						await this.provider.aiRequestService.generateWithRetry(
-							modificationPrompt,
-							settingsManager.getSelectedModelName(),
-							undefined,
-							`plan step ${stepNumber}`,
-							undefined,
-							undefined,
-							combinedToken
-						);
-					modifiedContent = modifiedContent
-						.replace(/^```[a-z]*\n?/, "")
-						.replace(/\n?```$/, "")
-						.trim();
+					if (errorMsg.includes(ERROR_OPERATION_CANCELLED)) {
+						executionOk = false;
+						throw error; // Propagate cancellation to outer handler
+					}
 
-					if (modifiedContent !== existingContent) {
-						const edit = new vscode.WorkspaceEdit();
-						const document = await vscode.workspace.openTextDocument(fileUri);
-						edit.replace(
-							fileUri,
-							new vscode.Range(
-								document.positionAt(0),
-								document.positionAt(document.getText().length)
-							),
-							modifiedContent
-						);
-						await vscode.workspace.applyEdit(edit);
-						const { formattedDiff, summary } = await generateFileChangeSummary(
-							existingContent,
-							modifiedContent,
-							step.path
-						);
+					// Implement transient error identification
+					if (
+						errorMsg.includes("quota exceeded") ||
+						errorMsg.includes("rate limit exceeded") ||
+						errorMsg.includes("network error") ||
+						errorMsg.includes("HTTP 50") ||
+						errorMsg.includes("timeout")
+					) {
+						isRetryableTransientError = true;
+					}
+
+					// Auto-Retry Logic
+					if (
+						isRetryableTransientError &&
+						currentTransientAttempt < this.MAX_TRANSIENT_STEP_RETRIES
+					) {
 						this._postChatUpdateForPlanExecution({
 							type: "appendRealtimeModelMessage",
 							value: {
-								text: `Step ${stepNumber} OK: Modified file \`${step.path}\` (See diff below)`,
+								text: `Step ${
+									index + 1
+								} FAILED (transient, auto-retrying): ${errorMsg}`,
+								isError: true,
 							},
-							diffContent: formattedDiff,
 						});
-						changeLogger.logChange({
-							filePath: step.path,
-							changeType: "modified",
-							summary,
-							diffContent: formattedDiff,
-							timestamp: Date.now(),
-						});
+						console.warn(
+							`Minovative Mind: Step ${
+								index + 1
+							} failed, auto-retrying due to transient error: ${errorMsg}`
+						);
+						await new Promise((resolve) =>
+							setTimeout(resolve, 10000 + currentTransientAttempt * 5000)
+						); // Exponential back-off
+						currentTransientAttempt++;
+						// currentStepCompletedSuccessfullyOrSkipped remains false, so inner loop will continue
 					}
-				} else if (isRunCommandStep(step)) {
-					const userChoice = await vscode.window.showWarningMessage(
-						`The plan wants to run a command: \`${step.command}\`\n\nAllow?`,
-						{ modal: true },
-						"Allow",
-						"Skip"
-					);
-					if (userChoice === "Allow") {
-						const term = vscode.window.createTerminal({
-							name: `Minovative Mind Step ${stepNumber}`,
-							cwd: rootUri.fsPath,
+					// User Intervention Prompt Logic
+					else {
+						// Fatal error, or transient retries exhausted, or user chose to skip command
+						this._postChatUpdateForPlanExecution({
+							type: "appendRealtimeModelMessage",
+							value: {
+								text: `Step ${
+									index + 1
+								} FAILED: ${errorMsg}. Requires user intervention.`,
+								isError: true,
+							},
 						});
-						term.show();
-						term.sendText(step.command);
+						const userChoice = await vscode.window.showErrorMessage(
+							`Minovative Mind: Step ${
+								index + 1
+							}/${totalSteps} failed: ${errorMsg}\n\nWhat would you like to do?`,
+							{ modal: true }, // Modal to block further interaction until decision
+							"Retry Step",
+							"Skip Step",
+							"Cancel Plan"
+						);
+
+						if (userChoice === "Retry Step") {
+							currentTransientAttempt = 0; // Reset auto-retry count for manual retry
+							// currentStepCompletedSuccessfullyOrSkipped remains false, so inner loop will re-execute this step
+							console.log(
+								`Minovative Mind: User chose to retry Step ${index + 1}.`
+							);
+						} else if (userChoice === "Skip Step") {
+							currentStepCompletedSuccessfullyOrSkipped = true; // Mark step as handled (skipped)
+							this._postChatUpdateForPlanExecution({
+								type: "appendRealtimeModelMessage",
+								value: { text: `Step ${index + 1} SKIPPED by user.` },
+							});
+							console.log(
+								`Minovative Mind: User chose to skip Step ${index + 1}.`
+							);
+						} else {
+							// Cancel Plan or dialog was dismissed/closed
+							executionOk = false;
+							throw new Error(ERROR_OPERATION_CANCELLED); // Abort the entire plan execution
+						}
 					}
 				}
-			} catch (error: any) {
-				executionOk = false;
-				const errorMsg = error instanceof Error ? error.message : String(error);
-				this._postChatUpdateForPlanExecution({
-					type: "appendRealtimeModelMessage",
-					value: {
-						text: `Step ${stepNumber} FAILED: ${errorMsg}`,
-						isError: true,
-					},
-				});
-				break; // Stop execution on first error
-			}
-		}
+			} // End of inner `while (!currentStepCompletedSuccessfullyOrSkipped)` loop
+
+			index++; // Increment outer loop index after current step is fully handled (succeeded or skipped).
+		} // End of outer `while (index < totalSteps)` loop
 		return executionOk;
 	}
 
