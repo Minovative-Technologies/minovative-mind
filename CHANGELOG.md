@@ -4,6 +4,13 @@ Stay updated with the latest improvements and bug fixes: [Minovative Mind Update
 
 ## [1.4.4] - 2025-06-20
 
+- **feat(errors): Sanitize absolute paths in error messages**:
+
+  Enhances error handling by replacing absolute file system paths with workspace-relative paths or basenames within error messages. This improves user privacy by preventing the exposure of sensitive file system structures and makes error messages more concise and readable.
+
+  - **New:** Introduced `src/utils/pathUtils.ts` for robust path sanitization.
+  - **Update:** Refactored `planService` to integrate the new path sanitization for displayed errors.
+
 ## [1.4.3] - 2025-06-20
 
 - **feat(ai): Enhance error handling and plan execution robustness**:
