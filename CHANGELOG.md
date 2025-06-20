@@ -2,7 +2,11 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
-## [1.4.1] - 2025-06-20
+## [1.4.2] - 2025-06-19
+
+- **fix(ai): Improve immediate cancellation handling**: Add an early cancellation check at the start of the retry loop to prevent unnecessary attempts. Prioritize operation cancellation errors in error handling to ensure immediate re-throw and prevent retries.
+
+## [1.4.1] - 2025-06-19
 
 - **docs: Overhaul user-facing policies and usage guides**: This commit introduces extensive updates and clarifications across the extension's primary documentation files.
   - **PRIVACY_POLICY.md:**
