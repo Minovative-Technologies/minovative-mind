@@ -2,9 +2,33 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.4.1] - 2025-06-20
+
+- **docs: Overhaul user-facing policies and usage guides**: This commit introduces extensive updates and clarifications across the extension's primary documentation files.
+  - **PRIVACY_POLICY.md:**
+    - Significantly enhanced transparency regarding data collection, processing, storage, and sharing.
+    - Clarified the role of Firebase for authentication/status versus third-party payment processors (Stripe) for payments.
+    - Detailed in-memory data handling and emphasized user control over data.
+    - Added specific collection details for symbol information and dependency graph analysis for smart context.
+  - **TERMS_OF_USE.md:**
+    - Strengthened user responsibility for AI-generated output and execution of commands.
+    - Expanded disclaimers of warranties and limitations of liability, including specific mention of AI inaccuracies and "hallucinations."
+    - Clarified payment processing handling by third-party services.
+  - **USAGE.md:**
+    - Introduced and documented new features, including the AI merge conflict resolution (`/merge` command).
+    - Enhanced "Smart Context Awareness" with detailed symbol information and TypeScript-aware dependency graph analysis.
+    - Documented "Resilient Plan Execution" with automatic retries for multi-step tasks.
+    - Added an interactive review step for AI-generated Git commit messages.
+    - Provided clearer examples and in-depth tips for optimal AI interaction, including prompt engineering guidance for various scenarios.
+    - Explicitly delineated features available in Free vs. Premium tiers.
+    - Documented improved UI/UX elements like diff syntax highlighting and code block rendering.
+    - Added automatic chat history restoration.
+  - **Removed `vsc-extension-quickstart.md`** as its content has been integrated and superseded by the updated documentation.
+  - Applied consistent title formatting across all policy and usage documents.
+
 ## [1.4.0] - 2025-06-19
 
-- **feat:(AI merge resolution)**: AI Merge Conflict Resolution (`/merge`): Automatically detects and resolves Git merge conflicts in the active file. The AI analyzes conflict markers, generates a semantically coherent merged version, applies the resolution, and unmarks the file as conflicted, streamlining a common tedious task.
+- **feat:**: AI Merge Conflict Resolution (`/merge`): Automatically detects and resolves Git merge conflicts in the active file. The AI analyzes conflict markers, generates a semantically coherent merged version, applies the resolution, and unmarks the file as conflicted, streamlining a common tedious task.
 
 ## [1.3.0] - 2025-06-19
 
