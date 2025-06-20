@@ -1,4 +1,4 @@
-# Minovative Mind VS Code Extension Terms of Use
+# Minovative Mind VS Code Extension | Terms of Use
 
 This document outlines the legal agreement between the publisher of the Minovative Mind VS Code extension ("the Extension") and its users. By using the Extension, you agree to be bound by these Terms of Use. These terms apply in conjunction with the Extension's Privacy Policy.
 
@@ -12,14 +12,13 @@ By using the Extension, you agree to the following:
 
 - **API Key Responsibility:** You are solely responsible for obtaining, securing, and managing your Google Gemini API keys, including any costs incurred from Google for API usage. The Extension does not manage your API billing.
 - **Content and Input:** You are responsible for all prompts, code, and any other content you input into the Extension. You must ensure that your input does not violate any applicable laws, regulations, or third-party rights, including intellectual property, privacy, or confidentiality obligations.
-- **AI Output Usage:** AI-generated code, text, or plans provided by the Extension are suggestions and tools, not guarantees. You are solely responsible for reviewing, testing, verifying, and ensuring the correctness, security, and suitability of any AI-generated content before deployment, execution, or reliance. The Extension disclaims all liability for any issues, damages, or losses arising from the use or misuse of AI-generated output.
+- **AI Output Usage:** AI-generated code, text, or plans provided by the Extension are suggestions and tools, not guarantees. **You assume full and sole responsibility for reviewing, testing, verifying, and ensuring the correctness, security, and suitability of any AI-generated content before deployment, execution, or reliance.** This is particularly critical for actions proposed by the AI's plan, such as `run_command`, `create_file`, and `modify_file` actions. Execution of these actions is **solely at your risk** and requires your explicit confirmation. You assume all risks and responsibility for the consequences of executing any AI-generated commands or applying AI-generated code changes. The Extension and its publisher disclaim all liability for any issues, damages, or losses arising from the use or misuse of AI-generated output, including but not limited to inaccuracies, security vulnerabilities, or operational failures.
 - **Compliance:** You must comply with all applicable local, national, and international laws and regulations while using the Extension.
 - **Prohibited Uses:** You agree not to:
   - Reverse engineer, decompile, or disassemble the Extension or any part thereof.
-  - Attempt to gain unauthorized access to any systems or networks connected to the Extension.
+  - Attempt to gain unauthorized access to any systems or networks connected to the Extension or to bypass any security measures of the Extension or any third-party services it interacts with.
   - Use the Extension for any malicious, unlawful, or fraudulent purposes.
-  - Circumvent any security features or access controls of the Extension.
-  - Use the Extension to generate or disseminate content that is illegal, harmful, threatening, abusive, harassing, defamatory, vulgar, obscene, libelous, invasive of another's privacy, hateful, or racially, ethnically, or otherwise objectionable.
+  - Use the Extension to generate or disseminate content that is illegal, harmful, unethical, threatening, abusive, harassing, defamatory, vulgar, obscene, libelous, invasive of another's privacy, hateful, or racially, ethnically, or otherwise objectionable.
 - **Age Restriction:** The Minovative Mind VS Code Extension is not intended for use by children under the age of 13. By using the Extension, you affirm that you are at least 13 years of age, or have obtained parental or guardian consent to use this Extension in alignment with our Privacy Policy and applicable laws.
 
 ## 3. Intellectual Property Rights
@@ -33,17 +32,17 @@ By using the Extension, you agree to the following:
 If the Extension offers subscription tiers or premium features, the following general terms apply:
 
 - Access to certain features may require an active subscription.
-- Payment processing is handled through third-party services (e.g., Firebase/Google).
+- Payment processing for subscriptions is handled by designated third-party payment processors (e.g., Stripe) via their secure portals. While Firebase is used to manage your authentication and subscription status within the Extension, all actual payment transactions and financial data are handled exclusively by these third-party payment processors and are subject to their respective terms and privacy policies, not these Terms of Use.
 - Subscription fees are separate from any costs incurred from Google for your direct API usage.
 - Details regarding subscription tiers, features, payment methods, and cancellation policies will be provided at the point of subscription.
 
 ## 5. Disclaimers of Warranties
 
-THE EXTENSION IS PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT ANY WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED. TO THE FULLEST EXTENT PERMISSIBLE PURSUANT TO APPLICABLE LAW, MINOVATIVE MIND DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, ACCURACY, RELIABILITY, OR UNINTERRUPTED SERVICE. WE DO NOT WARRANT THAT THE EXTENSION WILL BE ERROR-FREE, SECURE, OR THAT ANY DEFECTS WILL BE CORRECTED.
+THE EXTENSION IS PROVIDED "AS IS" AND "AS AVAILABLE," WITH ALL FAULTS AND WITHOUT ANY WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED. TO THE FULLEST EXTENT PERMISSIBLE PURSUANT TO APPLICABLE LAW, MINOVATIVE MIND EXPRESSLY DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, ACCURACY, RELIABILITY, OR UNINTERRUPTED SERVICE. WE DO NOT WARRANT THAT THE EXTENSION WILL BE ERROR-FREE, SECURE, OR THAT ANY DEFECTS WILL BE CORRECTED. FURTHER, WE MAKE NO WARRANTIES OR REPRESENTATIONS REGARDING THE ACCURACY, COMPLETENESS, RELIABILITY, OR FITNESS FOR ANY PURPOSE OF ANY AI-GENERATED CONTENT, WHICH MAY CONTAIN INACCURACIES, BIASES, OR "HALLUCINATIONS." YOUR USE OF THE EXTENSION AND RELIANCE ON ITS OUTPUT IS SOLELY AT YOUR OWN RISK.
 
 ## 6. Limitation of Liability
 
-TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL MINOVATIVE MIND BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO, LOSS OF PROFITS, DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES, RESULTING FROM (I) YOUR ACCESS TO OR USE OF OR INABILITY TO ACCESS OR USE THE EXTENSION; (II) ANY CONDUCT OR CONTENT OF ANY THIRD PARTY ON THE EXTENSION; (III) ANY CONTENT OBTAINED FROM THE EXTENSION; AND (IV) UNAUTHORIZED ACCESS, USE OR ALTERATION OF YOUR TRANSMISSIONS OR CONTENT, WHETHER BASED ON WARRANTY, CONTRACT, TORT (INCLUDING NEGLIGENCE) OR ANY OTHER LEGAL THEORY, WHETHER OR NOT WE HAVE BEEN INFORMED OF THE POSSIBILITY OF SUCH DAMAGE, AND EVEN IF A REMEDY SET FORTH HEREIN IS FOUND TO HAVE FAILED OF ITS ESSENTIAL PURPOSE. YOUR USE OF THE EXTENSION IS AT YOUR SOLE RISK.
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL MINOVATIVE MIND, ITS AFFILIATES, OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, OR LICENSORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO, LOSS OF PROFITS, DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES, RESULTING FROM (I) YOUR ACCESS TO OR USE OF OR INABILITY TO ACCESS OR USE THE EXTENSION; (II) ANY CONDUCT OR CONTENT OF ANY THIRD PARTY ON THE EXTENSION; (III) ANY CONTENT OBTAINED FROM THE EXTENSION, INCLUDING ANY AI-GENERATED CONTENT; AND (IV) UNAUTHORIZED ACCESS, USE OR ALTERATION OF YOUR TRANSMISSIONS OR CONTENT, WHETHER BASED ON WARRANTY, CONTRACT, TORT (INCLUDING NEGLIGENCE) OR ANY OTHER LEGAL THEORY, WHETHER OR NOT WE HAVE BEEN INFORMED OF THE POSSIBILITY OF SUCH DAMAGE, AND EVEN IF A REMEDY SET FORTH HEREIN IS FOUND TO HAVE FAILED OF ITS ESSENTIAL PURPOSE. YOUR USE OF THE EXTENSION IS ENTIRELY AT YOUR SOLE RISK.
 
 ## 7. Indemnification
 
