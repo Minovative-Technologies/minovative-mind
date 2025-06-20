@@ -154,7 +154,7 @@ Here are a few quick ways to start using Minovative Mind:
 
 ## 📚 Comprehensive Documentation
 
-For a detailed guide on all features, advanced workflows (like AI-driven planning), customization options, troubleshooting tips, and more, please refer to our [Minovative Mind Docs](https://minovativemind.dev/learn/developer)
+For a detailed guide on all features, advanced workflows (like AI-driven planning), customization options, troubleshooting tips, and more, please refer to our [Minovative Mind Docs](https://minovativemind.dev/docs)
 
 ## 📄 Change Log
 
@@ -170,4 +170,4 @@ For detailed information on the terms and conditions governing the use of the Mi
 
 ## 💬 Feedback & Support
 
-Your feedback is invaluable! If you encounter any bugs, have suggestions for new features, or just want to share your experience, please visit our [Minovative Mind Feedback](https://www.minovativemind.dev/) to submit an issue, feature request, or general feedback.
+Your feedback is invaluable! If you encounter any bugs, have suggestions for new features, or just want to share your experience, please visit our [Minovative Mind Discord](https://discord.gg/w9dkHTncva) to submit an issue, feature request, or general feedback.

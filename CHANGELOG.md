@@ -2,6 +2,8 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.4.4] - 2025-06-20
+
 ## [1.4.3] - 2025-06-20
 
 - **feat(ai): Enhance error handling and plan execution robustness**:

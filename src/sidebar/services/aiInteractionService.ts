@@ -579,7 +579,7 @@ export async function _performModification(
 	modelName: string,
 	aiRequestService: AIRequestService, // REMOVED apiKey: string, ADDED aiRequestService
 	token: vscode.CancellationToken,
-	isMergeOperation: boolean = false // NEW: isMergeOperation parameter
+	isMergeOperation: boolean = false // isMergeOperation parameter
 ): Promise<string> {
 	let specializedMergeInstruction = "";
 	if (isMergeOperation) {

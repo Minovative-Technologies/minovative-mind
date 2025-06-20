@@ -212,7 +212,7 @@ if (minovativeMindWebsiteButton) {
 		vscode.postMessage({
 			type: "openUrl", // Kept for consistency, though 'command' is preferred
 			command: "openUrl",
-			url: "https://minovativemind.dev/documentation",
+			url: "https://minovativemind.dev/docs",
 		});
 	});
 } else {
@@ -224,7 +224,7 @@ if (discordButton) {
 		vscode.postMessage({
 			type: "openUrl",
 			command: "openUrl",
-			url: "https://discord.com/channels/1384794415939194921/1384830913460048032",
+			url: "https://discord.gg/w9dkHTncva",
 		});
 	});
 } else {

@@ -24,6 +24,7 @@ import { typeContentIntoEditor } from "../sidebar/services/planExecutionService"
 import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
 import { GitConflictResolutionService } from "./gitConflictResolutionService"; // NEW Import
+import { sanitizeErrorMessagePaths } from "../utils/pathUtils"; // Import the path utility
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
@@ -813,7 +814,7 @@ export class PlanService {
 								undefined,
 								undefined,
 								combinedToken,
-								context.isMergeOperation // NEW: Pass isMergeOperation
+								context.isMergeOperation // Pass isMergeOperation
 							);
 						modifiedContent = modifiedContent
 							.replace(/^```[a-z]*\n?/, "")
@@ -914,8 +915,10 @@ export class PlanService {
 					}
 					currentStepCompletedSuccessfullyOrSkipped = true; // Step succeeded or was explicitly skipped (e.g., user skipped command)
 				} catch (error: any) {
-					const errorMsg =
-						error instanceof Error ? error.message : String(error);
+					let errorMsg = error instanceof Error ? error.message : String(error);
+					// Sanitize the error message to display relative paths
+					errorMsg = sanitizeErrorMessagePaths(errorMsg, rootUri);
+
 					let isRetryableTransientError = false;
 
 					if (errorMsg.includes(ERROR_OPERATION_CANCELLED)) {
