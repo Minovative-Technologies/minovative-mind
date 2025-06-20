@@ -4,7 +4,7 @@ Stay updated with the latest improvements and bug fixes: [Minovative Mind Update
 
 ## [1.4.0] - 2025-06-19
 
-- **AI Merge Conflict Resolution (`/merge`)**: Automatically detects and resolves Git merge conflicts in the active file. The AI analyzes conflict markers, generates a semantically coherent merged version, applies the resolution, and unmarks the file as conflicted, streamlining a common tedious task.
+- **feat:(AI merge resolution)**: AI Merge Conflict Resolution (`/merge`): Automatically detects and resolves Git merge conflicts in the active file. The AI analyzes conflict markers, generates a semantically coherent merged version, applies the resolution, and unmarks the file as conflicted, streamlining a common tedious task.
 
 ## [1.3.0] - 2025-06-19
 
