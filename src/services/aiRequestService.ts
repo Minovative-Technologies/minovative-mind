@@ -68,7 +68,11 @@ export class AIRequestService {
 		let result = "";
 
 		while (attempts < maxRetries) {
+			// MODIFICATION 1: Insert cancellation check at the start of the retry loop
 			if (token?.isCancellationRequested) {
+				console.log(
+					"[AIRequestService] Cancellation requested at start of retry loop."
+				);
 				if (streamCallbacks?.onComplete) {
 					streamCallbacks.onComplete();
 				}
@@ -119,21 +123,28 @@ export class AIRequestService {
 				return result; // Success
 			} catch (error: unknown) {
 				const err = error as Error;
+				const errorMessage = err.message;
 
-				if (err.message === ERROR_QUOTA_EXCEEDED) {
+				// MODIFICATION 2: Add specific cancellation error handling before other checks
+				if (errorMessage === ERROR_OPERATION_CANCELLED) {
+					console.log(
+						"[AIRequestService] Operation cancelled from underlying AI stream."
+					);
+					if (streamCallbacks?.onComplete) {
+						streamCallbacks.onComplete();
+					}
+					throw err; // Re-throw cancellation immediately, do NOT retry
+				}
+
+				if (errorMessage === ERROR_QUOTA_EXCEEDED) {
 					result = ERROR_QUOTA_EXCEEDED;
 					console.warn(
 						`[AIRequestService] Quota/Rate limit hit for key ...${currentApiKey?.slice(
 							-4
 						)}.`
 					);
-				} else if (err.message === ERROR_OPERATION_CANCELLED) {
-					if (streamCallbacks?.onComplete) {
-						streamCallbacks.onComplete();
-					}
-					throw err; // Re-throw cancellation error
 				} else {
-					result = `Error: ${err.message}`;
+					result = `Error: ${errorMessage}`;
 					console.error(
 						`[AIRequestService] Error during generation on attempt ${attempts}:`,
 						err
@@ -167,7 +178,7 @@ export class AIRequestService {
 				return result; // Return other errors immediately
 			}
 		}
-		// Fallback if loop finishes
+		// Fallback if loop finishes without returning (should only happen if all keys tried and failed with quota)
 		return `API quota or rate limit exceeded for model ${modelName}. Failed after trying ${attempts} keys.`;
 	}
 }
