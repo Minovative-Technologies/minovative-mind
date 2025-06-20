@@ -2,6 +2,14 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.4.3] - 2025-06-20
+
+- **feat(ai): Enhance error handling and plan execution robustness**:
+  - Implemented intelligent retry mechanism for "Service Unavailable" (503) and "model overloaded" errors from the Gemini API, ensuring automatic retries after a delay without switching API keys.
+  - Centralized all AI content generation calls through `AIRequestService` for improved robustness and consistent retry logic.
+  - Added robust `try-catch` blocks in plan execution to prevent AI API error messages from being written into source files, preserving file integrity.
+  - Ensured `ModifyFile` actions correctly use the configurable model name from VS Code settings.
+
 ## [1.4.2] - 2025-06-19
 
 - **fix(ai): Improve immediate cancellation handling**: Add an early cancellation check at the start of the retry loop to prevent unnecessary attempts. Prioritize operation cancellation errors in error handling to ensure immediate re-throw and prevent retries.

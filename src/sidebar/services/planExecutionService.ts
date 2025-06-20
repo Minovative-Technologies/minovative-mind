@@ -1,9 +1,9 @@
-// src/sidebar/services/planExecutionService.ts
 import * as vscode from "vscode";
 import * as path from "path";
 
 // New imports for AI interaction and code utilities
-import { _performModification } from "./aiInteractionService"; // Assuming this path based on "aiInteractionService.ts"
+import { _performModification } from "./aiInteractionService";
+import { AIRequestService } from "../../services/aiRequestService"; // Added import
 import { applyAITextEdits } from "../../utils/codeUtils";
 import { ProjectChangeLogger } from "../../workflow/ProjectChangeLogger";
 import { generateFileChangeSummary } from "../../utils/diffingUtils";
@@ -84,7 +84,8 @@ export async function executePlanStep(
 		type: string;
 		value: { text: string; isError?: boolean };
 		diffContent?: string;
-	}) => void
+	}) => void,
+	aiRequestService: AIRequestService // Added new parameter
 ): Promise<void> {
 	progress.report({ message: step.description });
 
@@ -99,6 +100,11 @@ export async function executePlanStep(
 			"No workspace folder open. Cannot perform file operations."
 		);
 	}
+
+	// Retrieve the model name from VS Code settings
+	const modelName: string = vscode.workspace
+		.getConfiguration("minovativeMind")
+		.get("modelName", "gemini-2.5-flash");
 
 	switch (step.action) {
 		case PlanStepAction.ModifyFile:
@@ -139,27 +145,28 @@ export async function executePlanStep(
 						)} not found. Attempting to generate initial content and create it...`,
 					});
 
-					// Retrieve the Gemini API key
-					const geminiApiKey: string | undefined = vscode.workspace
-						.getConfiguration("minovativeMind")
-						.get("geminiApiKey");
-
-					// Check for Gemini API key configuration
-					if (geminiApiKey === undefined) {
-						throw new Error(
-							"Gemini API key is not configured. Please set 'minovativeMind.geminiApiKey' in your VS Code settings."
+					let aiGeneratedInitialContent: string;
+					try {
+						aiGeneratedInitialContent = await _performModification(
+							"", // originalContent is empty as we're generating new content
+							step.modificationPrompt,
+							path.extname(targetFileUri.fsPath).substring(1), // Get language ID (e.g., 'ts' from 'file.ts')
+							targetFileUri.fsPath,
+							modelName, // Pass correct modelName
+							aiRequestService, // Pass AIRequestService instance
+							token
 						);
+					} catch (aiError: any) {
+						const errorMessage = `Failed to generate initial content for ${path.basename(
+							targetFileUri.fsPath
+						)}: ${aiError.message}`;
+						console.error("[PlanExecutionService] " + errorMessage, aiError);
+						postChatUpdate({
+							type: "appendRealtimeModelMessage",
+							value: { text: errorMessage, isError: true },
+						});
+						throw aiError; // Re-throw to stop plan execution
 					}
-
-					const aiGeneratedInitialContent = await _performModification(
-						"", // originalContent is empty as we're generating new content
-						step.modificationPrompt,
-						path.extname(targetFileUri.fsPath).substring(1), // Get language ID (e.g., 'ts' from 'file.ts')
-						targetFileUri.fsPath,
-						"default-model-name",
-						geminiApiKey,
-						token
-					);
 
 					const createStep: PlanStep = {
 						action: PlanStepAction.CreateFile,
@@ -176,7 +183,8 @@ export async function executePlanStep(
 						token,
 						progress,
 						changeLogger,
-						postChatUpdate
+						postChatUpdate,
+						aiRequestService // Pass the AIRequestService instance
 					);
 					return; // Exit to prevent further execution of modify logic that expects an existing file
 				} else {
@@ -195,28 +203,29 @@ export async function executePlanStep(
 				)} with AI...`,
 			});
 
-			// Retrieve the Gemini API key
-			const geminiApiKey: string | undefined = vscode.workspace
-				.getConfiguration("minovativeMind")
-				.get("geminiApiKey");
-
-			// Check for Gemini API key configuration
-			if (geminiApiKey === undefined) {
-				throw new Error(
-					"Gemini API key is not configured. Please set 'minovativeMind.geminiApiKey' in your VS Code settings."
+			let aiModifiedContent: string;
+			try {
+				// Call the AI function to get modified content
+				aiModifiedContent = await _performModification(
+					originalContent,
+					step.modificationPrompt,
+					editor.document.languageId,
+					editor.document.uri.fsPath,
+					modelName, // Pass correct modelName
+					aiRequestService, // Pass AIRequestService instance
+					token
 				);
+			} catch (aiError: any) {
+				const errorMessage = `Failed to modify file ${path.basename(
+					targetFileUri.fsPath
+				)}: ${aiError.message}`;
+				console.error("[PlanExecutionService] " + errorMessage, aiError);
+				postChatUpdate({
+					type: "appendRealtimeModelMessage",
+					value: { text: errorMessage, isError: true },
+				});
+				throw aiError; // Re-throw to stop plan execution
 			}
-
-			// Call the AI function to get modified content
-			const aiModifiedContent = await _performModification(
-				originalContent,
-				step.modificationPrompt,
-				editor.document.languageId,
-				editor.document.uri.fsPath,
-				"default-model-name",
-				geminiApiKey,
-				token
-			);
 
 			if (token.isCancellationRequested) {
 				throw new Error("Operation cancelled by user.");

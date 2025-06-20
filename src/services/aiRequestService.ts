@@ -6,6 +6,7 @@ import { HistoryEntry } from "../sidebar/common/sidebarTypes";
 import {
 	ERROR_OPERATION_CANCELLED,
 	ERROR_QUOTA_EXCEEDED,
+	ERROR_SERVICE_UNAVAILABLE, // MODIFICATION 1: Import new error constant
 	generateContentStream,
 } from "../ai/gemini";
 
@@ -42,14 +43,15 @@ export class AIRequestService {
 			onComplete?: () => void;
 		},
 		token?: vscode.CancellationToken,
-		isMergeOperation: boolean = false // NEW: Add this parameter
+		isMergeOperation: boolean = false
 	): Promise<string> {
 		await this.apiKeyManager.switchToNextApiKey();
 		let currentApiKey = this.apiKeyManager.getActiveApiKey();
 		const triedKeys = new Set<string>();
 		const apiKeyList = this.apiKeyManager.getApiKeyList();
-		const maxRetries = apiKeyList.length > 0 ? apiKeyList.length : 1;
-		let attempts = 0;
+		const maxRetries = apiKeyList.length > 0 ? apiKeyList.length : 1; // maxRetries refers to number of distinct keys to attempt for quota errors
+
+		let attempts = 0; // Total attempts made, including retries on same key
 
 		if (!currentApiKey) {
 			if (apiKeyList.length > 0) {
@@ -65,10 +67,9 @@ export class AIRequestService {
 			return `Error: Unable to obtain a valid API key.`;
 		}
 
-		let result = "";
+		let result = ""; // Stores the last error type or the successful generation result
 
 		while (attempts < maxRetries) {
-			// MODIFICATION 1: Insert cancellation check at the start of the retry loop
 			if (token?.isCancellationRequested) {
 				console.log(
 					"[AIRequestService] Cancellation requested at start of retry loop."
@@ -94,7 +95,7 @@ export class AIRequestService {
 
 				const historyForGemini =
 					history && history.length > 0
-						? this.transformHistoryForGemini(history as HistoryEntry[]) // Cast as transformHistoryForGemini expects HistoryEntry[]
+						? this.transformHistoryForGemini(history as HistoryEntry[])
 						: undefined;
 
 				const stream = generateContentStream(
@@ -104,7 +105,7 @@ export class AIRequestService {
 					historyForGemini,
 					generationConfig,
 					token,
-					isMergeOperation // NEW: Pass the flag to generateContentStream
+					isMergeOperation
 				);
 
 				for await (const chunk of stream) {
@@ -116,16 +117,15 @@ export class AIRequestService {
 						await streamCallbacks.onChunk(chunk);
 					}
 				}
-				result = accumulatedResult;
+				result = accumulatedResult; // Store successful result
 				if (streamCallbacks?.onComplete) {
 					streamCallbacks.onComplete();
 				}
-				return result; // Success
+				return result; // Success: return immediately
 			} catch (error: unknown) {
 				const err = error as Error;
 				const errorMessage = err.message;
 
-				// MODIFICATION 2: Add specific cancellation error handling before other checks
 				if (errorMessage === ERROR_OPERATION_CANCELLED) {
 					console.log(
 						"[AIRequestService] Operation cancelled from underlying AI stream."
@@ -137,26 +137,44 @@ export class AIRequestService {
 				}
 
 				if (errorMessage === ERROR_QUOTA_EXCEEDED) {
-					result = ERROR_QUOTA_EXCEEDED;
+					result = ERROR_QUOTA_EXCEEDED; // Mark result for outer handling (key switch)
 					console.warn(
 						`[AIRequestService] Quota/Rate limit hit for key ...${currentApiKey?.slice(
 							-4
 						)}.`
 					);
+				} else if (errorMessage === ERROR_SERVICE_UNAVAILABLE) {
+					// MODIFICATION 3: New service unavailable condition
+					result = ERROR_SERVICE_UNAVAILABLE; // Mark result to retry with same key
+					console.warn(
+						`[AIRequestService] Service unavailable for model ${modelName}. Retrying attempt ${attempts} of ${maxRetries}.`
+					);
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: `AI service temporarily unavailable. Retrying...`,
+					});
+					await new Promise((resolve) => setTimeout(resolve, 30000)); // 30-second delay
+					continue; // MODIFICATION 4: Stay in the loop with the same key
 				} else {
+					// For any other non-retryable error, set result and exit the loop / return immediately
 					result = `Error: ${errorMessage}`;
 					console.error(
 						`[AIRequestService] Error during generation on attempt ${attempts}:`,
 						err
 					);
+					return result; // Return other errors immediately (they are not retryable)
 				}
 			}
 
+			// This block is reached ONLY if `result` was `ERROR_QUOTA_EXCEEDED`.
+			// If `ERROR_SERVICE_UNAVAILABLE` occurred, the `continue` statement above skips this block.
+			// If a non-retryable error occurred, the `return result;` above skips this block.
 			if (result === ERROR_QUOTA_EXCEEDED) {
 				triedKeys.add(currentApiKey);
 				const availableKeysCount = apiKeyList.length;
 
 				if (availableKeysCount <= 1 || triedKeys.size >= availableKeysCount) {
+					// No more keys to try or all keys have been tried for quota.
 					return `API quota or rate limit exceeded for model ${modelName}. All ${availableKeysCount} API key(s) failed.`;
 				}
 
@@ -171,14 +189,28 @@ export class AIRequestService {
 						type: "apiKeyStatus",
 						value: `Switched to key ...${currentApiKey.slice(-4)} for retry.`,
 					});
+					// Loop will continue with the new key in the next iteration.
 				} else {
+					// No more untried keys, even if maxRetries isn't technically exhausted.
 					return `API quota or rate limit exceeded for model ${modelName}. All available API keys have been tried.`;
 				}
-			} else {
-				return result; // Return other errors immediately
 			}
+			// If `result` was anything else, it would have been returned or continued from the catch block.
+			// The loop will naturally continue if a new key was assigned for quota errors.
 		}
-		// Fallback if loop finishes without returning (should only happen if all keys tried and failed with quota)
-		return `API quota or rate limit exceeded for model ${modelName}. Failed after trying ${attempts} keys.`;
+
+		// MODIFICATION 5: After the while loop, modify final return statements
+		// This point is reached if the `while` loop condition `attempts < maxRetries` became false,
+		// meaning all allowed attempts (related to key switching or direct retries on same key) have been exhausted.
+		// `result` holds the error message from the *last* failed attempt.
+		if (result === ERROR_QUOTA_EXCEEDED) {
+			return `API quota or rate limit exceeded for model ${modelName}. Failed after trying ${attempts} keys.`;
+		} else if (result === ERROR_SERVICE_UNAVAILABLE) {
+			return `AI service for model ${modelName} remains unavailable after ${attempts} retries. Please try again later.`;
+		} else {
+			// This case should ideally not be reached if non-retryable errors are returned immediately within the loop.
+			// It serves as a robust fallback for unexpected loop termination conditions.
+			return `An unexpected error occurred after all retries for model ${modelName}. Last error: ${result}`;
+		}
 	}
 }

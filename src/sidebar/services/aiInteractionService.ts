@@ -1,8 +1,8 @@
 // src/sidebar/services/aiInteractionService.ts
 import { HistoryEntry, PlanGenerationContext } from "../common/sidebarTypes";
 import * as vscode from "vscode";
-import { generateContentStream } from "../../ai/gemini";
 import { TEMPERATURE } from "../common/sidebarConstants";
+import { AIRequestService } from "../../services/aiRequestService";
 
 export function createInitialPlanningExplanationPrompt(
 	projectContext: string,
@@ -577,7 +577,7 @@ export async function _performModification(
 	languageId: string,
 	filePath: string,
 	modelName: string,
-	apiKey: string,
+	aiRequestService: AIRequestService, // REMOVED apiKey: string, ADDED aiRequestService
 	token: vscode.CancellationToken,
 	isMergeOperation: boolean = false // NEW: isMergeOperation parameter
 ): Promise<string> {
@@ -626,18 +626,25 @@ export async function _performModification(
 	};
 
 	let modifiedContent = "";
-	const contentStream = generateContentStream(
-		apiKey,
-		modelName,
-		prompt,
-		undefined,
-		generationConfig,
-		token,
-		isMergeOperation // Pass isMergeOperation to the underlying AI call
-	);
-
-	for await (const chunk of contentStream) {
-		modifiedContent += chunk;
+	try {
+		modifiedContent = await aiRequestService.generateWithRetry(
+			prompt,
+			modelName,
+			undefined, // history: pass undefined
+			"file_modification", // requestType: optional, can be 'file_modification'
+			generationConfig,
+			{
+				onChunk: (chunk) => {
+					modifiedContent += chunk;
+				}, // onChunk callback to accumulate content
+				// onComplete: omit if awaiting the result, as generateWithRetry returns the full string
+			},
+			token,
+			isMergeOperation
+		);
+	} catch (error) {
+		console.error("Error during AI file modification:", error); // Log any caught errors
+		throw error; // Re-throw them to ensure proper upstream handling by planExecutionService
 	}
 
 	return modifiedContent;

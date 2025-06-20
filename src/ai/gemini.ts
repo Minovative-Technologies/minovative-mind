@@ -1,4 +1,3 @@
-// src/ai/gemini.ts
 import * as vscode from "vscode";
 import {
 	GoogleGenerativeAI,
@@ -10,6 +9,8 @@ import {
 export const ERROR_QUOTA_EXCEEDED = "ERROR_GEMINI_QUOTA_EXCEEDED";
 // Define a specific error message constant for cancellation
 export const ERROR_OPERATION_CANCELLED = "Operation cancelled by user.";
+// Add a new error constant for service unavailability
+export const ERROR_SERVICE_UNAVAILABLE = "ERROR_GEMINI_SERVICE_UNAVAILABLE";
 
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
@@ -96,6 +97,7 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
  * @throws Will throw `ERROR_OPERATION_CANCELLED` if the operation is cancelled by the user.
  *         Will throw an error if initialization fails, the request is blocked before yielding any content,
  *         or a critical API error occurs. Quota errors throw `new Error(ERROR_QUOTA_EXCEEDED)`.
+ *         Service Unavailable errors throw `new Error(ERROR_SERVICE_UNAVAILABLE)`.
  */
 export async function* generateContentStream(
 	apiKey: string,
@@ -336,6 +338,15 @@ export async function* generateContentStream(
 				errorMessage = `The selected Gemini model '${modelName}' is not valid, not found, or not accessible with your current API key.`;
 				resetClient(); // Model name or access issue, reset client state
 				errorTypeLogged = "Invalid Model";
+			} else if (
+				// Handle Service Unavailable specifically
+				errorStatus === 503 ||
+				lowerErrorMessage.includes("service unavailable") ||
+				lowerErrorMessage.includes("model is overloaded")
+			) {
+				errorMessage = "AI service is currently overloaded. Please try again.";
+				errorTypeLogged = "Service Unavailable";
+				throw new Error(ERROR_SERVICE_UNAVAILABLE); // Propagate specific error constant
 			} else if (
 				lowerErrorMessage.includes("json_parsing_error") ||
 				(generationConfig?.responseMimeType === "application/json" && // If JSON was expected
