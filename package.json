@@ -1,7 +1,7 @@
 {
 	"name": "minovative-mind-vscode",
 	"displayName": "Minovative Mind",
-	"description": "Minovative Mind integrates Google's powerful AI models, providing core AI-Agent capabilities, and enables coding using natural language.",
+	"description": "This extension leverages Google Gemini to provide intelligent, context-aware assistance directly within your development environment. From understanding complex code to automating multi-step refactoring, Minovative Mind is designed to accelerate your flow.",
 	"keywords": [
 		"AI",
 		"VSCode",
