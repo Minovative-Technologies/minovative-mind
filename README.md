@@ -4,23 +4,22 @@ Integrates Google Gemini directly into VS Code, providing an AI-powered assistan
 
 ## Table of Contents
 
-[Minovative Mind VS Code Extension]
-
-- [🚧 Not Fully Launched Yet]
-- [🔑 Getting Started: Setting Up Your Gemini API Key]
-- [👤 Account & Subscription Management]
+- [Not Fully Launched Yet]
+- [Getting Started: Setting Up Your Gemini API Key]
+- [Account & Subscription Management]
   - [User Accounts & Authentication]
   - [Flexible Subscription Tiers]
   - [Manage Your Subscription]
   - [Transparent Feature Gating]
 - [Minovative Mind — Feature Comparison]
-- [✨ Key Features]
-- [🧑‍💻 Basic Usage Examples]
-- [📚 Comprehensive Documentation]
-- [📄 Change Log]
-- [🔒 Privacy Policy]
-- [🔒 Terms of Use]
-- [💬 Feedback & Support]
+- [Key Features]
+- [Basic Usage Examples]
+- [Comprehensive Documentation]
+- [Change Log]
+- [Privacy Policy]
+- [Terms of Use]
+- [Feedback & Support]
+- [Feature / Capability Comparison]
 
 ## 🚧 Not Fully Launched Yet
 
@@ -33,9 +32,9 @@ Integrates Google Gemini directly into VS Code, providing an AI-powered assistan
 
 Minovative Mind requires a Google Gemini API key to function. To access advanced features, you will also need to sign in with a Premium subscription.
 
-1.  **Obtain a Key:** If you don't have one, generate a Gemini API key from the [Google AI Studio](https://aistudio.google.com/app/apikey) or Google Cloud Console.
-2.  **Open Minovative Mind Sidebar:** Click on the "Minovative Mind" icon in the Activity Bar.
-3.  **Add Key:** In the sidebar, locate the API Key input field, paste your Gemini API key, and click "Add Key".
+1. **Obtain a Key:** If you don't have one, generate a Gemini API key from the [Google AI Studio](https://aistudio.google.com/app/apikey) or Google Cloud Console.
+2. **Open Minovative Mind Sidebar:** Click on the "Minovative Mind" icon in the Activity Bar.
+3. **Add Key:** In the sidebar, locate the API Key input field, paste your Gemini API key, and click "Add Key".
 
 **Security Note:** Your API keys are securely stored in VS Code's built-in secret storage and are never exposed or sent outside of your local environment except directly to Google's Gemini API endpoints.
 
@@ -128,29 +127,29 @@ Here are a few quick ways to start using Minovative Mind:
 
 - **Chat with AI:**
 
-  1.  Open the Minovative Mind sidebar.
-  2.  Type your query in the chat input field and press Enter. The AI will respond, leveraging your project context.
+  1. Open the Minovative Mind sidebar.
+  2. Type your query in the chat input field and press Enter. The AI will respond, leveraging your project context.
 
 - **Explain Selected Code:**
 
-  1.  Select a code snippet in your active editor.
-  2.  Right-click on the selection.
-  3.  Choose `Minovative Mind` > `Generate Explanation`.
-  4.  A modal dialog will appear with the AI's explanation.
+  1. Select a code snippet in your active editor.
+  2. Right-click on the selection.
+  3. Choose `Minovative Mind` > `Generate Explanation`.
+  4. A modal dialog will appear with the AI's explanation.
 
 - **Custom Modifications (e.g., /docs, /fix, Refactor): (Note: /fix and custom refactoring are Premium Tier features.)**
 
-  1.  Select the code you want to modify or apply an action to.
-  2.  Press `Ctrl+M` (Windows/Linux) or `Cmd+M` (macOS) to activate the command.
-  3.  In the quick input box:
-      - Type `/docs` to generate documentation for the selected code.
-      - Type `/fix` to analyze and fix the selected code.
-      - Type a custom prompt (e.g., "refactor this function to be more concise").
+  1. Select the code you want to modify or apply an action to.
+  2. Press `Ctrl+M` (Windows/Linux) or `Cmd+M` (macOS) to activate the command.
+  3. In the quick input box:
+     - Type `/docs` to generate documentation for the selected code.
+     - Type `/fix` to analyze and fix the selected code.
+     - Type a custom prompt (e.g., "refactor this function to be more concise").
 
 - **Automated Git Commit:**
-  1.  Ensure you have staged changes in your Git repository.
-  2.  Open the Minovative Mind sidebar chat.
-  3.  Type `/commit` and press Enter. Minovative Mind will stage changes, generate a conventional commit message, and commit them.
+  1. Ensure you have staged changes in your Git repository.
+  2. Open the Minovative Mind sidebar chat.
+  3. Type `/commit` and press Enter. Minovative Mind will stage changes, generate a conventional commit message, and commit them.
 
 ## 📚 Comprehensive Documentation
 
@@ -171,3 +170,21 @@ For detailed information on the terms and conditions governing the use of the Mi
 ## 💬 Feedback & Support
 
 Your feedback is invaluable! If you encounter any bugs, have suggestions for new features, or just want to share your experience, please visit our [Minovative Mind Discord](https://discord.gg/w9dkHTncva) to submit an issue, feature request, or general feedback.
+
+## Feature / Capability Comparison
+
+### (As of 2025, June 21) - Table created by ChatGPT-4o (Search Feature)
+
+| **Product**              | **Auto Key Rotation** | **Chat Interface**           | **Context Awareness**                        | **Code Explanation**     | **Free‑form Refactor / Mods** | **Merge Resolution** | **Multi‑Step Planning & Execution** | **Shell / File Ops**       | **Execution Feedback / Cancel** | **Commit Msg Generation** | **Live Typing**        | **History Save/Load** | **API/Model Key Mgmt**      |
+| ------------------------ | --------------------- | ---------------------------- | -------------------------------------------- | ------------------------ | ----------------------------- | -------------------- | ----------------------------------- | -------------------------- | ------------------------------- | ------------------------- | ---------------------- | --------------------- | --------------------------- |
+| **Minovative Mind**      | ✅ Yes                | ✅ Sidebar chat              | ✅ Files, symbols, diagnostics, chat context | ✅ Modal explanations    | ✅ via premium menus          | ✅ Premium           | ✅ JSON plan + execution            | ✅ Yes via plan actions    | ✅ Diffs, live typing, cancel   | ✅ `/commit` UI           | ✅ Premium live typing | ✅ JSON import/export | ✅ Multi-key, auto-rotate   |
+| **Cursor**               | ❌ No                 | ✅ Tab/Chat inside editor    | ✅ Full codebase indexing                    | ✅ Inline suggestions    | ✅ Smart rewrite              | ❌                   | ✅ Agentic complete tasks           | ✅ CLI commands?           | ⚠️ Basic feedback               | ❌                        | ❌                     | ❌                    | ✅ Model selector           |
+| **GitHub Copilot Agent** | ❌ No                 | ✅ Inline + suggestions      | ✅ Strong chat + codebase context            | ✅ Inline comments       | ✅ Suggestions only           | ❌                   | ✅ Copilot Tasks                    | ❌                         | ❌                              | ✅ Suggests msgs          | ❌                     | ❌                    | ✅ GitHub-managed           |
+| **Claude Code**          | ❌ No                 | ✅ Terminal chat CLI         | ✅ Project memory in terminal                | ✅ Terminal explanations | ✅ Edits via CLI              | ❓ Not noted         | ✅ CLI-based multi-step tasks       | ✅ Terminal commands       | ⚠️ CLI logs only                | ❌                        | ❌                     | ❌                    | ❓ Anthropic config         |
+| **Windsurf** (Codeium)   | ❌ No                 | ✅ Editor suggestions        | ✅ Full codebase context                     | ✅ Suggestion explainers | ✅ NL-based edits             | ❌                   | ✅ Support vibe coding pipelines    | ✅ Possibly                | ⚠️ Basic feedback               | ❌                        | ❌                     | ❌                    | ✅ Configurable keys/models |
+| **Google Jules**         | ❌ No                 | ✅ Asynchronous agent + chat | ✅ Clones repo in cloud VM                   | ✅ Plan explanations     | ✅ Multi-file changes         | ❌                   | ✅ Plan + execute PR diff           | ✅ In-cloud commands       | ✅ Diff UI, audio changelog     | ❌                        | ❌                     | ⚠️ Plan history?      | ✅ Google config            |
+| **Replit Agent**         | ❌ No                 | ✅ Browser–based Agent chat  | ✅ Maintains context across repls            | ✅ Chat assistant        | ✅ NL-generated code          | ❌                   | ✅ Agent v2 multi-file execution    | ✅ Setup, deploy supported | ⚠️ Logs/preview UI              | ⚠️ Git integration        | ❌                     | ✅ via exported repl  | ✅ Token/settings           |
+| **Qodo Gen**             | ❌ No                 | ✅ Chat + agentic mode       | ✅ Repo/code context                         | ✅ Explains & tests      | ✅ Refactor/test hints        | ❌                   | ✅ Agentic test workflows           | ❌                         | ✅ Test results UI              | ❌                        | ❌                     | ❌                    | ✅ Configurable             |
+| **Amazon Q Developer**   | ❌ No                 | ✅ Chat-enabled AWS IDE      | ✅ AWS project context                       | ✅ Debug hints           | ✅ Code upgrades              | ❌                   | ✅ Some agentic upgrades            | ✅ Yes                     | ✅ Inline results via chat      | ❌                        | ❌                     | ❌                    | ✅ AWS Bedrock auth         |
+| **LangChain/AutoGPT**    | ❌ No                 | ❌ Framework only            | ✅ Configurable via pipelines                | ✅ Via prompts           | ✅ Custom flows               | ✅ If implemented    | ✅ Core capability                  | ✅ Yes                     | ✅ If built                     | ✅ If built               | ❌                     | ⚠️ Dev-managed        | ✅ Developer-managed        |
+| **Rovo Dev CLI**         | ❌ No                 | ✅ CLI chat & integration    | ✅ Retains project memory                    | ✅ Terminal summaries    | ✅ CLI-based code tasks       | ❓ Not noted         | ✅ CLI sequential tasks w/memory    | ✅ Jira/Confluence enabled | ⚠️ CLI logs                     | ❌                        | ❌                     | ✅ CLI recall?        | ✅ Enterprise auth          |
