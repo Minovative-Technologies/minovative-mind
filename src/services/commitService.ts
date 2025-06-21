@@ -82,7 +82,7 @@ export class CommitService {
 				return;
 			}
 
-			const commitMessagePrompt = `You are an AI expert in Git. Based on the provided staged diff, generate a concise and informative conventional commit message. Provide the commit message with markdown formatting.\n\nStaged Diff:\n\`\`\`diff\n${diff}\n\`\`\`\n\nCommit Message:`;
+			const commitMessagePrompt = `You are an AI expert in Git. Based on the provided staged diff, generate a short, concise, but highly accurate commit message. Provide the commit message with markdown formatting.\n\nStaged Diff:\n\`\`\`diff\n${diff}\n\`\`\`\n\nCommit Message:`;
 
 			let commitMessage =
 				await this.provider.aiRequestService.generateWithRetry(
