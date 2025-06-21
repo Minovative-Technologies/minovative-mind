@@ -328,8 +328,8 @@ h2 {
 }
 /* Position for user message actions */
 .user-message .message-actions {
-	right: 0px;
-	left: auto;
+	left: 0px;
+	right: auto;
 }
 
 /* --- Copy Button --- */

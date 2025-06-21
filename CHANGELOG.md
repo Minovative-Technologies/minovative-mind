@@ -2,6 +2,13 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.4.5] - 2025-06-21
+
+- **refactor(prompt): refine commit message generation instructions**
+- **refactor(firebase): Stop implicitly creating user documents**:
+
+  The firebaseService previously created a default user document in Firestore if one didn't exist upon a user's initial sign-in or event.
+
 ## [1.4.4] - 2025-06-20
 
 - **feat(errors): Sanitize absolute paths in error messages**:
