@@ -4,7 +4,6 @@ import {
 	Auth,
 	User,
 	signInWithEmailAndPassword,
-	createUserWithEmailAndPassword,
 	onAuthStateChanged,
 	signOut,
 } from "firebase/auth";
@@ -13,8 +12,6 @@ import {
 	Firestore,
 	doc,
 	onSnapshot,
-	setDoc,
-	Timestamp,
 	Unsubscribe,
 } from "firebase/firestore";
 import {
@@ -123,50 +120,45 @@ export const initializeFirebase = (
 							if (docSnapshot.exists()) {
 								subscriptionData = docSnapshot.data() as UserSubscriptionData;
 							} else {
-								// Document doesn't exist, potentially a new user. Create it.
+								// Document doesn't exist. Do NOT create it or write default status to Firestore.
+								// Instead, default to 'free' in application state only.
+								console.warn(
+									`[FirebaseService] User document for ${user.uid} not found. Defaulting to 'free' in application state only.`
+								);
 								subscriptionData = {
 									subscriptionStatus: "free",
-									subscriptionPeriodEnd: null, // MODIFICATION 1: Ensure subscriptionPeriodEnd is null
+									subscriptionPeriodEnd: null,
 									email: user.email || "",
 									uid: user.uid,
 								};
-								setDoc(
-									userDocRef,
-									{
-										subscriptionStatus: "free",
-										subscriptionPeriodEnd: null,
-										email: user.email || "",
-									},
-									{ merge: true }
-								)
-									.then(() => {
-										console.log("Created user doc for new user:", user.uid);
-									})
-									.catch((error) => {
-										console.error("Error creating user doc:", error);
-									});
 							}
 							onAuthStateChangeCallback(user, subscriptionData);
 							// Resolve the promise after the first onSnapshot fires successfully
 							console.log(
 								"[FirebaseService] Resolving: User signed in, Firestore snapshot received."
 							);
-							// MODIFICATION: Check onAuthStateChangedFirstFire
+							// Check onAuthStateChangedFirstFire
 							if (onAuthStateChangedFirstFire) {
-								safeResolve(); // MODIFICATION 2: Replaced direct resolve
+								safeResolve();
 								onAuthStateChangedFirstFire = false;
 							}
 						},
 						(error) => {
 							console.error("Error listening to user document:", error);
-							onAuthStateChangeCallback(user, null); // Still pass user, but no subscription data
+							// On error, still pass user but default subscription data to 'free' instead of null.
+							onAuthStateChangeCallback(user, {
+								subscriptionStatus: "free",
+								subscriptionPeriodEnd: null,
+								email: user?.email || "",
+								uid: user?.uid || "",
+							});
 							// Resolve the promise after the first onSnapshot errors
 							console.log(
 								"[FirebaseService] Resolving: User signed in, Firestore snapshot error."
 							);
-							// MODIFICATION: Check onAuthStateChangedFirstFire
+							// Check onAuthStateChangedFirstFire
 							if (onAuthStateChangedFirstFire) {
-								safeResolve(); // MODIFICATION 2: Replaced direct resolve
+								safeResolve();
 								onAuthStateChangedFirstFire = false;
 							}
 						}
@@ -176,9 +168,9 @@ export const initializeFirebase = (
 					onAuthStateChangeCallback(null, null);
 					// Resolve the promise immediately if no user is signed in
 					console.log("[FirebaseService] Resolving: No user signed in.");
-					// MODIFICATION: Check onAuthStateChangedFirstFire
+					// Check onAuthStateChangedFirstFire
 					if (onAuthStateChangedFirstFire) {
-						safeResolve(); // MODIFICATION 2: Replaced direct resolve
+						safeResolve();
 						onAuthStateChangedFirstFire = false;
 					}
 				}
@@ -188,11 +180,11 @@ export const initializeFirebase = (
 		} catch (error) {
 			console.error("Error initializing Firebase:", error);
 			// Ensure the promise resolves even if Firebase initialization itself fails
-			onAuthStateChangeCallback(null, null); // MODIFICATION 2: Ensure callback is called on init failure
+			onAuthStateChangeCallback(null, null); // Ensure callback is called on init failure
 			console.log(
 				"[FirebaseService] Resolving: Firebase initialization failed."
 			);
-			safeResolve(); // MODIFICATION 2: Replaced direct resolve
+			safeResolve();
 		}
 	});
 
