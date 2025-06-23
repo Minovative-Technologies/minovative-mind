@@ -232,12 +232,7 @@ export async function executePlanStep(
 			}
 
 			// Apply the AI-generated changes to the editor
-			await applyAITextEdits(
-				editor,
-				aiModifiedContent,
-				"AI modification",
-				token
-			);
+			await applyAITextEdits(editor, originalContent, aiModifiedContent, token);
 
 			const newContent = editor.document.getText();
 			const {

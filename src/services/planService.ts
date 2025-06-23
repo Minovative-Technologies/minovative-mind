@@ -25,6 +25,7 @@ import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
 import { GitConflictResolutionService } from "./gitConflictResolutionService"; // NEW Import
 import { sanitizeErrorMessagePaths } from "../utils/pathUtils"; // Import the path utility
+import { applyAITextEdits } from "../utils/codeUtils"; // NEW Import: For applying precise text edits
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
@@ -214,13 +215,8 @@ export class PlanService {
 		diagnosticsString?: string,
 		isMergeOperation: boolean = false // Added isMergeOperation parameter
 	): Promise<sidebarTypes.PlanGenerationResult> {
-		const {
-			settingsManager,
-			apiKeyManager,
-			changeLogger,
-			isUserSignedIn,
-			currentUserTier,
-		} = this.provider;
+		const { settingsManager, apiKeyManager, changeLogger, isUserSignedIn } =
+			this.provider;
 		const modelName = settingsManager.getSelectedModelName();
 		const apiKey = apiKeyManager.getActiveApiKey();
 
@@ -822,63 +818,61 @@ export class PlanService {
 							.trim();
 
 						if (modifiedContent !== existingContent) {
-							const edit = new vscode.WorkspaceEdit();
-							const document = await vscode.workspace.openTextDocument(fileUri);
-							edit.replace(
-								fileUri,
-								new vscode.Range(
-									document.positionAt(0),
-									document.positionAt(document.getText().length)
-								),
-								modifiedContent
-							);
-							const success = await vscode.workspace.applyEdit(edit);
-
-							if (success) {
-								// Added if condition for merge operations
-								if (
-									context.isMergeOperation &&
-									context.editorContext &&
-									fileUri.toString() ===
-										context.editorContext.documentUri.toString()
-								) {
-									await this.gitConflictResolutionService.unmarkFileAsResolved(
-										fileUri
-									);
-								}
-								// END MODIFIED
-
-								const { formattedDiff, summary } =
-									await generateFileChangeSummary(
-										existingContent,
-										modifiedContent,
-										step.path
-									);
-								this._postChatUpdateForPlanExecution({
-									type: "appendRealtimeModelMessage",
-									value: {
-										text: `Step ${index + 1} OK: Modified file \`${
-											step.path
-										}\` (See diff below)`,
-									},
-									diffContent: formattedDiff,
-								});
-								changeLogger.logChange({
-									filePath: step.path,
-									changeType: "modified",
-									summary,
-									diffContent: formattedDiff,
-									timestamp: Date.now(),
-								});
-							} else {
-								this.provider.postMessageToWebview({
-									type: "statusUpdate",
-									value: `Error applying modification to ${step.path}.`,
-									isError: true,
-								});
-								// Fall through to error handling of the outer catch, or explicitly fail.
-								throw new Error(`Failed to apply edit for ${step.path}.`);
+							// Ensure the file is open in an editor to apply precise edits
+							let document: vscode.TextDocument;
+							let editor: vscode.TextEditor;
+							try {
+								document = await vscode.workspace.openTextDocument(fileUri);
+								editor = await vscode.window.showTextDocument(document);
+							} catch (docError: any) {
+								// If the document cannot be opened or shown, treat as an error and stop execution for this step
+								throw new Error(
+									`Failed to open document ${fileUri.fsPath} for modification: ${docError.message}`
+								);
 							}
+
+							// Apply precise text edits using the utility function
+							await applyAITextEdits(
+								editor,
+								existingContent,
+								modifiedContent,
+								combinedToken
+							);
+
+							// Post-application logic, now unconditional after applyAITextEdits
+							if (
+								context.isMergeOperation &&
+								context.editorContext &&
+								fileUri.toString() ===
+									context.editorContext.documentUri.toString()
+							) {
+								await this.gitConflictResolutionService.unmarkFileAsResolved(
+									fileUri
+								);
+							}
+
+							const { formattedDiff, summary } =
+								await generateFileChangeSummary(
+									existingContent,
+									modifiedContent,
+									step.path
+								);
+							this._postChatUpdateForPlanExecution({
+								type: "appendRealtimeModelMessage",
+								value: {
+									text: `Step ${index + 1} OK: Modified file \`${
+										step.path
+									}\` (See diff below)`,
+								},
+								diffContent: formattedDiff,
+							});
+							changeLogger.logChange({
+								filePath: step.path,
+								changeType: "modified",
+								summary,
+								diffContent: formattedDiff,
+								timestamp: Date.now(),
+							});
 						} else {
 							// If content is identical, still count as success, but no diff/change log
 							this.provider.postMessageToWebview({
