@@ -32,7 +32,7 @@ export class ChatService {
 				value: { modelName, relevantFiles: projectContext.relevantFiles },
 			});
 
-			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown. If the user wants you to implement code changes, guide them to use the /plan command with an example according to their query.\n\nProject Context:\n${projectContext.contextString}\n\nUser Query:\n${userMessage}\n\nAssistant Response:`;
+			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown. If the user wants you to implement code changes, guide them to use the (/plan [user request]) for ideas they want you to code. Give them an example use case of /plan according to their queries.\n\nProject Context:\n${projectContext.contextString}\n\nUser Query:\n${userMessage}\n\nAssistant Response:`;
 
 			let accumulatedResponse = "";
 			finalAiResponseText =
