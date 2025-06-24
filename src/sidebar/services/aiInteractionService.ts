@@ -1,5 +1,5 @@
 // src/sidebar/services/aiInteractionService.ts
-import { HistoryEntry, PlanGenerationContext } from "../common/sidebarTypes";
+import * as sidebarTypes from "../common/sidebarTypes";
 import * as vscode from "vscode";
 import { TEMPERATURE } from "../common/sidebarConstants";
 import { AIRequestService } from "../../services/aiRequestService";
@@ -7,9 +7,9 @@ import { AIRequestService } from "../../services/aiRequestService";
 export function createInitialPlanningExplanationPrompt(
 	projectContext: string,
 	userRequest?: string,
-	editorContext?: PlanGenerationContext["editorContext"],
+	editorContext?: sidebarTypes.PlanGenerationContext["editorContext"],
 	diagnosticsString?: string,
-	chatHistory?: HistoryEntry[]
+	chatHistory?: sidebarTypes.HistoryEntry[]
 ): string {
 	let specificContextPrompt = "";
 	let mainInstructions = "";
@@ -162,9 +162,11 @@ export function createInitialPlanningExplanationPrompt(
 export function createPlanningPrompt(
 	userRequest: string | undefined,
 	projectContext: string,
-	editorContext: PlanGenerationContext["editorContext"] | undefined,
+	editorContext:
+		| sidebarTypes.PlanGenerationContext["editorContext"]
+		| undefined,
 	combinedDiagnosticsAndRetryString: string | undefined,
-	chatHistory: HistoryEntry[] | undefined,
+	chatHistory: sidebarTypes.HistoryEntry[] | undefined,
 	textualPlanExplanation: string,
 	recentChanges: string | undefined // Modified to accept pre-formatted string
 ): string {
@@ -195,7 +197,7 @@ export function createPlanningPrompt(
         "steps": [
             {
                 "step": 1,
-                "action": "create_directory | create_file | modify_file | run_command",
+                "action": "create_directory" | "create_file" | "modify_file" | "run_command",
                 "description": "What this step does. Make sure the step is as detailed as possible. **This field is ALWAYS required for every step no matter what.**",
                 "path": "relative/path/to/target", // Required for file/dir ops. Relative to workspace root and user's project.
                 "content": "...", // For create_file with direct content (string). Use ONLY this OR generate_prompt.
@@ -530,22 +532,22 @@ export function createPlanningPrompt(
 		editorContext && actualDiagnosticsString
 			? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan, in great detail, addresses them for '/fix' requests.**"
 			: ""
-	} Also carefully review the 'Recent Chat History' if provided. This history contains previous interactions, including any steps already taken or files created/modified. Your plan MUST build upon these prior changes, avoid redundant operations (e.g., recreating existing files, reinstalling already installed dependencies), and correctly reference or import new entities (e.g., functions from newly created utility files) introduced in earlier steps or during the conversation. When planning \`modify_file\` actions, especially for refactoring, leverage the 'Symbol Information' and particularly the 'Active Symbol Detailed Information' sections to ensure all related definitions and references are accurately considered for modification. **For '/fix' requests, specifically ensure that the 'Active Symbol Detailed Information' is robustly used for precise targeting and impact analysis of changes within \`modification_prompt\` values.** Additionally, prioritize \`modify_file\` steps that account for global symbol impact when a symbol is refactored.
+	} Also carefully review the 'Recent Chat History' if provided. This history contains previous interactions, including any steps already taken or files created/modified. When planning \`modify_file\` actions, especially for refactoring, leverage the 'Symbol Information' and particularly the 'Active Symbol Detailed Information' sections to ensure all related definitions and references are accurately considered for modification. **For '/fix' requests, specifically ensure that the 'Active Symbol Detailed Information' is robustly used for precise targeting and impact analysis of changes within \`modification_prompt\` values.** Additionally, prioritize \`modify_file\` steps that account for global symbol impact when a symbol is refactored.
     
     2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
-    3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
-    4.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
-    5.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. **Crucially, the 'description' field MUST be included and populated for EVERY step, regardless of the action type.** Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
-    6.  **JSON String Escaping:** When providing string values within the JSON (e.g., for \`content\`, \`generate_prompt\`, \`modification_prompt\`, \`description\`, \`path\`, \`command\`), ensure that special characters are correctly escaped according to JSON rules:
+    3.  **Consult Recent Project Changes:** Always consult the "Recent Project Changes (During Current Workflow Execution)" section. Your plan MUST build upon these prior changes. Avoid generating steps that redundantly re-create files already created, or redundantly modify files already changed in prior steps and whose desired state is reflected by that prior modification. Instead, if multiple logical changes are needed for one file, combine *all* those required modifications into a **single** \`modification_prompt\` for that file's \`modify_file\` step. This ensures efficiency and avoids unnecessary operations.
+    4.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
+    5.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
+    6.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. **Crucially, the 'description' field MUST be included and populated for EVERY step, regardless of the action type.** Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
+    7.  **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
+    8.  **JSON String Escaping:** When providing string values within the JSON (e.g., for \`content\`, \`generate_prompt\`, \`modification_prompt\`, \`description\`, \`path\`, \`command\`), ensure that special characters are correctly escaped according to JSON rules:
         *   Newline (\`\\n\`) must be escaped as \`\\n\`.
         *   Carriage return (\`\\r\`) must be escaped as \`\\r\`.
         *   Backslash (\`\\\`) must be escaped as \`\\\`.
         *   Double quote (\`"\`) must be escaped as \`"\`.
-    7.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
-    8. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for developers.
-    // Ensure only one modify_file step per file path
-    9. **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
-    6. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
+    9.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
+    10. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for developers.
+    11. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
 
     --- Specific Context Prompt ---
     ${specificContextPrompt}
@@ -562,10 +564,8 @@ export function createPlanningPrompt(
     --- Recent Changes ---
     ${recentChangesForPrompt}
     --- End Recent Changes ---
-
-    --- Textual Plan Prompt Section ---
-    ${textualPlanExplanation}
-    --- End Textual Plan Prompt Section ---
+    
+    ${textualPlanPromptSection}
 
     --- Expected JSON Plan Format ---
     ${jsonFormatDescription}
@@ -577,6 +577,130 @@ export function createPlanningPrompt(
 
     Execution Plan (ONLY JSON):
     `;
+}
+
+export function createCorrectionPlanPrompt(
+	originalUserInstruction: string,
+	projectContext: string,
+	editorContext: sidebarTypes.EditorContext | undefined,
+	chatHistory: sidebarTypes.HistoryEntry[],
+	relevantSnippets: string,
+	aggregatedFormattedDiagnostics: string,
+	formattedRecentChanges: string,
+	retryReason?: string
+): string {
+	const chatHistoryForPrompt =
+		chatHistory && chatHistory.length > 0
+			? `
+        --- Recent Chat History (for additional context on user's train of thought and previous conversations with a AI model) ---
+        ${chatHistory
+					.map(
+						(entry) =>
+							`Role: ${entry.role}\nContent:\n${entry.parts
+								.map((p) => p.text)
+								.join("\n")}`
+					)
+					.join("\n---\n")}
+        --- End Recent Chat History ---`
+			: "";
+
+	const editorContextForPrompt = editorContext
+		? `
+    --- Editor Context ---
+    File Path: ${editorContext.filePath}
+    Language: ${editorContext.languageId}
+    Selected Text:
+    \`\`\`${editorContext.languageId}
+    ${editorContext.selectedText}
+    \`\`\`
+    Full Text of Affected File:
+    \`\`\`${editorContext.languageId}
+    ${editorContext.fullText}
+    \`\`\`
+    --- End Editor Context ---`
+		: "";
+
+	const retryReasonSection = retryReason
+		? `
+    --- Previous Plan Parsing Error ---
+    CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${retryReason}".
+    You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. Do not include markdown fences.
+    --- End Previous Plan Parsing Error ---`
+		: "";
+
+	return `
+        You are an expert senior software engineer. Your ONLY task is to generate a JSON ExecutionPlan to fix errors.
+
+        The previous attempt to generate/modify code resulted in the following diagnostics across potentially multiple files. Your plan MUST resolve ALL reported diagnostics. DO NOT revert or change files that were already successfully modified or created during the current workflow execution, unless explicitly required to fix a new diagnostic reported below.
+
+        Your plan MUST resolve ALL reported diagnostics by generating a valid ExecutionPlan in JSON format. For create_file and modify_file steps, ensure the path field is **non-empty, a relative string** (e.g., 'src/utils/myFile.ts') to the workspace root, and accurately reflects the file being acted upon. This path is critical for successful execution.
+
+        **Single File, Single Step for Modifications (Critical for Corrections):** For any given file path, ensure there is at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of this correction plan. If multiple logical changes are required for the same file to fix diagnostics, combine *all* those modifications comprehensively into the **single** \`modification_prompt\` for that file's \`modify_file\` step.
+
+        Your output MUST be ONLY a JSON object, with no conversational text, explanations, or markdown formatting (e.g., \`\`\`json\`).
+
+        --- Original User Request ---
+        ${originalUserInstruction}
+        --- End Original User Request ---
+
+        --- Broader Project Context ---
+        ${projectContext}
+        --- End Broader Project Context ---
+        ${editorContextForPrompt}
+        ${chatHistoryForPrompt}
+
+        --- Relevant Project Snippets (for additional context) ---
+        ${relevantSnippets}
+        --- End Relevant Project Snippets ---
+
+        --- Recent Project Changes (During Current Workflow) ---
+        ${formattedRecentChanges}
+        --- End Recent Project Changes ---
+
+        --- Diagnostics to Address (Errors & Warnings) ---
+        ${aggregatedFormattedDiagnostics}
+        --- End Diagnostics to Address ---
+        
+        --- Retry Reason Section ---
+        ${retryReasonSection}
+        --- End Retry Reason Section ---
+
+        --- Required JSON Schema Reference ---
+        Your output MUST strictly adhere to the following TypeScript interfaces for \`ExecutionPlan\` and \`PlanStep\` types. Pay special attention to the 'path' field for file operations.
+
+        interface ExecutionPlan {
+          planDescription: string;
+          steps: PlanStep[];
+        }
+
+        interface PlanStep {
+          step: number; // 1-indexed, sequential
+          action: "create_directory" | "create_file" | "modify_file" | "run_command";
+          description: string;
+          // File/Directory Operations:
+          path?: string; // REQUIRED for 'create_directory', 'create_file', 'modify_file'. Must be a non-empty, relative string (e.g., 'src/components/button.ts'). DO NOT leave this empty, null, or undefined.
+          // 'create_file' specific:
+          content?: string; // Exclusive with 'generate_prompt'. Full content of the new file.
+          generate_prompt?: string; // Exclusive with 'content'. A prompt to generate file content.
+          // 'modify_file' specific:
+          modification_prompt?: string; // REQUIRED for 'modify_file'. Instructions on how to modify the file's content.
+          // 'run_command' specific:
+          command?: string; // REQUIRED for 'run_command'. The command string to execute.
+        }
+
+        --- End Required JSON Schema Reference ---
+
+        When generating steps to resolve diagnostics, you must use the exact file paths indicated in the 'Diagnostics to Address' section for the \`path\` field of \`create_file\` and \`modify_file\` steps.
+
+        **Key Requirements for your plan:**
+        1.  **Resolve ALL Reported Diagnostics:** Every error and warning listed in the 'Diagnostics to Address' section MUST be resolved by your plan.
+        2.  **No Reversion of Changes:** DO NOT revert any changes previously made during the current workflow unless the diagnostic explicitly indicates a regression that needs fixing. The 'Recent Project Changes (During Current Workflow)' section details these changes. **Consult the 'Recent Project Changes (During Current Workflow)' section to avoid redundant correction steps. Focus solely on resolving diagnostics that *persist* after prior modifications, and do not re-modify files if their desired state is already reflected by previous changes.**
+        3.  **Output ONLY JSON:** Your response MUST be a single, valid JSON object for the ExecutionPlan, and nothing else.
+        4.  **Production-Ready Code:** All modifications and new code generated must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles.
+        5.  **Adhere to Project Structure:** Consider the existing project structure, dependencies, and conventions inferred from the 'Broader Project Context' and 'Relevant Project Snippets'.
+        
+        ExecutionPlan (ONLY JSON):
+`;
 }
 
 export async function _performModification(

@@ -8,6 +8,7 @@ import * as sidebarConstants from "../sidebar/common/sidebarConstants";
 import {
 	createInitialPlanningExplanationPrompt,
 	createPlanningPrompt,
+	createCorrectionPlanPrompt, // NEW: Import createCorrectionPlanPrompt
 } from "../sidebar/services/aiInteractionService";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import {
@@ -23,13 +24,15 @@ import {
 import { typeContentIntoEditor } from "../sidebar/services/planExecutionService";
 import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
-import { GitConflictResolutionService } from "./gitConflictResolutionService"; // NEW Import
-import { sanitizeErrorMessagePaths } from "../utils/pathUtils"; // Import the path utility
-import { applyAITextEdits } from "../utils/codeUtils"; // NEW Import: For applying precise text edits
+import { GitConflictResolutionService } from "./gitConflictResolutionService";
+import { sanitizeErrorMessagePaths } from "../utils/pathUtils";
+import { applyAITextEdits } from "../utils/codeUtils"; // For applying precise text edits
+import { DiagnosticService } from "../utils/diagnosticUtils"; // NEW: Import DiagnosticService
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
 	private readonly MAX_TRANSIENT_STEP_RETRIES = 3;
+	private readonly MAX_CORRECTION_PLAN_ATTEMPTS = 3; // NEW: Max attempts for AI to generate a valid correction *plan*
 
 	constructor(
 		private provider: SidebarProvider,
@@ -589,7 +592,6 @@ export class PlanService {
 		operationToken: vscode.CancellationToken
 	): Promise<void> {
 		this.provider.currentExecutionOutcome = undefined;
-		let executionOk = true;
 		this.provider.activeChildProcesses = [];
 
 		// Use the workspaceRootUri from the class property, which is passed during instantiation
@@ -628,7 +630,12 @@ export class PlanService {
 							return;
 						}
 
-						executionOk = await this._executePlanSteps(
+						const originalRootInstruction =
+							planContext.type === "chat"
+								? planContext.originalUserRequest ?? ""
+								: planContext.editorContext!.instruction;
+
+						const affectedFilesSet = await this._executePlanSteps(
 							plan.steps!,
 							rootUri,
 							planContext,
@@ -636,12 +643,33 @@ export class PlanService {
 							combinedToken
 						);
 
+						let overallPlanExecutionSuccess = true; // Represents if steps executed without user cancellation/fatal errors
+
+						if (!combinedToken.isCancellationRequested) {
+							// If the main plan execution was not cancelled, proceed with final validation
+							const finalValidationOutcome =
+								await this._performFinalValidationAndCorrection(
+									affectedFilesSet,
+									rootUri,
+									combinedToken,
+									planContext,
+									progress,
+									originalRootInstruction
+								);
+							// The overall plan is successful only if both steps execution AND final validation succeed
+							if (!finalValidationOutcome) {
+								overallPlanExecutionSuccess = false;
+							}
+						} else {
+							overallPlanExecutionSuccess = false; // Plan was cancelled during step execution
+						}
+
+						// Update currentExecutionOutcome based on the overall success
 						if (combinedToken.isCancellationRequested) {
 							this.provider.currentExecutionOutcome = "cancelled";
 						} else {
-							this.provider.currentExecutionOutcome = executionOk
-								? "success"
-								: "failed";
+							this.provider.currentExecutionOutcome =
+								overallPlanExecutionSuccess ? "success" : "failed";
 						}
 					} finally {
 						opListener.dispose();
@@ -651,7 +679,6 @@ export class PlanService {
 				}
 			);
 		} catch (error: any) {
-			executionOk = false;
 			const isCancellation =
 				error.message.includes("Operation cancelled by user.") ||
 				error.message === ERROR_OPERATION_CANCELLED;
@@ -677,8 +704,9 @@ export class PlanService {
 		context: sidebarTypes.PlanGenerationContext, // Renamed to context for clarity
 		progress: vscode.Progress<{ message?: string; increment?: number }>,
 		combinedToken: vscode.CancellationToken
-	): Promise<boolean> {
-		let executionOk = true;
+	): Promise<Set<vscode.Uri>> {
+		let executionOk = true; // Still used for internal loop control and throwing on fatal error/cancellation
+		const affectedFileUris = new Set<vscode.Uri>();
 		const totalSteps = steps.length;
 		const { settingsManager, changeLogger } = this.provider;
 
@@ -693,7 +721,7 @@ export class PlanService {
 			while (!currentStepCompletedSuccessfullyOrSkipped) {
 				if (combinedToken.isCancellationRequested) {
 					executionOk = false;
-					return false; // Plan cancelled
+					throw new Error(ERROR_OPERATION_CANCELLED); // Plan cancelled
 				}
 
 				const stepMessageTitle = `Step ${index + 1}/${totalSteps}: ${
@@ -764,6 +792,9 @@ export class PlanService {
 							);
 						}
 						await typeContentIntoEditor(editor, content ?? "", combinedToken);
+
+						affectedFileUris.add(fileUri); // ADDED: Track affected file
+
 						const { formattedDiff, summary } = await generateFileChangeSummary(
 							"",
 							content ?? "",
@@ -849,10 +880,12 @@ export class PlanService {
 							// Apply precise text edits using the utility function
 							await applyAITextEdits(
 								editor,
-								existingContent,
+								editor.document.getText(), // CRITICAL CHANGE: Use current live content from editor for diffing
 								modifiedContent,
 								combinedToken
 							);
+
+							affectedFileUris.add(fileUri); // ADDED: Track affected file
 
 							// Post-application logic, now unconditional after applyAITextEdits
 							if (
@@ -1010,7 +1043,7 @@ export class PlanService {
 							);
 						} else {
 							// Cancel Plan or dialog was dismissed/closed
-							executionOk = false;
+							executionOk = false; // Set to false to indicate failure before throwing
 							throw new Error(ERROR_OPERATION_CANCELLED); // Abort the entire plan execution
 						}
 					}
@@ -1019,10 +1052,8 @@ export class PlanService {
 
 			index++; // Increment outer loop index after current step is fully handled (succeeded or skipped).
 		} // End of outer `while (index < totalSteps)` loop
-		return executionOk;
+		return affectedFileUris;
 	}
-
-	// --- HELPERS ---
 
 	/**
 	 * Reads the content of relevant files and formats them into Markdown fenced code blocks.
@@ -1293,5 +1324,220 @@ export class PlanService {
 				vscode.commands.executeCommand("minovative-mind.activitybar.focus");
 			}
 		}
+	}
+
+	// NEW: Add new _performFinalValidationAndCorrection method
+	private async _performFinalValidationAndCorrection(
+		affectedFileUris: Set<vscode.Uri>,
+		rootUri: vscode.Uri,
+		token: vscode.CancellationToken,
+		planContext: sidebarTypes.PlanGenerationContext,
+		progress: vscode.Progress<{ message?: string; increment?: number }>,
+		originalUserInstruction: string
+	): Promise<boolean> {
+		if (affectedFileUris.size === 0) {
+			this._postChatUpdateForPlanExecution({
+				type: "appendRealtimeModelMessage",
+				value: {
+					text: `No files were modified or created by the plan. Skipping final validation.`,
+				},
+			});
+			return true;
+		}
+
+		let currentCorrectionAttempt = 1;
+		while (currentCorrectionAttempt <= this.MAX_CORRECTION_PLAN_ATTEMPTS) {
+			if (token.isCancellationRequested) {
+				console.log(
+					`[MinovativeMind] Final validation and correction cancelled.`
+				);
+				this._postChatUpdateForPlanExecution({
+					type: "appendRealtimeModelMessage",
+					value: { text: `Final code validation cancelled.` },
+				});
+				return false;
+			}
+
+			// Give VS Code a moment to update diagnostics for all files
+			await new Promise((resolve) => setTimeout(resolve, 500));
+
+			let allErrorsAndWarnings: vscode.Diagnostic[] = [];
+			let aggregatedFormattedDiagnostics = "";
+
+			// Collect diagnostics from all affected files
+			for (const fileUri of affectedFileUris) {
+				const diagnosticsForFile =
+					DiagnosticService.getDiagnosticsForUri(fileUri);
+				const errorsAndWarningsForFile = diagnosticsForFile.filter(
+					(d) =>
+						d.severity === vscode.DiagnosticSeverity.Error ||
+						d.severity === vscode.DiagnosticSeverity.Warning
+				);
+
+				if (errorsAndWarningsForFile.length > 0) {
+					allErrorsAndWarnings.push(...errorsAndWarningsForFile);
+					const formattedForFile =
+						DiagnosticService.formatContextualDiagnostics(
+							fileUri,
+							rootUri,
+							undefined,
+							5000
+						);
+					if (formattedForFile) {
+						aggregatedFormattedDiagnostics += formattedForFile + "\n";
+					}
+				}
+			}
+
+			if (allErrorsAndWarnings.length === 0) {
+				const fileNames = Array.from(affectedFileUris)
+					.map((uri) => path.relative(rootUri.fsPath, uri.fsPath))
+					.join(", ");
+				this._postChatUpdateForPlanExecution({
+					type: "appendRealtimeModelMessage",
+					value: {
+						text: `All modifications validated successfully for: \`${fileNames}\`. No errors or warnings found.`,
+					},
+				});
+				return true; // Success! All diagnostics resolved.
+			} else {
+				const fileNames = Array.from(affectedFileUris)
+					.map((uri) => path.relative(rootUri.fsPath, uri.fsPath))
+					.join(", ");
+				this._postChatUpdateForPlanExecution({
+					type: "appendRealtimeModelMessage",
+					value: {
+						text: `Final validation failed for files: \`${fileNames}\` (found ${allErrorsAndWarnings.length} issues). Attempting AI self-correction (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
+						isError: true,
+					},
+				});
+
+				try {
+					const jsonGenerationConfig: GenerationConfig = {
+						responseMimeType: "application/json",
+						temperature: sidebarConstants.TEMPERATURE,
+					};
+
+					const relevantSnippets = await this._formatRelevantFilesForPrompt(
+						planContext.relevantFiles ?? [],
+						rootUri,
+						token
+					);
+					const formattedRecentChanges = this._formatRecentChangesForPrompt(
+						this.provider.changeLogger.getChangeLog()
+					);
+
+					const correctionPlanPrompt = createCorrectionPlanPrompt(
+						originalUserInstruction,
+						planContext.projectContext,
+						planContext.editorContext,
+						planContext.chatHistory ?? [],
+						relevantSnippets,
+						aggregatedFormattedDiagnostics,
+						formattedRecentChanges,
+						currentCorrectionAttempt > 1
+							? `Previous correction attempt (${
+									currentCorrectionAttempt - 1
+							  }) failed to resolve all diagnostics.`
+							: undefined
+					);
+
+					progress.report({
+						message: `AI generating overall correction plan (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
+					});
+
+					let correctionPlanJsonString =
+						await this.provider.aiRequestService.generateWithRetry(
+							correctionPlanPrompt,
+							planContext.modelName,
+							undefined,
+							`final correction plan generation (attempt ${currentCorrectionAttempt})`,
+							jsonGenerationConfig,
+							undefined,
+							token
+						);
+
+					correctionPlanJsonString = correctionPlanJsonString
+						.replace(/^```json\s*/im, "")
+						.replace(/\s*```$/im, "")
+						.trim();
+
+					const parsedPlanResult: ParsedPlanResult = await parseAndValidatePlan(
+						correctionPlanJsonString,
+						rootUri
+					);
+
+					if (token.isCancellationRequested) {
+						throw new Error(ERROR_OPERATION_CANCELLED);
+					}
+
+					if (parsedPlanResult.plan) {
+						this._postChatUpdateForPlanExecution({
+							type: "appendRealtimeModelMessage",
+							value: {
+								text: `Applying final correction plan for diagnostics.`,
+							},
+						});
+
+						// Execute the generated correction plan.
+						// The `_executePlanSteps` function will log its changes and ensure the `changeLogger` is updated.
+						// We pass `affectedFileUris` to `_executePlanSteps` but it will just ignore it and generate its own affectedFileUris internally.
+						const subPlanAffectedFiles = await this._executePlanSteps(
+							parsedPlanResult.plan.steps!,
+							rootUri,
+							planContext,
+							progress,
+							token
+						);
+						// Add any new files or modifications from the sub-plan to the overall set for re-validation
+						subPlanAffectedFiles.forEach((uri) => affectedFileUris.add(uri));
+
+						// If the sub-plan execution itself failed (e.g. user cancelled a command in it), treat as failure
+						// Note: _executePlanSteps now returns affectedFileUris, so we need to check if the overall
+						// execution of the sub-plan was successful or not. This requires a small adjustment if it can fail
+						// silently. Given current _executePlanSteps returns Set<Uri>, it relies on caught exceptions.
+						// For simplicity, we assume if no exception, sub-plan *execution* was successful, then re-validate.
+						// If `_executePlanSteps` throws, it will be caught by the outer `try/catch` and stop the overall plan.
+					} else {
+						console.error(
+							`[MinovativeMind] Failed to parse/validate AI final correction plan (Attempt ${currentCorrectionAttempt}): ${parsedPlanResult.error}`
+						);
+						this._postChatUpdateForPlanExecution({
+							type: "appendRealtimeModelMessage",
+							value: {
+								text: `AI generated an invalid final correction plan (Attempt ${currentCorrectionAttempt}): ${parsedPlanResult.error}.`,
+								isError: true,
+							},
+						});
+					}
+				} catch (correctionError: any) {
+					const errorMsg =
+						correctionError instanceof Error
+							? correctionError.message
+							: String(correctionError);
+					console.error(
+						`[MinovativeMind] AI final self-correction failed (Attempt ${currentCorrectionAttempt}): ${errorMsg}`
+					);
+					this._postChatUpdateForPlanExecution({
+						type: "appendRealtimeModelMessage",
+						value: {
+							text: `AI final self-correction failed (Attempt ${currentCorrectionAttempt}): ${errorMsg}.`,
+							isError: true,
+						},
+					});
+				}
+			}
+			currentCorrectionAttempt++; // Increment for the next validation/correction attempt
+		}
+
+		// If loop finishes (all attempts exhausted) and diagnostics are still present
+		this._postChatUpdateForPlanExecution({
+			type: "appendRealtimeModelMessage",
+			value: {
+				text: `Overall validation failed after ${this.MAX_CORRECTION_PLAN_ATTEMPTS} attempts to auto-correct. Please review the affected files manually.`,
+				isError: true,
+			},
+		});
+		return false; // All attempts exhausted, still issues
 	}
 }
