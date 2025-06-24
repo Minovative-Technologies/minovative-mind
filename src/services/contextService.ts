@@ -18,6 +18,7 @@ import {
 	DEFAULT_CONTEXT_CONFIG,
 } from "../context/contextBuilder";
 import * as SymbolService from "./symbolService";
+import { DiagnosticService } from "../utils/diagnosticUtils"; // NEW: Import DiagnosticService
 
 // Constants for symbol processing
 const MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT = 6; // Example depth for symbol hierarchy serialization
@@ -57,7 +58,7 @@ export class ContextService {
 		cancellationToken: vscode.CancellationToken | undefined,
 		userRequest?: string,
 		editorContext?: PlanGenerationContext["editorContext"],
-		diagnosticsString?: string
+		initialDiagnosticsString?: string // Renamed parameter for clarity
 	): Promise<BuildProjectContextResult> {
 		try {
 			// 2a. Initialize activeSymbolDetailedInfo
@@ -86,6 +87,33 @@ export class ContextService {
 					value: `Warning: Could not build dependency graph. Reason: ${depGraphError.message}`,
 				});
 			}
+
+			// --- New: Determine effective diagnostics string ---
+			let effectiveDiagnosticsString: string | undefined =
+				initialDiagnosticsString;
+
+			if (editorContext?.documentUri) {
+				// If there's an active editor, always fetch and filter live diagnostics
+				const diagnosticsForActiveFile =
+					DiagnosticService.formatContextualDiagnostics(
+						editorContext.documentUri,
+						rootFolder.uri, // Pass workspace root for relative path formatting
+						editorContext.selection // Pass selection if available
+					);
+				if (diagnosticsForActiveFile) {
+					effectiveDiagnosticsString = diagnosticsForActiveFile;
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Minovative Mind applied diagnostic filtering.",
+					});
+				} else if (initialDiagnosticsString) {
+					// If no relevant live diagnostics but an initial string was provided, use it
+					effectiveDiagnosticsString = initialDiagnosticsString;
+				} else {
+					effectiveDiagnosticsString = undefined;
+				}
+			}
+			// --- End New: Determine effective diagnostics string ---
 
 			// 2b. Add new conditional block for activeSymbolDetailedInfo
 			// This block is added after fileDependencies is built.
@@ -323,7 +351,7 @@ export class ContextService {
 						allScannedFiles,
 						projectRoot: rootFolder.uri,
 						activeEditorContext: editorContext,
-						diagnostics: diagnosticsString,
+						diagnostics: effectiveDiagnosticsString, // UPDATED: Use effectiveDiagnosticsString
 						aiModelCall: this.aiRequestService.generateWithRetry.bind(
 							this.aiRequestService
 						),
