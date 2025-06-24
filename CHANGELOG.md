@@ -2,6 +2,19 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.5.0] - 2025-06-24
+
+- **feat(plan): Introduce AI-driven post-execution diagnostic validation and self-correction**
+- **feat: Integrate DiagnosticService for contextual AI diagnostics**
+- **Feat: Provide AI with relevant file context and enhance symbol info utilization**
+- **Clarify \\ command usage in AI prompt.**
+- **Refactor: Apply AI modifications using precise text edits**
+- **docs: Add feature comparison table and refine README formatting**
+- **refactor: Streamline user document handling and refine prompt instructions**
+  - refactor(firebase): Stop implicitly creating user documents in Firestore. Previously, a default user document was created if one didn't exist upon a user's initial sign-in or event.
+  - refactor(prompt): Refine internal instructions for generating conventional commit messages.
+  - style(sidebar): Adjust the positioning of user message action buttons in the sidebar webview.
+
 ## [1.4.5] - 2025-06-21
 
 - **refactor(prompt): refine commit message generation instructions**

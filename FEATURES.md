@@ -26,7 +26,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - **AI Merge Conflict Resolution (`/merge`)** (Premium Tier): Automatically detects and resolves Git merge conflicts in the active file. The AI analyzes conflict markers, generates a semantically coherent merged version, applies the resolution, and unmarks the file as conflicted, streamlining a common tedious task.
 - **Symbol-Aware Refactoring**: Leverages VS Code's symbol information (functions, classes, variables, references, definitions, and types) to enable more precise, comprehensive, and robust refactorings and modifications across your entire project.
 - Modular Code Generation: The AI is explicitly instructed to promote modular code generation principles, encouraging maintainable and scalable solutions
-- **Diagnostic-Aware Modifications**: For both targeted selections and whole-file operations, the AI leverages relevant VS Code diagnostics (warnings, errors) to inform its custom modifications, leading to more accurate and problem-solving suggestions.
+- **Diagnostic-Aware Modifications**: The AI leverages relevant VS Code diagnostics (warnings, errors) in a more contextual manner, thanks to deeper integration with a dedicated diagnostic service, leading to more accurate and problem-solving custom modifications for both targeted selections and whole-file operations.
 - AI persona updated to focus on generating production-ready, robust, and secure code.
 
 ## Advanced Workflow & Automation
@@ -49,6 +49,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - **File Diffs in Chat**: Displays real-time file changes (diffs) directly within the chat interface for `create_file` and `modify_file` plan steps, with enhanced execution messages indicating diff availability.
 - Cancellation: Users can cancel an ongoing plan execution at any time via the `VS Code` progress notification.
 - **Resilient Plan Execution**: Enhances robustness by automatically retrying failed plan steps (with 10s, 15s, 20s delays) for transient errors like API overloads, network issues, or newly-identified 'Service Unavailable' (503) responses. Crucially, it now includes robust error handling to prevent AI API error messages from being written into files, ensuring file integrity. For persistent failures or exhausted retries, users are prompted with options to 'Retry Step', 'Skip Step', or 'Cancel Plan', preventing mid-plan halts and preserving progress.
+- **AI-driven post-execution diagnostic validation and self-correction**: Introduces AI capabilities to validate the outcome of plan steps and self-correct based on diagnostic feedback, enhancing the reliability of complex multi-step operations.
 - Retry Mechanism: If the AI fails to generate a valid `JSON` plan due to parsing errors, the system will automatically retry plan generation up to **3 times** (as defined by `MAX_PLAN_PARSE_RETRIES`). A “Retry” option is also provided in the sidebar for manual re-attempts.
 - **Dynamic Context Awareness:** The AI maintains a robust and adaptive understanding of ongoing project changes, including newly created files and recent modifications, throughout a multi-step workflow. This ensures that subsequent planned actions are highly coherent and build accurately upon previous steps, leading to more reliable and contextually aware solutions that reflect the evolving state of your codebase.
 - **Seamless Editor-to-Plan Integration**: When custom code modification requests (triggered via `Ctrl+M` or `Cmd+M`) or `/fix` commands involve complex, multi-step tasks, the extension seamlessly escalates them to the full AI-driven planning and execution system. This allows the AI to break down and execute the task as a coherent series of actions, potentially across multiple files, to achieve the desired outcome.
@@ -103,7 +104,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 ### Smart Context Awareness
 
-- **Comprehensive Understanding**: The AI intelligently considers the active file content, selected code, relevant diagnostics (warnings/errors) from VS Code, chat history, the overall project structure, enhanced detailed symbol information (definitions, references), and TypeScript-aware dependency graph analysis (respecting `tsconfig.json`/`jsconfig.json` for accurate module resolution), to provide highly relevant and accurate responses.
+- **Comprehensive Understanding**: The AI intelligently considers the active file content, selected code, relevant diagnostics (warnings/errors) from VS Code, chat history, the overall project structure, **significantly enhanced relevant file context**, **and improved utilization of detailed symbol information** (definitions, references), along with TypeScript-aware dependency graph analysis (respecting `tsconfig.json`/`jsconfig.json` for accurate module resolution), to provide highly relevant and accurate responses.
 
 ### Built-in Troubleshooting Guidance
 
