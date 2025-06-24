@@ -45,7 +45,11 @@ export function createInitialPlanningExplanationPrompt(
         \`\`\`
         --- End Full Content ---`;
 
-			mainInstructions = `Based on the user's request from the editor ('/fix' command) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For '/fix', the plan should ONLY clearly address the 'Relevant Diagnostics' listed.`;
+			mainInstructions = `Based on the user's request from the editor ('/fix' command) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For '/fix', the plan should ONLY clearly address the 'Relevant Diagnostics' listed. **Crucially, for '/fix' requests, you MUST actively consult the "Active Symbol Detailed Information" section in the "Broader Project Context" to:**
+            *   **Understand the broader impact of a change.**
+            *   **Identify all affected areas by considering definitions, implementations, and call hierarchy.**
+            *   **Ensure robust and less disruptive fixes by checking referenced types for compatibility and correct usage.**
+            *   **Anticipate unintended side effects.**`;
 		} else if (editorContext.instruction.toLowerCase() === "/merge") {
 			instructionType = `The user triggered the '/merge' command to resolve Git merge conflicts in the selected file.`;
 			specificContextPrompt = `
@@ -434,7 +438,11 @@ export function createPlanningPrompt(
         \`\`\`
         --- End Full Content ---`;
 
-			mainInstructions = `Based on the user's request from the editor ('/fix' command), the provided file/selection context, and any relevant chat history, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
+			mainInstructions = `Based on the user's request from the editor ('/fix' command), the provided file/selection context, and any relevant chat history, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). **For '/fix' requests, you MUST actively leverage the "Active Symbol Detailed Information" section in the "Broader Project Context". Specifically, when formulating \`modification_prompt\` for \`modify_file\` steps:**
+            *   **Actively reference and leverage the \`Active Symbol Detailed Information\` section within the \`Broader Project Context\` to understand the symbol's context and impact.**
+            *   **Use the symbol's definition, implementations, call hierarchy, and referenced types to precisely identify the scope of the fix, predict potential side-effects, and ensure comprehensive, non-disruptive changes across interconnected code.**
+            *   **Prioritize \`modify_file\` steps that account for global symbol impact when a symbol is refactored.**
+            For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
 		} else if (editorContext.instruction.toLowerCase() === "/merge") {
 			specificContextPrompt = `
         --- Specific User Request Context from Editor ---
@@ -522,7 +530,7 @@ export function createPlanningPrompt(
 		editorContext && actualDiagnosticsString
 			? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan, in great detail, addresses them for '/fix' requests.**"
 			: ""
-	} Also carefully review the 'Recent Chat History' if provided. This history contains previous interactions, including any steps already taken or files created/modified. Your plan MUST build upon these prior changes, avoid redundant operations (e.g., recreating existing files, reinstalling already installed dependencies), and correctly reference or import new entities (e.g., functions from newly created utility files) introduced in earlier steps or during the conversation. When planning \`modify_file\` actions, especially for refactoring, leverage the 'Symbol Information' section to ensure all related definitions and references are accurately considered for modification. Additionally, prioritize \`modify_file\` steps that account for global symbol impact when a symbol is refactored.
+	} Also carefully review the 'Recent Chat History' if provided. This history contains previous interactions, including any steps already taken or files created/modified. Your plan MUST build upon these prior changes, avoid redundant operations (e.g., recreating existing files, reinstalling already installed dependencies), and correctly reference or import new entities (e.g., functions from newly created utility files) introduced in earlier steps or during the conversation. When planning \`modify_file\` actions, especially for refactoring, leverage the 'Symbol Information' and particularly the 'Active Symbol Detailed Information' sections to ensure all related definitions and references are accurately considered for modification. **For '/fix' requests, specifically ensure that the 'Active Symbol Detailed Information' is robustly used for precise targeting and impact analysis of changes within \`modification_prompt\` values.** Additionally, prioritize \`modify_file\` steps that account for global symbol impact when a symbol is refactored.
     
     2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
     3.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
@@ -556,7 +564,7 @@ export function createPlanningPrompt(
     --- End Recent Changes ---
 
     --- Textual Plan Prompt Section ---
-    ${textualPlanPromptSection}
+    ${textualPlanExplanation}
     --- End Textual Plan Prompt Section ---
 
     --- Expected JSON Plan Format ---

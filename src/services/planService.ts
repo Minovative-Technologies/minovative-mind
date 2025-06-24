@@ -729,6 +729,13 @@ export class PlanService {
 
 						let content = step.content;
 						if (step.generate_prompt) {
+							// Format relevant files for the prompt
+							const relevantSnippets = await this._formatRelevantFilesForPrompt(
+								context.relevantFiles ?? [], // Add nullish coalescing
+								rootUri,
+								combinedToken
+							);
+
 							const generationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the full file content. Do NOT include markdown code block formatting. Provide only the file content.\n\nThe generated code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.\n\nFile Path:\n${
 								step.path
 							}\n\nInstructions:\n${
@@ -745,7 +752,7 @@ export class PlanService {
 									: ""
 							}${this._formatChatHistoryForPrompt(
 								context.chatHistory
-							)}\n\nComplete File Content:`;
+							)}\n\n--- Relevant Project Snippets (for context) ---\n${relevantSnippets}\n\nComplete File Content:`;
 							content = await this.provider.aiRequestService.generateWithRetry(
 								generationPrompt,
 								settingsManager.getSelectedModelName(),
@@ -783,6 +790,14 @@ export class PlanService {
 						const existingContent = Buffer.from(
 							await vscode.workspace.fs.readFile(fileUri)
 						).toString("utf-8");
+
+						// Format relevant files for the prompt
+						const relevantSnippets = await this._formatRelevantFilesForPrompt(
+							context.relevantFiles ?? [], // Add nullish coalescing
+							rootUri,
+							combinedToken
+						);
+
 						const modificationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.\n\nThe modified code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.\n\nFile Path:\n${
 							step.path
 						}\n\nModification Instructions:\n${
@@ -799,7 +814,7 @@ export class PlanService {
 								: ""
 						}${this._formatChatHistoryForPrompt(
 							context.chatHistory
-						)}\n\n--- Existing File Content ---\n${existingContent}\n--- End Existing File Content ---\n\nComplete Modified File Content:`;
+						)}\n\n--- Relevant Project Snippets (for context) ---\n${relevantSnippets}\n\n--- Existing File Content ---\n${existingContent}\n--- End Existing File Content ---\n\nComplete Modified File Content:`;
 
 						let modifiedContent =
 							await this.provider.aiRequestService.generateWithRetry(
@@ -1008,6 +1023,129 @@ export class PlanService {
 	}
 
 	// --- HELPERS ---
+
+	/**
+	 * Reads the content of relevant files and formats them into Markdown fenced code blocks.
+	 * Includes error handling for unreadable or binary files and checks for cancellation.
+	 * @param relevantFiles An array of relative file paths.
+	 * @param workspaceRootUri The URI of the workspace root.
+	 * @param token A CancellationToken to observe cancellation requests.
+	 * @returns A single concatenated string of all formatted snippets.
+	 */
+	private async _formatRelevantFilesForPrompt(
+		relevantFiles: string[],
+		workspaceRootUri: vscode.Uri,
+		token: vscode.CancellationToken
+	): Promise<string> {
+		if (!relevantFiles || relevantFiles.length === 0) {
+			return "";
+		}
+
+		const formattedSnippets: string[] = [];
+		const maxFileSizeForSnippet = 1024 * 50; // 50KB limit per file to prevent prompt overflow
+
+		for (const relativePath of relevantFiles) {
+			if (token.isCancellationRequested) {
+				return formattedSnippets.join("\n"); // Return what's processed so far
+			}
+
+			const fileUri = vscode.Uri.joinPath(workspaceRootUri, relativePath);
+			let fileContent: string | null = null;
+			let languageId = path.extname(relativePath).substring(1);
+			if (!languageId) {
+				// Fallback for files without extension (e.g., Dockerfile, LICENSE)
+				languageId = path.basename(relativePath).toLowerCase();
+			}
+			// Special handling for common files without extensions where syntax highlighting is helpful
+			if (languageId === "makefile") {
+				languageId = "makefile";
+			} else if (languageId === "dockerfile") {
+				languageId = "dockerfile";
+			} else if (languageId === "jsonc") {
+				languageId = "json";
+			} else if (languageId === "eslintignore") {
+				languageId = "ignore";
+			} else if (languageId === "prettierignore") {
+				languageId = "ignore";
+			} else if (languageId === "gitignore") {
+				languageId = "ignore";
+			} else if (languageId === "license") {
+				languageId = "plaintext";
+			} // License is usually just text
+
+			try {
+				const fileStat = await vscode.workspace.fs.stat(fileUri);
+
+				// Skip directories
+				if (fileStat.type === vscode.FileType.Directory) {
+					continue;
+				}
+
+				// Skip files larger than maxFileSizeForSnippet
+				if (fileStat.size > maxFileSizeForSnippet) {
+					console.warn(
+						`[MinovativeMind] Skipping relevant file '${relativePath}' (size: ${fileStat.size} bytes) due to size limit for prompt inclusion.`
+					);
+					formattedSnippets.push(
+						`--- Relevant File: ${relativePath} ---\n\`\`\`plaintext\n[File skipped: too large for context (${(
+							fileStat.size / 1024
+						).toFixed(2)}KB > ${(maxFileSizeForSnippet / 1024).toFixed(
+							2
+						)}KB)]\n\`\`\`\n`
+					);
+					continue;
+				}
+
+				const contentBuffer = await vscode.workspace.fs.readFile(fileUri);
+				const content = Buffer.from(contentBuffer).toString("utf8"); // Corrected conversion
+
+				// Basic heuristic for binary files: check for null characters
+				if (content.includes("\0")) {
+					console.warn(
+						`[MinovativeMind] Skipping relevant file '${relativePath}' as it appears to be binary.`
+					);
+					formattedSnippets.push(
+						`--- Relevant File: ${relativePath} ---\n\`\`\`plaintext\n[File skipped: appears to be binary]\n\`\`\`\n`
+					);
+					continue;
+				}
+
+				fileContent = content;
+			} catch (error: any) {
+				if (
+					error instanceof vscode.FileSystemError &&
+					(error.code === "FileNotFound" || error.code === "EntryNotFound")
+				) {
+					console.warn(
+						`[MinovativeMind] Relevant file not found: '${relativePath}'. Skipping.`
+					);
+				} else if (error.message.includes("is not a file")) {
+					// This can happen if fileUri points to a directory
+					console.warn(
+						`[MinovativeMind] Skipping directory '${relativePath}' as a relevant file.`
+					);
+				} else {
+					console.error(
+						`[MinovativeMind] Error reading relevant file '${relativePath}': ${error.message}. Skipping.`,
+						error
+					);
+				}
+				formattedSnippets.push(
+					`--- Relevant File: ${relativePath} ---\n\`\`\`plaintext\n[File skipped: could not be read or is inaccessible: ${error.message}]\n\`\`\`\n`
+				);
+				continue; // Skip to next file
+			}
+
+			if (fileContent !== null) {
+				formattedSnippets.push(
+					`--- Relevant File: ${relativePath} ---\n\`\`\`${languageId}\n${fileContent}\n\`\`\`\n`
+				);
+			}
+		}
+
+		return formattedSnippets.join("\n");
+	}
+
 	private async _handlePostTextualPlanGenerationUI(
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {

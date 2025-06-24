@@ -741,7 +741,7 @@ if (
 			isApiKeySet &&
 			!planConfirmationVisible &&
 			!planParseErrorVisible &&
-			!commitReviewVisible; // MODIFIED
+			!commitReviewVisible;
 
 		// Determine if chat history buttons can be interacted with
 		// Enabled only if not loading AND neither blocking UI is visible
@@ -749,7 +749,7 @@ if (
 			!loading &&
 			!planConfirmationVisible &&
 			!planParseErrorVisible &&
-			!commitReviewVisible; // MODIFIED
+			!commitReviewVisible;
 
 		console.log(
 			`[setLoadingState] Final computed enableSendControls=${enableSendControls}, canInteractWithChatHistoryButtons=${canInteractWithChatHistoryButtons}`
@@ -767,14 +767,14 @@ if (
 				!!isLoading ||
 				!!planConfirmationVisible ||
 				!!planParseErrorVisible ||
-				!!commitReviewVisible; // MODIFIED
+				!!commitReviewVisible;
 		}
 		// API key management buttons should also be disabled while any operation is running or UI is blocked
 		const enableApiKeyControls =
 			!isLoading &&
 			!planConfirmationVisible &&
 			!planParseErrorVisible &&
-			!commitReviewVisible && // MODIFIED
+			!commitReviewVisible &&
 			totalKeys > 0;
 		if (prevKeyButton) {
 			prevKeyButton.disabled = !enableApiKeyControls || totalKeys <= 1;
@@ -789,7 +789,7 @@ if (
 			!loading &&
 			!planConfirmationVisible &&
 			!planParseErrorVisible &&
-			!commitReviewVisible; // MODIFIED
+			!commitReviewVisible;
 		if (addKeyInput) {
 			addKeyInput.disabled = !enableAddKeyInputControls;
 		}
@@ -822,7 +822,7 @@ if (
 		// new console.log statements here
 		console.log(
 			`[setLoadingState] Status: loading=${loading}, planConfVis=${planConfirmationVisible}, planParseErrVis=${planParseErrorVisible}, commitRevVis=${commitReviewVisible}`
-		); // MODIFIED
+		);
 		console.log(
 			`[setLoadingState] Chat: childCount=${chatContainer?.childElementCount}, hasMessages=${hasMessages}`
 		);
@@ -840,7 +840,6 @@ if (
 				!planParseErrorVisible &&
 				!commitReviewVisible
 			) {
-				// MODIFIED
 				cancelGenerationButton.style.display = "inline-flex"; // Show the cancel button
 			} else {
 				// Hide the cancel button if not loading, or if a specific UI block is active
@@ -1251,7 +1250,7 @@ if (
 					true,
 					undefined,
 					message.value.relevantFiles
-				); // MODIFIED
+				);
 				// setLoadingState(true) was called when the user sent the message.
 				// We are now in the process of receiving the response, so loading is still active.
 				// No need to call setLoadingState(false) here. Button states are already handled by the initial setLoadingState(true).
