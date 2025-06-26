@@ -19,7 +19,8 @@ By using the Extension, you agree to the following:
   - Attempt to gain unauthorized access to any systems or networks connected to the Extension or to bypass any security measures of the Extension or any third-party services it interacts with.
   - Use the Extension for any malicious, unlawful, or fraudulent purposes.
   - Use the Extension to generate or disseminate content that is illegal, harmful, unethical, threatening, abusive, harassing, defamatory, vulgar, obscene, libelous, invasive of another's privacy, hateful, or racially, ethnically, or otherwise objectionable.
-- **Age Restriction:** The Minovative Mind VS Code Extension is not intended for use by children under the age of 13. By using the Extension, you affirm that you are at least 13 years of age, or have obtained parental or guardian consent to use this Extension in alignment with our Privacy Policy and applicable laws.
+  - Create or build products that directly rival the Minovative Mind VS Code Extension.
+- **Age Restriction:** The Minovative Mind VS Code Extension is not intended for use by children under the age of 13. By using the Extension, you affirm that you are at least 13 years of age, to use this Extension in alignment with our Privacy Policy and applicable laws.
 
 ## 3. Intellectual Property Rights
 
@@ -64,4 +65,4 @@ We reserve the right, at our sole discretion, to modify or replace these Terms a
 
 If you have any questions about these Terms of Use, please contact us at:
 
-Minovative Technologies (support@minovativemind.dev)
+Minovative Technologies (<support@minovativemind.dev>)
