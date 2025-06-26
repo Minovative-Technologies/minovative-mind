@@ -1,8 +1,8 @@
-// src/services/webviewMessageHandler.ts
 import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import * as path from "path";
 import { ToggleRelevantFilesDisplayMessage } from "../sidebar/common/sidebarTypes";
+import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 
 export async function handleWebviewMessage(
 	data: any,
@@ -51,7 +51,8 @@ export async function handleWebviewMessage(
 		);
 		provider.postMessageToWebview({
 			type: "statusUpdate",
-			value: "Another operation is in progress. Please wait or cancel.",
+			value:
+				"An operation is already in progress. Please wait for it to complete or cancel it before starting a new one.",
 			isError: true,
 		});
 		return;
@@ -93,7 +94,8 @@ export async function handleWebviewMessage(
 			} else {
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: "Error: No pending plan to confirm.",
+					value:
+						"No plan is currently awaiting confirmation. Please generate a new plan.",
 					isError: true,
 				});
 				provider.postMessageToWebview({ type: "reenableInput" });
@@ -113,7 +115,8 @@ export async function handleWebviewMessage(
 			} else {
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: "Error: No previous plan to retry.",
+					value:
+						"No previously generated plan is available for retry. Please initiate a new plan request.",
 					isError: true,
 				});
 				provider.postMessageToWebview({ type: "reenableInput" });
@@ -242,7 +245,8 @@ export async function handleWebviewMessage(
 			} else {
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: "Error: No panel ID provided for settings panel.",
+					value:
+						"Cannot open settings panel: No valid panel identifier was provided.",
 					isError: true,
 				});
 			}
@@ -263,7 +267,14 @@ export async function handleWebviewMessage(
 				);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: "Security Error: Invalid file path provided for opening.",
+					value: formatUserFacingErrorMessage(
+						new Error(
+							`The provided file path is invalid or malformed: "${relativeFilePathFromWebview}".`
+						),
+						"Security alert: The provided file path is invalid or malformed. Operation blocked.",
+						"Security alert: ",
+						vscode.workspace.workspaceFolders?.[0]?.uri
+					),
 					isError: true,
 				});
 				return;
@@ -293,7 +304,12 @@ export async function handleWebviewMessage(
 					);
 					provider.postMessageToWebview({
 						type: "statusUpdate",
-						value: `Error: Could not resolve file path for opening. ${uriError.message}`,
+						value: formatUserFacingErrorMessage(
+							uriError,
+							"Error: The file path could not be resolved. Please ensure the path is valid and accessible.",
+							"Error: ",
+							vscode.workspace.workspaceFolders?.[0]?.uri
+						),
 						isError: true,
 					});
 					return;
@@ -319,8 +335,11 @@ export async function handleWebviewMessage(
 				);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value:
-						"Security Error: Cannot open file. No VS Code workspace is currently open.",
+					value: formatUserFacingErrorMessage(
+						new Error("No VS Code workspace folder is currently open."),
+						"Security alert: Cannot open file. No VS Code workspace is currently open. Please open a project folder to proceed.",
+						"Security alert: "
+					),
 					isError: true,
 				});
 				return;
@@ -335,8 +354,14 @@ export async function handleWebviewMessage(
 				);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value:
-						"Security Error: Attempted to open a file outside the current workspace. Operation blocked.",
+					value: formatUserFacingErrorMessage(
+						new Error(
+							`Attempted to open a file located outside the current VS Code workspace: "${relativeFilePathFromWebview}".`
+						),
+						"Security alert: Attempted to open a file located outside the current VS Code workspace. This operation is blocked for security reasons.",
+						"Security alert: ",
+						vscode.workspace.workspaceFolders?.[0]?.uri
+					),
 					isError: true,
 				});
 				return;
@@ -358,9 +383,12 @@ export async function handleWebviewMessage(
 				);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: `Error opening file: ${
-						openError.message || String(openError)
-					}`,
+					value: formatUserFacingErrorMessage(
+						openError,
+						"Error opening file: Failed to open the specified file.",
+						"Error opening file: ",
+						vscode.workspace.workspaceFolders?.[0]?.uri
+					),
 					isError: true,
 				});
 			}

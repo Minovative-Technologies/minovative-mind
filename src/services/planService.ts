@@ -28,6 +28,7 @@ import { GitConflictResolutionService } from "./gitConflictResolutionService";
 import { sanitizeErrorMessagePaths } from "../utils/pathUtils";
 import { applyAITextEdits } from "../utils/codeUtils"; // For applying precise text edits
 import { DiagnosticService } from "../utils/diagnosticUtils"; // NEW: Import DiagnosticService
+import { formatUserFacingErrorMessage } from "../utils/errorFormatter"; // NEW: Import formatUserFacingErrorMessage
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
@@ -66,7 +67,8 @@ export class PlanService {
 		if (!apiKey) {
 			this.provider.postMessageToWebview({
 				type: "statusUpdate",
-				value: "Cannot start plan: No active API Key.",
+				value:
+					"Action blocked: No active API key found. Please add or select an API key in the sidebar settings.",
 				isError: true,
 			});
 			return;
@@ -96,7 +98,8 @@ export class PlanService {
 		if (!rootFolder) {
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
-				error: "Error: No workspace folder open.",
+				error:
+					"Action blocked: No VS Code workspace folder is currently open. Please open a project folder to proceed.",
 			});
 			return;
 		}
@@ -157,7 +160,14 @@ export class PlanService {
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 			if (textualPlanResponse.toLowerCase().startsWith("error:")) {
-				throw new Error(textualPlanResponse);
+				throw new Error(
+					formatUserFacingErrorMessage(
+						new Error(textualPlanResponse),
+						"AI failed to generate initial plan explanation.",
+						"AI response error: ",
+						rootFolder.uri
+					)
+				);
 			}
 
 			this.provider.chatHistoryManager.addHistoryEntry(
@@ -198,7 +208,12 @@ export class PlanService {
 				success: success,
 				error: isCancellation
 					? "Plan generation cancelled."
-					: finalErrorForDisplay,
+					: formatUserFacingErrorMessage(
+							Error,
+							"An unexpected error occurred during initial plan generation.",
+							"Error: ",
+							rootFolder.uri
+					  ),
 			});
 			this.provider.activeOperationCancellationTokenSource?.dispose();
 			this.provider.activeOperationCancellationTokenSource = undefined;
@@ -229,7 +244,11 @@ export class PlanService {
 				message: "Error: No workspace folder open.",
 				increment: 100,
 			});
-			return { success: false, error: "No workspace folder open." };
+			return {
+				success: false,
+				error:
+					"Action blocked: No VS Code workspace folder is currently open. Please open a project folder to proceed.",
+			};
 		}
 
 		if (!isUserSignedIn) {
@@ -385,9 +404,12 @@ export class PlanService {
 				success: false,
 				error: isCancellation
 					? "Plan generation cancelled."
-					: genError instanceof Error
-					? genError.message
-					: String(genError),
+					: formatUserFacingErrorMessage(
+							genError,
+							"An unexpected error occurred during editor action plan generation.",
+							"Error: ",
+							rootFolder.uri
+					  ),
 			};
 		} finally {
 			this.provider.postMessageToWebview({
@@ -488,7 +510,12 @@ export class PlanService {
 				}
 				if (structuredPlanJsonString.toLowerCase().startsWith("error:")) {
 					throw new Error(
-						`AI failed to generate structured plan: ${structuredPlanJsonString}`
+						formatUserFacingErrorMessage(
+							new Error(structuredPlanJsonString),
+							"The AI failed to generate a valid structured plan. This might be a model issue.",
+							"AI response error: ",
+							planContext.workspaceRootUri
+						)
 					);
 				}
 
@@ -578,7 +605,12 @@ export class PlanService {
 			} else {
 				this.provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: `Error generating plan: ${error.message}`,
+					value: formatUserFacingErrorMessage(
+						error,
+						"An unexpected error occurred during plan generation.",
+						"Error generating plan: ",
+						planContext.workspaceRootUri
+					),
 					isError: true,
 				});
 				this.provider.postMessageToWebview({ type: "reenableInput" });
@@ -957,9 +989,12 @@ export class PlanService {
 					}
 					currentStepCompletedSuccessfullyOrSkipped = true; // Step succeeded or was explicitly skipped (e.g., user skipped command)
 				} catch (error: any) {
-					let errorMsg = error instanceof Error ? error.message : String(error);
-					// Sanitize the error message to display relative paths
-					errorMsg = sanitizeErrorMessagePaths(errorMsg, rootUri);
+					let errorMsg = formatUserFacingErrorMessage(
+						error,
+						"Failed to execute plan step. Please review the details and try again.",
+						"Step execution failed: ",
+						rootUri
+					);
 
 					let isRetryableTransientError = false;
 
@@ -972,8 +1007,8 @@ export class PlanService {
 					if (
 						errorMsg.includes("quota exceeded") ||
 						errorMsg.includes("rate limit exceeded") ||
-						errorMsg.includes("network error") ||
-						errorMsg.includes("HTTP 50") ||
+						errorMsg.includes("network issue") || // Updated to match formatted message
+						errorMsg.includes("AI service unavailable") || // Updated to match formatted message
 						errorMsg.includes("timeout")
 					) {
 						isRetryableTransientError = true;
@@ -1505,23 +1540,29 @@ export class PlanService {
 						this._postChatUpdateForPlanExecution({
 							type: "appendRealtimeModelMessage",
 							value: {
-								text: `AI generated an invalid final correction plan (Attempt ${currentCorrectionAttempt}): ${parsedPlanResult.error}.`,
+								text: formatUserFacingErrorMessage(
+									new Error(
+										parsedPlanResult.error ||
+											"Failed to parse the correction plan."
+									),
+									"The AI generated an invalid final correction plan. Please check the Developer Tools console for more details.",
+									"AI correction error: ",
+									rootUri
+								),
 								isError: true,
 							},
 						});
 					}
 				} catch (correctionError: any) {
-					const errorMsg =
-						correctionError instanceof Error
-							? correctionError.message
-							: String(correctionError);
-					console.error(
-						`[MinovativeMind] AI final self-correction failed (Attempt ${currentCorrectionAttempt}): ${errorMsg}`
-					);
 					this._postChatUpdateForPlanExecution({
 						type: "appendRealtimeModelMessage",
 						value: {
-							text: `AI final self-correction failed (Attempt ${currentCorrectionAttempt}): ${errorMsg}.`,
+							text: formatUserFacingErrorMessage(
+								correctionError,
+								"AI final self-correction failed due to an unexpected issue. Retry /fix again. Manual review may be required.",
+								"AI self-correction failed: ",
+								rootUri
+							),
 							isError: true,
 						},
 					});
