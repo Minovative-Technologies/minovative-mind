@@ -57,6 +57,36 @@ Subscription details can be securely managed via a dedicated link to the Stripe 
 
 The extension clearly indicates feature availability based on your authentication status and current subscription tier, ensuring you always know what features are accessible.
 
+## 🧑‍💻 Basic Usage Examples
+
+Here are a few quick ways to start using Minovative Mind:
+
+- **Chat with AI:**
+
+  1. Open the Minovative Mind sidebar.
+  2. Type your query in the chat input field and press Enter. The AI will respond, leveraging your project context.
+
+- **Explain Selected Code:**
+
+  1. Select a code snippet in your active editor.
+  2. Right-click on the selection.
+  3. Choose `Minovative Mind` > `Generate Explanation`.
+  4. A modal dialog will appear with the AI's explanation.
+
+- **Custom Modifications (e.g., /docs, /fix, Refactor): (Note: /fix and custom refactoring are Premium Tier features.)**
+
+  1. Select the code you want to modify or apply an action to.
+  2. Press `Ctrl+M` (Windows/Linux) or `Cmd+M` (macOS) to activate the command.
+  3. In the quick input box:
+     - Type `/docs` to generate documentation for the selected code.
+     - Type `/fix` to analyze and fix the selected code.
+     - Type a custom prompt (e.g., "refactor this function to be more concise").
+
+- **Automated Git Commit:**
+  1. Ensure you have staged changes in your Git repository.
+  2. Open the Minovative Mind sidebar chat.
+  3. Type `/commit` and press Enter. Minovative Mind will stage changes, generate a conventional commit message, and commit them.
+
 ## Minovative Mind — Feature Comparison
 
 | **Feature Category**               | **Feature**                                                            | **Free Users** | **Paid Users ($10/mo)** |
@@ -120,36 +150,6 @@ Minovative Mind is designed to streamline your coding tasks and boost productivi
 
 - **Smart Context Awareness:**
   - The AI intelligently identifies and leverages the most relevant files from your project, including overall project structure, TypeScript-aware module resolution for enhanced dependency parsing, detailed symbol information, selected code, diagnostics, and chat history for highly accurate and idiomatic responses. You can also configure inclusions/exclusions.
-
-## 🧑‍💻 Basic Usage Examples
-
-Here are a few quick ways to start using Minovative Mind:
-
-- **Chat with AI:**
-
-  1. Open the Minovative Mind sidebar.
-  2. Type your query in the chat input field and press Enter. The AI will respond, leveraging your project context.
-
-- **Explain Selected Code:**
-
-  1. Select a code snippet in your active editor.
-  2. Right-click on the selection.
-  3. Choose `Minovative Mind` > `Generate Explanation`.
-  4. A modal dialog will appear with the AI's explanation.
-
-- **Custom Modifications (e.g., /docs, /fix, Refactor): (Note: /fix and custom refactoring are Premium Tier features.)**
-
-  1. Select the code you want to modify or apply an action to.
-  2. Press `Ctrl+M` (Windows/Linux) or `Cmd+M` (macOS) to activate the command.
-  3. In the quick input box:
-     - Type `/docs` to generate documentation for the selected code.
-     - Type `/fix` to analyze and fix the selected code.
-     - Type a custom prompt (e.g., "refactor this function to be more concise").
-
-- **Automated Git Commit:**
-  1. Ensure you have staged changes in your Git repository.
-  2. Open the Minovative Mind sidebar chat.
-  3. Type `/commit` and press Enter. Minovative Mind will stage changes, generate a conventional commit message, and commit them.
 
 ## 📚 Comprehensive Documentation
 
