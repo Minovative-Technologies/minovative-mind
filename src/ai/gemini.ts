@@ -315,7 +315,7 @@ export async function* generateContentStream(
 				errorStatus === 429 || // HTTP 429 Too Many Requests
 				(typeof errorStatus === "string" && errorStatus.startsWith("429")) // Some SDKs might return status as string
 			) {
-				errorMessage = `API quota or rate limit exceeded for model ${modelName}. Please check your Google Cloud/Gemini account limits.`;
+				errorMessage = `API quota or rate limit exceeded. Please check your Google Cloud account limits.`;
 				isQuotaError = true;
 				errorTypeLogged = "Quota Exceeded";
 			} else if (
@@ -327,7 +327,7 @@ export async function* generateContentStream(
 					(lowerErrorMessage.includes("permission denied") ||
 						lowerErrorMessage.includes("api key")))
 			) {
-				errorMessage = `Invalid API Key or insufficient permissions for Gemini model ${modelName}. Please verify your API key and its permissions in the settings.`;
+				errorMessage = `Invalid API Key while using Gemini model ${modelName}. Please verify your API key.`;
 				resetClient(); // API key is likely bad, reset client state
 				errorTypeLogged = "Invalid API Key/Permissions";
 			} else if (
