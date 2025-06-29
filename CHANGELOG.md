@@ -2,6 +2,15 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.6.0] - 2025-06-29
+
+- **feat(diagnostics): Include code snippets and cancellation in formatted diagnostics**
+- **Refine: Streamline Gemini API error messages**
+- **feat(errors): Standardize and enhance user-facing error messages**
+- **docs: Update Terms of Use; add competitive clause and refine policies**
+- **docs(README): Relocate Basic Usage Examples section**
+- **docs(ai): Introduce post-execution diagnostic validation and enhance context**
+
 ## [1.5.0] - 2025-06-24
 
 - **feat(plan): Introduce AI-driven post-execution diagnostic validation and self-correction**
