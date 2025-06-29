@@ -2,6 +2,14 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.8.0] - 2025-06-29
+
+- **Feat: Implement chat command suggestions and autocomplete**
+
+## [1.7.0] - 2025-06-29
+
+- **refactor(gemini): Simplify stream error handling and add thinkingConfig**
+
 ## [1.6.0] - 2025-06-29
 
 - **feat(diagnostics): Include code snippets and cancellation in formatted diagnostics**
@@ -16,7 +24,7 @@ Stay updated with the latest improvements and bug fixes: [Minovative Mind Update
 - **feat(plan): Introduce AI-driven post-execution diagnostic validation and self-correction**
 - **feat: Integrate DiagnosticService for contextual AI diagnostics**
 - **Feat: Provide AI with relevant file context and enhance symbol info utilization**
-- **Clarify \\ command usage in AI prompt.**
+- **Clarify \ command usage in AI prompt.**
 - **Refactor: Apply AI modifications using precise text edits**
 - **docs: Add feature comparison table and refine README formatting**
 - **refactor: Streamline user document handling and refine prompt instructions**
