@@ -45,16 +45,22 @@
     </div>
   </div>
 
-  <div id="input-container">
-    <textarea id="chat-input" rows="3" placeholder="Enter message or /plan [request]..."></textarea>
+  <div id="chat-input-controls-wrapper">
+    <div id="command-suggestions-container" class="command-suggestions-container">
+      <!-- Suggestions will be dynamically added here by JavaScript -->
+    </div>
 
-    <button id="send-button" title="Send Message">S</button>
+    <div id="input-container">
+      <textarea id="chat-input" rows="3" placeholder="Enter message or /plan [request]..."></textarea>
 
-    <!-- Added button to cancel ongoing generation -->
-    <button id="cancel-generation-button" title="Cancel Generation" style="display: none;">
-      <!-- Assuming Font Awesome is available via the stylesheet -->
-      <i class="fas fa-stop"></i>
-    </button>
+      <button id="send-button" title="Send Message">S</button>
+
+      <!-- Added button to cancel ongoing generation -->
+      <button id="cancel-generation-button" title="Cancel Generation" style="display: none;">
+        <!-- Assuming Font Awesome is available via the stylesheet -->
+        <i class="fas fa-stop"></i>
+      </button>
+    </div>
   </div>
 
   <!-- Added plan-parse-error-container as per instructions -->

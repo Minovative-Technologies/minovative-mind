@@ -16,6 +16,8 @@ import {
 	faExclamationTriangle,
 } from "@fortawesome/free-solid-svg-icons";
 import MarkdownIt from "markdown-it";
+// 1. Import Constants: At the top, alongside existing imports, add `import { MINOVATIVE_COMMANDS } from "../common/sidebarConstants";`
+import { MINOVATIVE_COMMANDS } from "../common/sidebarConstants";
 
 library.add(
 	faPaperPlane,
@@ -107,6 +109,18 @@ const cancelGenerationButton = document.getElementById(
 	"cancel-generation-button"
 ) as HTMLButtonElement | null;
 // END MODIFICATION
+
+// 2. Get New DOM Elements & Declare State: After the existing DOM element declarations (e.g., `const sendButton = ...`), add the following declarations:
+const commandSuggestionsContainer = document.getElementById(
+	"command-suggestions-container"
+) as HTMLDivElement | null;
+const chatInputControlsWrapper = document.getElementById(
+	"chat-input-controls-wrapper"
+) as HTMLDivElement | null;
+
+let activeCommandIndex: number = -1;
+let filteredCommands: string[] = [];
+let isCommandSuggestionsVisible: boolean = false;
 
 let planConfirmationContainer: HTMLDivElement | null = null;
 let confirmPlanButton: HTMLButtonElement | null = null;
@@ -240,7 +254,10 @@ if (
 	!confirmCommitButton ||
 	!cancelCommitButton ||
 	!signUpButton || // Added signUpButton to null check
-	!signInButton
+	!signInButton ||
+	// 3. Update Critical Element Null Checks: In the `if (...) { ... }` block that checks for null DOM elements (line ~133 `if (!sendButton || ...)`), add `!commandSuggestionsContainer` and `!chatInputControlsWrapper` to the null check condition.
+	!commandSuggestionsContainer ||
+	!chatInputControlsWrapper
 ) {
 	// END Add new DOM elements to the critical elements null check
 	console.error("Required DOM elements not found!");
@@ -582,6 +599,95 @@ if (
 		}
 	}
 
+	// 4. Implement Helper Functions for Command Suggestions: Inside the `else` block (where `appendMessage` is defined) and before `sendMessage` function, add the following helper functions:
+	function showCommandSuggestions(commands: string[]): void {
+		if (!commandSuggestionsContainer) {
+			return;
+		}
+		filteredCommands = commands;
+		commandSuggestionsContainer.innerHTML = "";
+		activeCommandIndex = -1;
+
+		if (commands.length === 0) {
+			const noMatchesItem = document.createElement("div");
+			noMatchesItem.classList.add("command-item", "no-matches"); // Add specific classes for styling
+			noMatchesItem.textContent = "No matching commands";
+			commandSuggestionsContainer.appendChild(noMatchesItem);
+		} else {
+			commands.forEach((command, index) => {
+				const commandItem = document.createElement("div");
+				commandItem.classList.add("command-item");
+				commandItem.textContent = command;
+				commandItem.dataset.command = command; // Store the command itself
+				commandItem.addEventListener("click", () => {
+					selectCommand(command);
+				});
+				commandSuggestionsContainer.appendChild(commandItem);
+			});
+		}
+		commandSuggestionsContainer.style.display = "flex"; // Use flex display
+		isCommandSuggestionsVisible = true;
+		setLoadingState(isLoading);
+		if (chatInputControlsWrapper) {
+			chatInputControlsWrapper.style.zIndex = "100"; // Ensure pop-up is above other elements
+		}
+	}
+
+	function hideCommandSuggestions(): void {
+		if (!commandSuggestionsContainer) {
+			return;
+		}
+		isCommandSuggestionsVisible = false;
+		commandSuggestionsContainer.style.display = "none";
+		setLoadingState(isLoading);
+		commandSuggestionsContainer.innerHTML = "";
+		activeCommandIndex = -1;
+		filteredCommands = [];
+		if (chatInputControlsWrapper) {
+			chatInputControlsWrapper.style.zIndex = ""; // Reset z-index
+		}
+	}
+
+	function selectCommand(command: string): void {
+		if (!chatInput) {
+			return;
+		}
+		chatInput.value = command + " ";
+		chatInput.focus();
+		// Move cursor to end
+		chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
+		hideCommandSuggestions();
+	}
+
+	function highlightCommand(index: number): void {
+		if (!commandSuggestionsContainer) {
+			return;
+		}
+		const items = Array.from(
+			commandSuggestionsContainer.children
+		) as HTMLDivElement[];
+		items.forEach((item) => item.classList.remove("active"));
+		if (index >= 0 && index < items.length) {
+			items[index].classList.add("active");
+			items[index].scrollIntoView({ block: "nearest" });
+		}
+	}
+
+	// NEW FUNCTION: Check if a complete command has already been typed
+	function isInputtingCompleteCommand(text: string): boolean {
+		// Iterate over all defined MINOVATIVE_COMMANDS (e.g., "/plan", "/commit")
+		for (const cmd of MINOVATIVE_COMMANDS) {
+			// Check if the input text starts exactly with a known command
+			if (text.startsWith(cmd)) {
+				// This indicates the command has been fully entered and the user is typing arguments or has simply pressed space.
+				if (text.length === cmd.length || text[cmd.length] === " ") {
+					return true; // A complete command is being input
+				}
+			}
+		}
+		return false; // No complete command detected at the beginning of the input
+	}
+
 	function updateApiKeyStatus(text: string) {
 		if (apiKeyStatusDiv) {
 			const sanitizedText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -647,7 +753,8 @@ if (
 			isLoading ||
 			planConfirmationVisible ||
 			planParseErrorVisible ||
-			commitReviewVisible || //
+			commitReviewVisible ||
+			isCommandSuggestionsVisible ||
 			!chatInput ||
 			!sendButton
 		) {
@@ -659,7 +766,9 @@ if (
 				"planParseErrorVisible",
 				planParseErrorVisible,
 				"commitReviewVisible", //
-				commitReviewVisible //
+				commitReviewVisible,
+				"isCommandSuggestionsVisible:",
+				isCommandSuggestionsVisible
 			);
 			return;
 		}
@@ -712,8 +821,8 @@ if (
 	// Modified setLoadingState to control button states based on loading and UI visibility
 	function setLoadingState(loading: boolean) {
 		console.log(
-			`[setLoadingState] Call: loading=${loading}, current isLoading=${isLoading}, current isApiKeySet=${isApiKeySet}`
-		); // console.log here
+			`[setLoadingState] Call: loading=${loading}, current isLoading=${isLoading}, current isApiKeySet=${isApiKeySet}, current isCommandSuggestionsVisible=${isCommandSuggestionsVisible}`
+		);
 		isLoading = loading; // Keep track of overall loading state
 		const loadingMsg = chatContainer?.querySelector(".loading-message");
 		if (loadingMsg) {
@@ -731,7 +840,7 @@ if (
 			commitReviewContainer && commitReviewContainer.style.display !== "none"; //
 
 		console.log(
-			`[setLoadingState] UI Display States: planConfirmationContainer=${planConfirmationContainer?.style.display}, planParseErrorContainer=${planParseErrorContainer?.style.display}, commitReviewContainer=${commitReviewContainer?.style.display}`
+			`[setLoadingState] UI Display States: planConfirmationContainer=${planConfirmationContainer?.style.display}, planParseErrorContainer=${planParseErrorContainer?.style.display}, commitReviewContainer=${commitReviewContainer?.style.display}, isCommandSuggestionsVisible=${isCommandSuggestionsVisible}`
 		);
 
 		// Determine if general chat/send controls should be enabled
@@ -741,7 +850,8 @@ if (
 			isApiKeySet &&
 			!planConfirmationVisible &&
 			!planParseErrorVisible &&
-			!commitReviewVisible;
+			!commitReviewVisible &&
+			!isCommandSuggestionsVisible;
 
 		// Determine if chat history buttons can be interacted with
 		// Enabled only if not loading AND neither blocking UI is visible
@@ -749,7 +859,8 @@ if (
 			!loading &&
 			!planConfirmationVisible &&
 			!planParseErrorVisible &&
-			!commitReviewVisible;
+			!commitReviewVisible &&
+			!isCommandSuggestionsVisible;
 
 		console.log(
 			`[setLoadingState] Final computed enableSendControls=${enableSendControls}, canInteractWithChatHistoryButtons=${canInteractWithChatHistoryButtons}`
@@ -759,7 +870,7 @@ if (
 			sendButton.disabled = !enableSendControls;
 		}
 		if (chatInput) {
-			chatInput.disabled = !enableSendControls;
+			chatInput.disabled = loading;
 		}
 		// Model selection should also be disabled while any operation is running or UI is blocked
 		if (modelSelect) {
@@ -767,7 +878,8 @@ if (
 				!!isLoading ||
 				!!planConfirmationVisible ||
 				!!planParseErrorVisible ||
-				!!commitReviewVisible;
+				!!commitReviewVisible ||
+				!!isCommandSuggestionsVisible;
 		}
 		// API key management buttons should also be disabled while any operation is running or UI is blocked
 		const enableApiKeyControls =
@@ -775,6 +887,7 @@ if (
 			!planConfirmationVisible &&
 			!planParseErrorVisible &&
 			!commitReviewVisible &&
+			!isCommandSuggestionsVisible &&
 			totalKeys > 0;
 		if (prevKeyButton) {
 			prevKeyButton.disabled = !enableApiKeyControls || totalKeys <= 1;
@@ -789,7 +902,8 @@ if (
 			!loading &&
 			!planConfirmationVisible &&
 			!planParseErrorVisible &&
-			!commitReviewVisible;
+			!commitReviewVisible &&
+			!isCommandSuggestionsVisible;
 		if (addKeyInput) {
 			addKeyInput.disabled = !enableAddKeyInputControls;
 		}
@@ -1050,13 +1164,105 @@ if (
 		console.log("Send button clicked.");
 		sendMessage();
 	}); // console.log here
-	chatInput.addEventListener("keydown", (e) => {
-		if (e.key === "Enter" && !e.shiftKey) {
-			console.log("Chat input Enter key pressed."); // console.log here
-			e.preventDefault();
-			sendMessage();
+	// The original simple keydown listener for Enter is removed as part of the consolidation.
+	// chatInput.addEventListener("keydown", (e) => {
+	// 	if (e.key === "Enter" && !e.shiftKey) {
+	// 		console.log("Chat input Enter key pressed."); // console.log here
+	// 		e.preventDefault();
+	// 		sendMessage();
+	// 	}
+	// });
+
+	// 5. Implement Event Listeners for `chatInput`: After the existing `chatInput.addEventListener('keydown', ...)` block and before the `modelSelect.addEventListener('change', ...)` block, add the following new event listeners for `chatInput`:
+	chatInput.addEventListener("input", () => {
+		if (!chatInput) {
+			return;
+		}
+		const text = chatInput.value;
+		if (text.startsWith("/")) {
+			// NEW LOGIC: Check if a complete command has already been typed
+			if (isInputtingCompleteCommand(text)) {
+				hideCommandSuggestions(); // Hide suggestions if a full command is already in the input
+				return; // Exit, do not proceed with filtering or showing suggestions
+			}
+
+			// Existing logic to show suggestions for partial commands should follow here
+			const query = text.substring(1).toLowerCase();
+			const matches = MINOVATIVE_COMMANDS.filter((cmd) =>
+				cmd.toLowerCase().includes(query)
+			);
+			showCommandSuggestions(matches);
+		} else {
+			hideCommandSuggestions();
 		}
 	});
+
+	chatInput.addEventListener("keydown", (e) => {
+		// Use the new state variable to check if command suggestions are currently displayed.
+		if (!isCommandSuggestionsVisible) {
+			// If command suggestions are NOT currently displayed, proceed to regular Enter handling.
+			if (e.key === "Enter" && !e.shiftKey) {
+				console.log("Chat input Enter key pressed (no suggestions visible).");
+				e.preventDefault(); // Prevent default newline/form submission.
+				sendMessage(); // Trigger send message.
+			}
+			return; // Exit this listener if suggestions are not active.
+		}
+
+		// --- Logic below this line executes ONLY IF command suggestions ARE visible ---
+
+		// If suggestions are visible but the list is empty (e.g., no matches for query).
+		if (filteredCommands.length === 0) {
+			if (e.key === "Enter" && !e.shiftKey) {
+				e.preventDefault(); // Prevent newline/sending.
+				// Do not call sendMessage. The user must either clear their query or hide suggestions.
+				console.log(
+					"Enter pressed with visible but empty suggestions. Not sending message."
+				);
+			}
+			return; // Exit if no commands to highlight/select.
+		}
+
+		const numCommands = filteredCommands.length;
+
+		if (e.key === "ArrowDown") {
+			e.preventDefault(); // Prevent cursor movement in textarea
+			activeCommandIndex = (activeCommandIndex + 1) % numCommands;
+			highlightCommand(activeCommandIndex);
+		} else if (e.key === "ArrowUp") {
+			e.preventDefault(); // Prevent cursor movement in textarea
+			activeCommandIndex = (activeCommandIndex - 1 + numCommands) % numCommands;
+			highlightCommand(activeCommandIndex);
+		} else if (e.key === "Enter") {
+			// If Enter is pressed WHEN COMMAND SUGGESTIONS ARE VISIBLE
+			e.preventDefault(); // ALWAYS prevent default behavior (newline/sending)
+
+			if (activeCommandIndex !== -1) {
+				// If a command is highlighted, select it
+				selectCommand(filteredCommands[activeCommandIndex]);
+			} else {
+				// If suggestions are visible but no command is highlighted (activeCommandIndex is -1),
+				// do nothing. This correctly prevents sending the message until suggestions are hidden.
+				console.log(
+					"Enter pressed with suggestions visible but no command highlighted. Not sending message."
+				);
+			}
+		} else if (e.key === "Escape") {
+			e.preventDefault();
+			hideCommandSuggestions();
+		}
+	});
+
+	chatInput.addEventListener("blur", () => {
+		// Delay hiding to allow click events on suggestion items to register
+		setTimeout(() => {
+			// Only hide command suggestions if chatInput exists AND its value does NOT start with '/'
+			if (chatInput && !chatInput.value.startsWith("/")) {
+				hideCommandSuggestions();
+			}
+		}, 150);
+	});
+
 	modelSelect.addEventListener("change", () => {
 		const selectedModel = modelSelect.value;
 		vscode.postMessage({ type: "selectModel", value: selectedModel });
@@ -1968,6 +2174,11 @@ if (
 			commitReviewContainer.style.display = "none";
 		}
 		// Removed: signUpButton.style.display = "none";
+
+		// 6. Initial State in `initializeWebview()`: Within the `initializeWebview()` function (around line ~900), after other initial display settings and before `setIconForButton` calls, ensure the `commandSuggestionsContainer` is initially hidden. Add:
+		if (commandSuggestionsContainer) {
+			commandSuggestionsContainer.style.display = "none";
+		}
 
 		// Set icons for buttons
 		setIconForButton(sendButton, faPaperPlane);

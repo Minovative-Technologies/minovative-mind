@@ -731,7 +731,7 @@ div#commit-message-display tr:nth-child(even),
 #input-container {
 	display: flex;
 	align-items: flex-end; /* Align items to the bottom */
-	margin-bottom: var(--element-spacing);
+	/* REMOVED: margin-bottom: var(--element-spacing); */
 	flex-shrink: 0;
 	border: 1px solid var(--vscode-input-border); /* Changed border color */
 	border-radius: var(--border-radius);
@@ -1617,4 +1617,52 @@ ul#staged-files-list li.empty-state {
 		--vscode-list-activeSelectionBorder,
 		var(--vscode-focusBorder)
 	);
+}
+
+/* --- New Rules for Command Suggestions --- */
+
+#chat-input-controls-wrapper {
+	position: relative;
+	flex-shrink: 0;
+	margin-bottom: var(--element-spacing);
+}
+
+#command-suggestions-container {
+	position: absolute;
+	bottom: calc(100% + 5px); /* Position above the input container */
+	left: 0;
+	right: 0;
+	max-height: 200px;
+	overflow-y: auto;
+	background-color: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-editorWidget-border);
+	border-radius: var(--border-radius);
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+	display: none; /* Hidden by default, shown by JS */
+	z-index: 100; /* Ensure it appears on top */
+	padding: 5px;
+	display: flex; /* Added for gap and flex-direction to work */
+	gap: 2px;
+	flex-direction: column;
+}
+
+.command-item {
+	padding: 8px 10px;
+	cursor: pointer;
+	border-radius: var(--border-radius);
+	font-size: 0.9em;
+	color: var(--vscode-editor-foreground);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.command-item:hover {
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.command-item.active {
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
 }

@@ -19,3 +19,6 @@ export const DEFAULT_MODEL =
 // this fallback branch will not be hit as the array is not empty.
 
 export const TEMPERATURE = 2;
+
+// Minovative commands for the chat input
+export const MINOVATIVE_COMMANDS = ["/plan", "/commit"];
