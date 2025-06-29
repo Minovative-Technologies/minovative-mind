@@ -8,7 +8,7 @@ import * as sidebarConstants from "../sidebar/common/sidebarConstants";
 import {
 	createInitialPlanningExplanationPrompt,
 	createPlanningPrompt,
-	createCorrectionPlanPrompt, // NEW: Import createCorrectionPlanPrompt
+	createCorrectionPlanPrompt, // Import createCorrectionPlanPrompt
 } from "../sidebar/services/aiInteractionService";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import {
@@ -25,15 +25,14 @@ import { typeContentIntoEditor } from "../sidebar/services/planExecutionService"
 import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
 import { GitConflictResolutionService } from "./gitConflictResolutionService";
-import { sanitizeErrorMessagePaths } from "../utils/pathUtils";
 import { applyAITextEdits } from "../utils/codeUtils"; // For applying precise text edits
-import { DiagnosticService } from "../utils/diagnosticUtils"; // NEW: Import DiagnosticService
-import { formatUserFacingErrorMessage } from "../utils/errorFormatter"; // NEW: Import formatUserFacingErrorMessage
+import { DiagnosticService } from "../utils/diagnosticUtils"; // Import DiagnosticService
+import { formatUserFacingErrorMessage } from "../utils/errorFormatter"; // Import formatUserFacingErrorMessage
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
 	private readonly MAX_TRANSIENT_STEP_RETRIES = 3;
-	private readonly MAX_CORRECTION_PLAN_ATTEMPTS = 3; // NEW: Max attempts for AI to generate a valid correction *plan*
+	private readonly MAX_CORRECTION_PLAN_ATTEMPTS = 3; // Max attempts for AI to generate a valid correction *plan*
 
 	constructor(
 		private provider: SidebarProvider,
@@ -1361,7 +1360,7 @@ export class PlanService {
 		}
 	}
 
-	// NEW: Add new _performFinalValidationAndCorrection method
+	// Add new _performFinalValidationAndCorrection method
 	private async _performFinalValidationAndCorrection(
 		affectedFileUris: Set<vscode.Uri>,
 		rootUri: vscode.Uri,
@@ -1412,11 +1411,13 @@ export class PlanService {
 				if (errorsAndWarningsForFile.length > 0) {
 					allErrorsAndWarnings.push(...errorsAndWarningsForFile);
 					const formattedForFile =
-						DiagnosticService.formatContextualDiagnostics(
+						await DiagnosticService.formatContextualDiagnostics(
 							fileUri,
 							rootUri,
 							undefined,
-							5000
+							5000,
+							undefined,
+							token
 						);
 					if (formattedForFile) {
 						aggregatedFormattedDiagnostics += formattedForFile + "\n";

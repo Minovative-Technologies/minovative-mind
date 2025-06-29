@@ -35,7 +35,7 @@ export function isFeatureAllowed(
 			case "api_key_management": // Adding, deleting, switching API keys
 			case "chat_history_management": // Clearing, saving, loading chat history
 			case "model_selection": // Selecting AI models
-			case "generate_documentation": // New: Generate documentation is allowed for free tier
+			case "generate_documentation": // Generate documentation is allowed for free tier
 				return true;
 
 			// Special case for editor modification commands: All are now restricted for free tier.

@@ -1,13 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
 
-interface FormattedDiagnostic {
-	filePath: string;
-	range: vscode.Range;
-	severity: vscode.DiagnosticSeverity;
-	message: string;
-}
-
 function getSeverityName(severity: vscode.DiagnosticSeverity): string {
 	switch (severity) {
 		case vscode.DiagnosticSeverity.Error:
@@ -41,18 +34,57 @@ export class DiagnosticService {
 	 * @param selection An optional vscode.Range representing the user's text selection.
 	 * @param maxTotalChars The maximum character length for the output string.
 	 * @param maxPerSeverity The maximum number of diagnostics to include per severity level when no selection.
+	 * @param token An optional CancellationToken to allow for early cancellation of the operation.
 	 * @returns A formatted string of diagnostics, or undefined if no relevant diagnostics.
 	 */
-	public static formatContextualDiagnostics(
+	public static async formatContextualDiagnostics(
 		documentUri: vscode.Uri,
 		workspaceRoot: vscode.Uri,
 		selection?: vscode.Range,
 		maxTotalChars: number = 25000,
-		maxPerSeverity: number = 25
-	): string | undefined {
+		maxPerSeverity: number = 25,
+		token?: vscode.CancellationToken // Make token optional
+	): Promise<string | undefined> {
 		const allDiagnostics = DiagnosticService.getDiagnosticsForUri(documentUri);
 		if (!allDiagnostics || allDiagnostics.length === 0) {
 			return undefined;
+		}
+
+		let fileContentLines: string[] | undefined;
+		try {
+			// Read the content of the document URI asynchronously
+			// Removed '{ signal: token.signal }' as it's not supported by vscode.workspace.fs.readFile
+			const fileBuffer = await vscode.workspace.fs.readFile(documentUri);
+			fileContentLines = Buffer.from(fileBuffer)
+				.toString("utf8")
+				.split(/\r?\n/);
+		} catch (error: any) {
+			if (token?.isCancellationRequested) {
+				// Use optional chaining
+				// Propagate cancellation if it occurred during file read
+				throw new Error("Operation cancelled during file content read.");
+			}
+			// Handle specific FileSystemErrors or other errors gracefully
+			if (error instanceof vscode.FileSystemError) {
+				if (
+					error.code === "FileNotFound" ||
+					error.code === "EntryIsDirectory"
+				) {
+					console.warn(
+						`[DiagnosticService] Skipping code snippet for '${documentUri.fsPath}': ${error.message}`
+					);
+				} else {
+					console.error(
+						`[DiagnosticService] Error reading file content for snippet '${documentUri.fsPath}': ${error.message}`
+					);
+				}
+			} else {
+				console.error(
+					`[DiagnosticService] Unexpected error reading file content for snippet '${documentUri.fsPath}': ${error.message}`
+				);
+			}
+			// If file cannot be read, fileContentLines remains undefined, and snippet generation will be skipped.
+			fileContentLines = undefined;
 		}
 
 		let filteredDiagnostics: vscode.Diagnostic[] = [];
@@ -108,10 +140,113 @@ export class DiagnosticService {
 			.replace(/\\/g, "/");
 
 		for (const diag of filteredDiagnostics) {
-			const diagLine = `- [${getSeverityName(diag.severity)}] ${relativePath}:${
-				diag.range.start.line + 1
-			}:${diag.range.start.character + 1} - ${diag.message}\n`;
+			if (token?.isCancellationRequested) {
+				// Use optional chaining
+				// Stop adding diagnostics if cancellation is requested
+				diagnosticsString += `... (${
+					filteredDiagnostics.length - filteredDiagnostics.indexOf(diag)
+				} more diagnostics truncated due to cancellation)\n`;
+				break;
+			}
 
+			let diagLine = `- [${getSeverityName(diag.severity)}] ${relativePath}:${
+				diag.range.start.line + 1
+			}:${diag.range.start.character + 1} - ${diag.message}`; // No newline here yet, add after snippet
+
+			let codeSnippetString = "";
+			if (fileContentLines && fileContentLines.length > 0) {
+				// Calculate snippet lines, ensuring bounds are respected
+				const snippetStartLine = Math.max(0, diag.range.start.line - 5);
+				const snippetEndLine = Math.min(
+					fileContentLines.length - 1,
+					diag.range.end.line + 5
+				);
+
+				// Ensure snippetEndLine is not less than snippetStartLine (e.g., for very short files or diagnostics at line 0)
+				const actualSnippetEndLine = Math.max(snippetStartLine, snippetEndLine);
+
+				const snippetLines = fileContentLines.slice(
+					snippetStartLine,
+					actualSnippetEndLine + 1
+				);
+
+				// Determine markdown language ID based on file extension
+				let languageId = path
+					.extname(documentUri.fsPath)
+					.substring(1)
+					.toLowerCase();
+				if (!languageId) {
+					// Fallback for files without extension (e.g., Dockerfile, LICENSE)
+					languageId = path.basename(documentUri.fsPath).toLowerCase();
+				}
+
+				// Map common extensions/filenames to widely recognized markdown language IDs
+				const languageMap: { [key: string]: string } = {
+					ts: "typescript",
+					js: "javascript",
+					jsx: "javascript",
+					tsx: "typescript",
+					py: "python",
+					java: "java",
+					cs: "csharp",
+					go: "go",
+					rb: "ruby",
+					php: "php",
+					cpp: "cpp",
+					c: "c",
+					html: "html",
+					css: "css",
+					json: "json",
+					xml: "xml",
+					yml: "yaml",
+					yaml: "yaml",
+					sh: "bash",
+					bat: "batchfile",
+					ps1: "powershell",
+					md: "markdown",
+					sql: "sql",
+					dockerfile: "dockerfile",
+					makefile: "makefile",
+					// Specific files without common extensions
+					gitignore: "ignore",
+					eslintignore: "ignore",
+					prettierignore: "ignore",
+					npmrc: "properties",
+					yarnrc: "properties",
+					bowerrc: "json",
+					license: "plaintext",
+					changelog: "plaintext",
+					readme: "markdown",
+					txt: "plaintext",
+					log: "plaintext",
+					env: "plaintext",
+					conf: "plaintext",
+					toml: "toml",
+					ini: "ini",
+				};
+				languageId = languageMap[languageId] || "plaintext";
+
+				// Format each snippet line with padded line numbers for alignment
+				const maxLineNumLength = String(actualSnippetEndLine + 1).length;
+				const formattedSnippetLines = snippetLines
+					.map((line, index) => {
+						const currentLineNum = snippetStartLine + index + 1; // 1-indexed line number
+						const paddedLineNum = String(currentLineNum).padStart(
+							maxLineNumLength,
+							" "
+						);
+						return `${paddedLineNum}: ${line}`;
+					})
+					.join("\n");
+
+				codeSnippetString = `\n  Code snippet:\n\`\`\`${languageId}\n${formattedSnippetLines}\n\`\`\`\n`;
+			}
+
+			// Append the code snippet to the diagnostic line
+			diagLine += codeSnippetString;
+			diagLine += "\n"; // Add the newline character at the very end of the full diagnostic entry
+
+			// Check if adding this diagnostic (with its snippet) would exceed the total character limit
 			if (currentLength + diagLine.length > maxTotalChars) {
 				diagnosticsString += `... (${
 					filteredDiagnostics.length - filteredDiagnostics.indexOf(diag)
