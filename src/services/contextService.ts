@@ -8,7 +8,11 @@ import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
 import { AIRequestService } from "./aiRequestService";
 import { PlanGenerationContext } from "../sidebar/common/sidebarTypes";
 import { scanWorkspace } from "../context/workspaceScanner";
-import { buildDependencyGraph } from "../context/dependencyGraphBuilder";
+import {
+	buildDependencyGraph,
+	buildReverseDependencyGraph,
+} from "../context/dependencyGraphBuilder";
+import { getHeuristicRelevantFiles } from "../context/heuristicContextSelector"; // NEW: Import heuristic selector
 import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
@@ -73,12 +77,18 @@ export class ContextService {
 
 			const allScannedFiles = await scanWorkspace({ respectGitIgnore: true });
 			let fileDependencies: Map<string, string[]> | undefined;
+			let reverseFileDependencies: Map<string, string[]> | undefined; // NEW variable
 
 			try {
 				fileDependencies = await buildDependencyGraph(
 					allScannedFiles,
 					rootFolder.uri
 				);
+				// NEW: Build reverse dependency graph if fileDependencies was successfully created
+				if (fileDependencies) {
+					reverseFileDependencies =
+						buildReverseDependencyGraph(fileDependencies);
+				}
 			} catch (depGraphError: any) {
 				console.error(
 					`[ContextService] Error building dependency graph: ${depGraphError.message}`
@@ -87,6 +97,7 @@ export class ContextService {
 					type: "statusUpdate",
 					value: `Warning: Could not build dependency graph. Reason: ${depGraphError.message}`,
 				});
+				// fileDependencies and reverseFileDependencies will remain undefined if error occurs
 			}
 
 			// --- Determine effective diagnostics string ---
@@ -335,6 +346,37 @@ export class ContextService {
 			}
 
 			let filesForContextBuilding = allScannedFiles;
+			let heuristicSelectedFiles: vscode.Uri[] = []; // NEW: Declare heuristicSelectedFiles
+
+			// NEW: Populate heuristicSelectedFiles by awaiting a call to getHeuristicRelevantFiles
+			try {
+				heuristicSelectedFiles = await getHeuristicRelevantFiles(
+					allScannedFiles,
+					rootFolder.uri,
+					editorContext,
+					fileDependencies,
+					reverseFileDependencies, // NEW: Pass reverseFileDependencies
+					cancellationToken
+				);
+				if (heuristicSelectedFiles.length > 0) {
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: `Identified ${heuristicSelectedFiles.length} heuristically relevant file(s).`,
+					});
+				}
+			} catch (heuristicError: any) {
+				console.error(
+					`[ContextService] Error during heuristic file selection: ${heuristicError.message}`
+				);
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Warning: Heuristic file selection failed. Reason: ${heuristicError.message}`,
+					isError: true,
+				});
+				// Continue without heuristic files if an error occurs
+				heuristicSelectedFiles = [];
+			}
+
 			const currentQueryForSelection =
 				userRequest || editorContext?.instruction;
 			const smartContextEnabled = this.settingsManager.getSetting<boolean>(
@@ -349,7 +391,7 @@ export class ContextService {
 			) {
 				this.postMessageToWebview({
 					type: "statusUpdate",
-					value: "Minovative Mind is identifying relevant files...",
+					value: "Minovative Mind is identifying relevant files using AI...", // Updated message
 				});
 				try {
 					const selectionOptions: SelectRelevantFilesAIOptions = {
@@ -365,6 +407,7 @@ export class ContextService {
 						modelName: this.settingsManager.getSelectedModelName(),
 						cancellationToken,
 						fileDependencies,
+						preSelectedHeuristicFiles: heuristicSelectedFiles, // NEW: Pass heuristicSelectedFiles
 					};
 					const selectedFiles = await selectRelevantFilesAI(selectionOptions);
 
@@ -372,19 +415,18 @@ export class ContextService {
 						filesForContextBuilding = selectedFiles;
 						this.postMessageToWebview({
 							type: "statusUpdate",
-							value: `Using ${selectedFiles.length} relevant file(s) for context.`,
+							value: `Using ${selectedFiles.length} relevant file(s) for context (hybrid selection).`, // Updated message
 						});
 					} else {
-						// Fallback logic
-						filesForContextBuilding = editorContext?.documentUri
-							? [editorContext.documentUri]
-							: [];
+						// Fallback logic: if AI returns no *additional* files, or its selection was empty/invalid,
+						// fall back to the heuristically selected files.
+						filesForContextBuilding = heuristicSelectedFiles;
 						this.postMessageToWebview({
 							type: "statusUpdate",
 							value:
 								filesForContextBuilding.length > 0
-									? `Focusing context on the active file.`
-									: `No specific files identified by AI.`,
+									? `AI identified no additional files. Using ${filesForContextBuilding.length} heuristically relevant file(s).` // Updated message
+									: `AI identified no specific files. No heuristically relevant files found either.`, // Updated message
 						});
 					}
 				} catch (error: any) {
@@ -396,10 +438,27 @@ export class ContextService {
 						value: "Smart context selection failed. Using limited context.",
 						isError: true,
 					});
-					filesForContextBuilding = allScannedFiles.slice(
-						0,
-						Math.min(allScannedFiles.length, 10)
-					);
+					// On AI error, first fallback to heuristic files
+					filesForContextBuilding = heuristicSelectedFiles;
+					if (
+						filesForContextBuilding.length === 0 &&
+						editorContext?.documentUri
+					) {
+						// If no heuristics either, fall back to just the active file
+						filesForContextBuilding = [editorContext.documentUri];
+					}
+					if (filesForContextBuilding.length === 0) {
+						// As a last resort, if nothing else, take a small subset of all scanned files
+						filesForContextBuilding = allScannedFiles.slice(
+							0,
+							Math.min(allScannedFiles.length, 10)
+						);
+					}
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: `Smart context selection failed. Falling back to ${filesForContextBuilding.length} file(s).`,
+						isError: true,
+					});
 				}
 			} else if (currentQueryForSelection?.startsWith("/commit")) {
 				return {

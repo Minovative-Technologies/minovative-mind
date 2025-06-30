@@ -17,6 +17,7 @@ export interface SelectRelevantFilesAIOptions {
 	diagnostics?: string;
 	fileDependencies?: Map<string, string[]>; // New optional property
 	activeEditorSymbols?: vscode.DocumentSymbol[];
+	preSelectedHeuristicFiles?: vscode.Uri[]; // NEW PROPERTY: Heuristically pre-selected files
 	aiModelCall: (
 		prompt: string,
 		modelName: string,
@@ -48,15 +49,30 @@ export async function selectRelevantFilesAI(
 		projectRoot,
 		activeEditorContext,
 		diagnostics,
-		fileDependencies, // Destructure new property
+		fileDependencies,
 		activeEditorSymbols,
 		aiModelCall,
 		modelName,
 		cancellationToken,
+		preSelectedHeuristicFiles, // Destructure new property
 	} = options;
 
 	if (allScannedFiles.length === 0) {
 		return [];
+	}
+
+	// Initialize the set of final selected URIs with any heuristically pre-selected files
+	const finalSelectedUris: Set<vscode.Uri> = new Set(
+		preSelectedHeuristicFiles || []
+	);
+
+	// Ensure the active editor's file is always part of the final selection if available,
+	// unless it's already included by the heuristics.
+	if (
+		activeEditorContext?.documentUri &&
+		!finalSelectedUris.has(activeEditorContext.documentUri)
+	) {
+		finalSelectedUris.add(activeEditorContext.documentUri);
 	}
 
 	const relativeFilePaths = allScannedFiles.map((uri) =>
@@ -64,6 +80,16 @@ export async function selectRelevantFilesAI(
 	);
 
 	let contextPrompt = `User Request: "${userRequest}"\n`;
+
+	// Add heuristically pre-selected files to the context prompt for AI's awareness
+	if (preSelectedHeuristicFiles && preSelectedHeuristicFiles.length > 0) {
+		const heuristicPaths = preSelectedHeuristicFiles.map((uri) =>
+			path.relative(projectRoot.fsPath, uri.fsPath).replace(/\\/g, "/")
+		);
+		contextPrompt += `\nHeuristically Pre-selected Files (based on active file directory, direct dependencies, etc. These are strong candidates for relevance.): ${heuristicPaths
+			.map((p) => `"${p}"`)
+			.join(", ")}\n`;
+	}
 
 	if (activeEditorContext) {
 		contextPrompt += `\nActive File: ${activeEditorContext.filePath}\n`;
@@ -88,12 +114,6 @@ export async function selectRelevantFilesAI(
 					symbolAtCursor.name
 				}" (Type: ${vscode.SymbolKind[symbolAtCursor.kind]})\n`;
 				try {
-					// symbolLocation is not strictly needed if we can pass selectionRange.start directly
-					// const symbolLocation: vscode.Location = new vscode.Location(
-					// 	activeFileUri,
-					// 	symbolAtCursor.selectionRange
-					// );
-
 					const references = await SymbolService.findReferences(
 						activeFileUri,
 						symbolAtCursor.selectionRange.start,
@@ -179,7 +199,7 @@ export async function selectRelevantFilesAI(
 
 	const selectionPrompt = `
 	You are an AI assistant helping a developer focus on the most relevant parts of their codebase.
-	Based on the user's request, active editor context, and chat history provided below, please select a subset of files from the "Available Project Files" list that are most pertinent to fulfilling the user's request.
+	Based on the user's request, active editor context, chat history, and the provided project file information, please select a subset of files from the "Available Project Files" list that are most pertinent to fulfilling the user's request.
 
 	-- Context Prompt --
 	${contextPrompt}
@@ -195,12 +215,13 @@ export async function selectRelevantFilesAI(
 
 	Instructions for your response:
 	1.  Analyze all the provided information to understand the user's goal.
-	2.  Carefully examine the 'Internal File Relationships' section if present, as it provides crucial context on how files relate to each other.
-	3.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes. Prioritize files that are imported by the active file, or by other files you deem highly relevant to the user's request.
-	4.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
-	5.  If no specific files from the list seem particularly relevant (e.g., the request is very general or can be answered without looking at other files beyond the active one), return an empty JSON array: [].
-	6.  Do NOT include any files not present in the "Available Project Files" list.
-	7.  Your entire response should be ONLY the JSON array. Do not include any other text, explanations, or markdown formatting.
+	2.  Crucially consider the 'Heuristically Pre-selected Files' if present; these files are highly likely to be relevant and should almost always be included unless explicitly contradictory to the request.
+	3.  Carefully examine the 'Internal File Relationships' section if present, as it provides crucial context on how files relate to each other, forming logical modules or feature areas.
+	4.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes. Prioritize files that are imported by the active file, or by other files you deem highly relevant to the user's request.
+	5.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
+	6.  If no specific files from the list seem particularly relevant *beyond the heuristically pre-selected ones* (e.g., the request is very general or can be answered without looking at other files beyond the active one and its immediate module), return an empty JSON array \`[]\`. This indicates you are not adding *new* files to the heuristic set.
+	7.  Do NOT include any files not present in the "Available Project Files" list.
+	8.  Your entire response should be ONLY the JSON array. Do not include any other text, explanations, or markdown formatting.
 
 	JSON Array of selected file paths:
 `;
@@ -252,51 +273,40 @@ export async function selectRelevantFilesAI(
 			!selectedPaths.every((p) => typeof p === "string")
 		) {
 			console.warn(
-				"[SmartContextSelector] AI did not return a valid JSON array of strings. Response:",
+				"[SmartContextSelector] AI did not return a valid JSON array of strings. Returning heuristically pre-selected files. Response:",
 				selectedPaths
 			);
-			return []; // Fallback to empty or trigger broader context in caller
+			// Fallback to just heuristic files if AI response is invalid
+			return Array.from(finalSelectedUris);
 		}
-
-		const validSelectedUris: vscode.Uri[] = [];
-		const lowerCaseRelativeFilePaths = relativeFilePaths.map((p) =>
-			p.toLowerCase()
-		);
 
 		for (const selectedPath of selectedPaths as string[]) {
 			const normalizedSelectedPath = selectedPath.replace(/\\/g, "/");
-			const originalPathIndex = lowerCaseRelativeFilePaths.indexOf(
-				normalizedSelectedPath.toLowerCase()
+			// Find the original URI from allScannedFiles to preserve casing and ensure existence
+			const originalUri = allScannedFiles.find(
+				(uri) =>
+					path
+						.relative(projectRoot.fsPath, uri.fsPath)
+						.replace(/\\/g, "/")
+						.toLowerCase() === normalizedSelectedPath.toLowerCase()
 			);
-			if (originalPathIndex > -1) {
-				// Find the original URI using the index from the non-lowercase 'relativeFilePaths'
-				// to preserve casing from the file system
-				const originalUri = allScannedFiles.find(
-					(uri) =>
-						path
-							.relative(projectRoot.fsPath, uri.fsPath)
-							.replace(/\\/g, "/")
-							.toLowerCase() === normalizedSelectedPath.toLowerCase()
-				);
-				if (originalUri) {
-					validSelectedUris.push(originalUri);
-				}
+			if (originalUri) {
+				finalSelectedUris.add(originalUri); // Add AI-selected files to the set
 			} else {
 				console.warn(
 					`[SmartContextSelector] AI selected a file not in the original scan or with altered path: ${selectedPath}`
 				);
 			}
 		}
-		return validSelectedUris;
+		// Return the combined set of heuristic and AI-selected files
+		return Array.from(finalSelectedUris);
 	} catch (error) {
 		console.error(
 			"[SmartContextSelector] Error during AI file selection:",
 			error
 		);
 		// In case of an error (API error, parsing error, etc.),
-		// let the caller decide on the fallback (e.g., use all files).
-		// For now, we throw to indicate failure at this stage.
-		// The caller (_buildProjectContext) will catch this and can implement a fallback.
-		throw error;
+		// fall back to the heuristically pre-selected files.
+		return Array.from(finalSelectedUris);
 	}
 }

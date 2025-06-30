@@ -13,7 +13,7 @@ export async function buildDependencyGraph(
 	projectRoot: vscode.Uri
 ): Promise<Map<string, string[]>> {
 	const dependencyGraph = new Map<string, string[]>();
-	const concurrencyLimit = 10; // Concurrency limit set between 5-10, chosen 8
+	const concurrencyLimit = 10; // Concurrency limit set between 5-10
 
 	const parsedCommandLine = await findAndLoadTsConfig(projectRoot);
 	const compilerOptions = parsedCommandLine?.options || {
@@ -51,4 +51,28 @@ export async function buildDependencyGraph(
 	);
 
 	return dependencyGraph;
+}
+
+/**
+ * Builds a reverse dependency graph from a forward dependency graph.
+ * The reverse graph maps an imported file path to a list of files that import it.
+ * @param fileDependencies A map where key is a file path (importer) and value is an array of files it imports.
+ * @returns A map where key is an imported file path and value is an array of files that import it.
+ */
+export function buildReverseDependencyGraph(
+	fileDependencies: Map<string, string[]>
+): Map<string, string[]> {
+	const reverseDependencyGraph = new Map<string, string[]>();
+
+	for (const [importerPath, importedPaths] of fileDependencies.entries()) {
+		for (const importedPath of importedPaths) {
+			// Ensure the importedPath exists as a key in the reverse map
+			if (!reverseDependencyGraph.has(importedPath)) {
+				reverseDependencyGraph.set(importedPath, []);
+			}
+			// Add the current importerPath to the list of files that import importedPath
+			reverseDependencyGraph.get(importedPath)!.push(importerPath);
+		}
+	}
+	return reverseDependencyGraph;
 }
