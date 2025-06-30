@@ -12,6 +12,10 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - Displays relevant file paths within AI chat responses, providing interactive elements to collapse/expand the file list and open files directly.
 - Enables HTML rendering in MarkdownIt parser for richer content and updates the 'Generating...' loading message to include an animated ellipsis effect.
 
+### Enhanced AI Reasoning (Thinking Capabilities)
+
+- Leverages advanced AI configuration to enable deeper internal reasoning and problem-solving before generating responses, leading to more robust and accurate outcomes.
+
 ### Contextual Code Explanation
 
 - On-Demand Explanation: Users can select any code snippet in the active editor.
@@ -105,6 +109,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 ### Smart Context Awareness
 
 - **Comprehensive Understanding**: The AI intelligently considers the active file content, selected code, relevant diagnostics (warnings/errors) from VS Code, chat history, the overall project structure, **significantly enhanced relevant file context**, **and improved utilization of detailed symbol information** (definitions, references), along with TypeScript-aware dependency graph analysis (respecting `tsconfig.json`/`jsconfig.json` for accurate module resolution), to provide highly relevant and accurate responses.
+- **File Change Tracking**: Includes a dedicated context section for the AI that lists recently modified and created file paths, providing the AI with up-to-date awareness of active development changes within the workspace.
 
 ### Built-in Troubleshooting Guidance
 
