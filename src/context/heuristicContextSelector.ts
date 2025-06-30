@@ -1,17 +1,21 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { PlanGenerationContext } from "../sidebar/common/sidebarTypes";
+import { ActiveSymbolDetailedInfo } from "../services/contextService"; // NEW IMPORT
 
 export async function getHeuristicRelevantFiles(
 	allScannedFiles: ReadonlyArray<vscode.Uri>,
 	projectRoot: vscode.Uri,
 	activeEditorContext?: PlanGenerationContext["editorContext"],
 	fileDependencies?: Map<string, string[]>,
-	reverseFileDependencies?: Map<string, string[]>, // NEW PARAMETER
+	reverseFileDependencies?: Map<string, string[]>,
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo, // NEW PARAMETER
 	cancellationToken?: vscode.CancellationToken
 ): Promise<vscode.Uri[]> {
 	const relevantFilesSet = new Set<vscode.Uri>();
 	const MAX_REVERSE_DEPENDENCIES_TO_INCLUDE = 10; // Define the limit
+	const MAX_CALL_HIERARCHY_INCOMING_FILES_TO_INCLUDE = 8; // NEW CONSTANT
+	const MAX_CALL_HIERARCHY_OUTGOING_FILES_TO_INCLUDE = 8; // NEW CONSTANT
 
 	// 1. Always include the active file if present
 	if (activeEditorContext?.documentUri) {
@@ -101,6 +105,75 @@ export async function getHeuristicRelevantFiles(
 					countAdded++;
 				}
 			}
+		}
+	}
+
+	// 5. Include files from active symbol's call hierarchy (incoming and outgoing calls)
+	if (
+		activeEditorContext?.documentUri && // Ensure there's an active file
+		activeSymbolDetailedInfo // Ensure detailed symbol info is available
+	) {
+		// Helper function to process calls and add URIs to the set
+		const addCallHierarchyUris = (
+			calls:
+				| vscode.CallHierarchyIncomingCall[]
+				| vscode.CallHierarchyOutgoingCall[]
+				| undefined,
+			limit: number
+		) => {
+			if (!calls || calls.length === 0) {
+				return;
+			}
+			let countAdded = 0;
+			for (const call of calls) {
+				if (cancellationToken?.isCancellationRequested || countAdded >= limit) {
+					break;
+				}
+				let callUri: vscode.Uri | undefined;
+				// Differentiate based on CallHierarchy type to get the correct URI
+				if ("from" in call) {
+					// IncomingCall
+					callUri = call.from.uri;
+				} else if ("to" in call) {
+					// OutgoingCall
+					callUri = call.to.uri;
+				}
+
+				if (callUri && callUri.scheme === "file") {
+					// Ensure it's a file URI
+					// Find the original URI from allScannedFiles to ensure it's a known project file
+					const relativeCallPath = path
+						.relative(projectRoot.fsPath, callUri.fsPath)
+						.replace(/\\/g, "/");
+					const projectFileUri = allScannedFiles.find(
+						(uri) =>
+							path
+								.relative(projectRoot.fsPath, uri.fsPath)
+								.replace(/\\/g, "/") === relativeCallPath
+					);
+
+					if (projectFileUri) {
+						relevantFilesSet.add(projectFileUri);
+						countAdded++;
+					}
+				}
+			}
+		};
+
+		// Process incoming calls
+		if (activeSymbolDetailedInfo.incomingCalls) {
+			addCallHierarchyUris(
+				activeSymbolDetailedInfo.incomingCalls,
+				MAX_CALL_HIERARCHY_INCOMING_FILES_TO_INCLUDE
+			);
+		}
+
+		// Process outgoing calls
+		if (activeSymbolDetailedInfo.outgoingCalls) {
+			addCallHierarchyUris(
+				activeSymbolDetailedInfo.outgoingCalls,
+				MAX_CALL_HIERARCHY_OUTGOING_FILES_TO_INCLUDE
+			);
 		}
 	}
 

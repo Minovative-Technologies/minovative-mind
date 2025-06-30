@@ -356,6 +356,7 @@ export class ContextService {
 					editorContext,
 					fileDependencies,
 					reverseFileDependencies, // NEW: Pass reverseFileDependencies
+					activeSymbolDetailedInfo, // NEW: Pass activeSymbolDetailedInfo
 					cancellationToken
 				);
 				if (heuristicSelectedFiles.length > 0) {
