@@ -736,7 +736,6 @@ export class PlanService {
 		progress: vscode.Progress<{ message?: string; increment?: number }>,
 		combinedToken: vscode.CancellationToken
 	): Promise<Set<vscode.Uri>> {
-		let executionOk = true; // Still used for internal loop control and throwing on fatal error/cancellation
 		const affectedFileUris = new Set<vscode.Uri>();
 		const totalSteps = steps.length;
 		const { settingsManager, changeLogger } = this.provider;
@@ -751,7 +750,6 @@ export class PlanService {
 			// Inner loop for auto-retries and user intervention for the *current* step
 			while (!currentStepCompletedSuccessfullyOrSkipped) {
 				if (combinedToken.isCancellationRequested) {
-					executionOk = false;
 					throw new Error(ERROR_OPERATION_CANCELLED); // Plan cancelled
 				}
 
@@ -795,13 +793,25 @@ export class PlanService {
 								combinedToken
 							);
 
-							const generationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the full file content. Do NOT include markdown code block formatting. Provide only the file content.\n\nThe generated code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.\n\nFile Path:\n${
-								step.path
-							}\n\nInstructions:\n${
-								step.generate_prompt
-							}\n\n--- Broader Project Context ---\n${
-								context.projectContext
-							}\n--- End Broader Project Context ---\n\n${
+							const generationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the full file content. Do NOT include markdown code block formatting. Provide only the file content.
+Ensure the generated code is self-contained and immediately functional within the existing project context.
+Pay close attention to necessary imports based on the file's purpose and its location. If it's a TypeScript file, ensure all types are correctly defined or imported.
+Adhere to the detected coding style, naming conventions (e.g., camelCase for variables, PascalCase for classes), and file organization patterns consistent with the Broader Project Context and Relevant Project Snippets.
+The 'File Path' itself conveys important structural information; ensure the content generated is appropriate for its intended location and adheres to any framework-specific conventions.
+
+							The generated code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.
+
+							File Path:
+							${step.path}
+
+							Instructions:
+							${step.generate_prompt}
+
+							--- Broader Project Context ---
+							${context.projectContext}
+							--- End Broader Project Context ---
+
+							${
 								context.editorContext
 									? `--- Editor Context ---\n${JSON.stringify(
 											context.editorContext,
@@ -809,9 +819,13 @@ export class PlanService {
 											2
 									  )}\n--- End Editor Context ---\n\n`
 									: ""
-							}${this._formatChatHistoryForPrompt(
-								context.chatHistory
-							)}\n\n--- Relevant Project Snippets (for context) ---\n${relevantSnippets}\n\nComplete File Content:`;
+							}${this._formatChatHistoryForPrompt(context.chatHistory)}
+
+							--- Relevant Project Snippets (for context) ---
+							${relevantSnippets}
+
+							Complete File Content:`;
+
 							content = await this.provider.aiRequestService.generateWithRetry(
 								generationPrompt,
 								settingsManager.getSelectedModelName(),
@@ -860,13 +874,25 @@ export class PlanService {
 							combinedToken
 						);
 
-						const modificationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.\n\nThe modified code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.\n\nFile Path:\n${
-							step.path
-						}\n\nModification Instructions:\n${
-							step.modification_prompt
-						}\n\n--- Broader Project Context ---\n${
-							context.projectContext
-						}\n--- End Broader Project Context ---\n\n${
+						const modificationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.
+Crucially, return the ENTIRE content of the file. Do not omit existing code that is not being modified. The response must be a full, complete, and syntactically valid version of the file after the specified changes are applied.
+Integrate all changes seamlessly with the existing code structure. This includes maintaining existing function/class definitions, preserving unused imports (unless explicitly instructed to remove them), and ensuring that new or modified code integrates without breaking existing logic or introducing new errors.
+Review the 'Existing File Content' and all provided context to ensure no regressions are introduced and that the file remains fully functional and robust.
+When modifying specific parts, leverage detailed symbol information (if available in 'Broader Project Context') to understand their full implications and interconnectedness with other parts of the codebase.
+
+						The modified code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.
+
+						File Path:
+						${step.path}
+
+						Modification Instructions:
+						${step.modification_prompt}
+
+						--- Broader Project Context ---
+						${context.projectContext}
+						--- End Broader Project Context ---
+
+						${
 							context.editorContext
 								? `--- Editor Context ---\n${JSON.stringify(
 										context.editorContext,
@@ -874,9 +900,16 @@ export class PlanService {
 										2
 								  )}\n--- End Editor Context ---\n\n`
 								: ""
-						}${this._formatChatHistoryForPrompt(
-							context.chatHistory
-						)}\n\n--- Relevant Project Snippets (for context) ---\n${relevantSnippets}\n\n--- Existing File Content ---\n${existingContent}\n--- End Existing File Content ---\n\nComplete Modified File Content:`;
+						}${this._formatChatHistoryForPrompt(context.chatHistory)}
+
+						--- Relevant Project Snippets (for context) ---
+						${relevantSnippets}
+
+						--- Existing File Content ---
+						${existingContent}
+						--- End Existing File Content ---
+
+						Complete Modified File Content:`;
 
 						let modifiedContent =
 							await this.provider.aiRequestService.generateWithRetry(
@@ -998,7 +1031,6 @@ export class PlanService {
 					let isRetryableTransientError = false;
 
 					if (errorMsg.includes(ERROR_OPERATION_CANCELLED)) {
-						executionOk = false;
 						throw error; // Propagate cancellation to outer handler
 					}
 
@@ -1077,7 +1109,6 @@ export class PlanService {
 							);
 						} else {
 							// Cancel Plan or dialog was dismissed/closed
-							executionOk = false; // Set to false to indicate failure before throwing
 							throw new Error(ERROR_OPERATION_CANCELLED); // Abort the entire plan execution
 						}
 					}
