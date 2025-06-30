@@ -139,7 +139,20 @@ export async function handleWebviewMessage(
 			break;
 
 		case "confirmCommit":
-			await provider.commitService.confirmCommit();
+			const editedCommitMessage = data.value; // Retrieve the edited message
+			if (typeof editedCommitMessage === "string") {
+				await provider.commitService.confirmCommit(editedCommitMessage);
+			} else {
+				console.error(
+					"[MessageHandler] Invalid commit message received for confirmCommit."
+				);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Error: Invalid commit message received. Please try again.",
+					isError: true,
+				});
+				provider.postMessageToWebview({ type: "reenableInput" }); // Re-enable if error
+			}
 			break;
 
 		case "cancelCommit":

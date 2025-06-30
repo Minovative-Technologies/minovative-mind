@@ -147,9 +147,9 @@ const cancelParseErrorButton = document.getElementById(
 const commitReviewContainer = document.getElementById(
 	"commit-review-container"
 ) as HTMLDivElement | null;
-const commitMessageDisplay = document.getElementById(
-	"commit-message-display"
-) as HTMLDivElement | null;
+const commitMessageTextarea = document.getElementById(
+	"commit-message-textarea"
+) as HTMLTextAreaElement | null;
 const stagedFilesList = document.getElementById(
 	"staged-files-list"
 ) as HTMLUListElement | null;
@@ -249,7 +249,7 @@ if (
 	!cancelParseErrorButton || // Added cancelParseErrorButton to critical elements check
 	!emptyChatPlaceholder || // Added emptyChatPlaceholder to critical elements check
 	!commitReviewContainer ||
-	!commitMessageDisplay ||
+	!commitMessageTextarea ||
 	!stagedFilesList ||
 	!confirmCommitButton ||
 	!cancelCommitButton ||
@@ -1634,14 +1634,21 @@ if (
 				console.log("Received commitReview message:", message.value);
 				const { commitMessage, stagedFiles } = message.value;
 
+				if (commitMessageTextarea) {
+					commitMessageTextarea.value = commitMessage;
+					commitMessageTextarea.focus();
+					commitMessageTextarea.scrollTop = 0;
+				} else {
+					console.error("commitMessageTextarea element not found.");
+				}
+
 				if (
 					commitReviewContainer &&
-					commitMessageDisplay &&
+					commitMessageTextarea &&
 					stagedFilesList &&
 					confirmCommitButton &&
 					cancelCommitButton
 				) {
-					commitMessageDisplay.innerHTML = md.render(commitMessage);
 					stagedFilesList.innerHTML = ""; // Clear previous list items
 
 					if (stagedFiles && stagedFiles.length > 0) {
@@ -1658,6 +1665,8 @@ if (
 					}
 
 					commitReviewContainer.style.display = "flex";
+					document.documentElement.scrollTop =
+						document.documentElement.scrollHeight; // Programmatically scroll to bottom
 					updateStatus("Review commit details and confirm.", false);
 					setLoadingState(false); // This will disable chat inputs/general buttons because commitReviewVisible will be true
 					if (cancelGenerationButton) {
@@ -2229,7 +2238,8 @@ if (
 				if (commitReviewContainer) {
 					commitReviewContainer.style.display = "none"; // Hide the commit review container
 				}
-				vscode.postMessage({ type: "confirmCommit" });
+				const editedMessage = commitMessageTextarea?.value || "";
+				vscode.postMessage({ type: "confirmCommit", value: editedMessage });
 				updateStatus("Committing changes...", false);
 				setLoadingState(true); // Set loading state while commit is in progress
 			});

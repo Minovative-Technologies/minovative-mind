@@ -168,13 +168,15 @@ export class CommitService {
 		}
 	}
 
-	public async confirmCommit(): Promise<void> {
+	public async confirmCommit(editedMessage: string): Promise<void> {
 		if (!this.provider.pendingCommitReviewData) {
 			vscode.window.showErrorMessage("No pending commit to confirm.");
 			return;
 		}
 
-		const { commitMessage } = this.provider.pendingCommitReviewData;
+		// Use the edited message received from the webview.
+		// The commitMessage variable now directly holds the user's final message.
+		const commitMessage = editedMessage;
 		const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!rootPath) {
 			vscode.window.showErrorMessage("No workspace folder for git commit.");
