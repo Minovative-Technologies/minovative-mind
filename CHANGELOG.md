@@ -2,6 +2,10 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.8.1] - 2025-06-29
+
+- **enhancement: Introduced a new context section for AI, listing modified and created file paths.**
+
 ## [1.8.0] - 2025-06-29
 
 - **Feat: Implement chat command suggestions and autocomplete**
