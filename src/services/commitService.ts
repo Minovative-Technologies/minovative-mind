@@ -4,10 +4,13 @@ import {
 	constructGitCommitCommand,
 	getGitStagedDiff,
 	getGitStagedFiles,
+	getGitFileContentFromIndex, // Added import
+	getGitFileContentFromHead, // Added import
 	stageAllChanges,
 } from "../sidebar/services/gitService";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { ChildProcess } from "child_process";
+import { generateFileChangeSummary } from "../utils/diffingUtils"; // Added import
 
 export class CommitService {
 	constructor(private provider: SidebarProvider) {}
@@ -72,7 +75,10 @@ export class CommitService {
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 
+			// Get the overall staged diff and the list of staged files
 			const diff = await getGitStagedDiff(rootPath);
+			const stagedFiles = await getGitStagedFiles(rootPath);
+
 			if (!diff || diff.trim() === "") {
 				this.provider.chatHistoryManager.addHistoryEntry(
 					"model",
@@ -82,7 +88,37 @@ export class CommitService {
 				return;
 			}
 
-			const commitMessagePrompt = `You are an AI expert in Git. Based on the provided staged diff, generate a short, concise, but highly accurate commit message. Provide the commit message with markdown formatting.\n\nStaged Diff:\n\`\`\`diff\n${diff}\n\`\`\`\n\nCommit Message:`;
+			const fileSummaries: string[] = [];
+			for (const filePath of stagedFiles) {
+				// Check for cancellation before processing each file
+				if (token.isCancellationRequested) {
+					throw new Error(ERROR_OPERATION_CANCELLED);
+				}
+				const oldContent = await getGitFileContentFromHead(rootPath, filePath);
+				const newContent = await getGitFileContentFromIndex(rootPath, filePath);
+				const { summary } = await generateFileChangeSummary(
+					oldContent,
+					newContent,
+					filePath
+				);
+				fileSummaries.push(summary);
+			}
+
+			const detailedSummaries =
+				fileSummaries.length > 0
+					? "Summary of File Changes:\n" +
+					  fileSummaries.map((s) => `- ${s}`).join("\n") +
+					  "\n\n"
+					: "";
+
+			const commitMessagePrompt = `You are an AI expert in Git. Your task is to generate a short, concise, but highly accurate commit message based on the provided staged changes. Prioritize the detailed file-by-file summaries for content, and use the overall diff for additional context if needed. Provide the commit message with markdown formatting.
+
+			${detailedSummaries}Overall Staged Diff:
+			\`\`\`diff
+			${diff}
+			\`\`\`
+
+			Commit Message:`;
 
 			let commitMessage =
 				await this.provider.aiRequestService.generateWithRetry(
@@ -106,12 +142,12 @@ export class CommitService {
 
 			this.provider.chatHistoryManager.addHistoryEntry("model", commitMessage);
 
-			const stagedFiles = await getGitStagedFiles(rootPath);
+			// The stagedFiles variable is now available earlier and used for summary generation
 			const { displayMessage } = constructGitCommitCommand(commitMessage);
 
 			this.provider.pendingCommitReviewData = {
 				commitMessage: displayMessage,
-				stagedFiles,
+				stagedFiles, // This uses the stagedFiles array obtained earlier
 			};
 
 			this.provider.postMessageToWebview({
