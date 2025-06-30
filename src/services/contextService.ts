@@ -30,6 +30,7 @@ export interface ActiveSymbolDetailedInfo {
 	kind?: string;
 	detail?: string; // Added optional detail property
 	fullRange?: vscode.Range;
+	filePath?: string; // New: relative path of the file where the symbol is defined
 	definition?: vscode.Location | vscode.Location[];
 	implementations?: vscode.Location[];
 	typeDefinition?: vscode.Location | vscode.Location[];
@@ -137,11 +138,17 @@ export class ContextService {
 						);
 
 						if (symbolAtCursor) {
-							// 2b.v. Populate activeSymbolDetailedInfo.name and activeSymbolDetailedInfo.kind
+							// Calculate relative path for the active file
+							const relativePathOfTheActiveFile = path
+								.relative(rootFolder.uri.fsPath, activeFileUri.fsPath)
+								.replace(/\\/g, "/");
+
+							// 2b.v. Populate activeSymbolDetailedInfo.name, activeSymbolDetailedInfo.kind, fullRange, and filePath
 							activeSymbolDetailedInfo = {
 								name: symbolAtCursor.name,
 								kind: vscode.SymbolKind[symbolAtCursor.kind], // Convert enum to string
-								fullRange: symbolAtCursor.range, // Modification 1
+								fullRange: symbolAtCursor.range,
+								filePath: relativePathOfTheActiveFile, // Add the filePath property here
 							};
 
 							// Assign symbolAtCursor.detail if it exists
@@ -150,9 +157,6 @@ export class ContextService {
 							}
 
 							// Modification 2: Populate childrenHierarchy if symbol has children
-							const relativePathOfTheActiveFile = path
-								.relative(rootFolder.uri.fsPath, activeFileUri.fsPath)
-								.replace(/\\/g, "/");
 							if (
 								symbolAtCursor.children &&
 								symbolAtCursor.children.length > 0

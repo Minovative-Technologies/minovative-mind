@@ -1,9 +1,9 @@
-// src/context/contextBuilder.ts
 import * as vscode from "vscode";
 import * as path from "path";
 import { createAsciiTree } from "../utilities/treeFormatter";
 import { FileChangeEntry } from "../types/workflow"; // Already imported, as per instructions, ensure it's here
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
+import { intelligentlySummarizeFileContent } from "./fileContentProcessor";
 
 // Constants for context building
 const MAX_REFERENCED_TYPE_CONTENT_CHARS = 5000; // Adjust for desired content length
@@ -592,31 +592,52 @@ export async function buildContextString(
 		}
 		// END: Dependency Graph Logic
 
-		let fileContent = "";
-		let truncated = false;
+		let fileContentRaw = "";
+		let fileContentForContext = "";
+		let truncatedForSmartSummary = false;
 
 		try {
 			const contentBytes = await vscode.workspace.fs.readFile(fileUri);
-			fileContent = Buffer.from(contentBytes).toString("utf-8");
+			fileContentRaw = Buffer.from(contentBytes).toString("utf-8");
 
-			// Apply per-file length limit
-			if (fileContent.length > config.maxFileLength) {
-				fileContent = fileContent.substring(0, config.maxFileLength);
-				truncated = true;
+			const symbolsForFile = documentSymbols?.get(relativePath);
+
+			// Determine if this is the active file for active symbol prioritization
+			const isActiveFile = activeSymbolDetailedInfo?.filePath === relativePath;
+			let activeSymbolInfoForCurrentFile: ActiveSymbolDetailedInfo | undefined =
+				undefined;
+			if (isActiveFile) {
+				activeSymbolInfoForCurrentFile = activeSymbolDetailedInfo;
+			}
+
+			fileContentForContext = intelligentlySummarizeFileContent(
+				fileContentRaw,
+				symbolsForFile,
+				activeSymbolInfoForCurrentFile,
+				config.maxFileLength
+			);
+
+			if (fileContentForContext.length < fileContentRaw.length) {
+				truncatedForSmartSummary = true;
 			}
 		} catch (error) {
-			console.warn(`Could not read file content for ${relativePath}:`, error);
-			fileContent = `[Error reading file: ${
+			console.warn(
+				`Could not read or intelligently summarize file content for ${relativePath}:`,
+				error
+			);
+			fileContentForContext = `[Error reading/summarizing file: ${
 				error instanceof Error ? error.message : String(error)
 			}]`;
-			truncated = true; // Mark as truncated/incomplete due to error
+			truncatedForSmartSummary = true; // Mark as truncated/incomplete due to error
 		}
 
 		const contentToAdd =
 			fileHeader +
 			importRelationsDisplay +
-			fileContent +
-			(truncated ? "\n[...truncated]" : "") +
+			fileContentForContext +
+			(truncatedForSmartSummary
+				? "\n[...content intelligently summarized]"
+				: "") +
 			"\n\n";
 		const estimatedLengthIncrease = contentToAdd.length;
 
@@ -631,14 +652,14 @@ export async function buildContextString(
 					availableContentSpace -
 					fileHeader.length -
 					importRelationsDisplay.length - // Account for new import relations
-					"\n[...truncated]\n\n".length;
+					"\n[...content intelligently summarized]\n\n".length; // Use the new message length
 				if (maxAllowedContentLength > 50) {
 					// Only add if we can fit a reasonable snippet
 					const partialContentToAdd =
 						fileHeader +
 						importRelationsDisplay +
-						fileContent.substring(0, maxAllowedContentLength) +
-						"\n[...truncated]\n\n";
+						fileContentForContext.substring(0, maxAllowedContentLength) +
+						"\n[...content intelligently summarized]\n\n"; // Use the new message
 					context += partialContentToAdd;
 					currentTotalLength += partialContentToAdd.length;
 					console.log(
