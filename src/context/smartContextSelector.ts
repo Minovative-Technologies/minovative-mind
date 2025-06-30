@@ -8,6 +8,9 @@ import {
 import { TEMPERATURE } from "../sidebar/common/sidebarConstants";
 import * as SymbolService from "../services/symbolService";
 
+const MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION = 350;
+export { MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION };
+
 export interface SelectRelevantFilesAIOptions {
 	userRequest: string;
 	chatHistory: ReadonlyArray<HistoryEntry>;
@@ -18,6 +21,7 @@ export interface SelectRelevantFilesAIOptions {
 	fileDependencies?: Map<string, string[]>; // New optional property
 	activeEditorSymbols?: vscode.DocumentSymbol[];
 	preSelectedHeuristicFiles?: vscode.Uri[]; // NEW PROPERTY: Heuristically pre-selected files
+	fileSummaries?: Map<string, string>;
 	aiModelCall: (
 		prompt: string,
 		modelName: string,
@@ -51,10 +55,11 @@ export async function selectRelevantFilesAI(
 		diagnostics,
 		fileDependencies,
 		activeEditorSymbols,
+		preSelectedHeuristicFiles,
+		fileSummaries,
 		aiModelCall,
 		modelName,
 		cancellationToken,
-		preSelectedHeuristicFiles, // Destructure new property
 	} = options;
 
 	if (allScannedFiles.length === 0) {
@@ -195,7 +200,21 @@ export async function selectRelevantFilesAI(
 		}
 	}
 
-	const fileListString = relativeFilePaths.map((p) => `- "${p}"`).join("\n");
+	const fileListString = relativeFilePaths
+		.map((p) => {
+			let summary = fileSummaries?.get(p);
+			if (summary) {
+				summary = summary.replace(/\s+/g, " ").trim();
+				if (summary.length > MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION) {
+					summary =
+						summary.substring(0, MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION - 3) +
+						"...";
+				}
+				return `- "${p}" (Summary: ${summary})`;
+			}
+			return `- "${p}"`;
+		})
+		.join("\n");
 
 	const selectionPrompt = `
 	You are an AI assistant helping a developer focus on the most relevant parts of their codebase.
@@ -209,7 +228,7 @@ export async function selectRelevantFilesAI(
 	${dependencyInfo}
 	-- End Dependency Info --
 	
-	-- Available Project Files --
+	-- Available Project Files (with optional summaries) --
 	${fileListString}
 	-- End Available Project Files --
 

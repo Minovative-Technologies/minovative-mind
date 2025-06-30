@@ -16,6 +16,7 @@ import { getHeuristicRelevantFiles } from "../context/heuristicContextSelector";
 import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
+	MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION, // NEW: Import for summary length
 } from "../context/smartContextSelector";
 import {
 	buildContextString,
@@ -23,6 +24,7 @@ import {
 } from "../context/contextBuilder";
 import * as SymbolService from "./symbolService";
 import { DiagnosticService } from "../utils/diagnosticUtils";
+import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor"; // NEW: Import for file content summarization
 
 // Constants for symbol processing
 const MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT = 6; // Example depth for symbol hierarchy serialization
@@ -99,6 +101,32 @@ export class ContextService {
 				});
 				// fileDependencies and reverseFileDependencies will remain undefined if error occurs
 			}
+
+			// Moved: Populate documentSymbolsMap for all scanned files upfront
+			const documentSymbolsMap = new Map<
+				string,
+				vscode.DocumentSymbol[] | undefined
+			>();
+			await BPromise.map(
+				allScannedFiles, // Modified to allScannedFiles
+				async (fileUri: vscode.Uri) => {
+					if (cancellationToken?.isCancellationRequested) {
+						return;
+					}
+					try {
+						const symbols = await SymbolService.getSymbolsInDocument(fileUri);
+						const relativePath = path
+							.relative(rootFolder.uri.fsPath, fileUri.fsPath)
+							.replace(/\\/g, "/");
+						documentSymbolsMap.set(relativePath, symbols);
+					} catch (symbolError: any) {
+						console.warn(
+							`[ContextService] Failed to get symbols for ${fileUri.fsPath}: ${symbolError.message}`
+						);
+					}
+				},
+				{ concurrency: 5 }
+			);
 
 			// --- Determine effective diagnostics string ---
 			let effectiveDiagnosticsString: string | undefined =
@@ -378,6 +406,57 @@ export class ContextService {
 				heuristicSelectedFiles = [];
 			}
 
+			// NEW: Summary generation logic
+			const MAX_FILES_TO_SUMMARIZE_ALL_FOR_SELECTION_PROMPT = 100; // User-defined threshold
+
+			let filesToSummarizeForSelectionPrompt: vscode.Uri[];
+			if (
+				allScannedFiles.length <=
+				MAX_FILES_TO_SUMMARIZE_ALL_FOR_SELECTION_PROMPT
+			) {
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Summarizing all ${allScannedFiles.length} files for AI selection prompt...`,
+				});
+				filesToSummarizeForSelectionPrompt = Array.from(allScannedFiles);
+			} else {
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Summarizing ${heuristicSelectedFiles.length} heuristically relevant files for AI selection prompt...`,
+				});
+				filesToSummarizeForSelectionPrompt = Array.from(heuristicSelectedFiles);
+			}
+
+			const fileSummariesForAI = new Map<string, string>();
+			const summaryGenerationPromises = filesToSummarizeForSelectionPrompt.map(
+				async (fileUri) => {
+					if (cancellationToken?.isCancellationRequested) {
+						return;
+					}
+					const relativePath = path
+						.relative(rootFolder.uri.fsPath, fileUri.fsPath)
+						.replace(/\\/g, "/");
+					try {
+						const contentBytes = await vscode.workspace.fs.readFile(fileUri);
+						const fileContentRaw = Buffer.from(contentBytes).toString("utf-8");
+						const symbolsForFile = documentSymbolsMap.get(relativePath);
+
+						const summary = intelligentlySummarizeFileContent(
+							fileContentRaw,
+							symbolsForFile,
+							undefined,
+							MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION
+						);
+						fileSummariesForAI.set(relativePath, summary);
+					} catch (error: any) {
+						console.warn(
+							`[ContextService] Could not generate summary for ${relativePath}: ${error.message}`
+						);
+					}
+				}
+			);
+			await BPromise.allSettled(summaryGenerationPromises);
+
 			const currentQueryForSelection =
 				userRequest || editorContext?.instruction;
 			const smartContextEnabled = this.settingsManager.getSetting<boolean>(
@@ -409,6 +488,7 @@ export class ContextService {
 						cancellationToken,
 						fileDependencies,
 						preSelectedHeuristicFiles: heuristicSelectedFiles, // NEW: Pass heuristicSelectedFiles
+						fileSummaries: fileSummariesForAI, // NEW: Pass the generated file summaries
 					};
 					const selectedFiles = await selectRelevantFilesAI(selectionOptions);
 
@@ -475,31 +555,6 @@ export class ContextService {
 					relevantFiles: [],
 				};
 			}
-
-			const documentSymbolsMap = new Map<
-				string,
-				vscode.DocumentSymbol[] | undefined
-			>();
-			await BPromise.map(
-				filesForContextBuilding,
-				async (fileUri: vscode.Uri) => {
-					if (cancellationToken?.isCancellationRequested) {
-						return;
-					}
-					try {
-						const symbols = await SymbolService.getSymbolsInDocument(fileUri);
-						const relativePath = path
-							.relative(rootFolder.uri.fsPath, fileUri.fsPath)
-							.replace(/\\/g, "/");
-						documentSymbolsMap.set(relativePath, symbols);
-					} catch (symbolError: any) {
-						console.warn(
-							`[ContextService] Failed to get symbols for ${fileUri.fsPath}: ${symbolError.message}`
-						);
-					}
-				},
-				{ concurrency: 5 }
-			);
 
 			// Convert filesForContextBuilding (vscode.Uri[]) to relative string paths
 			const relativeFilesForContextBuilding: string[] =
