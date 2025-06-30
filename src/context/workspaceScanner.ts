@@ -1,8 +1,8 @@
 // src/context/workspaceScanner.ts
 import * as vscode from "vscode";
 import BPromise from "bluebird"; // using bluebird map for concurrency control
-import * as path from "path"; // Import path for joining
-import { loadGitIgnoreMatcher } from "../utils/ignoreUtils"; // NEW IMPORT
+import * as path from "path";
+import { loadGitIgnoreMatcher } from "../utils/ignoreUtils";
 
 // Interface for scan options (can be expanded later for settings)
 interface ScanOptions {

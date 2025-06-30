@@ -2,7 +2,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { createAsciiTree } from "../utilities/treeFormatter";
-import { FileChangeEntry } from "../types/workflow";
+import { FileChangeEntry } from "../types/workflow"; // Already imported, as per instructions, ensure it's here
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 
 // Constants for context building
@@ -26,6 +26,49 @@ export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
 	maxTotalSymbolChars: 100000, // Default to 100KB for the entire symbols section
 	maxActiveSymbolDetailChars: 100000, // Default to 100KB
 };
+
+/**
+ * Formats a list of file change entries into a string section for AI context,
+ * listing only the paths of created or modified files.
+ * @param changeLog An array of FileChangeEntry objects representing recent changes.
+ * @returns A formatted string of changed file paths, or an empty string if no relevant changes.
+ */
+function _formatFileChangePathsForContext(
+	changeLog: FileChangeEntry[],
+	rootFolderUri: vscode.Uri
+): string {
+	if (!changeLog || changeLog.length === 0) {
+		return ""; // No changes to report
+	}
+
+	const changedFilePaths: string[] = [];
+	const processedPaths = new Set<string>(); // To track unique paths and avoid duplicates
+
+	for (const entry of changeLog) {
+		// Only consider 'created' or 'modified' entries and ensure the path is unique
+		if (
+			(entry.changeType === "created" || entry.changeType === "modified") &&
+			!processedPaths.has(entry.filePath)
+		) {
+			changedFilePaths.push(entry.filePath);
+			processedPaths.add(entry.filePath);
+		}
+	}
+
+	if (changedFilePaths.length === 0) {
+		return ""; // No relevant changes after filtering
+	}
+
+	// Sort paths alphabetically for consistent output
+	changedFilePaths.sort();
+
+	const header = "--- Modified/Created File Paths ---";
+	const footer = "--- End Modified/Created File Paths ---";
+	// Prefix each path with '- ' and join with newlines
+	const pathsList = changedFilePaths.map((p) => `- ${p}`).join("\n");
+
+	return `${header}\n${pathsList}\n${footer}`;
+}
 
 /**
  * Builds a textual context string from a list of file URIs.
@@ -140,7 +183,7 @@ export async function buildContextString(
 		}
 		const relativePath = path
 			.relative(workspaceRoot.fsPath, fileUri.fsPath)
-			.replace(/\\\\/g, "/");
+			.replace(/\\/g, "/");
 		existingPathsSection += `- ${relativePath}\n`;
 		pathsAddedCount++;
 	}
@@ -170,6 +213,42 @@ export async function buildContextString(
 		`Context size after adding existing paths list: ${currentTotalLength} chars.`
 	);
 	// --- END: Direct list of existing relative file paths ---
+
+	// --- Modified/Created File Paths Section (NEW) ---
+	const fileChangePathsSection = _formatFileChangePathsForContext(
+		recentChanges || [], // Pass the recentChanges argument from buildContextString
+		workspaceRoot
+	);
+	if (fileChangePathsSection) {
+		// Add 2 for newlines separating this section from others
+		if (
+			currentTotalLength + fileChangePathsSection.length + 2 >
+			config.maxTotalLength
+		) {
+			console.warn(
+				`Modified/Created file paths section exceeds total context limit. Truncating.`
+			);
+			const availableLength = config.maxTotalLength - currentTotalLength - 50; // Reserve space for truncation message
+			let truncatedSection = fileChangePathsSection;
+			if (availableLength > 0) {
+				truncatedSection =
+					truncatedSection.substring(0, availableLength) +
+					"\n... (Modified/Created paths truncated due to total size limit)";
+			} else {
+				truncatedSection =
+					"\n... (Modified/Created paths section omitted due to total size limit)";
+			}
+			context += truncatedSection + "\n\n";
+			currentTotalLength = config.maxTotalLength; // Maxed out
+		} else {
+			context += fileChangePathsSection + "\n\n";
+			currentTotalLength += fileChangePathsSection.length + 2; // +2 for newlines
+			console.log(
+				`Context size after adding modified/created paths: ${currentTotalLength} chars.`
+			);
+		}
+	}
+	// --- END: Modified/Created File Paths Section ---
 
 	// --- Symbol Information ---
 	let symbolInfoSection = "";

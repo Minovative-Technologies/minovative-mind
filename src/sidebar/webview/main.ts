@@ -405,7 +405,7 @@ if (
 
 				messageElement.appendChild(diffContainer);
 			}
-			// END NEW DIFF CONTENT ADDITION
+			// END DIFF CONTENT ADDITION
 
 			// Logic for relevantFiles
 			if (sender === "Model" && relevantFiles && relevantFiles.length > 0) {
@@ -494,7 +494,7 @@ if (
 			// The entire block for creating/appending copyButton, deleteButton, and messageActions
 			// must be wrapped in `if (isHistoryMessage)`
 			if (isHistoryMessage) {
-				// NEW PRIMARY CONDITION
+				// PRIMARY CONDITION
 				// Only history messages get buttons and are involved in streaming logic
 				if (
 					className.includes("user-message") ||
@@ -580,7 +580,7 @@ if (
 					currentAccumulatedText = "";
 				}
 			} else {
-				// NEW ELSE BLOCK for !isHistoryMessage (no buttons, direct render, state reset)
+				// ELSE BLOCK for !isHistoryMessage (no buttons, direct render, state reset)
 				// For non-history messages (e.g., real-time status updates from Model), no copy/delete buttons
 				console.log("Appending non-history message (no buttons)."); // Added log
 				const renderedHtml = md.render(text);
@@ -673,7 +673,7 @@ if (
 		}
 	}
 
-	// NEW FUNCTION: Check if a complete command has already been typed
+	// FUNCTION: Check if a complete command has already been typed
 	function isInputtingCompleteCommand(text: string): boolean {
 		// Iterate over all defined MINOVATIVE_COMMANDS (e.g., "/plan", "/commit")
 		for (const cmd of MINOVATIVE_COMMANDS) {
@@ -1180,7 +1180,7 @@ if (
 		}
 		const text = chatInput.value;
 		if (text.startsWith("/")) {
-			// NEW LOGIC: Check if a complete command has already been typed
+			// LOGIC: Check if a complete command has already been typed
 			if (isInputtingCompleteCommand(text)) {
 				hideCommandSuggestions(); // Hide suggestions if a full command is already in the input
 				return; // Exit, do not proceed with filtering or showing suggestions
@@ -2401,12 +2401,12 @@ if (
 						} else {
 							console.warn(
 								"Could not find index of history message to delete (after data-is-history filter)."
-							); // NEW console.warn
+							); // console.warn
 						}
 					} else {
 						console.warn(
 							"Delete button clicked, but target is not a history-backed message."
-						); // NEW console.warn
+						); // console.warn
 					}
 				}
 			});

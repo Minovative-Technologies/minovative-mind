@@ -232,7 +232,7 @@ async function executeDocsAction(
 	}
 }
 
-// --- NEW Helper Function for Diagnostics Formatting ---
+// --- Helper Function for Diagnostics Formatting ---
 async function _getFormattedDiagnostics(
 	documentUri: vscode.Uri
 ): Promise<string> {

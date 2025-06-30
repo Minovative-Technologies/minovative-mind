@@ -20,7 +20,7 @@ import { PlanService } from "../services/planService";
 import { ChatService } from "../services/chatService";
 import { CommitService } from "../services/commitService";
 import { AuthService } from "../services/authService";
-import { GitConflictResolutionService } from "../services/gitConflictResolutionService"; // NEW Import
+import { GitConflictResolutionService } from "../services/gitConflictResolutionService";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";

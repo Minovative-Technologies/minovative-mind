@@ -18,7 +18,7 @@ import {
 	DEFAULT_CONTEXT_CONFIG,
 } from "../context/contextBuilder";
 import * as SymbolService from "./symbolService";
-import { DiagnosticService } from "../utils/diagnosticUtils"; // Import DiagnosticService
+import { DiagnosticService } from "../utils/diagnosticUtils";
 
 // Constants for symbol processing
 const MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT = 6; // Example depth for symbol hierarchy serialization
@@ -29,14 +29,14 @@ export interface ActiveSymbolDetailedInfo {
 	name?: string;
 	kind?: string;
 	detail?: string; // Added optional detail property
-	fullRange?: vscode.Range; // NEW
+	fullRange?: vscode.Range;
 	definition?: vscode.Location | vscode.Location[];
 	implementations?: vscode.Location[];
 	typeDefinition?: vscode.Location | vscode.Location[];
 	incomingCalls?: vscode.CallHierarchyIncomingCall[];
 	outgoingCalls?: vscode.CallHierarchyOutgoingCall[];
-	childrenHierarchy?: any; // NEW (e.g., a serialized tree structure of children)
-	referencedTypeDefinitions?: { filePath: string; content: string }[]; // NEW
+	childrenHierarchy?: any; // (e.g., a serialized tree structure of children)
+	referencedTypeDefinitions?: { filePath: string; content: string }[]; //
 }
 
 // Define a new interface 'BuildProjectContextResult'
