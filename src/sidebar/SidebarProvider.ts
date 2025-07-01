@@ -279,6 +279,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.activeOperationCancellationTokenSource?.cancel();
 		this.activeChildProcesses.forEach((cp) => cp.kill());
 		this.activeChildProcesses = [];
+		// Clear any lingering pending data
+		this.pendingPlanGenerationContext = null;
+		this.lastPlanGenerationContext = null;
+		this.pendingCommitReviewData = null;
 		this.chatHistoryManager.addHistoryEntry(
 			"model",
 			"Operation cancelled by user."
@@ -287,6 +291,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			type: "statusUpdate",
 			value: "Operation cancelled.",
 		});
+		// Re-enable the webview UI
+		this.postMessageToWebview({ type: "reenableInput" });
 	}
 
 	public cancelPendingPlan(): void {

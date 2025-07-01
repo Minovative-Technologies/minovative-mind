@@ -4,26 +4,33 @@ import {
 	constructGitCommitCommand,
 	getGitStagedDiff,
 	getGitStagedFiles,
-	getGitFileContentFromIndex, // Added import
-	getGitFileContentFromHead, // Added import
+	getGitFileContentFromIndex,
+	getGitFileContentFromHead,
 	stageAllChanges,
 } from "../sidebar/services/gitService";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { ChildProcess } from "child_process";
-import { generateFileChangeSummary } from "../utils/diffingUtils"; // Added import
+import { generateFileChangeSummary } from "../utils/diffingUtils";
 
 export class CommitService {
 	constructor(private provider: SidebarProvider) {}
 
-	public async handleCommitCommand(): Promise<void> {
+	/**
+	 * Handles the /commit command by staging changes, generating a commit message via AI,
+	 * and presenting it for user review. Integrates cancellation.
+	 * @param token A CancellationToken to observe cancellation requests.
+	 */
+	public async handleCommitCommand(
+		token: vscode.CancellationToken
+	): Promise<void> {
 		const { settingsManager } = this.provider;
 		const modelName = settingsManager.getSelectedModelName();
 
-		this.provider.activeOperationCancellationTokenSource =
-			new vscode.CancellationTokenSource();
-		const token = this.provider.activeOperationCancellationTokenSource.token;
-
 		try {
+			if (token.isCancellationRequested) {
+				throw new Error(ERROR_OPERATION_CANCELLED);
+			}
+
 			this.provider.postMessageToWebview({
 				type: "aiResponseStart",
 				value: { modelName },
@@ -65,9 +72,10 @@ export class CommitService {
 				}
 			};
 
+			// Stage all changes (git add .)
 			await stageAllChanges(
 				rootPath,
-				token,
+				token, // Pass the cancellation token to git service
 				onProcessCallback,
 				onOutputCallback
 			);
@@ -90,7 +98,7 @@ export class CommitService {
 
 			const fileSummaries: string[] = [];
 			for (const filePath of stagedFiles) {
-				// Check for cancellation before processing each file
+				// Check for cancellation before processing each file summary
 				if (token.isCancellationRequested) {
 					throw new Error(ERROR_OPERATION_CANCELLED);
 				}
@@ -120,6 +128,7 @@ export class CommitService {
 
 			Commit Message:`;
 
+			// Generate commit message using AI
 			let commitMessage =
 				await this.provider.aiRequestService.generateWithRetry(
 					commitMessagePrompt,
@@ -128,7 +137,7 @@ export class CommitService {
 					"commit message generation",
 					undefined,
 					undefined,
-					token
+					token // Pass the cancellation token to AI request service
 				);
 
 			if (token.isCancellationRequested) {
@@ -142,7 +151,6 @@ export class CommitService {
 
 			this.provider.chatHistoryManager.addHistoryEntry("model", commitMessage);
 
-			// The stagedFiles variable is now available earlier and used for summary generation
 			const { displayMessage } = constructGitCommitCommand(commitMessage);
 
 			this.provider.pendingCommitReviewData = {
@@ -158,24 +166,26 @@ export class CommitService {
 			const isCancellation = error.message === ERROR_OPERATION_CANCELLED;
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
+				success: false, // Indicate failure
 				error: isCancellation
 					? "Commit operation cancelled."
 					: `Commit failed: ${error.message}`,
 			});
-		} finally {
-			this.provider.activeOperationCancellationTokenSource?.dispose();
-			this.provider.activeOperationCancellationTokenSource = undefined;
 		}
+		// TokenSource disposal is now handled by the caller (webviewMessageHandler)
+		// as per the new token passing pattern.
 	}
 
+	/**
+	 * Confirms and executes the commit with the provided message.
+	 * @param editedMessage The commit message, potentially edited by the user.
+	 */
 	public async confirmCommit(editedMessage: string): Promise<void> {
 		if (!this.provider.pendingCommitReviewData) {
 			vscode.window.showErrorMessage("No pending commit to confirm.");
 			return;
 		}
 
-		// Use the edited message received from the webview.
-		// The commitMessage variable now directly holds the user's final message.
 		const commitMessage = editedMessage;
 		const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!rootPath) {
@@ -197,9 +207,15 @@ export class CommitService {
 		);
 		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		this.provider.pendingCommitReviewData = null;
-		this.provider.postMessageToWebview({ type: "aiResponseEnd" });
+		this.provider.postMessageToWebview({
+			type: "aiResponseEnd",
+			success: true,
+		}); // Indicate success
 	}
 
+	/**
+	 * Cancels the pending commit review and re-enables UI.
+	 */
 	public cancelCommit(): void {
 		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		this.provider.pendingCommitReviewData = null;
@@ -209,6 +225,7 @@ export class CommitService {
 		);
 		this.provider.postMessageToWebview({
 			type: "aiResponseEnd",
+			success: false, // Indicate cancellation/failure of the commit flow
 			error: "Commit cancelled.",
 		});
 	}

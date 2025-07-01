@@ -68,6 +68,9 @@ export class ContextService {
 		initialDiagnosticsString?: string // Renamed parameter for clarity
 	): Promise<BuildProjectContextResult> {
 		try {
+			if (cancellationToken?.isCancellationRequested) {
+				throw new Error("Operation cancelled by user.");
+			}
 			// 2a. Initialize activeSymbolDetailedInfo
 			let activeSymbolDetailedInfo: ActiveSymbolDetailedInfo | undefined;
 
@@ -100,6 +103,9 @@ export class ContextService {
 					value: `Warning: Could not build dependency graph. Reason: ${depGraphError.message}`,
 				});
 				// fileDependencies and reverseFileDependencies will remain undefined if error occurs
+			}
+			if (cancellationToken?.isCancellationRequested) {
+				throw new Error("Operation cancelled by user.");
 			}
 
 			// Moved: Populate documentSymbolsMap for all scanned files upfront

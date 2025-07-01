@@ -126,7 +126,15 @@ export async function handleWebviewMessage(
 		case "chatMessage": {
 			const userMessage = data.value;
 			if (userMessage.trim().toLowerCase() === "/commit") {
-				await provider.commitService.handleCommitCommand();
+				// If a /commit command is sent via chat input,
+				// ensure a cancellation token is prepared and passed.
+				if (!provider.activeOperationCancellationTokenSource) {
+					provider.activeOperationCancellationTokenSource =
+						new vscode.CancellationTokenSource();
+				}
+				await provider.commitService.handleCommitCommand(
+					provider.activeOperationCancellationTokenSource.token
+				);
 			} else {
 				provider.chatHistoryManager.addHistoryEntry("user", userMessage);
 				await provider.chatService.handleRegularChat(userMessage);
@@ -135,7 +143,14 @@ export async function handleWebviewMessage(
 		}
 
 		case "commitRequest":
-			await provider.commitService.handleCommitCommand();
+			// If a direct commitRequest message, ensure a cancellation token is prepared and passed.
+			if (!provider.activeOperationCancellationTokenSource) {
+				provider.activeOperationCancellationTokenSource =
+					new vscode.CancellationTokenSource();
+			}
+			await provider.commitService.handleCommitCommand(
+				provider.activeOperationCancellationTokenSource.token
+			);
 			break;
 
 		case "confirmCommit":
