@@ -277,6 +277,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	public cancelActiveOperation(): void {
 		this.activeOperationCancellationTokenSource?.cancel();
+		this.activeOperationCancellationTokenSource = undefined; // Immediately reset the token source
 		this.activeChildProcesses.forEach((cp) => cp.kill());
 		this.activeChildProcesses = [];
 		// Clear any lingering pending data
