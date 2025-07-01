@@ -2,6 +2,11 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.10.0] - 2025-07-01
+
+- **Refactor**: Centralize active operation state management
+- **Feat(ai)**: Provided immediate AI rationale for file operations
+
 ## [1.9.0] - 2025-06-30
 
 - **Feat**: Implement AI streaming state persistence and UI refinements.
