@@ -599,6 +599,14 @@ if (
 		}
 	}
 
+	// New modular function: updateCommitButtonState (Instruction 1)
+	function updateCommitButtonState() {
+		if (commitMessageTextarea && confirmCommitButton) {
+			const trimmedMessage = commitMessageTextarea.value.trim();
+			confirmCommitButton.disabled = trimmedMessage === "";
+		}
+	}
+
 	// 4. Implement Helper Functions for Command Suggestions: Inside the `else` block (where `appendMessage` is defined) and before `sendMessage` function, add the following helper functions:
 	function showCommandSuggestions(commands: string[]): void {
 		if (!commandSuggestionsContainer) {
@@ -1263,6 +1271,11 @@ if (
 		}, 150);
 	});
 
+	// Instruction 3: Add an `input` event listener to `commitMessageTextarea`.
+	if (commitMessageTextarea) {
+		commitMessageTextarea.addEventListener("input", updateCommitButtonState);
+	}
+
 	modelSelect.addEventListener("change", () => {
 		const selectedModel = modelSelect.value;
 		vscode.postMessage({ type: "selectModel", value: selectedModel });
@@ -1638,6 +1651,8 @@ if (
 					commitMessageTextarea.value = commitMessage;
 					commitMessageTextarea.focus();
 					commitMessageTextarea.scrollTop = 0;
+					// Instruction 2: Call updateCommitButtonState after setting commitMessageTextarea.value
+					updateCommitButtonState();
 				} else {
 					console.error("commitMessageTextarea element not found.");
 				}
@@ -2182,7 +2197,10 @@ if (
 		if (commitReviewContainer) {
 			commitReviewContainer.style.display = "none";
 		}
-		// Removed: signUpButton.style.display = "none";
+		// Instruction 4: Set the initial state of the `confirmCommitButton`
+		if (confirmCommitButton) {
+			confirmCommitButton.disabled = true;
+		}
 
 		// 6. Initial State in `initializeWebview()`: Within the `initializeWebview()` function (around line ~900), after other initial display settings and before `setIconForButton` calls, ensure the `commandSuggestionsContainer` is initially hidden. Add:
 		if (commandSuggestionsContainer) {

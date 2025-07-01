@@ -194,16 +194,27 @@ export async function getGitFileContentFromIndex(
 		}
 		return stdout.trim();
 	} catch (error: any) {
-		console.error(
-			`[GitService] Failed to get file content from index for '${filePath}' in '${rootPath}': ${
-				error.message || error
-			}`
-		);
-		throw new Error(
-			`Failed to get staged file content for '${filePath}': ${
-				error.message || error
-			}`
-		);
+		const errorOutput = error.stderr || error.message || String(error);
+		// Regex to detect the specific error for files deleted and staged in the index
+		const deletedFileInIndexErrorRegex =
+			/fatal: path '.*?' does not exist \(neither on disk nor in the index\)/i;
+
+		if (deletedFileInIndexErrorRegex.test(errorOutput)) {
+			// If the file is deleted and thus not in the index, return an empty string.
+			// This signals to the diffing logic that there is no "new" content.
+			console.log(
+				`[GitService] File '${filePath}' is marked as deleted in the index. Returning empty string for staged content.`
+			);
+			return "";
+		} else {
+			// For any other error, re-throw it as it indicates a genuine problem.
+			console.error(
+				`[GitService] Failed to get file content from index for '${filePath}' in '${rootPath}': ${errorOutput}`
+			);
+			throw new Error(
+				`Failed to get staged file content for '${filePath}': ${errorOutput}`
+			);
+		}
 	}
 }
 
