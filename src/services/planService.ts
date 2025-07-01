@@ -8,7 +8,8 @@ import * as sidebarConstants from "../sidebar/common/sidebarConstants";
 import {
 	createInitialPlanningExplanationPrompt,
 	createPlanningPrompt,
-	createCorrectionPlanPrompt, // Import createCorrectionPlanPrompt
+	createCorrectionPlanPrompt,
+	createPerStepExplanationPrompt, // Import createPerStepExplanationPrompt
 } from "../sidebar/services/aiInteractionService";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import {
@@ -806,7 +807,40 @@ export class PlanService {
 								combinedToken
 							);
 
-							const generationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the full file content. Do NOT include markdown code block formatting. Provide only the file content.
+							// NEW AI CALL FOR EXPLANATION
+							const perStepExplanationPromptForCreate =
+								createPerStepExplanationPrompt(
+									context.projectContext,
+									step.path,
+									step.generate_prompt!,
+									"", // No existing content for a new file
+									relevantSnippets,
+									context.chatHistory ?? [],
+									this._formatRecentChangesForPrompt(
+										changeLogger.getChangeLog()
+									)
+								);
+
+							const explanationTextForCreate =
+								await this.provider.aiRequestService.generateWithRetry(
+									perStepExplanationPromptForCreate,
+									settingsManager.getSelectedModelName(),
+									undefined,
+									`per-step explanation for creating ${step.path}`,
+									{ temperature: 2 },
+									undefined,
+									combinedToken
+								);
+
+							this._postChatUpdateForPlanExecution({
+								type: "appendRealtimeModelMessage",
+								value: {
+									text: `AI's mini-plan for creating ${step.path}: ${explanationTextForCreate}`,
+								},
+							});
+							// END NEW AI CALL FOR EXPLANATION
+
+							const generationPrompt = `You are an expert software engineer. Your ONLY task is to generate the full file content. Do NOT include markdown code block formatting. Provide only the file content.
 Ensure the generated code is self-contained and immediately functional within the existing project context.
 Pay close attention to necessary imports based on the file's purpose and its location. If it's a TypeScript file, ensure all types are correctly defined or imported.
 Adhere to the detected coding style, naming conventions (e.g., camelCase for variables, PascalCase for classes), and file organization patterns consistent with the Broader Project Context and Relevant Project Snippets.
@@ -819,6 +853,11 @@ The 'File Path' itself conveys important structural information; ensure the cont
 
 							Instructions:
 							${step.generate_prompt}
+
+							--- AI's Immediate Rationale for this File Creation ---
+							Mini-plan for this specific step:
+							${explanationTextForCreate}
+							--- End AI's Immediate Rationale ---
 
 							--- Broader Project Context ---
 							${context.projectContext}
@@ -887,7 +926,38 @@ The 'File Path' itself conveys important structural information; ensure the cont
 							combinedToken
 						);
 
-						const modificationPrompt = `You are an expert senior software engineer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.
+						// NEW AI CALL FOR EXPLANATION
+						const perStepExplanationPromptForModify =
+							createPerStepExplanationPrompt(
+								context.projectContext,
+								step.path,
+								step.modification_prompt!,
+								existingContent,
+								relevantSnippets,
+								context.chatHistory ?? [],
+								this._formatRecentChangesForPrompt(changeLogger.getChangeLog())
+							);
+
+						const explanationTextForModify =
+							await this.provider.aiRequestService.generateWithRetry(
+								perStepExplanationPromptForModify,
+								settingsManager.getSelectedModelName(),
+								undefined,
+								`per-step explanation for modifying ${step.path}`,
+								{ temperature: 2 },
+								undefined,
+								combinedToken
+							);
+
+						this._postChatUpdateForPlanExecution({
+							type: "appendRealtimeModelMessage",
+							value: {
+								text: `AI's mini-plan for modifying ${step.path}: ${explanationTextForModify}`,
+							},
+						});
+						// END NEW AI CALL FOR EXPLANATION
+
+						const modificationPrompt = `You are an expert software engineer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.
 Crucially, return the ENTIRE content of the file. Do not omit existing code that is not being modified. The response must be a full, complete, and syntactically valid version of the file after the specified changes are applied.
 Integrate all changes seamlessly with the existing code structure. This includes maintaining existing function/class definitions, preserving unused imports (unless explicitly instructed to remove them), and ensuring that new or modified code integrates without breaking existing logic or introducing new errors.
 Review the 'Existing File Content' and all provided context to ensure no regressions are introduced and that the file remains fully functional and robust.
@@ -900,6 +970,11 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 
 						Modification Instructions:
 						${step.modification_prompt}
+
+						--- AI's Immediate Rationale for this File Modification ---
+						Mini-plan for this specific step:
+						${explanationTextForModify}
+						--- End AI's Immediate Rationale ---
 
 						--- Broader Project Context ---
 						${context.projectContext}
