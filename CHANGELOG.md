@@ -2,6 +2,22 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.9.0] - 2025-06-30
+
+- **Feat**: Implement AI streaming state persistence and UI refinements.
+- **Refactor**: Update AI prompt to ensure unformatted \ command examples.
+- **Feat(commit)**: Improve deleted file diffing and button state.
+- **Refactor**: Reset active operation cancellation token source on cancellation.
+- **Refactor**: Implement robust cancellation for commit and AI workflows.
+- **Feat**: Improve AI file selection with intelligent file summaries.
+- **Feat**: Include active symbol call hierarchy in heuristic file selection.
+- **Feat**: Implement hybrid AI context selection using heuristics and reverse dependency graph.
+- **Feat(context)**: Intelligently summarize file content.
+  - Replaces simple file truncation with intelligent summarization prioritizing the active symbol and major definitions.
+- **Feat**: Enhance AI prompts for more robust code generation and modification.
+- **Feat**: Allow editing commit message in review step.
+- **Feat**: Enhance commit message generation with file content summaries.
+
 ## [1.8.1] - 2025-06-29
 
 - **enhancement: Introduced a new context section for AI, listing modified and created file paths.**
@@ -19,9 +35,6 @@ Stay updated with the latest improvements and bug fixes: [Minovative Mind Update
 - **feat(diagnostics): Include code snippets and cancellation in formatted diagnostics**
 - **Refine: Streamline Gemini API error messages**
 - **feat(errors): Standardize and enhance user-facing error messages**
-- **docs: Update Terms of Use; add competitive clause and refine policies**
-- **docs(README): Relocate Basic Usage Examples section**
-- **docs(ai): Introduce post-execution diagnostic validation and enhance context**
 
 ## [1.5.0] - 2025-06-24
 
@@ -30,7 +43,6 @@ Stay updated with the latest improvements and bug fixes: [Minovative Mind Update
 - **Feat: Provide AI with relevant file context and enhance symbol info utilization**
 - **Clarify \ command usage in AI prompt.**
 - **Refactor: Apply AI modifications using precise text edits**
-- **docs: Add feature comparison table and refine README formatting**
 - **refactor: Streamline user document handling and refine prompt instructions**
   - refactor(firebase): Stop implicitly creating user documents in Firestore. Previously, a default user document was created if one didn't exist upon a user's initial sign-in or event.
   - refactor(prompt): Refine internal instructions for generating conventional commit messages.
@@ -170,21 +182,11 @@ Stay updated with the latest improvements and bug fixes: [Minovative Mind Update
   - Added a new feature description for "Symbol-Aware Refactoring," highlighting its ability to leverage VS Code’s symbol information for precise modifications. Updated the "Comprehensive Understanding" feature to explicitly mention the use of detailed symbol information. Adjusted table header alignment in the feature comparison section.
 - **feat(context): Enhance AI context with document symbol information**
   - This commit integrates document symbol information into the context provided to the AI, significantly improving its understanding of codebase structure and relationships.
-- **docs: Update feature comparison link in README**
 
 ## [1.0.3] - 2025-06-15
 
 - **feat: Initialize webview with user authentication and subscription state**
   - On webview resolution, send the current sign-in status, user tier, subscription activity, and email to ensure the UI accurately reflects the user's state from the start.
-
-## [1.0.2] - 2025-06-15
-
-- **docs: Enhance README and refine UI styling**
-  - - Added a comprehensive Table of Contents to README.md for improved navigation.
-  - - Standardized list item formatting and updated internal links within README.md.
-  - - Updated the VS Code activity bar icon to a higher resolution version.
-  - - Adjusted sidebar layout by setting H2 elements to in styles.css.
-  - - Refined the border style of the commit review container for better visual consistency.
 
 ## [1.0.1] - 2025-06-15
 
