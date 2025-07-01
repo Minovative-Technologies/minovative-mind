@@ -1,7 +1,7 @@
-// src/services/chatService.ts
 import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
+import * as sidebarTypes from "../sidebar/common/sidebarTypes"; // 1. Add import
 
 export class ChatService {
 	constructor(private provider: SidebarProvider) {}
@@ -27,6 +27,14 @@ export class ChatService {
 				throw new Error(projectContext.contextString);
 			}
 
+			// 2. Initialize this.provider.currentAiStreamingState
+			this.provider.currentAiStreamingState = {
+				content: "",
+				relevantFiles: projectContext.relevantFiles,
+				isComplete: false,
+				isError: false,
+			};
+
 			this.provider.postMessageToWebview({
 				type: "aiResponseStart",
 				value: { modelName, relevantFiles: projectContext.relevantFiles },
@@ -45,6 +53,10 @@ export class ChatService {
 					{
 						onChunk: (chunk: string) => {
 							accumulatedResponse += chunk;
+							// 3. In the onChunk callback, append the chunk
+							if (this.provider.currentAiStreamingState) {
+								this.provider.currentAiStreamingState.content += chunk;
+							}
 							this.provider.postMessageToWebview({
 								type: "aiResponseChunk",
 								value: chunk,
@@ -72,7 +84,15 @@ export class ChatService {
 		} catch (error: any) {
 			finalAiResponseText = error.message;
 			success = false;
+			// 4. In the catch block (for errors), set isError = true;
+			if (this.provider.currentAiStreamingState) {
+				this.provider.currentAiStreamingState.isError = true;
+			}
 		} finally {
+			// 5. In the finally block, set isComplete = true;
+			if (this.provider.currentAiStreamingState) {
+				this.provider.currentAiStreamingState.isComplete = true;
+			}
 			const isCancellation = finalAiResponseText === ERROR_OPERATION_CANCELLED;
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",

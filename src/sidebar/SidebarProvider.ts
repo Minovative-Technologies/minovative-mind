@@ -53,6 +53,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public lastPlanGenerationContext: sidebarTypes.PlanGenerationContext | null =
 		null;
 	public currentExecutionOutcome: sidebarTypes.ExecutionOutcome | undefined;
+	public currentAiStreamingState: sidebarTypes.AiStreamingState | null = null;
 	public pendingCommitReviewData: {
 		commitMessage: string;
 		stagedFiles: string[];
@@ -242,7 +243,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			value: this.getAuthStatePayload(),
 		});
 
-		if (this.pendingPlanGenerationContext) {
+		if (
+			this.currentAiStreamingState &&
+			!this.currentAiStreamingState.isComplete
+		) {
+			console.log(
+				"[SidebarProvider] Restoring active AI streaming progress to webview."
+			);
+			this.postMessageToWebview({
+				type: "restoreStreamingProgress",
+				value: this.currentAiStreamingState,
+			});
+		} else if (this.pendingPlanGenerationContext) {
 			// Logic to restore pending plan UI
 			const planCtx = this.pendingPlanGenerationContext;
 			const planDataForRestore =
@@ -284,6 +296,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.pendingPlanGenerationContext = null;
 		this.lastPlanGenerationContext = null;
 		this.pendingCommitReviewData = null;
+		this.currentAiStreamingState = null; // Clear streaming state on cancellation
 		this.chatHistoryManager.addHistoryEntry(
 			"model",
 			"Operation cancelled by user."

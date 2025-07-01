@@ -191,3 +191,10 @@ export interface EditorContext {
 	documentUri: import("vscode").Uri;
 	selection: import("vscode").Range;
 }
+
+export interface AiStreamingState {
+	content: string;
+	relevantFiles?: string[];
+	isComplete: boolean;
+	isError: boolean;
+}

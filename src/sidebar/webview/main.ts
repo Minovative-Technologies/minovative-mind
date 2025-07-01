@@ -1,4 +1,3 @@
-// --- Font Awesome Imports ---
 import { library, icon } from "@fortawesome/fontawesome-svg-core";
 import {
 	faPaperPlane,
@@ -16,8 +15,8 @@ import {
 	faExclamationTriangle,
 } from "@fortawesome/free-solid-svg-icons";
 import MarkdownIt from "markdown-it";
-// 1. Import Constants: At the top, alongside existing imports, add `import { MINOVATIVE_COMMANDS } from "../common/sidebarConstants";`
 import { MINOVATIVE_COMMANDS } from "../common/sidebarConstants";
+import { AiStreamingState } from "../common/sidebarTypes"; // Ensure this import is present
 
 library.add(
 	faPaperPlane,
@@ -34,7 +33,6 @@ library.add(
 	faCopy,
 	faExclamationTriangle
 );
-// --- End Font Awesome Imports ---
 
 interface VsCodeApi {
 	postMessage(message: any): void;
@@ -103,14 +101,11 @@ const statusArea = document.getElementById(
 ) as HTMLDivElement | null;
 const emptyChatPlaceholder = document.getElementById(
 	"empty-chat-placeholder"
-) as HTMLDivElement | null; // Declare new DOM element variable for the #empty-chat-placeholder div.
-// Get reference to the new #cancel-generation-button
+) as HTMLDivElement | null;
 const cancelGenerationButton = document.getElementById(
 	"cancel-generation-button"
 ) as HTMLButtonElement | null;
-// END MODIFICATION
 
-// 2. Get New DOM Elements & Declare State: After the existing DOM element declarations (e.g., `const sendButton = ...`), add the following declarations:
 const commandSuggestionsContainer = document.getElementById(
 	"command-suggestions-container"
 ) as HTMLDivElement | null;
@@ -126,7 +121,6 @@ let planConfirmationContainer: HTMLDivElement | null = null;
 let confirmPlanButton: HTMLButtonElement | null = null;
 let cancelPlanButton: HTMLButtonElement | null = null;
 
-// Declare new DOM element variables for the parse error UI
 const planParseErrorContainer = document.getElementById(
 	"plan-parse-error-container"
 ) as HTMLDivElement | null;
@@ -141,8 +135,7 @@ const retryGenerationButton = document.getElementById(
 ) as HTMLButtonElement | null;
 const cancelParseErrorButton = document.getElementById(
 	"cancel-parse-error-button"
-) as HTMLButtonElement | null; // Added cancel button for parse error
-// END Declare new DOM element variables for the parse error UI
+) as HTMLButtonElement | null;
 
 const commitReviewContainer = document.getElementById(
 	"commit-review-container"
@@ -163,7 +156,7 @@ const cancelCommitButton = document.getElementById(
 const signUpButton = document.getElementById(
 	"signUpButton"
 ) as HTMLButtonElement | null;
-console.log("[main.ts] signUpButton element:", signUpButton); // ADDED
+console.log("[main.ts] signUpButton element:", signUpButton);
 const signInButton = document.getElementById(
 	"signInButton"
 ) as HTMLButtonElement | null;
@@ -172,13 +165,11 @@ const signInButton = document.getElementById(
 let isApiKeySet = false;
 let isLoading = false;
 let totalKeys = 0;
-// pendingPlanData now stores the simplified object from the provider
-// when a textual plan is awaiting confirmation.
 let pendingPlanData: {
 	type: string;
 	originalRequest?: string;
 	originalInstruction?: string;
-	relevantFiles?: string[]; // Added relevantFiles to pendingPlanData
+	relevantFiles?: string[];
 } | null = null;
 
 console.log("Webview script loaded.");
@@ -224,7 +215,6 @@ function startTypingAnimation() {
 	}
 }
 
-// new DOM elements to the critical elements null check
 if (
 	!sendButton ||
 	!chatInput ||
@@ -241,25 +231,23 @@ if (
 	!loadChatButton ||
 	!clearChatButton ||
 	!statusArea ||
-	!cancelGenerationButton || // Added cancelGenerationButton to critical elements check
-	!planParseErrorContainer || // Added planParseErrorContainer to critical elements check
-	!planParseErrorDisplay || // Added planParseErrorDisplay to critical elements check
-	!failedJsonDisplay || // Added failedJsonDisplay to critical elements check
-	!retryGenerationButton || // Added retryGenerationButton to critical elements check
-	!cancelParseErrorButton || // Added cancelParseErrorButton to critical elements check
-	!emptyChatPlaceholder || // Added emptyChatPlaceholder to critical elements check
+	!cancelGenerationButton ||
+	!planParseErrorContainer ||
+	!planParseErrorDisplay ||
+	!failedJsonDisplay ||
+	!retryGenerationButton ||
+	!cancelParseErrorButton ||
+	!emptyChatPlaceholder ||
 	!commitReviewContainer ||
 	!commitMessageTextarea ||
 	!stagedFilesList ||
 	!confirmCommitButton ||
 	!cancelCommitButton ||
-	!signUpButton || // Added signUpButton to null check
+	!signUpButton ||
 	!signInButton ||
-	// 3. Update Critical Element Null Checks: In the `if (...) { ... }` block that checks for null DOM elements (line ~133 `if (!sendButton || ...)`), add `!commandSuggestionsContainer` and `!chatInputControlsWrapper` to the null check condition.
 	!commandSuggestionsContainer ||
 	!chatInputControlsWrapper
 ) {
-	// END Add new DOM elements to the critical elements null check
 	console.error("Required DOM elements not found!");
 	const body = document.querySelector("body");
 	if (body) {
@@ -267,32 +255,28 @@ if (
 			'<p style="color: var(--vscode-errorForeground); font-weight: bold;">Error initializing webview UI. Please check console (Developer: Open Webview Developer Tools).</p>';
 	}
 } else {
-	// Modified appendMessage to handle stream initialization and add copy button for AI messages
 	function appendMessage(
 		sender: string,
 		text: string,
 		className: string = "",
 		isHistoryMessage: boolean = false,
-		diffContent?: string, // Add diffContent parameter
-		relevantFiles?: string[], // Add relevantFiles parameter
-		messageIndexForHistory?: number, // ADDED
-		isRelevantFilesExpandedForHistory?: boolean // ADDED
+		diffContent?: string,
+		relevantFiles?: string[],
+		messageIndexForHistory?: number,
+		isRelevantFilesExpandedForHistory?: boolean
 	) {
 		if (chatContainer) {
-			// Handle the "Creating..." loading message
 			if (className === "loading-message") {
 				if (chatContainer.querySelector(".loading-message")) {
-					// If one already exists, update it or just skip if content is identical
 					const existingLoadingMsg = chatContainer.querySelector(
 						".loading-message"
 					) as HTMLDivElement;
 					if (existingLoadingMsg && existingLoadingMsg.textContent !== text) {
 						existingLoadingMsg.textContent = text;
 					}
-					return; // Don't add another loading message
+					return;
 				}
 			} else {
-				// If this is any other message, remove any existing general "loading-message".
 				const loadingMsg = chatContainer.querySelector(".loading-message");
 				if (loadingMsg) {
 					loadingMsg.remove();
@@ -307,9 +291,7 @@ if (
 					.forEach((cls) => messageElement.classList.add(cls));
 			}
 			if (isHistoryMessage) {
-				// Add dataset.isHistory attribute
 				messageElement.dataset.isHistory = "true";
-				// Add messageIndexForHistory to dataset if provided
 				if (messageIndexForHistory !== undefined) {
 					messageElement.dataset.messageIndex =
 						messageIndexForHistory.toString();
@@ -317,44 +299,32 @@ if (
 			}
 
 			const senderElement = document.createElement("strong");
-			// a non-breaking space after the sender name
-			senderElement.textContent = `${sender}:\u00A0`; // non-breaking space
+			senderElement.textContent = `${sender}:\u00A0`;
 			messageElement.appendChild(senderElement);
 
-			// Conditionally add error icon
 			if (className.includes("error-message")) {
 				const errorIconContainer = document.createElement("span");
 				errorIconContainer.classList.add("error-icon");
 				errorIconContainer.title = "Error";
 				try {
 					const errorIconHTML = icon(faExclamationTriangle, {
-						classes: ["fa-icon"], // Use base icon class
+						classes: ["fa-icon"],
 					}).html[0];
 					if (errorIconHTML) {
 						errorIconContainer.innerHTML = errorIconHTML;
-						messageElement.appendChild(errorIconContainer); // Append icon before text
+						messageElement.appendChild(errorIconContainer);
 					} else {
 						console.error("Failed to generate Font Awesome error icon HTML.");
-						// Optional: Add text fallback like "(Error)"
 					}
 				} catch (e) {
 					console.error("Error setting Font Awesome error icon", e);
-					// Optional: Add text fallback like "(Error)"
 				}
 			}
-			// END MODIFICATION
 
 			const textElement = document.createElement("span");
-			textElement.classList.add("message-text-content"); // class to identify the text span
-			messageElement.appendChild(textElement); // Always append text element
+			textElement.classList.add("message-text-content");
+			messageElement.appendChild(textElement);
 
-			// Refactor the existing `if (diffContent)` block within the `appendMessage` function.
-			// It should now always create a `diff-container` div with class `diff-container` and append it to `messageElement`.
-			// Inside `diff-container`, create and append a `diff-header` div with class `diff-header`.
-			// Set its `textContent` to 'Code Changes:' if `diffContent` is not empty (after trimming whitespace using `diffContent.trim() !== ''`).
-			// If `diffContent` IS empty or just whitespace, set `diff-header`'s `textContent` to 'No Code Changes Detected (or no diff provided)' and add the class `no-diff-content` to the `diff-container`.
-			// The `pre` and `code` elements containing the actual diff lines (`span` elements with specific classes for added/removed/equal lines) should only be appended to `diff-container` if `diffContent` is non-empty, otherwise omit them.
-			// Ensure `br` elements are added after each span for line breaks.
 			if (diffContent !== undefined) {
 				const diffContainer = document.createElement("div");
 				diffContainer.classList.add("diff-container");
@@ -382,10 +352,9 @@ if (
 							span.classList.add("diff-line-equal");
 						}
 						preCode.appendChild(span);
-						preCode.appendChild(document.createElement("br")); // Add <br> after each line
+						preCode.appendChild(document.createElement("br"));
 					});
 
-					// Remove the last <br> if it exists
 					if (
 						preCode.lastChild instanceof Element &&
 						preCode.lastChild.tagName === "BR"
@@ -400,18 +369,14 @@ if (
 						"No Code Changes Detected (or no diff provided)";
 					diffContainer.classList.add("no-diff-content");
 					diffContainer.appendChild(diffHeader);
-					// pre and code elements are omitted as per instruction
 				}
 
 				messageElement.appendChild(diffContainer);
 			}
-			// END DIFF CONTENT ADDITION
 
-			// Logic for relevantFiles
 			if (sender === "Model" && relevantFiles && relevantFiles.length > 0) {
 				const contextFilesDiv = document.createElement("div");
 				contextFilesDiv.classList.add("ai-context-files");
-				// Determine initial expansion state
 				const shouldBeExpandedInitially =
 					isRelevantFilesExpandedForHistory !== undefined
 						? isRelevantFilesExpandedForHistory
@@ -425,13 +390,12 @@ if (
 
 				const filesHeader = document.createElement("div");
 				filesHeader.classList.add("context-files-header");
-				filesHeader.textContent = "AI Context Files"; // 2. Ensure filesHeader.textContent is exactly "AI Context Files:"
+				filesHeader.textContent = "AI Context Files";
 				contextFilesDiv.appendChild(filesHeader);
-				// 4. Add an addEventListener("click", ...) to filesHeader that toggles the "collapsed" and "expanded" classes on the contextFilesDiv.
 				filesHeader.addEventListener("click", () => {
 					const currentIsExpanded =
 						contextFilesDiv.classList.contains("expanded");
-					const newIsExpanded = !currentIsExpanded; // The state after toggle
+					const newIsExpanded = !currentIsExpanded;
 
 					contextFilesDiv.classList.toggle("collapsed", !newIsExpanded);
 					contextFilesDiv.classList.toggle("expanded", newIsExpanded);
@@ -469,79 +433,64 @@ if (
 				relevantFiles.forEach((filePath) => {
 					const li = document.createElement("li");
 					li.classList.add("context-file-item");
-					li.textContent = filePath; // Directly apply to li
-					li.dataset.filepath = filePath; // Directly apply to li
-					li.title = `Open ${filePath}`; // Directly apply to li
+					li.textContent = filePath;
+					li.dataset.filepath = filePath;
+					li.title = `Open ${filePath}`;
 					fileList.appendChild(li);
 				});
 
 				contextFilesDiv.appendChild(fileList);
 
-				// Insert the relevant files div after the sender's strong tag
-				// if it's the start of a message and not a loading message
 				const senderStrongTag = messageElement.querySelector("strong");
 				if (senderStrongTag) {
 					senderStrongTag.insertAdjacentElement("afterend", contextFilesDiv);
 				} else {
-					messageElement.appendChild(contextFilesDiv); // Fallback to end of message
+					messageElement.appendChild(contextFilesDiv);
 				}
 			}
-			// END Logic for relevantFiles
 
 			let copyButton: HTMLButtonElement | null = null;
 			let deleteButton: HTMLButtonElement | null = null;
 
-			// The entire block for creating/appending copyButton, deleteButton, and messageActions
-			// must be wrapped in `if (isHistoryMessage)`
 			if (isHistoryMessage) {
-				// PRIMARY CONDITION
-				// Only history messages get buttons and are involved in streaming logic
 				if (
 					className.includes("user-message") ||
 					className.includes("ai-message")
 				) {
-					// Existing condition, now nested
-					// Create copy button
 					copyButton = document.createElement("button");
 					copyButton.classList.add("copy-button");
 					copyButton.title = "Copy Message";
 					setIconForButton(copyButton, faCopy);
 
-					// Create delete button
 					deleteButton = document.createElement("button");
 					deleteButton.classList.add("delete-button");
 					deleteButton.title = "Delete Message";
 					setIconForButton(deleteButton, faTrashCan);
 
-					// Create actions container
 					const messageActions = document.createElement("div");
 					messageActions.classList.add("message-actions");
 					messageActions.appendChild(copyButton);
 					messageActions.appendChild(deleteButton);
 
-					messageElement.appendChild(messageActions); // Append actions container to messageElement
+					messageElement.appendChild(messageActions);
 
-					// Keep logic for disabling button during AI streaming specific to 'ai-message'
 					if (
-						sender === "Model" && // This condition ensures it only applies to Model messages
+						sender === "Model" &&
 						text === "" &&
 						className.includes("ai-message") &&
 						!className.includes("error-message")
 					) {
-						// This is the start of an AI stream for a HISTORY message (e.g., from aiResponseStart)
 						console.log(
 							"Appending start of AI stream message (isHistoryMessage)."
-						); // Modified log
+						);
 						currentAiMessageContentElement = textElement;
-						currentAccumulatedText = ""; // Initialize accumulated text
-						typingBuffer = ""; // Clear typing buffer
-						startTypingAnimation(); // Start the typing animation
+						currentAccumulatedText = "";
+						typingBuffer = "";
+						startTypingAnimation();
 
-						// a loading indicator within the text element
 						textElement.innerHTML =
-							'<span class="loading-text">Thinking<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+							'<span class="loading-text">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
 
-						// Disable copy and delete buttons while content is loading/streaming
 						if (copyButton) {
 							copyButton.disabled = true;
 						}
@@ -549,15 +498,13 @@ if (
 							deleteButton.disabled = true;
 						}
 					} else {
-						// This is a complete HISTORY message (user message or complete AI message from history/aiResponseEnd)
-						stopTypingAnimation(); // Stop any ongoing typing animation
-						typingBuffer = ""; // Clear typing buffer
-						currentAiMessageContentElement = null; // Clear AI streaming state if it was active
+						stopTypingAnimation();
+						typingBuffer = "";
+						currentAiMessageContentElement = null;
 						currentAccumulatedText = "";
 
 						const renderedHtml = md.render(text);
 						textElement.innerHTML = renderedHtml;
-						// For complete messages (user or non-streaming AI), buttons are enabled immediately
 						if (copyButton) {
 							copyButton.disabled = false;
 						}
@@ -566,40 +513,32 @@ if (
 						}
 					}
 				} else {
-					// This is a system message (or other non-user/AI message) that IS part of history
-					// (e.g., restored system messages). No buttons.
 					console.log(
 						"Appending history-backed non-user/AI message (no buttons)."
-					); // Added log
+					);
 					const renderedHtml = md.render(text);
 					textElement.innerHTML = renderedHtml;
-					// Ensure streaming state is reset here as it's a complete message.
 					stopTypingAnimation();
 					typingBuffer = "";
 					currentAiMessageContentElement = null;
 					currentAccumulatedText = "";
 				}
 			} else {
-				// ELSE BLOCK for !isHistoryMessage (no buttons, direct render, state reset)
-				// For non-history messages (e.g., real-time status updates from Model), no copy/delete buttons
-				console.log("Appending non-history message (no buttons)."); // Added log
+				console.log("Appending non-history message (no buttons).");
 				const renderedHtml = md.render(text);
 				textElement.innerHTML = renderedHtml;
-				// Ensure streaming state is reset for these complete messages.
 				stopTypingAnimation();
 				typingBuffer = "";
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
 			}
-			// END Add copy button for AI messages
 
 			chatContainer.appendChild(messageElement);
-			chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to bottom
-			updateEmptyChatPlaceholderVisibility(); // Call after any message is appended
+			chatContainer.scrollTop = chatContainer.scrollHeight;
+			updateEmptyChatPlaceholderVisibility();
 		}
 	}
 
-	// New modular function: updateCommitButtonState (Instruction 1)
 	function updateCommitButtonState() {
 		if (commitMessageTextarea && confirmCommitButton) {
 			const trimmedMessage = commitMessageTextarea.value.trim();
@@ -607,7 +546,6 @@ if (
 		}
 	}
 
-	// 4. Implement Helper Functions for Command Suggestions: Inside the `else` block (where `appendMessage` is defined) and before `sendMessage` function, add the following helper functions:
 	function showCommandSuggestions(commands: string[]): void {
 		if (!commandSuggestionsContainer) {
 			return;
@@ -618,7 +556,7 @@ if (
 
 		if (commands.length === 0) {
 			const noMatchesItem = document.createElement("div");
-			noMatchesItem.classList.add("command-item", "no-matches"); // Add specific classes for styling
+			noMatchesItem.classList.add("command-item", "no-matches");
 			noMatchesItem.textContent = "No matching commands";
 			commandSuggestionsContainer.appendChild(noMatchesItem);
 		} else {
@@ -626,18 +564,18 @@ if (
 				const commandItem = document.createElement("div");
 				commandItem.classList.add("command-item");
 				commandItem.textContent = command;
-				commandItem.dataset.command = command; // Store the command itself
+				commandItem.dataset.command = command;
 				commandItem.addEventListener("click", () => {
 					selectCommand(command);
 				});
 				commandSuggestionsContainer.appendChild(commandItem);
 			});
 		}
-		commandSuggestionsContainer.style.display = "flex"; // Use flex display
+		commandSuggestionsContainer.style.display = "flex";
 		isCommandSuggestionsVisible = true;
 		setLoadingState(isLoading);
 		if (chatInputControlsWrapper) {
-			chatInputControlsWrapper.style.zIndex = "100"; // Ensure pop-up is above other elements
+			chatInputControlsWrapper.style.zIndex = "100";
 		}
 	}
 
@@ -652,7 +590,7 @@ if (
 		activeCommandIndex = -1;
 		filteredCommands = [];
 		if (chatInputControlsWrapper) {
-			chatInputControlsWrapper.style.zIndex = ""; // Reset z-index
+			chatInputControlsWrapper.style.zIndex = "";
 		}
 	}
 
@@ -662,7 +600,6 @@ if (
 		}
 		chatInput.value = command + " ";
 		chatInput.focus();
-		// Move cursor to end
 		chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
 		hideCommandSuggestions();
 	}
@@ -681,19 +618,15 @@ if (
 		}
 	}
 
-	// FUNCTION: Check if a complete command has already been typed
 	function isInputtingCompleteCommand(text: string): boolean {
-		// Iterate over all defined MINOVATIVE_COMMANDS (e.g., "/plan", "/commit")
 		for (const cmd of MINOVATIVE_COMMANDS) {
-			// Check if the input text starts exactly with a known command
 			if (text.startsWith(cmd)) {
-				// This indicates the command has been fully entered and the user is typing arguments or has simply pressed space.
 				if (text.length === cmd.length || text[cmd.length] === " ") {
-					return true; // A complete command is being input
+					return true;
 				}
 			}
 		}
-		return false; // No complete command detected at the beginning of the input
+		return false;
 	}
 
 	function updateApiKeyStatus(text: string) {
@@ -729,7 +662,6 @@ if (
 			statusArea.style.color = isError
 				? "var(--vscode-errorForeground)"
 				: "var(--vscode-descriptionForeground)";
-			// Clear after a delay unless it's an error
 			if (!isError) {
 				setTimeout(() => {
 					if (statusArea.textContent === sanitizedText) {
@@ -747,7 +679,6 @@ if (
 	}
 
 	function sendMessage() {
-		// Allow sending only if not currently loading and no blocking UI is visible
 		const planConfirmationVisible =
 			planConfirmationContainer &&
 			planConfirmationContainer.style.display !== "none";
@@ -755,7 +686,7 @@ if (
 			planParseErrorContainer &&
 			planParseErrorContainer.style.display !== "none";
 		const commitReviewVisible =
-			commitReviewContainer && commitReviewContainer.style.display !== "none"; //
+			commitReviewContainer && commitReviewContainer.style.display !== "none";
 
 		if (
 			isLoading ||
@@ -773,7 +704,7 @@ if (
 				planConfirmationVisible,
 				"planParseErrorVisible",
 				planParseErrorVisible,
-				"commitReviewVisible", //
+				"commitReviewVisible",
 				commitReviewVisible,
 				"isCommandSuggestionsVisible:",
 				isCommandSuggestionsVisible
@@ -792,25 +723,23 @@ if (
 				"System",
 				"Please add or select a valid API Key first.",
 				"error-message",
-				true // System messages are part of history
+				true
 			);
 			return;
 		}
 
-		// Set loading state to true immediately upon sending
 		setLoadingState(true);
 
 		const lowerMessage = fullMessage.toLowerCase();
 		if (lowerMessage.startsWith("/plan ")) {
 			const planRequest = fullMessage.substring(6).trim();
 			if (!planRequest) {
-				// If command is invalid, re-enable input
 				setLoadingState(false);
 				appendMessage(
 					"System",
 					"Please provide a description for the plan after /plan.",
 					"error-message",
-					true // System messages are part of history
+					true
 				);
 				return;
 			}
@@ -820,24 +749,21 @@ if (
 			appendMessage("You", fullMessage, "user-message", true);
 			vscode.postMessage({ type: "commitRequest" });
 		} else {
-			// Regular chat message
 			appendMessage("You", fullMessage, "user-message", true);
 			vscode.postMessage({ type: "chatMessage", value: fullMessage });
 		}
 	}
 
-	// Modified setLoadingState to control button states based on loading and UI visibility
 	function setLoadingState(loading: boolean) {
 		console.log(
 			`[setLoadingState] Call: loading=${loading}, current isLoading=${isLoading}, current isApiKeySet=${isApiKeySet}, current isCommandSuggestionsVisible=${isCommandSuggestionsVisible}`
 		);
-		isLoading = loading; // Keep track of overall loading state
+		isLoading = loading;
 		const loadingMsg = chatContainer?.querySelector(".loading-message");
 		if (loadingMsg) {
 			loadingMsg.remove();
 		}
 
-		// Check visibility of blocking UI elements
 		const planConfirmationVisible =
 			planConfirmationContainer &&
 			planConfirmationContainer.style.display !== "none";
@@ -845,14 +771,12 @@ if (
 			planParseErrorContainer &&
 			planParseErrorContainer.style.display !== "none";
 		const commitReviewVisible =
-			commitReviewContainer && commitReviewContainer.style.display !== "none"; //
+			commitReviewContainer && commitReviewContainer.style.display !== "none";
 
 		console.log(
 			`[setLoadingState] UI Display States: planConfirmationContainer=${planConfirmationContainer?.style.display}, planParseErrorContainer=${planParseErrorContainer?.style.display}, commitReviewContainer=${commitReviewContainer?.style.display}, isCommandSuggestionsVisible=${isCommandSuggestionsVisible}`
 		);
 
-		// Determine if general chat/send controls should be enabled
-		// Enabled only if not loading AND API key is set AND neither blocking UI is visible
 		const enableSendControls =
 			!loading &&
 			isApiKeySet &&
@@ -861,8 +785,6 @@ if (
 			!commitReviewVisible &&
 			!isCommandSuggestionsVisible;
 
-		// Determine if chat history buttons can be interacted with
-		// Enabled only if not loading AND neither blocking UI is visible
 		const canInteractWithChatHistoryButtons =
 			!loading &&
 			!planConfirmationVisible &&
@@ -880,7 +802,6 @@ if (
 		if (chatInput) {
 			chatInput.disabled = loading;
 		}
-		// Model selection should also be disabled while any operation is running or UI is blocked
 		if (modelSelect) {
 			modelSelect.disabled =
 				!!isLoading ||
@@ -889,7 +810,6 @@ if (
 				!!commitReviewVisible ||
 				!!isCommandSuggestionsVisible;
 		}
-		// API key management buttons should also be disabled while any operation is running or UI is blocked
 		const enableApiKeyControls =
 			!isLoading &&
 			!planConfirmationVisible &&
@@ -919,29 +839,23 @@ if (
 			addKeyButton.disabled = !enableAddKeyInputControls;
 		}
 
-		// Determine if there are messages in the chat container
 		const hasMessages = chatContainer
 			? chatContainer.childElementCount > 0 &&
-			  !chatContainer.querySelector(".loading-message") // Don't count the loading message as content
+			  !chatContainer.querySelector(".loading-message")
 			: false;
 
 		if (loadChatButton) {
-			// loadChatButton is disabled if loading or a blocking UI is visible. Otherwise, it's enabled.
 			loadChatButton.disabled = !canInteractWithChatHistoryButtons;
 		}
 		if (saveChatButton) {
-			// saveChatButton is disabled if loading or a blocking UI is visible OR there are no messages.
 			saveChatButton.disabled =
 				!canInteractWithChatHistoryButtons || !hasMessages;
 		}
 		if (clearChatButton) {
-			// clearChatButton is disabled if loading or a blocking UI is visible OR there are no messages.
 			clearChatButton.disabled =
 				!canInteractWithChatHistoryButtons || !hasMessages;
 		}
-		// END USER REQUESTED MODIFICATION
 
-		// new console.log statements here
 		console.log(
 			`[setLoadingState] Status: loading=${loading}, planConfVis=${planConfirmationVisible}, planParseErrVis=${planParseErrorVisible}, commitRevVis=${commitReviewVisible}`
 		);
@@ -952,23 +866,18 @@ if (
 			`[setLoadingState] Buttons: saveDisabled=${saveChatButton?.disabled}, clearDisabled=${clearChatButton?.disabled}`
 		);
 
-		// Manage cancel generation button visibility based on loading AND blocking UI state
 		if (cancelGenerationButton) {
-			// The button should be visible ONLY when loading is true AND neither
-			// plan confirmation container NOR plan parse error container is visible.
 			if (
 				loading &&
 				!planConfirmationVisible &&
 				!planParseErrorVisible &&
 				!commitReviewVisible
 			) {
-				cancelGenerationButton.style.display = "inline-flex"; // Show the cancel button
+				cancelGenerationButton.style.display = "inline-flex";
 			} else {
-				// Hide the cancel button if not loading, or if a specific UI block is active
-				cancelGenerationButton.style.display = "none"; // Hide the cancel button
+				cancelGenerationButton.style.display = "none";
 			}
 		}
-		// END Manage cancel generation button visibility
 
 		if (loading) {
 			if (
@@ -980,14 +889,12 @@ if (
 					'<span class="loading-text">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>',
 					"loading-message",
 					false
-				); // Loading messages are not history
+				);
 			}
 		} else {
-			updateEmptyChatPlaceholderVisibility(); // Call when isLoading becomes false
+			updateEmptyChatPlaceholderVisibility();
 		}
 
-		// If a new request starts (setLoadingState(true)) while a plan is awaiting confirmation,
-		// hide the confirmation UI and reset pending plan data.
 		if (
 			loading &&
 			planConfirmationContainer &&
@@ -998,10 +905,8 @@ if (
 			updateStatus(
 				"New request initiated, pending plan confirmation cancelled."
 			);
-			// No need to explicitly re-enable buttons here; setLoadingState(true) will handle disabling them correctly.
 		}
 
-		// Hide planParseErrorContainer if a new message is sent (loading becomes true)
 		if (
 			loading &&
 			planParseErrorContainer &&
@@ -1014,33 +919,24 @@ if (
 			if (failedJsonDisplay) {
 				failedJsonDisplay.textContent = "";
 			}
-			// Optionally provide a status update
 			updateStatus("New request initiated, parse error UI hidden.");
-			// No need to explicitly re-enable buttons here; setLoadingState(true) will handle disabling them correctly.
 		}
-		// Hide commitReviewContainer if a new request starts
 		if (
 			loading &&
 			commitReviewContainer &&
 			commitReviewContainer.style.display !== "none"
 		) {
 			commitReviewContainer.style.display = "none";
-			// Optionally provide a status update
 			updateStatus("New request initiated, commit review UI hidden.");
 		}
-		// END MODIFICATION
 	}
 
-	// New modular function: updateEmptyChatPlaceholderVisibility
 	function updateEmptyChatPlaceholderVisibility() {
 		console.log("[DEBUG] updateEmptyChatPlaceholderVisibility called.");
 		if (!chatContainer || !emptyChatPlaceholder) {
-			// console.warn("chatContainer or emptyChatPlaceholder not found. Cannot update visibility.");
 			return;
 		}
 
-		// Count actual chat messages, excluding temporary .loading-message
-		// A message is any .message div that is NOT also .loading-message
 		const actualMessages = Array.from(chatContainer.children).filter(
 			(child) =>
 				child.classList.contains("message") &&
@@ -1049,10 +945,10 @@ if (
 
 		if (actualMessages.length > 0) {
 			emptyChatPlaceholder.style.display = "none";
-			chatContainer.style.display = "flex"; // Show chat container
+			chatContainer.style.display = "flex";
 		} else {
-			emptyChatPlaceholder.style.display = "flex"; // Set the display style of #empty-chat-placeholder to flex if there are no messages.
-			chatContainer.style.display = "none"; // Hide chat container
+			emptyChatPlaceholder.style.display = "flex";
+			chatContainer.style.display = "none";
 		}
 		console.log(
 			`[DEBUG] actualMessages.length: ${actualMessages.length}, emptyChatPlaceholder.style.display: ${emptyChatPlaceholder.style.display}`
@@ -1063,10 +959,10 @@ if (
 		if (!planConfirmationContainer) {
 			planConfirmationContainer = document.createElement("div");
 			planConfirmationContainer.id = "plan-confirmation-container";
-			planConfirmationContainer.style.display = "none"; // Initially hidden
+			planConfirmationContainer.style.display = "none";
 
 			const textElement = document.createElement("p");
-			textElement.textContent = "Review plan and confirm to proceed?"; // Modified text for clarity
+			textElement.textContent = "Review plan and confirm to proceed?";
 
 			confirmPlanButton = document.createElement("button");
 			confirmPlanButton.id = "confirm-plan-button";
@@ -1088,7 +984,6 @@ if (
 			setIconForButton(confirmPlanButton, faCheck);
 			setIconForButton(cancelPlanButton, faTimes);
 
-			// Review Point 3: Verify this listener setup.
 			planConfirmationContainer.addEventListener(
 				"click",
 				(event: MouseEvent) => {
@@ -1097,44 +992,35 @@ if (
 						target.id === "confirm-plan-button" ||
 						target.closest("#confirm-plan-button")
 					) {
-						console.log("Confirm Plan button clicked."); // console.log here
+						console.log("Confirm Plan button clicked.");
 						if (pendingPlanData) {
 							vscode.postMessage({
 								type: "confirmPlanExecution",
 								value: pendingPlanData,
 							});
 							updateStatus("Requesting plan execution...");
-							// Correctly hides the confirmation UI
 							planConfirmationContainer!.style.display = "none";
-							// Correctly clears pending plan data
 							pendingPlanData = null;
-							// Correctly sets loading state while structured plan is generated/executed
-							setLoadingState(true); // This call now correctly manages all button states
+							setLoadingState(true);
 						} else {
 							updateStatus("Error: No pending plan data to confirm.", true);
 						}
 					} else if (
-						// This is the #cancel-plan-button logic being reviewed
 						target.id === "cancel-plan-button" ||
 						target.closest("#cancel-plan-button")
 					) {
-						console.log("Cancel Plan button clicked."); // console.log here
-						// Correctly sends the cancel message
+						console.log("Cancel Plan button clicked.");
 						vscode.postMessage({ type: "cancelPlanExecution" });
 						updateStatus("Plan cancelled.");
-						// Correctly hides the confirmation UI
 						planConfirmationContainer!.style.display = "none";
-						// Correctly clears pending plan data
 						pendingPlanData = null;
-						// Correctly re-enables inputs as plan flow is cancelled
-						setLoadingState(false); // This call now correctly manages all button states
+						setLoadingState(false);
 					}
 				}
 			);
 		}
 	}
 
-	// Helper function to set Font Awesome icon on a button
 	function setIconForButton(
 		button: HTMLButtonElement | null,
 		iconDefinition: any
@@ -1147,7 +1033,7 @@ if (
 				if (iconHTML) {
 					button.innerHTML = iconHTML;
 				} else {
-					button.innerHTML = "?"; // Fallback
+					button.innerHTML = "?";
 					console.error(
 						"Failed to generate Font Awesome icon HTML for:",
 						iconDefinition.iconName
@@ -1159,42 +1045,27 @@ if (
 					iconDefinition.iconName,
 					e
 				);
-				button.innerHTML = "!"; // Fallback on error
+				button.innerHTML = "!";
 			}
 		}
 	}
 
-	// --- Event Listeners ---
-	// Note: Placing general listeners here, and specific UI listeners (like cancel buttons) within initializeWebview
-	// ensures they are set up after DOM checks and UI creation (if any).
-
 	sendButton.addEventListener("click", () => {
 		console.log("Send button clicked.");
 		sendMessage();
-	}); // console.log here
-	// The original simple keydown listener for Enter is removed as part of the consolidation.
-	// chatInput.addEventListener("keydown", (e) => {
-	// 	if (e.key === "Enter" && !e.shiftKey) {
-	// 		console.log("Chat input Enter key pressed."); // console.log here
-	// 		e.preventDefault();
-	// 		sendMessage();
-	// 	}
-	// });
+	});
 
-	// 5. Implement Event Listeners for `chatInput`: After the existing `chatInput.addEventListener('keydown', ...)` block and before the `modelSelect.addEventListener('change', ...)` block, add the following new event listeners for `chatInput`:
 	chatInput.addEventListener("input", () => {
 		if (!chatInput) {
 			return;
 		}
 		const text = chatInput.value;
 		if (text.startsWith("/")) {
-			// LOGIC: Check if a complete command has already been typed
 			if (isInputtingCompleteCommand(text)) {
-				hideCommandSuggestions(); // Hide suggestions if a full command is already in the input
-				return; // Exit, do not proceed with filtering or showing suggestions
+				hideCommandSuggestions();
+				return;
 			}
 
-			// Existing logic to show suggestions for partial commands should follow here
 			const query = text.substring(1).toLowerCase();
 			const matches = MINOVATIVE_COMMANDS.filter((cmd) =>
 				cmd.toLowerCase().includes(query)
@@ -1206,51 +1077,41 @@ if (
 	});
 
 	chatInput.addEventListener("keydown", (e) => {
-		// Use the new state variable to check if command suggestions are currently displayed.
 		if (!isCommandSuggestionsVisible) {
-			// If command suggestions are NOT currently displayed, proceed to regular Enter handling.
 			if (e.key === "Enter" && !e.shiftKey) {
 				console.log("Chat input Enter key pressed (no suggestions visible).");
-				e.preventDefault(); // Prevent default newline/form submission.
-				sendMessage(); // Trigger send message.
+				e.preventDefault();
+				sendMessage();
 			}
-			return; // Exit this listener if suggestions are not active.
+			return;
 		}
 
-		// --- Logic below this line executes ONLY IF command suggestions ARE visible ---
-
-		// If suggestions are visible but the list is empty (e.g., no matches for query).
 		if (filteredCommands.length === 0) {
 			if (e.key === "Enter" && !e.shiftKey) {
-				e.preventDefault(); // Prevent newline/sending.
-				// Do not call sendMessage. The user must either clear their query or hide suggestions.
+				e.preventDefault();
 				console.log(
 					"Enter pressed with visible but empty suggestions. Not sending message."
 				);
 			}
-			return; // Exit if no commands to highlight/select.
+			return;
 		}
 
 		const numCommands = filteredCommands.length;
 
 		if (e.key === "ArrowDown") {
-			e.preventDefault(); // Prevent cursor movement in textarea
+			e.preventDefault();
 			activeCommandIndex = (activeCommandIndex + 1) % numCommands;
 			highlightCommand(activeCommandIndex);
 		} else if (e.key === "ArrowUp") {
-			e.preventDefault(); // Prevent cursor movement in textarea
+			e.preventDefault();
 			activeCommandIndex = (activeCommandIndex - 1 + numCommands) % numCommands;
 			highlightCommand(activeCommandIndex);
 		} else if (e.key === "Enter") {
-			// If Enter is pressed WHEN COMMAND SUGGESTIONS ARE VISIBLE
-			e.preventDefault(); // ALWAYS prevent default behavior (newline/sending)
+			e.preventDefault();
 
 			if (activeCommandIndex !== -1) {
-				// If a command is highlighted, select it
 				selectCommand(filteredCommands[activeCommandIndex]);
 			} else {
-				// If suggestions are visible but no command is highlighted (activeCommandIndex is -1),
-				// do nothing. This correctly prevents sending the message until suggestions are hidden.
 				console.log(
 					"Enter pressed with suggestions visible but no command highlighted. Not sending message."
 				);
@@ -1262,16 +1123,13 @@ if (
 	});
 
 	chatInput.addEventListener("blur", () => {
-		// Delay hiding to allow click events on suggestion items to register
 		setTimeout(() => {
-			// Only hide command suggestions if chatInput exists AND its value does NOT start with '/'
 			if (chatInput && !chatInput.value.startsWith("/")) {
 				hideCommandSuggestions();
 			}
 		}, 150);
 	});
 
-	// Instruction 3: Add an `input` event listener to `commitMessageTextarea`.
 	if (commitMessageTextarea) {
 		commitMessageTextarea.addEventListener("input", updateCommitButtonState);
 	}
@@ -1298,12 +1156,10 @@ if (
 		}
 	});
 	prevKeyButton.addEventListener("click", () => {
-		// Removed redundant explicit disables, setLoadingState will handle
 		vscode.postMessage({ type: "switchToPrevKey" });
 		updateApiKeyStatus("Switching key...");
 	});
 	nextKeyButton.addEventListener("click", () => {
-		// Removed redundant explicit disables, setLoadingState will handle
 		vscode.postMessage({ type: "switchToNextKey" });
 		updateApiKeyStatus("Switching key...");
 	});
@@ -1311,36 +1167,29 @@ if (
 		vscode.postMessage({ type: "requestDeleteConfirmation" });
 		updateApiKeyStatus("Waiting for delete confirmation...");
 	});
-	// Clear/Save/Load listeners are correct, they trigger actions handled elsewhere.
-	// Button disabled states are managed by setLoadingState.
 	clearChatButton.addEventListener("click", () => {
-		console.log("Clear Chat button clicked."); // console.log here
+		console.log("Clear Chat button clicked.");
 		vscode.postMessage({ type: "clearChatRequest" });
 	});
 	saveChatButton.addEventListener("click", () => {
-		console.log("Save Chat button clicked."); // console.log here
+		console.log("Save Chat button clicked.");
 		vscode.postMessage({ type: "saveChatRequest" });
 		updateStatus("Requesting chat save...");
 	});
 	loadChatButton.addEventListener("click", () => {
-		console.log("Load Chat button clicked."); // console.log here
+		console.log("Load Chat button clicked.");
 		vscode.postMessage({ type: "loadChatRequest" });
 		updateStatus("Requesting chat load...");
 	});
 
-	// event listener for retryGenerationButton
 	if (retryGenerationButton) {
 		retryGenerationButton.addEventListener("click", () => {
-			console.log("Retry Generation button clicked."); // console.log here
-			// Hide the error container
+			console.log("Retry Generation button clicked.");
 			if (planParseErrorContainer) {
 				planParseErrorContainer.style.display = "none";
 			}
-			// Send message to extension to retry generation
 			vscode.postMessage({ type: "retryStructuredPlanGeneration" });
-			// Set loading state to true as a new generation attempt is starting
-			setLoadingState(true); // This call now correctly manages all button states
-			// Clear the error display fields
+			setLoadingState(true);
 			if (planParseErrorDisplay) {
 				planParseErrorDisplay.textContent = "";
 			}
@@ -1348,19 +1197,14 @@ if (
 				failedJsonDisplay.textContent = "";
 			}
 			updateStatus("Retrying structured plan generation...");
-
-			// --- USER REQUESTED MODIFICATION ---
-			// These lines are redundant as setLoadingState(true) handles disabling buttons. Removed.
-			// --- END USER REQUESTED MODIFICATION ---
 		});
 	}
-	// END MODIFICATION
 
 	if (signUpButton) {
 		signUpButton.addEventListener("click", () => {
 			console.log(
 				"[main.ts] Sign Up button clicked. Posting openExternalLink message."
-			); // Specific log message
+			);
 			vscode.postMessage({
 				type: "openExternalLink",
 				url: "https://www.minovativemind.dev/registration/signin",
@@ -1381,30 +1225,20 @@ if (
 
 	window.addEventListener("message", (event: MessageEvent) => {
 		const message = event.data;
-		console.log("Received message:", event.data); // console.log here
+		console.log("Received message:", event.data);
 		console.log("[Webview] Message received from extension:", message.type);
 
 		switch (message.type) {
-			// Case for non-streamed, complete AI responses.
-			// Can also handle plans that require confirmation if message includes relevant flags.
 			case "aiResponse": {
-				// This message type is now primarily used for final non-streamed responses or error messages.
-				// Streamed responses use aiResponseStart, aiResponseChunk, aiResponseEnd.
-				// Ensure the message is appended and handle error state if provided.
-				// The copy button logic for 'ai-message' is handled inside appendMessage.
-				// Pass multiple classes as a string.
 				appendMessage(
 					"Model",
 					message.value,
 					`ai-message ${message.isError ? "error-message" : ""}`.trim(),
-					true, // `aiResponse` is a complete message meant for history
-					undefined, // diffContent is not provided by this message type
-					message.relevantFiles // Pass relevantFiles
+					true,
+					undefined,
+					message.relevantFiles
 				);
 
-				// Handle plan confirmation if this non-streamed message requires it.
-				// Note: Plan confirmation UI is typically triggered by aiResponseEnd for streamed plans,
-				// but this might still be used for non-streamed plan explanations if that flow is re-introduced.
 				if (
 					message.isPlanResponse &&
 					message.requiresConfirmation &&
@@ -1417,51 +1251,154 @@ if (
 							type: string;
 							originalRequest?: string;
 							originalInstruction?: string;
-							relevantFiles?: string[]; // Store relevantFiles
+							relevantFiles?: string[];
 						};
 						planConfirmationContainer.style.display = "flex";
 						updateStatus(
 							"Textual plan generated. Review and confirm to proceed."
 						);
 
-						// Disable chat inputs and other controls while plan confirmation is visible.
-						setLoadingState(false); // This will trigger setLoadingState(false) which then sees planConfirmationVisible and disables accordingly.
-						// Hide cancel button when plan confirmation shows
+						setLoadingState(false);
 						if (cancelGenerationButton) {
 							cancelGenerationButton.style.display = "none";
 						}
-						// END MODIFICATION
 					} else {
 						console.error(
 							"Plan confirmation container failed to create or find for non-streamed plan!"
 						);
 						updateStatus("Error: UI for plan confirmation is missing.", true);
-						setLoadingState(false); // Fallback to re-enable if UI failed to show.
+						setLoadingState(false);
 					}
 				} else if (message.isLoading === false) {
-					// If this is a regular non-streamed message and isLoading is explicitly false, operation is complete.
-					setLoadingState(false); // This call now correctly manages all button states.
+					setLoadingState(false);
 				}
-				// If isLoading is true (or not specified) and it's not a confirmable plan, loading state persists.
 				break;
 			}
 
-			// --- New handlers for streamed responses ---
+			case "restoreStreamingProgress": {
+				const { content, relevantFiles, isComplete, isError } =
+					message.value as AiStreamingState;
+				console.log(
+					"[Webview] Received restoreStreamingProgress. Content length:",
+					content.length,
+					"Is Complete:",
+					isComplete
+				);
+
+				// 1. Clear any existing webview-side streaming state to prepare for restoration
+				stopTypingAnimation();
+				typingBuffer = "";
+				currentAccumulatedText = "";
+				currentAiMessageContentElement = null;
+
+				// 2. Append the base AI message element. This sets up the DOM structure
+				//    and assigns `currentAiMessageContentElement` to the correct span.
+				//    We pass an empty string for initial text, as content will be injected/animated.
+				appendMessage(
+					"Model",
+					"", // Initial empty text, content will be populated next
+					`ai-message ${isError ? "error-message" : ""}`.trim(),
+					true, // Treat as a history-backed message for consistent styling and buttons
+					undefined, // No diffContent for streaming progress
+					relevantFiles
+				);
+
+				// 3. Get a reference to the message element that was just created.
+				const restoredMessageElement =
+					chatContainer?.lastElementChild as HTMLDivElement | null;
+				if (restoredMessageElement) {
+					// Find the specific content span within the newly created message element.
+					currentAiMessageContentElement = restoredMessageElement.querySelector(
+						".message-text-content"
+					) as HTMLSpanElement | null;
+
+					// Get references to copy/delete buttons
+					const copyButton = restoredMessageElement.querySelector(
+						".copy-button"
+					) as HTMLButtonElement | null;
+					const deleteButton = restoredMessageElement.querySelector(
+						".delete-button"
+					) as HTMLButtonElement | null;
+
+					if (currentAiMessageContentElement) {
+						// Populate the accumulated text from the restored state
+						currentAccumulatedText = content;
+
+						// 4. Render content and manage loading state based on `isComplete`
+						if (isComplete) {
+							// If the stream is complete, just render the final content.
+							currentAiMessageContentElement.innerHTML = md.render(
+								currentAccumulatedText
+							);
+							if (copyButton) {
+								copyButton.disabled = false;
+							}
+							if (deleteButton) {
+								deleteButton.disabled = false;
+							}
+							stopTypingAnimation(); // Ensure animation is stopped
+						} else {
+							// If the stream is NOT complete, render accumulated content PLUS the loading dots.
+							currentAiMessageContentElement.innerHTML =
+								md.render(currentAccumulatedText) +
+								'<span class="loading-text">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+							startTypingAnimation(); // Re-activate the typing animation for the dots
+							if (copyButton) {
+								copyButton.disabled = true;
+							} // Disable buttons while generating
+							if (deleteButton) {
+								deleteButton.disabled = true;
+							}
+						}
+
+						// Ensure the chat container scrolls to the bottom to show the restored message
+						if (chatContainer) {
+							chatContainer.scrollTop = chatContainer.scrollHeight;
+						}
+					} else {
+						console.warn(
+							"[Webview] Failed to find .message-text-content in restored AI message. Fallback to direct append."
+						);
+						// Fallback if the content element isn't found after appendMessage.
+						// Append the full content, assuming it's an error or complete state.
+						appendMessage(
+							"Model",
+							content,
+							`ai-message ${isError ? "error-message" : ""}`.trim(),
+							true,
+							undefined,
+							relevantFiles
+						);
+					}
+				} else {
+					console.warn(
+						"[Webview] Failed to find or create AI message element for restoreStreamingProgress. Fallback to direct append."
+					);
+					// Fallback if the message element itself couldn't be created.
+					appendMessage(
+						"Model",
+						content,
+						`ai-message ${isError ? "error-message" : ""}`.trim(),
+						true,
+						undefined,
+						relevantFiles
+					);
+				}
+
+				// 5. Update the overall loading state of the UI (disables/enables inputs, shows/hides cancel button)
+				setLoadingState(!isComplete);
+				break;
+			}
+
 			case "aiResponseStart": {
 				isLoading = true;
 				setLoadingState(true);
-				// Reset typing state
 				currentAccumulatedText = "";
 				typingBuffer = "";
-				stopTypingAnimation(); // Ensure no old timer is running
+				stopTypingAnimation();
 				console.log(
 					"Received aiResponseStart. Starting stream via appendMessage."
-				); // Specific console log
-				// Point 1.c (from review instructions): Ensure any generic "Creating..." or similar loading message is removed.
-				// Point 1.b (from review instructions): Ensure appendMessage("Model", "", "ai-message") is called.
-				// It leads to the initialization/reset of currentAiMessageContentElement and currentAccumulatedText
-				// within the appendMessage function (see its definition) for a new AI stream.
-				// Note: aiResponseStart is only sent for *successful* starts. Errors would come as aiResponseEnd with !success.
+				);
 				appendMessage(
 					"Model",
 					"",
@@ -1470,129 +1407,96 @@ if (
 					undefined,
 					message.value.relevantFiles
 				);
-				// setLoadingState(true) was called when the user sent the message.
-				// We are now in the process of receiving the response, so loading is still active.
-				// No need to call setLoadingState(false) here. Button states are already handled by the initial setLoadingState(true).
 				break;
 			}
 			case "aiResponseChunk": {
-				// Point 2.a, 2.b, 2.c (from review instructions) are handled within appendMessage now.
-				// This message type is only for streaming content chunks.
 				if (message.value !== undefined) {
-					typingBuffer += message.value; // REPLACED: currentAccumulatedText update with typingBuffer
+					typingBuffer += message.value;
 					if (typingTimer === null) {
-						// Defensive start
 						startTypingAnimation();
 					}
-					// The actual DOM update and scrolling are now handled by typeNextCharacters in the interval.
 				}
 				break;
 			}
 			case "aiResponseEnd": {
-				stopTypingAnimation(); // Stop typing animation
+				stopTypingAnimation();
 				console.log("Received aiResponseEnd. Stream finished.");
-				// After stream ends, finalize the message content and handle UI updates
 				if (currentAiMessageContentElement) {
-					currentAccumulatedText += typingBuffer; // Append any remaining buffered text
-					// Finalize the content in the DOM using the accumulated text
+					currentAccumulatedText += typingBuffer;
 					const renderedHtml = md.render(currentAccumulatedText);
 					currentAiMessageContentElement.innerHTML = renderedHtml;
 
-					// Find the copy and delete buttons for this message and enable them
 					const messageElement = currentAiMessageContentElement.parentElement;
 					if (messageElement) {
 						const copyButton = messageElement.querySelector(
 							".copy-button"
 						) as HTMLButtonElement | null;
 						if (copyButton) {
-							copyButton.disabled = false; // Enable the copy button
+							copyButton.disabled = false;
 						}
 						const deleteButton = messageElement.querySelector(
 							".delete-button"
 						) as HTMLButtonElement | null;
 						if (deleteButton) {
-							deleteButton.disabled = false; // Enable the delete button
+							deleteButton.disabled = false;
 						}
 					}
 				} else {
-					// Handle cases where stream ended but we somehow lost the element reference
 					console.warn(
-						"aiResponseEnd received but currentAiMessageContentElement is null. Attempting to clear state." // More specific warning
+						"aiResponseEnd received but currentAiMessageContentElement is null. Attempting to clear state."
 					);
 				}
 
-				// Point 3.c (from review instructions): Confirm that currentAiMessageContentElement = null; and currentAccumulatedText = ""; are always called
-				// to reset state for the next stream.
-				typingBuffer = ""; // Clear typingBuffer here
+				typingBuffer = "";
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
 
-				// Handle error display if !message.success && message.error.
 				if (!message.success && message.error) {
 					const errorMessageContent =
 						typeof message.error === "string"
 							? message.error
 							: "Unknown error occurred during AI response streaming.";
-					// Append the error message as a new system message or update status
-					// The provider's finally block often adds a history entry for errors,
-					// potentially including the failed response text. Appending here might be redundant
-					// or cause double messages depending on provider logic. Appending here might be redundant
-					// or cause double messages depending on provider logic. Let's rely on provider adding history.
-					// Just update status for immediate feedback.
 					updateStatus(`AI Stream Error: ${errorMessageContent}`, true);
 				}
 
-				// Handle plan confirmation if the stream was successful and resulted in a plan.
 				if (message.success && message.isPlanResponse && message.planData) {
 					console.log("aiResponseEnd indicates confirmable plan.");
-					createPlanConfirmationUI(); // Ensure UI elements for confirmation are ready.
+					createPlanConfirmationUI();
 					if (planConfirmationContainer) {
 						pendingPlanData = message.planData as {
-							// Store plan data.
 							type: string;
 							originalRequest?: string;
 							originalInstruction?: string;
-							relevantFiles?: string[]; // Store relevantFiles
+							relevantFiles?: string[];
 						};
 
-						planConfirmationContainer.style.display = "flex"; // Show confirmation UI.
+						planConfirmationContainer.style.display = "flex";
 						updateStatus(
 							"Textual plan generated. Review and confirm to proceed."
 						);
 
-						// Disable chat inputs while plan confirmation is visible.
-						// Call setLoadingState(false) which will trigger setLoadingState(false) which then sees planConfirmationVisible and disables accordingly.
 						setLoadingState(false);
-						// Hide cancel button when plan confirmation shows
 						if (cancelGenerationButton) {
 							cancelGenerationButton.style.display = "none";
 						}
-						// END MODIFICATION
 					} else {
-						// Fallback if UI creation failed.
 						console.error(
 							"Plan confirmation container failed to create or find!"
 						);
 						updateStatus("Error: UI for plan confirmation is missing.", true);
-						setLoadingState(false); // Fallback to re-enable if UI failed to show.
+						setLoadingState(false);
 					}
 				} else if (message.success) {
 					console.log("aiResponseEnd indicates successful chat response.");
-					// This is a successful streamed response that is NOT a plan requiring confirmation.
-					// Inputs should be re-enabled.
-					setLoadingState(false); // This call now correctly manages all button states
-					updateEmptyChatPlaceholderVisibility(); // this line
+					setLoadingState(false);
+					updateEmptyChatPlaceholderVisibility();
 				} else {
 					console.log("aiResponseEnd indicates failed streaming operation.");
-					// If !message.success and message.error was handled above, or if it's a non-plan failure.
-					// Inputs should be re-enabled.
-					setLoadingState(false); // This call handles re-enabling inputs/buttons.
+					setLoadingState(false);
 				}
 				break;
 			}
-			// --- End new handlers for streamed responses ---
 
-			// new case for 'structuredPlanParseFailed'
 			case "structuredPlanParseFailed": {
 				const { error, failedJson } = message.value;
 				console.log("Received structuredPlanParseFailed.");
@@ -1602,31 +1506,20 @@ if (
 					planParseErrorDisplay &&
 					failedJsonDisplay &&
 					retryGenerationButton &&
-					cancelParseErrorButton // Added cancel button check
+					cancelParseErrorButton
 				) {
-					// Display the error and the failed JSON
 					planParseErrorDisplay.textContent = error;
-					failedJsonDisplay.textContent = failedJson; // Full JSON for potential copy/debug
+					failedJsonDisplay.textContent = failedJson;
 
-					// Show the error container
-					planParseErrorContainer.style.display = "block"; // Or "flex" depending on its CSS
+					planParseErrorContainer.style.display = "block";
 
-					// AI generation is done, awaiting user action (retry or new plan)
-					// Set loading state to false. This will remove the chat loading message
-					// and re-evaluate button states based on the now-visible parse error UI.
-					setLoadingState(false); // This call now correctly manages all button states
-					// Input states will be disabled because planParseErrorVisible is true.
+					setLoadingState(false);
 
 					updateStatus(
 						"Structured plan parsing failed. Review error and retry or cancel.",
 						true
 					);
-
-					// --- USER REQUESTED MODIFICATION ---
-					// These lines are redundant as setLoadingState(false) handles enabling buttons. Removed.
-					// --- END USER REQUESTED MODIFICATION ---
 				} else {
-					// Fallback if UI elements are missing
 					console.error(
 						"Parse error UI elements not found. Cannot display structured plan parse failure."
 					);
@@ -1634,15 +1527,13 @@ if (
 						"System",
 						`Structured plan parsing failed: ${error}. Failed JSON: \n\`\`\`json\n${failedJson}\n\`\`\`. Error UI missing.`,
 						"error-message",
-						true // System messages are part of history
+						true
 					);
-					setLoadingState(false); // Still set loading to false, manages buttons based on no UI block.
+					setLoadingState(false);
 				}
 				break;
 			}
-			// END MODIFICATION
 
-			// new case for 'commitReview'
 			case "commitReview": {
 				console.log("Received commitReview message:", message.value);
 				const { commitMessage, stagedFiles } = message.value;
@@ -1651,7 +1542,6 @@ if (
 					commitMessageTextarea.value = commitMessage;
 					commitMessageTextarea.focus();
 					commitMessageTextarea.scrollTop = 0;
-					// Instruction 2: Call updateCommitButtonState after setting commitMessageTextarea.value
 					updateCommitButtonState();
 				} else {
 					console.error("commitMessageTextarea element not found.");
@@ -1664,7 +1554,7 @@ if (
 					confirmCommitButton &&
 					cancelCommitButton
 				) {
-					stagedFilesList.innerHTML = ""; // Clear previous list items
+					stagedFilesList.innerHTML = "";
 
 					if (stagedFiles && stagedFiles.length > 0) {
 						stagedFiles.forEach((file: string) => {
@@ -1681,52 +1571,46 @@ if (
 
 					commitReviewContainer.style.display = "flex";
 					document.documentElement.scrollTop =
-						document.documentElement.scrollHeight; // Programmatically scroll to bottom
+						document.documentElement.scrollHeight;
 					updateStatus("Review commit details and confirm.", false);
-					setLoadingState(false); // This will disable chat inputs/general buttons because commitReviewVisible will be true
+					setLoadingState(false);
 					if (cancelGenerationButton) {
-						cancelGenerationButton.style.display = "none"; // Hide cancel generation button
+						cancelGenerationButton.style.display = "none";
 					}
 				} else {
 					console.error(
 						"Commit review UI elements not found. Cannot display commit details."
 					);
 					updateStatus("Error: UI for commit review is missing.", true);
-					setLoadingState(false); // Re-enable inputs as fallback
+					setLoadingState(false);
 				}
 				break;
 			}
 
-			// new case for 'restorePendingPlanConfirmation'
 			case "restorePendingPlanConfirmation":
 				if (message.value) {
 					console.log("Received restorePendingPlanConfirmation.");
 					pendingPlanData = message.value as {
-						// Cast to expected type
 						type: string;
 						originalRequest?: string;
 						originalInstruction?: string;
-						relevantFiles?: string[]; // Store relevantFiles
+						relevantFiles?: string[];
 					};
 
-					createPlanConfirmationUI(); // Ensure UI elements are created
+					createPlanConfirmationUI();
 
 					if (planConfirmationContainer) {
-						planConfirmationContainer.style.display = "flex"; // Show the confirmation UI
+						planConfirmationContainer.style.display = "flex";
 						updateStatus(
 							"Pending plan confirmation restored. Review and confirm to proceed."
 						);
 
-						// Hide cancel button when plan confirmation shows on restore
 						if (cancelGenerationButton) {
 							cancelGenerationButton.style.display = "none";
 						}
-						// END MODIFICATION
-						isLoading = false; // Ensure loading indicator is not active
-						// Call setLoadingState(false) to correctly manage button states based on the now visible plan confirmation UI.
-						setLoadingState(false); // This call will see planConfirmationVisible is true and disable inputs/buttons correctly.
+						isLoading = false;
+						setLoadingState(false);
 					} else {
-						// Fallback if UI creation or finding failed
 						console.error(
 							"Error: Plan confirmation container not found during restore. Cannot display pending plan."
 						);
@@ -1734,39 +1618,28 @@ if (
 							"Error: Failed to restore pending plan UI. Inputs re-enabled.",
 							true
 						);
-						pendingPlanData = null; // Clear data as it cannot be confirmed
-						// Ensure inputs are re-enabled as a fallback
-						setLoadingState(false); // This call will see no blocking UI and re-enable inputs/buttons based on API key.
+						pendingPlanData = null;
+						setLoadingState(false);
 					}
 				} else {
 					console.warn(
 						"restorePendingPlanConfirmation received without message.value. No action taken."
 					);
-					// Ensure inputs are in a sensible state if this happens unexpectedly
 					setLoadingState(false);
 				}
 				break;
-			// END Add new case for 'restorePendingPlanConfirmation'
 
-			// new case for 'appendRealtimeModelMessage'
 			case "appendRealtimeModelMessage":
-				// This case handles messages that should be directly appended to the chat as if they were from the Model.
-				// It's intended for real-time updates or messages from the model that are not part of a typical streaming response (e.g., step OK/FAIL, command output).
 				if (message.value && typeof message.value.text === "string") {
-					// Append the message. The 'ai-message' class includes copy button logic.
-					// If message.value.isError is true, add 'error-message' class as well.
 					appendMessage(
 						"Model",
 						message.value.text,
 						`ai-message ${message.value.isError ? "error-message" : ""}`.trim(),
-						true, // Changed to true based on instructions
-						message.value.diffContent, // Pass diffContent
-						message.value.relevantFiles // Pass relevantFiles
+						true,
+						message.value.diffContent,
+						message.value.relevantFiles
 					);
-					// After adding a message, update button states based on content count, but only if not blocked
-					// Calling setLoadingState(isLoading) re-evaluates button states based on current state and UI visibility
-					// This also ensures save/clear buttons become active if this message is the first content.
-					setLoadingState(isLoading); // Call setLoadingState with its current value to re-trigger UI update
+					setLoadingState(isLoading);
 				} else {
 					console.warn(
 						"Received 'appendRealtimeModelMessage' with invalid value:",
@@ -1774,20 +1647,17 @@ if (
 					);
 				}
 				break;
-			// END MODIFICATION
 
 			case "apiKeyStatus": {
 				if (typeof message.value === "string") {
 					updateApiKeyStatus(message.value);
-					// Re-evaluate input states after API key status update
-					setLoadingState(isLoading); // Call setLoadingState with its current value
+					setLoadingState(isLoading);
 				}
 				break;
 			}
 			case "statusUpdate": {
 				if (typeof message.value === "string") {
 					updateStatus(message.value, message.isError ?? false);
-					// No change to input state here, status updates don't block input flow.
 				}
 				break;
 			}
@@ -1812,8 +1682,7 @@ if (
 						currentKeyDisplay!.textContent = "No Active Key";
 						updateApiKeyStatus("Please add an API key.");
 					}
-					// Button states are now managed by setLoadingState
-					setLoadingState(isLoading); // This call now correctly updates inputs/buttons based on the new isApiKeySet value and existing state.
+					setLoadingState(isLoading);
 				} else {
 					console.error("Invalid 'updateKeyList' message received:", message);
 				}
@@ -1841,8 +1710,7 @@ if (
 						"Model list updated in webview. Selected:",
 						selectedModel
 					);
-					// Re-evaluate input states based on current UI state
-					setLoadingState(isLoading); // This call correctly updates inputs/buttons based on existing state.
+					setLoadingState(isLoading);
 				} else {
 					console.error("Invalid 'updateModelList' message received:", message);
 				}
@@ -1852,14 +1720,11 @@ if (
 				if (chatContainer) {
 					chatContainer.innerHTML = "";
 				}
-				// setLoadingState(false) will now handle disabling clear/save buttons correctly based on empty chat
-				setLoadingState(false); // Ensure loading state is reset and buttons updated.
-				// Reset streaming globals in case a clear happens mid-stream (unlikely but safe)
+				setLoadingState(false);
 				stopTypingAnimation();
 				typingBuffer = "";
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
-				// If plan confirmation was active, hide it
 				if (
 					planConfirmationContainer &&
 					planConfirmationContainer.style.display !== "none"
@@ -1867,7 +1732,6 @@ if (
 					planConfirmationContainer.style.display = "none";
 					pendingPlanData = null;
 				}
-				// If plan parse error UI was active, hide it
 				if (
 					planParseErrorContainer &&
 					planParseErrorContainer.style.display !== "none"
@@ -1880,50 +1744,44 @@ if (
 						failedJsonDisplay.textContent = "";
 					}
 				}
-				// If commit review UI was active, hide it
 				if (
 					commitReviewContainer &&
 					commitReviewContainer.style.display !== "none"
 				) {
 					commitReviewContainer.style.display = "none";
 				}
-				updateEmptyChatPlaceholderVisibility(); // Call after chatCleared is processed (to show the placeholder).
+				updateEmptyChatPlaceholderVisibility();
 				break;
 			}
 			case "restoreHistory": {
 				if (chatContainer && Array.isArray(message.value)) {
-					chatContainer.innerHTML = ""; // Clear existing messages before restoring
+					chatContainer.innerHTML = "";
 					message.value.forEach((msg: any, index: number) => {
-						// ADDED 'index'
 						if (
 							msg &&
 							typeof msg.sender === "string" &&
 							typeof msg.text === "string"
 						) {
-							// For restored messages, they are complete, so no streaming logic applies here.
-							// appendMessage will correctly add the copy button for AI messages here
 							appendMessage(
 								msg.sender,
 								msg.text,
 								msg.className || "",
 								true,
 								msg.diffContent,
-								msg.relevantFiles, // Pass relevantFiles
-								index, // Pass messageIndexForHistory
-								msg.isRelevantFilesExpanded // Pass isRelevantFilesExpandedForHistory
+								msg.relevantFiles,
+								index,
+								msg.isRelevantFilesExpanded
 							);
 						}
 					});
 					updateStatus("Chat history restored.");
-					// setLoadingState(false) will now handle enabling/disabling save/clear based on restored messages
 				} else {
 					updateStatus(
 						"Error: Failed to restore chat history due to invalid format.",
 						true
 					);
 				}
-				setLoadingState(false); // Ensure loading state is reset and buttons updated based on restored content.
-				// If plan confirmation was active, hide it
+				setLoadingState(false);
 				if (
 					planConfirmationContainer &&
 					planConfirmationContainer.style.display !== "none"
@@ -1931,7 +1789,6 @@ if (
 					planConfirmationContainer.style.display = "none";
 					pendingPlanData = null;
 				}
-				// If plan parse error UI was active, hide it
 				if (
 					planParseErrorContainer &&
 					planParseErrorContainer.style.display !== "none"
@@ -1944,37 +1801,35 @@ if (
 						failedJsonDisplay.textContent = "";
 					}
 				}
-				// If commit review UI was active, hide it
 				if (
 					commitReviewContainer &&
 					commitReviewContainer.style.display !== "none"
 				) {
 					commitReviewContainer.style.display = "none";
 				}
-				updateEmptyChatPlaceholderVisibility(); // Call after restoreHistory is processed (to show/hide based on loaded history).
+				updateEmptyChatPlaceholderVisibility();
 
 				document.documentElement.scrollTop = 0;
 
 				break;
 			}
 			case "authStateUpdate": {
-				// Added/verified logic for signUpButton visibility
 				const { isSignedIn, currentUserTier, isSubscriptionActive } =
 					message.value;
 				console.log(
 					`[main.ts] authStateUpdate received. isSignedIn: ${isSignedIn}, Tier: ${currentUserTier}, ActiveSub: ${isSubscriptionActive}`
-				); // ADDED
+				);
 
 				if (signUpButton) {
-					const newDisplay = isSignedIn ? "none" : "inline-block"; // Capture the new display value
+					const newDisplay = isSignedIn ? "none" : "inline-block";
 					signUpButton.style.display = newDisplay;
 					console.log(
 						`[main.ts] signUpButton display set to: '${newDisplay}' based on isSignedIn: ${isSignedIn}`
-					); // ADDED
+					);
 				} else {
 					console.warn(
 						"[main.ts] authStateUpdate: signUpButton element not found when trying to update visibility."
-					); // ADDED
+					);
 				}
 				if (signInButton) {
 					const newDisplay = isSignedIn ? "none" : "inline-block";
@@ -2015,27 +1870,19 @@ if (
 				}
 				break;
 			}
-			// Modify 'reenableInput' handler
 			case "reenableInput": {
 				console.log(
 					"[reenableInput] Received reenableInput request from provider."
 				);
-				// This message signals an operation was cancelled or an-error occurred requiring input re-enabling.
 
-				// Always set isLoading to false, as the operation that was loading is now considered finished or cancelled.
 				isLoading = false;
-				stopTypingAnimation(); // Stop typing animation
+				stopTypingAnimation();
 
-				// Remove any general "Creating..." or "Loading..." message from chat, similar to setLoadingState(false) logic.
-				// The loading message removal is handled by setLoadingState(false).
-
-				// Ensure streaming state is also reset if this happens unexpectedly mid-stream
 				if (currentAiMessageContentElement) {
 					console.warn(
 						"reenableInput received mid-stream. Resetting stream state."
 					);
-					// Finalize the current message with accumulated text before clearing state
-					currentAccumulatedText += typingBuffer; // Append any remaining buffered text
+					currentAccumulatedText += typingBuffer;
 					const renderedHtml = md.render(currentAccumulatedText);
 					currentAiMessageContentElement.innerHTML = renderedHtml;
 					const messageElement = currentAiMessageContentElement.parentElement;
@@ -2055,8 +1902,7 @@ if (
 					}
 				}
 
-				// Clear all streaming state variables regardless of whether currentAiMessageContentElement was active
-				typingBuffer = ""; // Clear typingBuffer
+				typingBuffer = "";
 				currentAiMessageContentElement = null;
 				currentAccumulatedText = "";
 
@@ -2065,7 +1911,6 @@ if (
 						`[reenableInput] Hiding planConfirmationContainer. Current display: ${planConfirmationContainer.style.display}`
 					);
 				}
-				// If plan confirmation was active, hide it
 				if (
 					planConfirmationContainer &&
 					planConfirmationContainer.style.display !== "none"
@@ -2078,7 +1923,6 @@ if (
 						`[reenableInput] Hiding planParseErrorContainer. Current display: ${planParseErrorContainer.style.display}`
 					);
 				}
-				// If plan parse error UI was active, hide it
 				if (
 					planParseErrorContainer &&
 					planParseErrorContainer.style.display !== "none"
@@ -2096,7 +1940,6 @@ if (
 						`[reenableInput] Hiding commitReviewContainer. Current display: ${commitReviewContainer.style.display}`
 					);
 				}
-				// If commit review UI was active, hide it
 				if (
 					commitReviewContainer &&
 					commitReviewContainer.style.display !== "none"
@@ -2107,31 +1950,22 @@ if (
 				console.log(
 					"[reenableInput] Calling setLoadingState(false); Confirming isLoading is now false."
 				);
-				// Call setLoadingState(false) to re-evaluate all input and button states based on the new isLoading=false,
-				// current API key status, and visibility of blocking UI elements.
-				setLoadingState(false); // This call now correctly manages all button states.
+				setLoadingState(false);
 
-				// Check if plan confirmation UI is currently active and visible.
 				const planConfirmationActive =
 					planConfirmationContainer &&
 					planConfirmationContainer.style.display !== "none";
 
-				// If plan confirmation UI is not active, but there was pendingPlanData (e.g., from a cancelled flow before UI showed),
-				// clear it as `reenableInput` implies a reset to a normal interactive state.
 				if (!planConfirmationActive && pendingPlanData) {
 					pendingPlanData = null;
 					updateStatus(
 						"Inputs re-enabled; any non-visible pending plan confirmation has been cleared."
 					);
 				} else if (!planConfirmationActive) {
-					// If plan confirmation is not active and no pending data was cleared
-					updateStatus("Inputs re-enabled."); // Generic message
+					updateStatus("Inputs re-enabled.");
 				}
-				// If planConfirmationActive is true, inputs remain disabled by setLoadingState,
-				// and the status message reflects that state or the user interacts with the confirmation UI.
 				break;
 			}
-			// END Modify 'reenableInput' handler
 			default:
 				console.warn(
 					"[Webview] Received unknown message type from extension:",
@@ -2145,12 +1979,6 @@ if (
 		console.log("Webview sent ready message.");
 		chatInput?.focus();
 
-		// USER REQUESTED Initial button states
-		// Disabled until API key is confirmed and not loading and no blocking UI
-		// These initial states are now handled by the initial call to setLoadingState(false)
-		// triggered by the 'webviewReady' message handler after receiving updateKeyList/updateModelList.
-		// It's safer to let the state management function handle initialization based on loaded config.
-		// Keep them here as belt-and-subspenders initial DOM state, but main control is setLoadingState.
 		if (chatInput) {
 			chatInput.disabled = true;
 		}
@@ -2161,7 +1989,6 @@ if (
 			modelSelect.disabled = true;
 		}
 
-		// Disabled initially because there are no messages
 		if (clearChatButton) {
 			clearChatButton.disabled = true;
 		}
@@ -2169,12 +1996,10 @@ if (
 			saveChatButton.disabled = true;
 		}
 
-		// Enabled initially as loading history is always possible unless loading/blocked
 		if (loadChatButton) {
 			loadChatButton.disabled = false;
 		}
 
-		// Key navigation buttons disabled initially until key list is loaded
 		if (prevKeyButton) {
 			prevKeyButton.disabled = true;
 		}
@@ -2185,29 +2010,23 @@ if (
 			deleteKeyButton.disabled = true;
 		}
 
-		// Set initial display state for the cancel button
 		if (cancelGenerationButton) {
 			cancelGenerationButton.style.display = "none";
 		}
-		// Ensure parse error container is hidden initially (should also be in CSS)
 		if (planParseErrorContainer) {
 			planParseErrorContainer.style.display = "none";
 		}
-		// Ensure commit review container is hidden initially
 		if (commitReviewContainer) {
 			commitReviewContainer.style.display = "none";
 		}
-		// Instruction 4: Set the initial state of the `confirmCommitButton`
 		if (confirmCommitButton) {
 			confirmCommitButton.disabled = true;
 		}
 
-		// 6. Initial State in `initializeWebview()`: Within the `initializeWebview()` function (around line ~900), after other initial display settings and before `setIconForButton` calls, ensure the `commandSuggestionsContainer` is initially hidden. Add:
 		if (commandSuggestionsContainer) {
 			commandSuggestionsContainer.style.display = "none";
 		}
 
-		// Set icons for buttons
 		setIconForButton(sendButton, faPaperPlane);
 		setIconForButton(saveChatButton, faFloppyDisk);
 		setIconForButton(loadChatButton, faFolderOpen);
@@ -2216,50 +2035,38 @@ if (
 		setIconForButton(nextKeyButton, faChevronRight);
 		setIconForButton(deleteKeyButton, faTrashCan);
 		setIconForButton(addKeyButton, faPlus);
-		setIconForButton(retryGenerationButton, faRedo); // faRedo imported for this
-		setIconForButton(cancelParseErrorButton, faTimes); // Set icon for the cancel parse error button (faTimes imported)
-		// Set icon for the cancel generation button
-		setIconForButton(cancelGenerationButton, faStop); // faStop imported for this
-		// END MODIFICATION
+		setIconForButton(retryGenerationButton, faRedo);
+		setIconForButton(cancelParseErrorButton, faTimes);
+		setIconForButton(cancelGenerationButton, faStop);
 
-		// click event listener for cancelParseErrorButton as requested
-		// This listener is added within initializeWebview as part of UI setup.
 		if (cancelParseErrorButton) {
 			cancelParseErrorButton.addEventListener("click", () => {
-				console.log("Cancel Parse Error button clicked."); // console.log here
-				// 2a. Hide the error container
+				console.log("Cancel Parse Error button clicked.");
 				if (planParseErrorContainer) {
 					planParseErrorContainer.style.display = "none";
 				}
-				// 2b. Clear the error display fields
 				if (planParseErrorDisplay) {
 					planParseErrorDisplay.textContent = "";
 				}
 				if (failedJsonDisplay) {
 					failedJsonDisplay.textContent = "";
 				}
-				// 2c. Inform the extension that the plan execution (and thus retry) is cancelled
-				vscode.postMessage({ type: "cancelPlanExecution" }); // This message type already handles necessary provider-side cleanup
+				vscode.postMessage({ type: "cancelPlanExecution" });
 				updateStatus("Plan generation retry cancelled.");
-				// 2d. Re-enable general inputs and update button states
-				// Calling setLoadingState(false) handles re-enabling based on API key status
-				// and ensures the chat loading message is removed if present.
-				setLoadingState(false); // This call now correctly manages all button states based on the hidden UI.
+				setLoadingState(false);
 			});
 		}
-		// END Add click event listener for cancelParseErrorButton
 
-		// Add event listeners for commit review buttons
 		if (confirmCommitButton) {
 			confirmCommitButton.addEventListener("click", () => {
 				console.log("Confirm Commit button clicked.");
 				if (commitReviewContainer) {
-					commitReviewContainer.style.display = "none"; // Hide the commit review container
+					commitReviewContainer.style.display = "none";
 				}
 				const editedMessage = commitMessageTextarea?.value || "";
 				vscode.postMessage({ type: "confirmCommit", value: editedMessage });
 				updateStatus("Committing changes...", false);
-				setLoadingState(true); // Set loading state while commit is in progress
+				setLoadingState(true);
 			});
 		}
 
@@ -2267,36 +2074,26 @@ if (
 			cancelCommitButton.addEventListener("click", () => {
 				console.log("Cancel Commit button clicked.");
 				if (commitReviewContainer) {
-					commitReviewContainer.style.display = "none"; // Hide the commit review container
+					commitReviewContainer.style.display = "none";
 				}
 				vscode.postMessage({ type: "cancelCommit" });
 				updateStatus("Commit cancelled by user.", false);
-				setLoadingState(false); // Re-enable inputs
+				setLoadingState(false);
 			});
 		}
 
-		// Set icons for commit review buttons
 		setIconForButton(confirmCommitButton, faCheck);
 		setIconForButton(cancelCommitButton, faTimes);
 
-		// click event listener for cancelGenerationButton
 		if (cancelGenerationButton) {
 			cancelGenerationButton.addEventListener("click", () => {
-				console.log("Cancel Generation button clicked."); // console.log here
-				// 1. Hide the button immediately (redundant as setLoadingState will hide it, but good for instant feedback)
-				// cancelGenerationButton.style.display = "none"; // Removed - setLoadingState(false) handles this
-				// 2. Send message to extension to cancel
+				console.log("Cancel Generation button clicked.");
 				vscode.postMessage({ type: "cancelGeneration" });
 
-				// Update status immediately
 				updateStatus("Cancelling operation...");
-				// The 'reenableInput' message from the provider will trigger the final setLoadingState(false)
-				// and the "Operation cancelled by user." chat message and status update.
 			});
 		}
-		// END Add click event listener for cancelGenerationButton
 
-		// event delegation listener for copy buttons on chatContainer
 		if (chatContainer) {
 			chatContainer.addEventListener("click", async (event) => {
 				const target = event.target as HTMLElement;
@@ -2306,42 +2103,33 @@ if (
 				const deleteButton = target.closest(
 					".delete-button"
 				) as HTMLButtonElement | null;
-				// Event listener for opening files
 				const fileItem = target.closest(
-					".context-file-item[data-filepath]" // Changed selector
-				) as HTMLLIElement | null; // Changed type annotation
+					".context-file-item[data-filepath]"
+				) as HTMLLIElement | null;
 
 				if (fileItem) {
-					// Changed fileLink to fileItem
-					event.preventDefault(); // Stop default navigation
-					const filePath = fileItem.dataset.filepath; // Changed fileLink to fileItem
+					event.preventDefault();
+					const filePath = fileItem.dataset.filepath;
 					if (filePath) {
 						vscode.postMessage({ type: "openFile", value: filePath });
 						updateStatus(`Opening file: ${filePath}`);
 					}
-					return; // Consume the click event here
+					return;
 				}
-				// END Event listener for opening files
 
-				// Check if a copy button was clicked and it's enabled
 				if (copyButton && !copyButton.disabled) {
 					const messageElement = copyButton.closest(".message");
 					if (messageElement) {
-						// Find the text content element (the span with class 'message-text-content')
 						const textElement = messageElement.querySelector(
 							".message-text-content"
 						) as HTMLSpanElement | null;
 
 						if (textElement) {
-							// Get the rendered HTML content of the text element
-							// This captures markdown formatting like code blocks correctly
 							const textToCopyHTML = textElement.innerHTML;
 
-							// Use a temporary element to convert HTML to plain text while preserving newlines from <br> and block elements
 							const tempDiv = document.createElement("div");
 							tempDiv.innerHTML = textToCopyHTML;
 
-							// Convert block elements and <br> to newlines
 							Array.from(
 								tempDiv.querySelectorAll(
 									"p, pre, ul, ol, li, div, br, h1, h2, h3, h4, h5, h6, blockquote, table, tr"
@@ -2350,47 +2138,40 @@ if (
 								if (el.tagName === "BR") {
 									el.replaceWith("\n");
 								} else if (el.tagName === "LI") {
-									// newline before list items, unless it's the first item in its parent
 									if (el.previousElementSibling) {
 										el.prepend("\n");
 									}
 								} else if (el.tagName === "TR") {
-									// newline before table rows, unless it's the first row in its parent
 									if (el.previousElementSibling) {
 										el.prepend("\n");
 									}
 								} else {
-									el.append("\n"); // newline after most block elements
+									el.append("\n");
 								}
 							});
 
-							// Get the text content and clean up extra newlines
-							let textToCopy = tempDiv.textContent || tempDiv.innerText || ""; // Use textContent or innerText
-							textToCopy = textToCopy.replace(/\n{3,}/g, "\n\n"); // Reduce multiple newlines to max two
-							textToCopy = textToCopy.replace(/^\n+/, ""); // Remove leading newlines
-							textToCopy = textToCopy.replace(/\n+$/, ""); // Remove trailing newlines
-							textToCopy = textToCopy.trim(); // Trim leading/trailing whitespace (redundant after newline trim?)
+							let textToCopy = tempDiv.textContent || tempDiv.innerText || "";
+							textToCopy = textToCopy.replace(/\n{3,}/g, "\n\n");
+							textToCopy = textToCopy.replace(/^\n+/, "");
+							textToCopy = textToCopy.replace(/\n+$/, "");
+							textToCopy = textToCopy.trim();
 
-							// Additional cleanup for lists/tables where prepending newlines might create issues
-							textToCopy = textToCopy.replace(/\n\s*\n/g, "\n\n"); // Replace newline + whitespace + newline with just two newlines
+							textToCopy = textToCopy.replace(/\n\s*\n/g, "\n\n");
 
 							try {
 								await navigator.clipboard.writeText(textToCopy);
 								console.log("Text copied to clipboard.");
 
-								// Visual feedback: Temporarily change icon
-								const originalIconHTML = copyButton.innerHTML; // Store original icon HTML
-								setIconForButton(copyButton, faCheck); // Change to check icon
+								const originalIconHTML = copyButton.innerHTML;
+								setIconForButton(copyButton, faCheck);
 								copyButton.title = "Copied!";
 
-								// Revert icon after a delay
 								setTimeout(() => {
-									copyButton.innerHTML = originalIconHTML; // Restore original icon HTML
-									copyButton.title = "Copy Message"; // Restore tooltip
-								}, 1500); // 1.5 seconds delay
+									copyButton.innerHTML = originalIconHTML;
+									copyButton.title = "Copy Message";
+								}, 1500);
 							} catch (err) {
 								console.error("Failed to copy text: ", err);
-								// Check if clipboard API is supported or permission denied
 								let errorMessage = "Failed to copy text.";
 								if (err instanceof Error && err.message) {
 									errorMessage += ` Details: ${err.message}`;
@@ -2407,18 +2188,16 @@ if (
 						);
 					}
 				} else if (deleteButton && !deleteButton.disabled) {
-					// New logic for delete button
 					const messageElementToDelete = deleteButton.closest(
 						".message[data-is-history='true']"
-					); // Filter by data-is-history attribute
+					);
 					if (messageElementToDelete) {
-						// Get all .message elements within chatContainer that are history messages
 						const allHistoryMessages = Array.from(
-							chatContainer.querySelectorAll(".message[data-is-history='true']") // Filter by data-is-history attribute
+							chatContainer.querySelectorAll(".message[data-is-history='true']")
 						);
 						const messageIndex = allHistoryMessages.indexOf(
 							messageElementToDelete
-						); // Use allHistoryMessages
+						);
 
 						if (messageIndex !== -1) {
 							vscode.postMessage({
@@ -2429,24 +2208,20 @@ if (
 						} else {
 							console.warn(
 								"Could not find index of history message to delete (after data-is-history filter)."
-							); // console.warn
+							);
 						}
 					} else {
 						console.warn(
 							"Delete button clicked, but target is not a history-backed message."
-						); // console.warn
+						);
 					}
 				}
 			});
 		}
-		// END Add event delegation listener for copy buttons
 
-		// Create plan confirmation UI elements (initially hidden)
 		createPlanConfirmationUI();
-		// Note: Plan parse error UI elements are expected to be in the HTML.
-		// Their container (planParseErrorContainer) should be initially hidden via CSS (e.g., style="display: none;").
 
-		updateEmptyChatPlaceholderVisibility(); // Call immediately after the DOM elements are initialized.
+		updateEmptyChatPlaceholderVisibility();
 		console.log("[DEBUG] initializeWebview completed.");
 	}
 

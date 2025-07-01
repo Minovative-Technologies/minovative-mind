@@ -1286,7 +1286,7 @@ code#failed-json-display {
 /* --- Loading Indicator Styles --- */
 /* Style for the text part of the loading indicator */
 .loading-text {
-	display: inline-block; /* Ensures the text "Thinking" and dots are on the same line if used together */
+	display: inline-block; /* Ensures the text "Generating" and dots are on the same line if used together */
 	font-style: italic; /* Matches style of system-message */
 	color: var(
 		--vscode-descriptionForeground

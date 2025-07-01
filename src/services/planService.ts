@@ -85,8 +85,6 @@ export class PlanService {
 			return;
 		}
 
-		// Removed this.provider.postMessageToWebview for type: "aiResponseStart" here.
-
 		this.provider.activeOperationCancellationTokenSource =
 			new vscode.CancellationTokenSource();
 		const token = this.provider.activeOperationCancellationTokenSource.token;
@@ -117,6 +115,13 @@ export class PlanService {
 				);
 			const { contextString, relevantFiles } = buildContextResult;
 
+			// Initialize currentAiStreamingState immediately before aiResponseStart
+			this.provider.currentAiStreamingState = {
+				content: "",
+				relevantFiles: relevantFiles,
+				isComplete: false,
+				isError: false,
+			};
 			// Add new aiResponseStart message here with relevantFiles
 			this.provider.postMessageToWebview({
 				type: "aiResponseStart",
@@ -146,6 +151,9 @@ export class PlanService {
 					{
 						onChunk: (chunk: string) => {
 							accumulatedTextualResponse += chunk;
+							if (this.provider.currentAiStreamingState) {
+								this.provider.currentAiStreamingState.content += chunk;
+							}
 							this.provider.postMessageToWebview({
 								type: "aiResponseChunk",
 								value: chunk,
@@ -199,8 +207,14 @@ export class PlanService {
 				this.provider.pendingPlanGenerationContext!
 			);
 		} catch (error: any) {
+			if (this.provider.currentAiStreamingState) {
+				this.provider.currentAiStreamingState.isError = true;
+			}
 			finalErrorForDisplay = error.message;
 		} finally {
+			if (this.provider.currentAiStreamingState) {
+				this.provider.currentAiStreamingState.isComplete = true;
+			}
 			const isCancellation = finalErrorForDisplay === ERROR_OPERATION_CANCELLED;
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
@@ -284,7 +298,6 @@ export class PlanService {
 		};
 
 		try {
-			// Removed this.provider.postMessageToWebview for type: "aiResponseStart" here.
 			this.provider.pendingPlanGenerationContext = null;
 
 			const relativeFilePath = path
@@ -799,7 +812,7 @@ Pay close attention to necessary imports based on the file's purpose and its loc
 Adhere to the detected coding style, naming conventions (e.g., camelCase for variables, PascalCase for classes), and file organization patterns consistent with the Broader Project Context and Relevant Project Snippets.
 The 'File Path' itself conveys important structural information; ensure the content generated is appropriate for its intended location and adheres to any framework-specific conventions.
 
-							The generated code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.
+							The generated code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.
 
 							File Path:
 							${step.path}
