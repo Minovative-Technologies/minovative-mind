@@ -1,4 +1,3 @@
-// src/sidebar/SidebarProvider.ts
 import * as vscode from "vscode";
 import { ChildProcess } from "child_process";
 
@@ -274,8 +273,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "restorePendingPlanConfirmation",
 				value: planDataForRestore,
 			});
+		} else if (this.pendingCommitReviewData) {
+			console.log(
+				"[SidebarProvider] Restoring pending commit review to webview."
+			);
+			this.postMessageToWebview({
+				type: "commitReview",
+				value: this.pendingCommitReviewData,
+			});
 		} else {
 			this.postMessageToWebview({ type: "reenableInput" });
+			this.clearActiveOperationState();
 		}
 	}
 
@@ -287,16 +295,32 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 	}
 
+	/**
+	 * Clears the active operation state, including the cancellation token source
+	 * and any pending review or streaming data.
+	 */
+	public clearActiveOperationState(): void {
+		if (this.activeOperationCancellationTokenSource) {
+			console.log(
+				"[SidebarProvider] Disposing activeOperationCancellationTokenSource."
+			);
+			this.activeOperationCancellationTokenSource.dispose();
+			this.activeOperationCancellationTokenSource = undefined;
+		}
+		this.pendingCommitReviewData = null; // Clear any pending commit data
+		this.currentAiStreamingState = null; // Clear streaming state when operation ends
+	}
+
 	public cancelActiveOperation(): void {
 		this.activeOperationCancellationTokenSource?.cancel();
-		this.activeOperationCancellationTokenSource = undefined; // Immediately reset the token source
+		this.clearActiveOperationState(); // Call the new method to handle token and related state clearing
+
 		this.activeChildProcesses.forEach((cp) => cp.kill());
 		this.activeChildProcesses = [];
-		// Clear any lingering pending data
+		// Clear any lingering pending data not handled by clearActiveOperationState
 		this.pendingPlanGenerationContext = null;
 		this.lastPlanGenerationContext = null;
-		this.pendingCommitReviewData = null;
-		this.currentAiStreamingState = null; // Clear streaming state on cancellation
+
 		this.chatHistoryManager.addHistoryEntry(
 			"model",
 			"Operation cancelled by user."

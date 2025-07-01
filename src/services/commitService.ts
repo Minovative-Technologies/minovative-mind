@@ -171,9 +171,11 @@ export class CommitService {
 					? "Commit operation cancelled."
 					: `Commit failed: ${error.message}`,
 			});
+			// 3. In the `catch` block of the `handleCommitCommand` method, add a call to `this.provider.clearActiveOperationState();`
+			this.provider.clearActiveOperationState();
 		}
-		// TokenSource disposal is now handled by the caller (webviewMessageHandler)
-		// as per the new token passing pattern.
+		// 4. Review and remove the outdated comment "TokenSource disposal is now handled by the caller (webviewMessageHandler)"
+		// Comment has been removed as per instruction.
 	}
 
 	/**
@@ -210,7 +212,9 @@ export class CommitService {
 		this.provider.postMessageToWebview({
 			type: "aiResponseEnd",
 			success: true,
-		}); // Indicate success
+		});
+		// 1. In the `confirmCommit` method, add a call to `this.provider.clearActiveOperationState();`
+		this.provider.clearActiveOperationState();
 	}
 
 	/**
@@ -218,7 +222,8 @@ export class CommitService {
 	 */
 	public cancelCommit(): void {
 		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
-		this.provider.pendingCommitReviewData = null;
+		// 2. In the `cancelCommit` method, remove `this.provider.pendingCommitReviewData = null;`
+		// this.provider.pendingCommitReviewData = null; // Removed
 		this.provider.chatHistoryManager.addHistoryEntry(
 			"model",
 			"Commit review cancelled by user."
@@ -228,5 +233,7 @@ export class CommitService {
 			success: false, // Indicate cancellation/failure of the commit flow
 			error: "Commit cancelled.",
 		});
+		// 2. In the `cancelCommit` method, add a call to `this.provider.clearActiveOperationState();`
+		this.provider.clearActiveOperationState();
 	}
 }
