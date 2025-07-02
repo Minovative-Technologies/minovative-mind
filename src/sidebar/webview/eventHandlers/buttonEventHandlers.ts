@@ -17,7 +17,6 @@ import { postMessageToExtension } from "../utils/vscodeApi";
 import { updateStatus, updateApiKeyStatus } from "../ui/statusManager";
 import { appState } from "../state/appState";
 import { sendMessage } from "../messageSender";
-import { appendMessage } from "../ui/chatMessageRenderer";
 import {
 	hideCommitReviewUI,
 	hidePlanParseErrorUI,
@@ -55,10 +54,6 @@ export function initializeButtonEventListeners(
 		signInButton,
 		cancelGenerationButton,
 		chatContainer,
-		// planParseErrorContainer, // Handled by hidePlanParseErrorUI
-		// planParseErrorDisplay,   // Handled by hidePlanParseErrorUI
-		// failedJsonDisplay,       // Handled by hidePlanParseErrorUI
-		// commitReviewContainer,   // Handled by hideCommitReviewUI
 	} = elements;
 
 	// Initial icon setup for buttons
