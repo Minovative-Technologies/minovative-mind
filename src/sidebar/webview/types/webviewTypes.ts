@@ -1,0 +1,66 @@
+import { VsCodeWebviewApi } from "../vscode.d";
+
+export interface VsCodeApi extends VsCodeWebviewApi {}
+
+export interface RequiredDomElements {
+	chatContainer: HTMLDivElement;
+	chatInput: HTMLTextAreaElement;
+	sendButton: HTMLButtonElement;
+	statusArea: HTMLDivElement;
+	modelSelect: HTMLSelectElement;
+	currentKeyDisplay: HTMLSpanElement;
+	prevKeyButton: HTMLButtonElement;
+	nextKeyButton: HTMLButtonElement;
+	deleteKeyButton: HTMLButtonElement;
+	addKeyInput: HTMLInputElement;
+	addKeyButton: HTMLButtonElement;
+	apiKeyStatusDiv: HTMLDivElement;
+	clearChatButton: HTMLButtonElement;
+	saveChatButton: HTMLButtonElement;
+	loadChatButton: HTMLButtonElement;
+	cancelGenerationButton: HTMLButtonElement;
+	planConfirmationContainer: HTMLDivElement;
+	confirmPlanButton: HTMLButtonElement;
+	cancelPlanButton: HTMLButtonElement;
+	planParseErrorContainer: HTMLDivElement;
+	planParseErrorDisplay: HTMLParagraphElement;
+	failedJsonDisplay: HTMLElement;
+	retryGenerationButton: HTMLButtonElement;
+	cancelParseErrorButton: HTMLButtonElement;
+	commitReviewContainer: HTMLDivElement;
+	commitMessageTextarea: HTMLTextAreaElement;
+	stagedFilesList: HTMLOListElement;
+	confirmCommitButton: HTMLButtonElement;
+	cancelCommitButton: HTMLButtonElement;
+	emptyChatPlaceholder: HTMLDivElement;
+	signUpButton: HTMLButtonElement;
+	signInButton: HTMLButtonElement;
+	chatInputControlsWrapper: HTMLDivElement;
+	commandSuggestionsContainer: HTMLDivElement;
+}
+
+export interface PendingPlanData {
+	type: string;
+	originalRequest?: string;
+	originalInstruction?: string;
+	relevantFiles?: string[];
+}
+
+export interface WebviewAppState {
+	currentAiMessageContentElement: HTMLSpanElement | null;
+	currentAccumulatedText: string;
+	typingBuffer: string;
+	typingTimer: ReturnType<typeof setInterval> | null;
+	TYPING_SPEED_MS: number;
+	CHARS_PER_INTERVAL: number;
+	activeCommandIndex: number;
+	filteredCommands: string[];
+	isCommandSuggestionsVisible: boolean;
+	planConfirmationContainer: HTMLDivElement | null;
+	confirmPlanButton: HTMLButtonElement | null;
+	cancelPlanButton: HTMLButtonElement | null;
+	pendingPlanData: PendingPlanData | null;
+	isApiKeySet: boolean;
+	isLoading: boolean;
+	totalKeys: number;
+}
