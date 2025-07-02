@@ -591,7 +591,7 @@ if (
 			noMatchesItem.textContent = "No matching commands";
 			commandSuggestionsContainer.appendChild(noMatchesItem);
 		} else {
-			commands.forEach((command, index) => {
+			commands.forEach((command) => {
 				const commandItem = document.createElement("div");
 				commandItem.classList.add("command-item");
 				commandItem.textContent = command;
@@ -1747,6 +1747,11 @@ if (
 				}
 				break;
 			}
+			// New case added as per instruction 2
+			case "updateLoadingState": {
+				setLoadingState(message.value as boolean);
+				break;
+			}
 			case "chatCleared": {
 				if (chatContainer) {
 					chatContainer.innerHTML = "";
@@ -1812,7 +1817,6 @@ if (
 						true
 					);
 				}
-				setLoadingState(false);
 				if (
 					planConfirmationContainer &&
 					planConfirmationContainer.style.display !== "none"
@@ -2169,10 +2173,6 @@ if (
 								if (el.tagName === "BR") {
 									el.replaceWith("\n");
 								} else if (el.tagName === "LI") {
-									if (el.previousElementSibling) {
-										el.prepend("\n");
-									}
-								} else if (el.tagName === "TR") {
 									if (el.previousElementSibling) {
 										el.prepend("\n");
 									}
