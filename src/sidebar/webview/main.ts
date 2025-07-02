@@ -15,6 +15,7 @@ import {
 	faExclamationTriangle,
 } from "@fortawesome/free-solid-svg-icons";
 import MarkdownIt from "markdown-it";
+import hljs from "highlight.js";
 import { MINOVATIVE_COMMANDS } from "../common/sidebarConstants";
 import { AiStreamingState } from "../common/sidebarTypes"; // Ensure this import is present
 
@@ -42,7 +43,29 @@ interface VsCodeApi {
 declare const acquireVsCodeApi: () => VsCodeApi;
 const vscode = acquireVsCodeApi();
 
-const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
+const md: MarkdownIt = new MarkdownIt({
+	html: true, // Allow HTML tags in Markdown output
+	linkify: true, // Automatically convert URLs to links
+	typographer: true, // Enable some smart typography replacements
+	highlight: function (str: string, lang: string): string {
+		// If a language is specified and highlight.js supports it
+		if (lang && hljs.getLanguage(lang)) {
+			try {
+				// Highlight the string and return the HTML value
+				return hljs.highlight(str, { language: lang, ignoreIllegals: true })
+					.value;
+			} catch (__) {
+				// Fallback in case of highlighting error
+				console.warn(`[MarkdownIt] Highlight.js failed for language ${lang}.`);
+			}
+		}
+		// Fallback for unsupported language or no language specified:
+		// Render as a basic preformatted code block with escaped HTML
+		return (
+			'<pre class="hljs"><code>' + md.utils.escapeHtml(str) + "</code></pre>"
+		);
+	},
+});
 
 // --- Global variables for streaming responses ---
 let currentAiMessageContentElement: HTMLSpanElement | null = null;
@@ -329,40 +352,48 @@ if (
 				const diffContainer = document.createElement("div");
 				diffContainer.classList.add("diff-container");
 
+				// The original 'diffHeader' element defined here was only appended
+				// in the 'else' block for 'no-diff-content'.
+				// For consistency and explicit placement, a new diffHeaderElement
+				// is created and prepended below for actual diffs.
 				const diffHeader = document.createElement("div");
 				diffHeader.classList.add("diff-header");
 
 				const trimmedDiffContent = diffContent.trim();
 
 				if (trimmedDiffContent !== "") {
-					diffHeader.textContent = "Code Changes:";
+					// Remove or comment out this line as a new element will be created and prepended
+					// diffHeader.textContent = "Code Changes:";
+
+					// Create and append the diff header for actual diff content
+					const diffHeaderElement = document.createElement("div");
+					diffHeaderElement.classList.add("diff-header");
+					diffHeaderElement.textContent = "Code Diff:";
+					diffContainer.prepend(diffHeaderElement);
 
 					const preCode = document.createElement("pre");
 					preCode.classList.add("diff-code");
 
-					const lines = diffContent.split("\n");
-					lines.forEach((line) => {
-						const span = document.createElement("span");
-						span.textContent = line;
-						if (line.startsWith("+ ")) {
-							span.classList.add("diff-line-added");
-						} else if (line.startsWith("- ")) {
-							span.classList.add("diff-line-removed");
-						} else if (line.startsWith("  ")) {
-							span.classList.add("diff-line-equal");
-						}
-						preCode.appendChild(span);
-						preCode.appendChild(document.createElement("br"));
-					});
+					const codeElement = document.createElement("code");
+					codeElement.classList.add("language-diff"); // Instruct highlight.js it's a diff
+					codeElement.classList.add("hljs"); // Add highlight.js base class
 
-					if (
-						preCode.lastChild instanceof Element &&
-						preCode.lastChild.tagName === "BR"
-					) {
-						preCode.removeChild(preCode.lastChild);
+					let highlightedHtml = "";
+					try {
+						// Highlight the entire diff content as a 'diff' language
+						highlightedHtml = hljs.highlight(trimmedDiffContent, {
+							language: "diff",
+							ignoreIllegals: true,
+						}).value;
+					} catch (e) {
+						console.error("Error highlighting diff content:", e);
+						// Fallback to plain text if highlighting fails
+						highlightedHtml = md.utils.escapeHtml(trimmedDiffContent);
 					}
+					codeElement.innerHTML = highlightedHtml; // Set the highlighted HTML
 
-					diffContainer.appendChild(diffHeader);
+					preCode.appendChild(codeElement);
+					// No need to append diffHeader here as it's now prepended earlier
 					diffContainer.appendChild(preCode);
 				} else {
 					diffHeader.textContent =

@@ -602,8 +602,7 @@ div#commit-message-display blockquote p:last-child,
 div#commit-message-display pre,
 .message pre {
 	background-color: var(
-		--vscode-textCodeBlock-background,
-		rgba(0, 0, 0, 0.1)
+		--vscode-textCodeBlock-background
 	); /* VSCode var for code block bg */
 	padding: 10px;
 	border-radius: var(--border-radius);
@@ -613,17 +612,26 @@ div#commit-message-display pre,
 	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle inset shadow */
 	white-space: pre-wrap; /* Preserve whitespace and allow wrapping */
 	overflow-wrap: break-word; /* Ensure long lines and words wrap correctly within the code block, preventing horizontal scrolling. */
+	overflow-x: auto; /* Enable horizontal scrolling for very long lines */
+	font-family: var(
+		--vscode-editor-font-family,
+		"SF Mono",
+		"Cascadia Code",
+		"Fira Code",
+		monospace
+	); /* Use VSCode editor font family */
+	font-size: 0.95em; /* Slightly smaller font for code blocks */
 }
-/* General styling for code elements (both inline and block) */
+/* General styling for code elements (both inline and block), ensuring common font-family */
 div#commit-message-display code,
 .message code {
 	font-family: var(
 		--vscode-editor-font-family,
-		"Courier New",
-		Courier,
+		"SF Mono",
+		"Cascadia Code",
+		"Fira Code",
 		monospace
 	); /* VSCode editor font */
-	font-size: 0.95em; /* Slightly smaller font for code */
 	word-break: normal; /* Prevent breaking in middle of code tokens */
 }
 /* Specific styling for code inside pre blocks (markdown-it typically uses <pre><code class="language-..."></code></pre>) */
@@ -638,6 +646,7 @@ div#commit-message-display pre code,
 	box-shadow: none; /* No shadow for the code element itself */
 	border: none; /* No border for the code element itself */
 	white-space: pre-wrap; /* Allow wrapping within code blocks */
+	font-size: 0.95em; /* Explicitly set font size for code inside pre */
 }
 /* Inline code styling (code not inside a pre block) */
 div#commit-message-display :not(pre) > code,
@@ -651,6 +660,13 @@ div#commit-message-display :not(pre) > code,
 	font-size: 0.9em; /* Slightly smaller for inline code */
 	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
 	white-space: nowrap; /* Prevent inline code from wrapping if possible */
+	font-family: var(
+		--vscode-editor-font-family,
+		"SF Mono",
+		"Cascadia Code",
+		"Fira Code",
+		monospace
+	); /* Ensure monospace font for inline code */
 }
 
 /* Horizontal Rules */
@@ -1159,8 +1175,9 @@ code#failed-json-display {
 	display: block; /* Ensure the code block fills the parent <pre> for proper layout of its content. */
 	font-family: var(
 		--vscode-editor-font-family,
-		"Courier New",
-		Courier,
+		"SF Mono",
+		"Cascadia Code",
+		"Fira Code",
 		monospace
 	); /* Monospace font for code. */
 	font-size: 0.9em; /* Slightly smaller font size for code. */
@@ -1330,57 +1347,31 @@ code#failed-json-display {
 		--vscode-editor-background
 	); /* Use VS Code editor background */
 	border-radius: 4px;
-	padding: 10px;
+	padding: 12px 15px;
 	margin-top: 10px;
-	margin-bottom: 5px; /* Add some space below the diff */
-	font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; /* Monospaced font for code */
-	font-size: 13px;
+	margin-bottom: 10px; /* Add some space below the diff */
+	font-family: var(
+		--vscode-editor-font-family,
+		"SF Mono",
+		"Cascadia Code",
+		"Fira Code",
+		monospace
+	); /* Monospaced font for code */
+	font-size: 0.95em; /* Use consistent font size for diff container */
 	border: 1px solid var(--vscode-editorGroup-border); /* Subtle border for clarity */
 }
 
-/* Styles for the pre/code block within the diff container */
-.diff-code {
-	width: 100%; /* Full width of the container */
-}
-
-/* Styles for the diff header */
-.diff-header {
-	font-weight: bold;
-	margin-bottom: 5px;
-	color: var(--vscode-editor-foreground);
-	border-bottom: 1px solid var(--vscode-editorGroup-border);
-	padding-bottom: 3px;
-	user-select: none;
-}
-
-/* Styles for individual lines within the diff (applied to spans) */
-.diff-line-added {
-	color: var(
-		--vscode-diffEditor-insertedText
-	); /* VS Code green for added text */
-	background-color: var(
-		--vscode-diffEditor-insertedTextBackground
-	); /* Subtle green background highlight */
-	display: block; /* Ensure it behaves like a block element */
-	/* Adjust padding/margin to align within the overall message content */
-}
-
-.diff-line-removed {
-	color: var(
-		--vscode-diffEditor-removedText
-	); /* VS Code red for removed text */
-	background-color: var(
-		--vscode-diffEditor-removedTextBackground
-	); /* Subtle red background highlight */
-	display: block; /* Ensure it behaves like a block element */
-}
-
-.diff-line-equal {
-	color: var(
-		--vscode-editor-foreground
-	); /* Default text color for unchanged lines */
-	background-color: transparent; /* No special background */
-	display: block; /* Ensure it behaves like a block element */
+/* NEW: Styles for the diff header when there IS diff content */
+.diff-container .diff-header {
+	font-size: 0.9em; /* Slightly smaller than code text */
+	color: var(--vscode-descriptionForeground); /* Subtle text color */
+	font-style: italic; /* Visually differentiate as metadata */
+	margin-bottom: 8px; /* Space between header and code lines */
+	padding-bottom: 5px; /* Space above the separator line */
+	border-bottom: 1px dashed var(--vscode-editorGroup-border); /* Subtle dashed separator */
+	/* Adjust padding to align with code lines' horizontal padding */
+	padding-left: 0;
+	padding-right: 0;
 }
 
 /* Styles for the diff container when there's no content */
@@ -1397,6 +1388,100 @@ code#failed-json-display {
 .diff-container.no-diff-content .diff-header {
 	border-bottom: none;
 	padding-bottom: 0;
+	color: var(--vscode-descriptionForeground);
+	font-style: italic; /* Consistent italic style */
+}
+
+/* --- highlight.js Base and Token Styles --- */
+.hljs {
+	color: var(--vscode-editor-foreground);
+	background: transparent;
+	display: block;
+	padding: 0;
+}
+
+.hljs-comment,
+.hljs-quote {
+	color: var(--vscode-editor-inlayHint-foreground, #6a9955);
+	font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-tag,
+.hljs-name {
+	color: var(--vscode-terminal-ansiBrightMagenta, #c586c0);
+}
+.hljs-string,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-attribute,
+.hljs-regexp,
+.hljs-template-variable {
+	color: var(--vscode-terminal-ansiGreen, #9cdcfe);
+}
+.hljs-literal,
+.hljs-number,
+.hljs-variable {
+	color: var(--vscode-terminal-ansiBlue, #569cd6);
+}
+.hljs-built_in,
+.hljs-doctag,
+.hljs-type,
+.hljs-section,
+.hljs-title {
+	color: var(--vscode-terminal-ansiYellow, #dcdcaa);
+}
+.hljs-function,
+.hljs-symbol,
+.hljs-class,
+.hljs-params {
+	color: var(--vscode-terminal-ansiCyan, #4ec9b0);
+}
+.hljs-property,
+.hljs-attr {
+	color: var(--vscode-terminal-ansiBrightBlue, #9cdcfe);
+}
+.hljs-meta {
+	color: var(--vscode-textCodeBlock-foreground, #c586c0);
+}
+.hljs-operator {
+	color: var(--vscode-editor-foreground);
+}
+
+/* Specific styles for highlight.js's diff output classes and .diff-code (<pre> tag within diff-container) */
+.diff-code .hljs-addition {
+	background-color: var(--vscode-diffEditor-insertedTextBackground);
+	color: inherit;
+	display: block;
+	padding: 2px 10px;
+	margin: 0;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+.diff-code .hljs-deletion {
+	background-color: var(--vscode-diffEditor-removedTextBackground);
+	color: inherit;
+	display: block;
+	padding: 2px 10px;
+	margin: 0;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+.diff-code code > span:not(.hljs-addition):not(.hljs-deletion) {
+	display: block;
+	padding: 2px 10px;
+	color: var(--vscode-editor-foreground);
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+.diff-code {
+	/* This is the <pre> tag with class 'diff-code' */
+	padding: 0;
+	background-color: transparent;
+	border: none;
+	box-shadow: none;
+	margin: 0;
+	overflow-x: auto;
 }
 
 /* --- Phase 2: Styling the Commit Review UI --- */
