@@ -2,6 +2,27 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.11.0] - 2025-07-03
+
+- **feat(context, embeddings)**: Introduced semantic embedding-based file selection
+  - This commit enhances AI context selection by integrating semantic search using AI-generated embeddings. Files are now prioritized based on their conceptual similarity to the user's query and active editor content.
+- **feat**: Increased AI and UI timeout durations
+  - Elevate initial AI response and retry timeouts from 30s to 45s. Extend UI status message display durations (non-error: 15s to 30s, error: 30s to 45s) to align with longer operations.
+- **Refine**: AI explanation prompt to summarize current step
+- **feat**: Added AI response timeout and improve operation cancellation
+  - Introduce an initial response timeout for Gemini AI requests in `src/ai/gemini.ts` to prevent indefinite waits.
+  - Propagate cancellation tokens across long-running context-building operations, including workspace scanning, dependency graph building, and context string generation.
+  - Enhance to explicitly handle AI timeout errors.
+  - Improve to distinguish between user cancellation and general failures when ending an active operation.
+- **Refactor**: Centralize commit operation state management
+  - Unified UI signaling and state cleanup after commit confirmation using `endUserOperation`.
+  - Adjusted internal commit message prompt for clarity on markdown formatting.
+- **Refactor(commit)**: Streamlined cancellation and refined AI prompt output
+- **feat**: Broaden default ignore patterns
+  - Significantly expands the `DEFAULT_IGNORE_PATTERNS` list to include common files and directories across various programming languages, build tools, IDEs, and operating systems. This update aims to reduce repository clutter and improve consistency for different project types.
+- **feat**: Centralized AI operation state & UI control
+  - Standardizes how AI operations conclude by introducing `SidebarProvider.endUserOperation`. This central function now handles state resets, UI re-enablement, and outcome-specific status updates (success, failed, cancelled, review).
+
 ## [1.10.1] - 2025-07-02
 
 - **refactor**: Enhanced UI state management and AI operation feedback
