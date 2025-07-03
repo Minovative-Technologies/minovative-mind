@@ -2,6 +2,18 @@
 
 Stay updated with the latest improvements and bug fixes: [Minovative Mind Updates](https://www.minovativemind.dev/updates)
 
+## [1.10.1] - 2025-07-02
+
+- **refactor**: Enhanced UI state management and AI operation feedback
+  - This commit significantly refactors UI state management to provide more robust feedback during AI operations and improve error handling.
+- **feat(webview)**: Implemented pending commit review restoration
+  - Introduces a mechanism to restore pending commit review data within the webview.
+- **refactor(webview)**: Modularized and centralized frontend logic
+  - Decomposed the monolithic \ into a modular architecture for better maintainability, readability, and separation of concerns.
+- **feat(webview)**: Add updateLoadingState handler & refine UI logic
+- **feat(webview)**: Added syntax highlighting for code blocks and diffs
+  - Integrates \ to provide syntax highlighting for Markdown code blocks. Refactors the diff content display to utilize \'s \diff\ language, replacing the previous custom line-by-line rendering for improved accuracy and visual consistency. Includes relevant CSS updates for highlighting themes.
+
 ## [1.10.0] - 2025-07-01
 
 - **Refactor**: Centralize active operation state management
