@@ -115,7 +115,7 @@ export class CommitService {
 					  "\n\n"
 					: "";
 
-			const commitMessagePrompt = `You are an AI expert in Git. Your task is to generate a short, concise, but highly accurate commit message based on the provided staged changes. Prioritize the detailed file-by-file summaries for content, and use the overall diff for additional context if needed. Provide the commit message with markdown formatting.
+			const commitMessagePrompt = `You are an AI expert in Git. Your task is to generate a short, concise, but highly accurate commit message based on the provided staged changes. Prioritize the detailed file-by-file summaries for content, and use the overall diff for additional context if needed. Make the commit messages in past tense. Provide the commit message without any markdown formatting. There needs to be 0 markdown formatting. Make sure the commit message follow the commit message best practices.
 
 			${detailedSummaries}Overall Staged Diff:
 			\`\`\`diff
@@ -235,7 +235,8 @@ export class CommitService {
 	/**
 	 * Cancels the pending commit review and re-enables UI.
 	 */
-	public cancelCommit(): void {
+	public async cancelCommit(): Promise<void> {
+		// Modified signature
 		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		// 2. In the `cancelCommit` method, remove `this.provider.pendingCommitReviewData = null;`
 		// this.provider.pendingCommitReviewData = null; // Removed
@@ -243,12 +244,6 @@ export class CommitService {
 			"model",
 			"Commit review cancelled by user."
 		);
-		this.provider.postMessageToWebview({
-			type: "aiResponseEnd",
-			success: false, // Indicate cancellation/failure of the commit flow
-			error: "Commit cancelled.",
-		});
-		// 2. In the `cancelCommit` method, add a call to `this.provider.clearActiveOperationState();`
-		this.provider.clearActiveOperationState();
+		await this.provider.endUserOperation("cancelled"); // New line added
 	}
 }
