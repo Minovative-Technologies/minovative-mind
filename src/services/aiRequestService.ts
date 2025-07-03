@@ -163,7 +163,7 @@ export class AIRequestService {
 						type: "statusUpdate",
 						value: `AI service temporarily unavailable. Retrying...`,
 					});
-					await new Promise((resolve) => setTimeout(resolve, 30000)); // 30-second delay
+					await new Promise((resolve) => setTimeout(resolve, 45000)); // 45-second delay
 					continue; // MODIFICATION 4: Stay in the loop with the same key
 				} else {
 					// For any other non-retryable error, set result and exit the loop / return immediately

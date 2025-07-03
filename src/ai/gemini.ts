@@ -14,8 +14,8 @@ export const ERROR_SERVICE_UNAVAILABLE = "ERROR_GEMINI_SERVICE_UNAVAILABLE";
 // NEW: Define a specific error message constant for AI timeout
 export const ERROR_AI_TIMEOUT = "ERROR_GEMINI_AI_TIMEOUT";
 
-// NEW: Define the initial AI response timeout in milliseconds (e.g., 30 seconds)
-const INITIAL_AI_RESPONSE_TIMEOUT_MS = 30000;
+// NEW: Define the initial AI response timeout in milliseconds (e.g., 45 seconds)
+const INITIAL_AI_RESPONSE_TIMEOUT_MS = 45000;
 
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
