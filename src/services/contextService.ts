@@ -80,14 +80,18 @@ export class ContextService {
 			}
 			const rootFolder = workspaceFolders[0];
 
-			const allScannedFiles = await scanWorkspace({ respectGitIgnore: true });
+			const allScannedFiles = await scanWorkspace(
+				{ respectGitIgnore: true },
+				cancellationToken
+			);
 			let fileDependencies: Map<string, string[]> | undefined;
 			let reverseFileDependencies: Map<string, string[]> | undefined; // NEW variable
 
 			try {
 				fileDependencies = await buildDependencyGraph(
 					allScannedFiles,
-					rootFolder.uri
+					rootFolder.uri,
+					cancellationToken
 				);
 				// NEW: Build reverse dependency graph if fileDependencies was successfully created
 				if (fileDependencies) {
@@ -463,6 +467,11 @@ export class ContextService {
 			);
 			await BPromise.allSettled(summaryGenerationPromises);
 
+			// Add cancellation check before AI-based selection processes
+			if (cancellationToken?.isCancellationRequested) {
+				throw new Error("Operation cancelled by user.");
+			}
+
 			const currentQueryForSelection =
 				userRequest || editorContext?.instruction;
 			const smartContextEnabled = this.settingsManager.getSetting<boolean>(
@@ -576,7 +585,8 @@ export class ContextService {
 				this.changeLogger.getChangeLog(),
 				fileDependencies,
 				documentSymbolsMap,
-				activeSymbolDetailedInfo // Pass the new argument
+				activeSymbolDetailedInfo, // Pass the new argument
+				cancellationToken // Pass cancellation token
 			);
 
 			// Return the new object structure

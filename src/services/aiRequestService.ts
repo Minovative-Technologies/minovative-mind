@@ -6,7 +6,8 @@ import { HistoryEntry } from "../sidebar/common/sidebarTypes";
 import {
 	ERROR_OPERATION_CANCELLED,
 	ERROR_QUOTA_EXCEEDED,
-	ERROR_SERVICE_UNAVAILABLE, // MODIFICATION 1: Import new error constant
+	ERROR_SERVICE_UNAVAILABLE,
+	ERROR_AI_TIMEOUT, // 1. Add ERROR_AI_TIMEOUT to the import list
 	generateContentStream,
 } from "../ai/gemini";
 
@@ -134,6 +135,15 @@ export class AIRequestService {
 						streamCallbacks.onComplete();
 					}
 					throw err; // Re-throw cancellation immediately, do NOT retry
+				} else if (errorMessage === ERROR_AI_TIMEOUT) {
+					// 2. Add new else if condition for ERROR_AI_TIMEOUT
+					console.warn(
+						`[AIRequestService] AI initial response timed out for model ${modelName}.`
+					);
+					if (streamCallbacks?.onComplete) {
+						streamCallbacks.onComplete();
+					}
+					throw err; // Re-throw timeout immediately, do NOT retry or switch keys
 				}
 
 				if (errorMessage === ERROR_QUOTA_EXCEEDED) {

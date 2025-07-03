@@ -81,6 +81,7 @@ function _formatFileChangePathsForContext(
  * @param dependencyGraph Optional map representing file import/dependency relations.
  * @param documentSymbols Optional map containing document symbols for relevant files.
  * @param activeSymbolDetailedInfo Optional detailed information about the active symbol.
+ * @param cancellationToken Optional cancellation token to signal cancellation.
  * @returns A promise that resolves to the generated context string.
  */
 export async function buildContextString(
@@ -90,8 +91,13 @@ export async function buildContextString(
 	recentChanges?: FileChangeEntry[],
 	dependencyGraph?: Map<string, string[]>,
 	documentSymbols?: Map<string, vscode.DocumentSymbol[] | undefined>,
-	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo,
+	cancellationToken?: vscode.CancellationToken
 ): Promise<string> {
+	if (cancellationToken?.isCancellationRequested) {
+		throw new Error("Operation cancelled by user.");
+	}
+
 	let context = `Project Context (Workspace: ${path.basename(
 		workspaceRoot.fsPath
 	)}):\n`;
@@ -563,6 +569,11 @@ export async function buildContextString(
 			break; // Stop processing file contents immediately
 		}
 
+		// Add cancellation check before reading each file
+		if (cancellationToken?.isCancellationRequested) {
+			throw new Error("Operation cancelled by user.");
+		}
+
 		const relativePath = path
 			.relative(workspaceRoot.fsPath, fileUri.fsPath)
 			.replace(/\\/g, "/");
@@ -643,7 +654,7 @@ export async function buildContextString(
 
 		// Check if adding *this* file's content exceeds the total length limit
 		if (currentTotalLength + estimatedLengthIncrease > config.maxTotalLength) {
-			// Try adding a truncated version if it fits
+			// Try adding a truncated version if it's large enough to bother
 			const availableContentSpace = config.maxTotalLength - currentTotalLength;
 			const minContentHeader = `--- File: ${relativePath} --- [...content omitted]\n\n`;
 			if (availableContentSpace > minContentHeader.length) {

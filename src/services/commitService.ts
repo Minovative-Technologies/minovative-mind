@@ -184,7 +184,9 @@ export class CommitService {
 					: `Commit failed: ${error.message}`,
 			});
 			// 3. In the `catch` block of the `handleCommitCommand` method, add a call to `this.provider.clearActiveOperationState();`
-			this.provider.clearActiveOperationState();
+			await this.provider.endUserOperation(
+				isCancellation ? "cancelled" : "failed"
+			);
 		}
 		// Comment has been removed as per instruction.
 	}

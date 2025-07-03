@@ -15,11 +15,18 @@ interface ScanOptions {
  * Scans the workspace for relevant files, respecting .gitignore and default excludes.
  *
  * @param options Optional configuration for the scan.
+ * @param cancellationToken Optional CancellationToken to abort the operation.
  * @returns A promise that resolves to an array of vscode.Uri objects representing relevant files.
  */
 export async function scanWorkspace(
-	options?: ScanOptions
+	options?: ScanOptions,
+	cancellationToken?: vscode.CancellationToken
 ): Promise<vscode.Uri[]> {
+	// Add initial cancellation check for scanWorkspace
+	if (cancellationToken?.isCancellationRequested) {
+		throw new Error("Operation cancelled by user.");
+	}
+
 	const workspaceFolders = vscode.workspace.workspaceFolders;
 	if (!workspaceFolders || workspaceFolders.length === 0) {
 		console.warn("No workspace folder open.");
@@ -47,6 +54,11 @@ export async function scanWorkspace(
 	 * Uses Bluebird's map for controlled concurrency when reading subdirectories.
 	 */
 	async function _scanDir(dirUri: vscode.Uri): Promise<void> {
+		// Add initial cancellation check for _scanDir
+		if (cancellationToken?.isCancellationRequested) {
+			throw new Error("Operation cancelled by user.");
+		}
+
 		// --- DIAGNOSTIC ---
 		// console.log(`Scanning directory: ${dirUri.fsPath}`);
 
@@ -56,6 +68,11 @@ export async function scanWorkspace(
 			await BPromise.map(
 				entries,
 				async ([name, type]) => {
+					// Add cancellation check before processing each entry
+					if (cancellationToken?.isCancellationRequested) {
+						throw new Error("Operation cancelled by user.");
+					}
+
 					const fullUri = vscode.Uri.joinPath(dirUri, name);
 					// Get relative path for ignore check (important!)
 					const relativePath = path.relative(
@@ -93,7 +110,11 @@ export async function scanWorkspace(
 				},
 				{ concurrency: concurrency }
 			); // Apply concurrency limit here
-		} catch (error) {
+		} catch (error: any) {
+			// Ensure cancellation errors are re-thrown for immediate exit
+			if (error.message === "Operation cancelled by user.") {
+				throw error;
+			}
 			console.error(`Error reading directory ${dirUri.fsPath}:`, error);
 			// Optionally show a warning to the user, but be mindful of noise if many folders are unreadable
 			// vscode.window.showWarningMessage(`Could not read directory: ${dirUri.fsPath}`);

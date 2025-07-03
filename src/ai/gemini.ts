@@ -11,6 +11,11 @@ export const ERROR_QUOTA_EXCEEDED = "ERROR_GEMINI_QUOTA_EXCEEDED";
 export const ERROR_OPERATION_CANCELLED = "Operation cancelled by user.";
 // Add a new error constant for service unavailability
 export const ERROR_SERVICE_UNAVAILABLE = "ERROR_GEMINI_SERVICE_UNAVAILABLE";
+// NEW: Define a specific error message constant for AI timeout
+export const ERROR_AI_TIMEOUT = "ERROR_GEMINI_AI_TIMEOUT";
+
+// NEW: Define the initial AI response timeout in milliseconds (e.g., 30 seconds)
+const INITIAL_AI_RESPONSE_TIMEOUT_MS = 30000;
 
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
@@ -108,6 +113,20 @@ export async function* generateContentStream(
 		throw new Error(ERROR_OPERATION_CANCELLED);
 	}
 
+	// 1. Initialize a new AbortController
+	const internalAbortController = new AbortController();
+
+	// 2. Set a setTimeout call for INITIAL_AI_RESPONSE_TIMEOUT_MS
+	const timeoutId = setTimeout(() => {
+		internalAbortController.abort(new Error(ERROR_AI_TIMEOUT));
+	}, INITIAL_AI_RESPONSE_TIMEOUT_MS);
+
+	// 3. If token is provided, subscribe to its onCancellationRequested event
+	token?.onCancellationRequested(() => {
+		clearTimeout(timeoutId); // Clear the timeout as we are explicitly cancelling
+		internalAbortController.abort(new Error(ERROR_OPERATION_CANCELLED));
+	});
+
 	if (!initializeGenerativeAI(apiKey, modelName)) {
 		throw new Error(
 			`Gemini AI client not initialized. Please check API key and selected model (${modelName}).`
@@ -149,10 +168,14 @@ export async function* generateContentStream(
 			console.log(`Gemini (${modelName}): This is a merge operation.`);
 		}
 
-		const result = await model.generateContentStream({
-			contents: requestContents,
-			generationConfig: requestConfig,
-		});
+		// 4. Modify the model.generateContentStream call to pass internalAbortController.signal
+		const result = await model.generateContentStream(
+			{
+				contents: requestContents,
+				generationConfig: requestConfig,
+			},
+			{ signal: internalAbortController.signal } // Pass the AbortSignal as a new second argument
+		);
 
 		for await (const chunk of result.stream) {
 			if (token?.isCancellationRequested) {
@@ -216,8 +239,14 @@ export async function* generateContentStream(
 	} catch (error: any) {
 		console.error(`Gemini (${modelName}): Raw error during stream:`, error);
 
-		if (error instanceof Error && error.message === ERROR_OPERATION_CANCELLED) {
-			throw error;
+		// 5. In the try...catch block, add ERROR_AI_TIMEOUT condition before ERROR_OPERATION_CANCELLED
+		if (error instanceof Error) {
+			if (error.message === ERROR_AI_TIMEOUT) {
+				throw error; // Re-throw the timeout error
+			}
+			if (error.message === ERROR_OPERATION_CANCELLED) {
+				throw error;
+			}
 		}
 
 		let errorMessage = `An error occurred with the Gemini API (${modelName}).`;
@@ -249,6 +278,9 @@ export async function* generateContentStream(
 		}
 
 		throw new Error(errorMessage);
+	} finally {
+		// 6. Add a finally block to ensure clearTimeout is called
+		clearTimeout(timeoutId);
 	}
 }
 

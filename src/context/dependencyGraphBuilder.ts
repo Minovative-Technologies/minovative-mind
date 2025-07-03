@@ -10,8 +10,13 @@ import {
 
 export async function buildDependencyGraph(
 	allScannedFiles: vscode.Uri[],
-	projectRoot: vscode.Uri
+	projectRoot: vscode.Uri,
+	cancellationToken?: vscode.CancellationToken
 ): Promise<Map<string, string[]>> {
+	if (cancellationToken?.isCancellationRequested) {
+		throw new Error("Operation cancelled by user.");
+	}
+
 	const dependencyGraph = new Map<string, string[]>();
 	const concurrencyLimit = 10; // Concurrency limit set between 5-10
 
@@ -30,6 +35,9 @@ export async function buildDependencyGraph(
 	await BPromise.map(
 		allScannedFiles,
 		async (fileUri: vscode.Uri) => {
+			if (cancellationToken?.isCancellationRequested) {
+				throw new Error("Operation cancelled by user.");
+			}
 			try {
 				const relativePath = path.relative(projectRoot.fsPath, fileUri.fsPath);
 				const imports = await parseFileImports(
