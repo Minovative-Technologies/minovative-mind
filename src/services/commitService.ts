@@ -115,7 +115,7 @@ export class CommitService {
 					  "\n\n"
 					: "";
 
-			const commitMessagePrompt = `You are an AI expert in Git. Your task is to generate a short, concise, but highly accurate commit message based on the provided staged changes. Prioritize the detailed file-by-file summaries for content, and use the overall diff for additional context if needed. Make the commit messages in past tense. Provide the commit message without any markdown formatting. There needs to be 0 markdown formatting. Make sure the commit message follow the commit message best practices.
+			const commitMessagePrompt = `You are an AI expert in Git. Your task is to generate a short, concise, but highly accurate commit message based on the provided staged changes. Prioritize the detailed file-by-file summaries for content, and use the overall diff for additional context if needed. Make the commit messages in past tense. Provide the commit message without any markdown formatting. There needs to be 0 markdown formatting. Make sure the commit message follow the commit message best practices with no markdown formatting.
 
 			${detailedSummaries}Overall Staged Diff:
 			\`\`\`diff
@@ -224,12 +224,8 @@ export class CommitService {
 			`Commit confirmed and executed:\n---\n${commitMessage}\n---\nCheck TERMINAL for result.`
 		);
 		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
-		this.provider.postMessageToWebview({
-			type: "aiResponseEnd",
-			success: true,
-		});
-		// 1. In the `confirmCommit` method, add a call to `this.provider.clearActiveOperationState();`
-		this.provider.clearActiveOperationState();
+		// Replace previous state cleanup and UI signaling with central endUserOperation
+		await this.provider.endUserOperation("success"); // Mark operation as successful and re-enable UI
 	}
 
 	/**
