@@ -77,6 +77,11 @@ export async function handleWebviewMessage(
 				"user",
 				`/plan ${userRequest}`
 			);
+			provider.isGeneratingUserRequest = true;
+			await provider.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				true
+			);
 			// The planService will handle the rest, including UI updates
 			await provider.planService.handleInitialPlanRequest(userRequest);
 			break;
@@ -108,6 +113,11 @@ export async function handleWebviewMessage(
 				provider.chatHistoryManager.addHistoryEntry(
 					"model",
 					"User requested retry of structured plan generation."
+				);
+				provider.isGeneratingUserRequest = true;
+				await provider.workspaceState.update(
+					"minovativeMind.isGeneratingUserRequest",
+					true
 				);
 				await provider.planService.generateStructuredPlanAndExecute(
 					contextForRetry
@@ -148,6 +158,11 @@ export async function handleWebviewMessage(
 				provider.activeOperationCancellationTokenSource =
 					new vscode.CancellationTokenSource();
 			}
+			provider.isGeneratingUserRequest = true;
+			await provider.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				true
+			);
 			await provider.commitService.handleCommitCommand(
 				provider.activeOperationCancellationTokenSource.token
 			);
@@ -420,6 +435,43 @@ export async function handleWebviewMessage(
 					isError: true,
 				});
 			}
+			break;
+		}
+
+		case "aiResponseEnd": {
+			// Stop typing animation is handled in webview's messageBusHandler.ts for this message.
+			// This is just marking the end of generic generation from the extension's side.
+			provider.isGeneratingUserRequest = false;
+			await provider.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				false
+			);
+			// The rest of the AI response end logic (e.g., success/error handling) is in messageBusHandler.ts
+			break;
+		}
+
+		case "structuredPlanParseFailed": {
+			// This case indicates that AI generation for the plan has completed, but parsing failed.
+			provider.isGeneratingUserRequest = false;
+			await provider.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				false
+			);
+			const { error, failedJson } = data.value;
+			console.log("Received structuredPlanParseFailed.");
+			// The webview's messageBusHandler.ts will show the error UI based on this message.
+			break;
+		}
+
+		case "commitReview": {
+			// This case indicates that AI generation for the commit message has completed and is ready for review.
+			provider.isGeneratingUserRequest = false;
+			await provider.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				false
+			);
+			console.log("Received commitReview message:", data.value);
+			// The webview's messageBusHandler.ts will show the commit review UI based on this message.
 			break;
 		}
 

@@ -205,6 +205,31 @@ export function initializeMessageBusHandler(
 				break;
 			}
 
+			case "showGenericLoadingMessage": {
+				console.log(
+					"[Webview] Received showGenericLoadingMessage. Displaying generic loading."
+				);
+				// Remove any existing loading message to ensure a clean state
+				const existingLoadingMsg =
+					elements.chatContainer.querySelector(".loading-message");
+				if (existingLoadingMsg) {
+					existingLoadingMsg.remove();
+				}
+
+				// Append a new AI message element. By passing an empty string for text,
+				// appendMessage will automatically trigger the typing animation to show "Generating..." dots.
+				appendMessage(
+					elements,
+					"Model",
+					"", // Empty string to signify starting stream/generation
+					"ai-message",
+					true // Treat as a history-backed message for consistent styling and buttons (even if not yet in history)
+				);
+				// Ensure UI controls are disabled while loading
+				setLoadingState(true, elements);
+				break;
+			}
+
 			case "aiResponseStart": {
 				setLoadingState(true, elements);
 				resetStreamingAnimationState();
@@ -296,17 +321,39 @@ export function initializeMessageBusHandler(
 						updateStatus,
 						setLoadingState
 					);
+					appState.isCommitActionInProgress = false; // Added as per instructions
 					setLoadingState(false, elements);
 					if (elements.cancelGenerationButton) {
 						elements.cancelGenerationButton.style.display = "none";
 					}
 				} else if (message.success) {
 					console.log("aiResponseEnd indicates successful chat response.");
+					appState.isCommitActionInProgress = false; // Added as per instructions
 					setLoadingState(false, elements);
 					updateEmptyChatPlaceholderVisibility(elements);
 				} else {
 					console.log("aiResponseEnd indicates failed streaming operation.");
-					setLoadingState(false, elements);
+					if (message.error) {
+						const errorMessageContent =
+							typeof message.error === "string"
+								? message.error
+								: "Unknown error occurred during AI operation.";
+						// Display the specific error message to the user
+						updateStatus(
+							elements,
+							`AI Operation Failed: ${errorMessageContent}`,
+							true
+						);
+					} else {
+						// Fallback for cases where no specific error message is provided
+						updateStatus(
+							elements,
+							"AI operation failed or was cancelled.",
+							true
+						);
+					}
+					appState.isCommitActionInProgress = false; // Added as per instructions
+					setLoadingState(false, elements); // Ensure inputs are re-enabled
 				}
 				break;
 			}
@@ -671,6 +718,8 @@ export function initializeMessageBusHandler(
 				}
 
 				hideAllConfirmationAndReviewUIs(elements);
+
+				appState.isCommitActionInProgress = false; // Added as per instructions
 
 				console.log(
 					"[reenableInput] Calling setLoadingState(false); Confirming appState.isLoading is now false."

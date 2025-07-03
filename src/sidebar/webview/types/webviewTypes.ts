@@ -68,5 +68,6 @@ export interface WebviewAppState {
 	pendingCommitReviewData: PendingCommitReviewData | null;
 	isApiKeySet: boolean;
 	isLoading: boolean;
+	isCommitActionInProgress: boolean;
 	totalKeys: number;
 }

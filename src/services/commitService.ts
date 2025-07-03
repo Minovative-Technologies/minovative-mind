@@ -57,12 +57,8 @@ export class CommitService {
 					type: "gitProcessUpdate",
 					value: { type, data, isError },
 				});
-				if (type === "status") {
-					this.provider.chatHistoryManager.addHistoryEntry(
-						"model",
-						`Git Staging: ${data}`
-					);
-				} else if (type === "stderr" || isError) {
+
+				if (type === "stderr" || isError) {
 					this.provider.chatHistoryManager.addHistoryEntry(
 						"model",
 						`Git Staging Error: ${data}`
@@ -143,10 +139,26 @@ export class CommitService {
 			if (token.isCancellationRequested) {
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
-			if (commitMessage.toLowerCase().startsWith("error:")) {
-				throw new Error(
-					`AI failed to generate commit message: ${commitMessage}`
+
+			const trimmedCommitMessage = commitMessage.trim();
+			// Check for AI-reported errors or an empty/whitespace message
+			if (
+				trimmedCommitMessage.toLowerCase().startsWith("error:") ||
+				trimmedCommitMessage === ""
+			) {
+				// Log the full AI response for detailed debugging in the extension host
+				console.error(
+					`[CommitService] AI generated an invalid or error-prefixed commit message: "${commitMessage}"`
 				);
+
+				// Throw a more user-friendly error message that explains the issue
+				const userFacingError = `AI failed to generate a valid commit message. Received: "${trimmedCommitMessage.substring(
+					0,
+					150
+				)}${
+					trimmedCommitMessage.length > 150 ? "..." : ""
+				}". Please try again or provide more context.`;
+				throw new Error(userFacingError);
 			}
 
 			this.provider.chatHistoryManager.addHistoryEntry("model", commitMessage);
@@ -174,7 +186,6 @@ export class CommitService {
 			// 3. In the `catch` block of the `handleCommitCommand` method, add a call to `this.provider.clearActiveOperationState();`
 			this.provider.clearActiveOperationState();
 		}
-		// 4. Review and remove the outdated comment "TokenSource disposal is now handled by the caller (webviewMessageHandler)"
 		// Comment has been removed as per instruction.
 	}
 
@@ -202,13 +213,17 @@ export class CommitService {
 		});
 		terminal.show();
 		terminal.sendText(command);
+		// Add the staging success message here, after git command sent and before final confirmation message.
+		this.provider.chatHistoryManager.addHistoryEntry(
+			"model",
+			"Git Staging: Changes staged successfully."
+		);
 
 		this.provider.chatHistoryManager.addHistoryEntry(
 			"model",
 			`Commit confirmed and executed:\n---\n${commitMessage}\n---\nCheck TERMINAL for result.`
 		);
 		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
-		this.provider.pendingCommitReviewData = null;
 		this.provider.postMessageToWebview({
 			type: "aiResponseEnd",
 			success: true,

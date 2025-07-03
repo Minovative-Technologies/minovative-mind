@@ -57,6 +57,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		commitMessage: string;
 		stagedFiles: string[];
 	} | null = null;
+	public isGeneratingUserRequest: boolean = false; // Added property
 
 	// Auth State
 	public isUserSignedIn: boolean = false;
@@ -105,6 +106,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.postMessageToWebview.bind(this)
 		);
 		this.changeLogger = new ProjectChangeLogger();
+
+		// Load persistent state for isGeneratingUserRequest
+		this.isGeneratingUserRequest = context.workspaceState.get<boolean>(
+			"minovativeMind.isGeneratingUserRequest",
+			false
+		);
 
 		// Instantiate services, passing dependencies
 		this.aiRequestService = new AIRequestService(
@@ -242,6 +249,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			value: this.getAuthStatePayload(),
 		});
 
+		// 1. Prioritize active AI streaming progress (e.g., for long chat responses)
 		if (
 			this.currentAiStreamingState &&
 			!this.currentAiStreamingState.isComplete
@@ -253,8 +261,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "restoreStreamingProgress",
 				value: this.currentAiStreamingState,
 			});
-		} else if (this.pendingPlanGenerationContext) {
-			// Logic to restore pending plan UI
+			this.postMessageToWebview({ type: "updateLoadingState", value: true }); // Ensure inputs are disabled
+		}
+		// 2. Then, check for pending plan confirmation (generation *complete*, awaiting review)
+		else if (this.pendingPlanGenerationContext) {
+			console.log(
+				"[SidebarProvider] Restoring pending plan confirmation to webview."
+			);
 			const planCtx = this.pendingPlanGenerationContext;
 			const planDataForRestore =
 				planCtx.type === "chat"
@@ -273,15 +286,44 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "restorePendingPlanConfirmation",
 				value: planDataForRestore,
 			});
-		} else if (this.pendingCommitReviewData) {
+			// Generation is complete, inputs should be re-enabled for user interaction with the review UI
+			this.postMessageToWebview({ type: "updateLoadingState", value: false });
+			// Ensure the general generation flag is reset as we're now in a review state
+			this.isGeneratingUserRequest = false;
+			await this.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				false
+			);
+		}
+		// 3. Then, check for pending commit review (generation *complete*, awaiting review)
+		else if (this.pendingCommitReviewData) {
 			console.log(
 				"[SidebarProvider] Restoring pending commit review to webview."
 			);
 			this.postMessageToWebview({
-				type: "restorePendingCommitReview", // Changed from 'commitReview' to 'restorePendingCommitReview'
+				type: "restorePendingCommitReview",
 				value: this.pendingCommitReviewData,
 			});
-		} else {
+			// Generation is complete, inputs should be re-enabled for user interaction with the review UI
+			this.postMessageToWebview({ type: "updateLoadingState", value: false });
+			// Ensure the general generation flag is reset as we're now in a review state
+			this.isGeneratingUserRequest = false;
+			await this.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				false
+			);
+		}
+		// 4. Finally, check for a generic AI generation in progress (e.g., initial /plan, /commit before review UI)
+		else if (this.isGeneratingUserRequest) {
+			console.log(
+				"[SidebarProvider] Restoring generic loading state for user request."
+			);
+			// Send a specific message to the webview to show the generic "Generating..." message
+			this.postMessageToWebview({ type: "showGenericLoadingMessage" });
+			this.postMessageToWebview({ type: "updateLoadingState", value: true }); // Ensure main controls are disabled
+		}
+		// 5. Default: No active operations, re-enable inputs
+		else {
 			this.postMessageToWebview({ type: "reenableInput" });
 			this.clearActiveOperationState();
 		}
@@ -311,7 +353,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.currentAiStreamingState = null; // Clear streaming state when operation ends
 	}
 
-	public cancelActiveOperation(): void {
+	public async cancelActiveOperation(): Promise<void> {
+		// Mark as async
 		this.activeOperationCancellationTokenSource?.cancel();
 		this.clearActiveOperationState(); // Call the new method to handle token and related state clearing
 
@@ -320,6 +363,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		// Clear any lingering pending data not handled by clearActiveOperationState
 		this.pendingPlanGenerationContext = null;
 		this.lastPlanGenerationContext = null;
+
+		this.isGeneratingUserRequest = false; // Clear general generation state
+		await this.workspaceState.update(
+			"minovativeMind.isGeneratingUserRequest",
+			false
+		); // Persist
 
 		this.chatHistoryManager.addHistoryEntry(
 			"model",
@@ -333,9 +382,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.postMessageToWebview({ type: "reenableInput" });
 	}
 
-	public cancelPendingPlan(): void {
+	public async cancelPendingPlan(): Promise<void> {
+		// Mark as async
 		this.pendingPlanGenerationContext = null;
 		this.lastPlanGenerationContext = null;
+		this.isGeneratingUserRequest = false; // Clear general generation state
+		await this.workspaceState.update(
+			"minovativeMind.isGeneratingUserRequest",
+			false
+		); // Persist
 		vscode.window.showInformationMessage(
 			"Minovative Mind: Plan review cancelled."
 		);

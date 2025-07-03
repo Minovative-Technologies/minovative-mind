@@ -481,7 +481,22 @@ export function handleConfirmCommit(
 	updateStatus: Function,
 	setLoadingState: Function
 ): void {
+	// Add client-side safeguard to prevent duplicate requests
+	if (appState.isCommitActionInProgress) {
+		console.warn(
+			"[handleConfirmCommit] Commit action already in progress. Ignoring duplicate click."
+		);
+		return;
+	}
+	appState.isCommitActionInProgress = true; // Set flag to indicate operation started
+
 	console.log("Confirm Commit button clicked.");
+	if (elements.confirmCommitButton) {
+		elements.confirmCommitButton.disabled = true; // Disable confirm button
+	}
+	if (elements.cancelCommitButton) {
+		elements.cancelCommitButton.disabled = true; // Disable cancel button (to prevent interaction during processing)
+	}
 	hideCommitReviewUI(elements);
 	const editedMessage = elements.commitMessageTextarea?.value || "";
 	postMessageToExtension({ type: "confirmCommit", value: editedMessage });
@@ -503,7 +518,22 @@ export function handleCancelCommit(
 	updateStatus: Function,
 	setLoadingState: Function
 ): void {
+	// Add client-side safeguard to prevent duplicate requests
+	if (appState.isCommitActionInProgress) {
+		console.warn(
+			"[handleCancelCommit] Commit action already in progress. Ignoring duplicate cancel click."
+		);
+		return;
+	}
+	appState.isCommitActionInProgress = true; // Set flag to indicate operation started
+
 	console.log("Cancel Commit button clicked.");
+	if (elements.confirmCommitButton) {
+		elements.confirmCommitButton.disabled = true;
+	}
+	if (elements.cancelCommitButton) {
+		elements.cancelCommitButton.disabled = true;
+	}
 	hideCommitReviewUI(elements);
 	postMessageToExtension({ type: "cancelCommit" });
 	updateStatus(elements, "Commit cancelled by user.", false);

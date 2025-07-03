@@ -165,33 +165,6 @@ export function initializeButtonEventListeners(
 		setLoadingState(false, elements);
 	});
 
-	// Commit Review UI - Commit Message Textarea input listener (for button state)
-	commitMessageTextarea.addEventListener("input", () => {
-		if (confirmCommitButton) {
-			const trimmedMessage = commitMessageTextarea.value.trim();
-			confirmCommitButton.disabled = trimmedMessage === "";
-		}
-	});
-
-	// Confirm Commit Button
-	confirmCommitButton.addEventListener("click", () => {
-		console.log("Confirm Commit button clicked.");
-		hideCommitReviewUI(elements); // Use the helper to hide UI elements
-		const editedMessage = commitMessageTextarea.value || "";
-		postMessageToExtension({ type: "confirmCommit", value: editedMessage });
-		updateStatus(elements, "Committing changes...", false); // Pass elements
-		setLoadingState(true, elements);
-	});
-
-	// Cancel Commit Button
-	cancelCommitButton.addEventListener("click", () => {
-		console.log("Cancel Commit button clicked.");
-		hideCommitReviewUI(elements); // Use the helper to hide UI elements
-		postMessageToExtension({ type: "cancelCommit" });
-		updateStatus(elements, "Commit cancelled by user.", false); // Pass elements
-		setLoadingState(false, elements);
-	});
-
 	// Sign Up Button
 	signUpButton.addEventListener("click", () => {
 		console.log(

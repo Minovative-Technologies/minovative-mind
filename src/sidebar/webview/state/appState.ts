@@ -30,5 +30,6 @@ export const appState: WebviewAppState = {
 	pendingCommitReviewData: null,
 	isApiKeySet: false,
 	isLoading: false,
+	isCommitActionInProgress: false, // Added as per instruction
 	totalKeys: 0,
 };
