@@ -217,18 +217,73 @@ export class PlanService {
 				this.provider.currentAiStreamingState.isComplete = true;
 			}
 			const isCancellation = finalErrorForDisplay === ERROR_OPERATION_CANCELLED;
-			this.provider.postMessageToWebview({
-				type: "aiResponseEnd",
+
+			// Determine if the generated response is a confirmable plan
+			const isConfirmablePlanResponse =
+				success &&
+				!!this.provider.pendingPlanGenerationContext?.textualPlanExplanation;
+
+			// If it's not a confirmable plan response (i.e., it's a simple chat response, or an error/cancellation that definitively ends the top-level command)
+			if (!isConfirmablePlanResponse) {
+				await this.provider.endUserOperation(
+					isCancellation ? "cancelled" : success ? "success" : "failed"
+				);
+			}
+			// If isConfirmablePlanResponse is true, we explicitly do NOT call endUserOperation here.
+			// The operation transitions to a review state, and webviewMessageHandler.ts will handle
+			// the 'review' outcome based on the 'aiResponseEnd' message itself.
+
+			// Construct the aiResponseEnd message, ensuring plan-related data is included if applicable
+			const aiResponseEndValue: Record<string, any> = {
 				success: success,
-				error: isCancellation
+				// Only provide error if 'success' is false or it's a cancellation
+				error: success
+					? undefined // No error if successful
+					: isCancellation
 					? "Plan generation cancelled."
 					: formatUserFacingErrorMessage(
-							Error,
+							finalErrorForDisplay
+								? new Error(finalErrorForDisplay)
+								: new Error("Unknown error"), // Pass an actual Error instance
 							"An unexpected error occurred during initial plan generation.",
 							"Error: ",
 							rootFolder.uri
 					  ),
+			};
+
+			if (
+				isConfirmablePlanResponse &&
+				this.provider.pendingPlanGenerationContext
+			) {
+				// Ensure plan-specific flags and data are sent for the webview to pick up
+				aiResponseEndValue.isPlanResponse = true;
+				aiResponseEndValue.requiresConfirmation = true;
+				// Structure planData for webview, similar to how restorePendingPlanConfirmation uses it
+				aiResponseEndValue.planData = {
+					type:
+						this.provider.pendingPlanGenerationContext.type === "chat"
+							? "textualPlanPending"
+							: "textualPlanPending", // Use "textualPlanPending" for webview message
+					originalRequest:
+						this.provider.pendingPlanGenerationContext.type === "chat"
+							? this.provider.pendingPlanGenerationContext.originalUserRequest
+							: undefined,
+					originalInstruction:
+						this.provider.pendingPlanGenerationContext.type === "editor"
+							? this.provider.pendingPlanGenerationContext.editorContext
+									?.instruction
+							: undefined,
+					relevantFiles:
+						this.provider.pendingPlanGenerationContext.relevantFiles,
+				};
+			}
+
+			// Post the message to webview
+			this.provider.postMessageToWebview({
+				type: "aiResponseEnd",
+				...aiResponseEndValue,
 			});
+
 			this.provider.activeOperationCancellationTokenSource?.dispose();
 			this.provider.activeOperationCancellationTokenSource = undefined;
 		}
@@ -598,6 +653,7 @@ export class PlanService {
 				vscode.window.showErrorMessage(
 					`Minovative Mind: Failed to parse AI plan after ${this.MAX_PLAN_PARSE_RETRIES} attempts. Check sidebar for retry options.`
 				);
+				await this.provider.endUserOperation("failed"); // Signal failure and re-enable input
 				return; // Important: return here to stop further execution
 			}
 
@@ -615,6 +671,7 @@ export class PlanService {
 					type: "statusUpdate",
 					value: "Structured plan generation cancelled.",
 				});
+				await this.provider.endUserOperation("cancelled"); // Signal cancellation and re-enable input
 			} else {
 				this.provider.postMessageToWebview({
 					type: "statusUpdate",
@@ -626,7 +683,8 @@ export class PlanService {
 					),
 					isError: true,
 				});
-				this.provider.postMessageToWebview({ type: "reenableInput" });
+				// this.provider.postMessageToWebview({ type: "reenableInput" }); // REMOVED
+				await this.provider.endUserOperation("failed"); // Signal failure and re-enable input
 			}
 		}
 	}
@@ -739,7 +797,8 @@ export class PlanService {
 				plan.planDescription || "Unnamed Plan",
 				outcome
 			);
-			this.provider.postMessageToWebview({ type: "reenableInput" });
+			// this.provider.postMessageToWebview({ type: "reenableInput" }); // REMOVED
+			await this.provider.endUserOperation(outcome); // REPLACED with centralized call
 		}
 	}
 

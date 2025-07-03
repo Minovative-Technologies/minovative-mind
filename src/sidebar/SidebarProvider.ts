@@ -353,55 +353,91 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.currentAiStreamingState = null; // Clear streaming state when operation ends
 	}
 
-	public async cancelActiveOperation(): Promise<void> {
-		// Mark as async
-		this.activeOperationCancellationTokenSource?.cancel();
-		this.clearActiveOperationState(); // Call the new method to handle token and related state clearing
+	/**
+	 * Resets all state related to a user-initiated AI operation,
+	 * ensures UI inputs are re-enabled, and provides an optional status update.
+	 * This method centralizes the logic for ending user operations (success, failure, cancellation, or review transition).
+	 * @param outcome The final outcome of the operation, or "review" if transitioning to a review state.
+	 */
+	public async endUserOperation(
+		outcome: sidebarTypes.ExecutionOutcome | "review"
+	): Promise<void> {
+		console.log(
+			`[SidebarProvider] Ending user operation with outcome: ${outcome}`
+		);
 
-		this.activeChildProcesses.forEach((cp) => cp.kill());
-		this.activeChildProcesses = [];
-		// Clear any lingering pending data not handled by clearActiveOperationState
-		this.pendingPlanGenerationContext = null;
-		this.lastPlanGenerationContext = null;
-
-		this.isGeneratingUserRequest = false; // Clear general generation state
+		// 1. Reset isGeneratingUserRequest and persist
+		this.isGeneratingUserRequest = false;
 		await this.workspaceState.update(
 			"minovativeMind.isGeneratingUserRequest",
 			false
-		); // Persist
-
-		this.chatHistoryManager.addHistoryEntry(
-			"model",
-			"Operation cancelled by user."
 		);
-		this.postMessageToWebview({
-			type: "statusUpdate",
-			value: "Operation cancelled.",
-		});
-		// Re-enable the webview UI
+
+		// 2. Clear active operation state (cancellation token, streaming state, pendingCommitReviewData)
+		this.clearActiveOperationState();
+
+		// 3. Explicitly clear all pending context data not handled by clearActiveOperationState
+		this.pendingPlanGenerationContext = null;
+		this.lastPlanGenerationContext = null;
+		// pendingCommitReviewData is cleared by clearActiveOperationState
+
+		// 4. Re-enable input in the webview
 		this.postMessageToWebview({ type: "reenableInput" });
+
+		// 5. Post optional status update to the webview and chat history
+		let statusMessage = "";
+		let isError = false;
+
+		switch (outcome) {
+			case "success":
+				statusMessage = "Operation completed successfully.";
+				break;
+			case "cancelled":
+				statusMessage = "Operation cancelled.";
+				isError = true;
+				break;
+			case "failed":
+				statusMessage = "Operation failed. Check sidebar for details.";
+				isError = true;
+				break;
+			case "review":
+				statusMessage =
+					"Operation paused for user review. Please review the proposed changes.";
+				break;
+			default:
+				statusMessage = `Operation ended with unknown outcome: ${outcome}.`;
+				isError = true;
+				break;
+		}
+
+		if (statusMessage) {
+			this.chatHistoryManager.addHistoryEntry("model", statusMessage);
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: statusMessage,
+				isError: isError,
+			});
+		}
+	}
+
+	public async cancelActiveOperation(): Promise<void> {
+		// Cancel any actively running tasks
+		this.activeOperationCancellationTokenSource?.cancel();
+		// Kill any child processes started by the extension
+		this.activeChildProcesses.forEach((cp) => cp.kill());
+		this.activeChildProcesses = [];
+
+		// Centralize state cleanup and UI re-enablement
+		await this.endUserOperation("cancelled");
 	}
 
 	public async cancelPendingPlan(): Promise<void> {
-		// Mark as async
-		this.pendingPlanGenerationContext = null;
-		this.lastPlanGenerationContext = null;
-		this.isGeneratingUserRequest = false; // Clear general generation state
-		await this.workspaceState.update(
-			"minovativeMind.isGeneratingUserRequest",
-			false
-		); // Persist
+		// Provide a direct VS Code notification for the user
 		vscode.window.showInformationMessage(
 			"Minovative Mind: Plan review cancelled."
 		);
-		this.postMessageToWebview({
-			type: "statusUpdate",
-			value: "Pending plan cancelled.",
-		});
-		this.chatHistoryManager.addHistoryEntry(
-			"model",
-			"Pending plan cancelled by user."
-		);
-		this.postMessageToWebview({ type: "reenableInput" });
+
+		// Centralize state cleanup and UI re-enablement
+		await this.endUserOperation("cancelled");
 	}
 }

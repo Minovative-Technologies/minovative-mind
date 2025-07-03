@@ -88,6 +88,13 @@ export async function handleWebviewMessage(
 		}
 
 		case "confirmPlanExecution":
+			// Ensure isGeneratingUserRequest is true at the very beginning
+			provider.isGeneratingUserRequest = true;
+			await provider.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				true
+			);
+
 			if (provider.pendingPlanGenerationContext) {
 				const contextForExecution = {
 					...provider.pendingPlanGenerationContext,
@@ -103,21 +110,24 @@ export async function handleWebviewMessage(
 						"No plan is currently awaiting confirmation. Please generate a new plan.",
 					isError: true,
 				});
-				provider.postMessageToWebview({ type: "reenableInput" });
+				await provider.endUserOperation("failed"); // Signal failure and re-enable inputs
+				return; // Add return to prevent further execution in this branch
 			}
 			break;
 
 		case "retryStructuredPlanGeneration":
+			// Ensure isGeneratingUserRequest is true at the very beginning
+			provider.isGeneratingUserRequest = true;
+			await provider.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				true
+			);
+
 			if (provider.lastPlanGenerationContext) {
 				const contextForRetry = { ...provider.lastPlanGenerationContext };
 				provider.chatHistoryManager.addHistoryEntry(
 					"model",
 					"User requested retry of structured plan generation."
-				);
-				provider.isGeneratingUserRequest = true;
-				await provider.workspaceState.update(
-					"minovativeMind.isGeneratingUserRequest",
-					true
 				);
 				await provider.planService.generateStructuredPlanAndExecute(
 					contextForRetry
@@ -129,7 +139,8 @@ export async function handleWebviewMessage(
 						"No previously generated plan is available for retry. Please initiate a new plan request.",
 					isError: true,
 				});
-				provider.postMessageToWebview({ type: "reenableInput" });
+				await provider.endUserOperation("failed"); // Signal failure and re-enable inputs
+				return; // Add return to prevent further execution in this branch
 			}
 			break;
 
@@ -171,6 +182,7 @@ export async function handleWebviewMessage(
 		case "confirmCommit":
 			const editedCommitMessage = data.value; // Retrieve the edited message
 			if (typeof editedCommitMessage === "string") {
+				// No explicit provider.endUserOperation() here; CommitService will handle it
 				await provider.commitService.confirmCommit(editedCommitMessage);
 			} else {
 				console.error(
@@ -186,6 +198,7 @@ export async function handleWebviewMessage(
 			break;
 
 		case "cancelCommit":
+			// No explicit provider.endUserOperation() here; CommitService will handle it
 			provider.commitService.cancelCommit();
 			break;
 
@@ -441,36 +454,45 @@ export async function handleWebviewMessage(
 		case "aiResponseEnd": {
 			// Stop typing animation is handled in webview's messageBusHandler.ts for this message.
 			// This is just marking the end of generic generation from the extension's side.
-			provider.isGeneratingUserRequest = false;
-			await provider.workspaceState.update(
-				"minovativeMind.isGeneratingUserRequest",
-				false
-			);
-			// The rest of the AI response end logic (e.g., success/error handling) is in messageBusHandler.ts
+			// Removed explicit isGeneratingUserRequest reset as per instructions.
+			// Replaced with conditional calls to provider.endUserOperation
+			if (data.success && data.isPlanResponse && data.requiresConfirmation) {
+				await provider.endUserOperation("review");
+			} else if (data.success) {
+				await provider.endUserOperation("success");
+			} else {
+				await provider.endUserOperation("failed");
+			}
 			break;
 		}
 
 		case "structuredPlanParseFailed": {
 			// This case indicates that AI generation for the plan has completed, but parsing failed.
-			provider.isGeneratingUserRequest = false;
-			await provider.workspaceState.update(
-				"minovativeMind.isGeneratingUserRequest",
-				false
-			);
-			const { error, failedJson } = data.value;
+			// Removed explicit isGeneratingUserRequest reset as per instructions.
+			const { error, failedJson } = data.value; // Keep extracting error/failedJson for potential logging/debugging
 			console.log("Received structuredPlanParseFailed.");
+			await provider.endUserOperation("failed"); // Add this call as per instructions
 			// The webview's messageBusHandler.ts will show the error UI based on this message.
 			break;
 		}
 
 		case "commitReview": {
 			// This case indicates that AI generation for the commit message has completed and is ready for review.
-			provider.isGeneratingUserRequest = false;
-			await provider.workspaceState.update(
-				"minovativeMind.isGeneratingUserRequest",
-				false
-			);
+			// Removed explicit isGeneratingUserRequest reset as per instructions.
 			console.log("Received commitReview message:", data.value);
+			if (
+				!data.value ||
+				typeof data.value.commitMessage !== "string" ||
+				!Array.isArray(data.value.stagedFiles)
+			) {
+				console.error(
+					"[MessageHandler] Invalid 'commitReview' message value:",
+					data.value
+				);
+				await provider.endUserOperation("failed"); // Signal failure if data is bad
+				return; // Stop processing this case if data is invalid
+			}
+			await provider.endUserOperation("review"); // Add this call as per instructions
 			// The webview's messageBusHandler.ts will show the commit review UI based on this message.
 			break;
 		}
