@@ -46,6 +46,11 @@ export interface PendingPlanData {
 	relevantFiles?: string[];
 }
 
+export interface PendingCommitReviewData {
+	commitMessage: string;
+	stagedFiles: string[];
+}
+
 export interface WebviewAppState {
 	currentAiMessageContentElement: HTMLSpanElement | null;
 	currentAccumulatedText: string;
@@ -60,6 +65,7 @@ export interface WebviewAppState {
 	confirmPlanButton: HTMLButtonElement | null;
 	cancelPlanButton: HTMLButtonElement | null;
 	pendingPlanData: PendingPlanData | null;
+	pendingCommitReviewData: PendingCommitReviewData | null;
 	isApiKeySet: boolean;
 	isLoading: boolean;
 	totalKeys: number;

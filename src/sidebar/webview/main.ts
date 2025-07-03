@@ -110,8 +110,11 @@ function setLoadingState(
 	elements.clearChatButton.disabled =
 		!canInteractWithChatHistoryButtons || !hasMessages;
 
-	// Apply disabled state for confirm commit button based on general send controls
-	elements.confirmCommitButton.disabled = !enableSendControls;
+	// Apply disabled state for confirm commit button
+	elements.confirmCommitButton.disabled =
+		loading ||
+		!commitReviewVisible ||
+		elements.commitMessageTextarea.value.trim() === "";
 
 	console.log(
 		`[setLoadingState] Status: loading=${loading}, planConfVis=${planConfirmationVisible}, planParseErrVis=${planParseErrorVisible}, commitRevVis=${commitReviewVisible}`

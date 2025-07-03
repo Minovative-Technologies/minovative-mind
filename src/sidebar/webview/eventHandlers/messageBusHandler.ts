@@ -319,23 +319,77 @@ export function initializeMessageBusHandler(
 					error,
 					failedJson,
 					postMessageToExtension,
-					setLoadingState,
-					updateStatus
+					updateStatus, // Corrected order as per showPlanParseErrorUI signature
+					setLoadingState // Corrected order as per showPlanParseErrorUI signature
 				);
 				break;
 			}
 
 			case "commitReview": {
 				console.log("Received commitReview message:", message.value);
+				if (
+					!message.value ||
+					typeof message.value.commitMessage !== "string" ||
+					!Array.isArray(message.value.stagedFiles)
+				) {
+					console.error("Invalid 'commitReview' message value:", message.value);
+					setLoadingState(false, elements);
+					return;
+				}
 				const { commitMessage, stagedFiles } = message.value;
+				appState.pendingCommitReviewData = { commitMessage, stagedFiles }; // Update appState here
 				showCommitReviewUI(
 					elements,
 					commitMessage,
 					stagedFiles,
 					postMessageToExtension,
-					setLoadingState,
-					updateStatus
+					updateStatus, // Corrected argument order
+					setLoadingState // Corrected argument order
 				);
+				break;
+			}
+
+			case "restorePendingCommitReview": {
+				if (message.value) {
+					console.log(
+						"Received restorePendingCommitReview message:",
+						message.value
+					);
+					if (
+						typeof message.value.commitMessage !== "string" ||
+						!Array.isArray(message.value.stagedFiles)
+					) {
+						console.error(
+							"Invalid 'restorePendingCommitReview' message value:",
+							message.value
+						);
+						setLoadingState(false, elements);
+						return;
+					}
+					const { commitMessage, stagedFiles } = message.value;
+
+					appState.pendingCommitReviewData = { commitMessage, stagedFiles };
+
+					showCommitReviewUI(
+						elements,
+						commitMessage,
+						stagedFiles,
+						postMessageToExtension,
+						updateStatus,
+						setLoadingState
+					);
+
+					setLoadingState(false, elements);
+
+					if (elements.cancelGenerationButton) {
+						elements.cancelGenerationButton.style.display = "none";
+					}
+				} else {
+					console.warn(
+						"restorePendingCommitReview received without message.value. No action taken."
+					);
+					setLoadingState(false, elements);
+				}
 				break;
 			}
 
@@ -487,6 +541,7 @@ export function initializeMessageBusHandler(
 				resetStreamingAnimationState();
 				hideAllConfirmationAndReviewUIs(elements);
 				appState.pendingPlanData = null; // Ensure this is reset too
+				appState.pendingCommitReviewData = null; // Ensure this is reset too
 				updateEmptyChatPlaceholderVisibility(elements);
 				break;
 			}
@@ -522,6 +577,7 @@ export function initializeMessageBusHandler(
 				}
 				hideAllConfirmationAndReviewUIs(elements);
 				appState.pendingPlanData = null; // Ensure this is reset too
+				appState.pendingCommitReviewData = null; // Ensure this is reset too
 				updateEmptyChatPlaceholderVisibility(elements);
 				document.documentElement.scrollTop = 0;
 				break;

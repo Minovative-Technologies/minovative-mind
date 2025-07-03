@@ -278,7 +278,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"[SidebarProvider] Restoring pending commit review to webview."
 			);
 			this.postMessageToWebview({
-				type: "commitReview",
+				type: "restorePendingCommitReview", // Changed from 'commitReview' to 'restorePendingCommitReview'
 				value: this.pendingCommitReviewData,
 			});
 		} else {

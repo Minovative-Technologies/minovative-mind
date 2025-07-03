@@ -27,6 +27,7 @@ export const appState: WebviewAppState = {
 	confirmPlanButton: null,
 	cancelPlanButton: null,
 	pendingPlanData: null,
+	pendingCommitReviewData: null,
 	isApiKeySet: false,
 	isLoading: false,
 	totalKeys: 0,

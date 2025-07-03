@@ -1,6 +1,5 @@
 import { setIconForButton } from "../utils/iconHelpers";
 import { faCheck, faTimes, faRedo } from "@fortawesome/free-solid-svg-icons";
-import { postMessageToExtension as vscodePostMessageToExtension } from "../utils/vscodeApi";
 import { appState } from "../state/appState";
 import { updateStatus } from "./statusManager";
 import { PendingPlanData, RequiredDomElements } from "../types/webviewTypes";
@@ -364,6 +363,7 @@ export function hideCommitReviewUI(elements: RequiredDomElements): void {
 	const { commitReviewContainer } = elements;
 	if (commitReviewContainer) {
 		commitReviewContainer.style.display = "none";
+		appState.pendingCommitReviewData = null; // Clear the pending data
 		console.log("Commit review UI hidden.");
 	}
 }
