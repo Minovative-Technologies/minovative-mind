@@ -6,6 +6,8 @@ import { SettingsManager } from "../sidebar/managers/settingsManager";
 import { ChatHistoryManager } from "../sidebar/managers/chatHistoryManager";
 import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
 import { AIRequestService } from "./aiRequestService";
+import { EmbeddingService } from "./embeddingService"; // 1. Import EmbeddingService
+import { ERROR_OPERATION_CANCELLED } from "../ai/gemini"; // Import for error handling
 import { PlanGenerationContext } from "../sidebar/common/sidebarTypes";
 import { scanWorkspace } from "../context/workspaceScanner";
 import {
@@ -58,7 +60,8 @@ export class ContextService {
 		private chatHistoryManager: ChatHistoryManager,
 		private changeLogger: ProjectChangeLogger,
 		private aiRequestService: AIRequestService,
-		private postMessageToWebview: (message: any) => void
+		private postMessageToWebview: (message: any) => void,
+		private embeddingService: EmbeddingService // 2. Add embeddingService to constructor
 	) {}
 
 	public async buildProjectContext(
@@ -296,7 +299,7 @@ export class ContextService {
 													if (processedFilePaths.has(relativeFilePath)) {
 														return;
 													}
-													processedFilePaths.add(relativeFilePath);
+													processedFilePaths.add(relativeFilePath); // MODIFICATION HERE: Changed relativePath to relativeFilePath
 
 													const content =
 														await SymbolService.getDocumentContentAtLocation(
@@ -467,6 +470,53 @@ export class ContextService {
 			);
 			await BPromise.allSettled(summaryGenerationPromises);
 
+			// 3. Add embedding generation block
+			const fileEmbeddings = new Map<string, number[]>();
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Generating file embeddings for semantic search...",
+			});
+
+			let generatedEmbeddingsCount = 0;
+			await BPromise.map(
+				filesToSummarizeForSelectionPrompt, // Use the same set of files as for summaries
+				async (fileUri: vscode.Uri) => {
+					if (cancellationToken?.isCancellationRequested) {
+						throw new Error(ERROR_OPERATION_CANCELLED); // Re-throw to stop the entire map operation
+					}
+					const relativePath = path
+						.relative(rootFolder.uri.fsPath, fileUri.fsPath)
+						.replace(/\\/g, "/");
+					const summary = fileSummariesForAI.get(relativePath);
+
+					if (summary) {
+						try {
+							const embedding = await this.embeddingService.embed(
+								summary,
+								cancellationToken
+							);
+							fileEmbeddings.set(relativePath, embedding);
+							generatedEmbeddingsCount++;
+						} catch (error: any) {
+							if (error.message === ERROR_OPERATION_CANCELLED) {
+								throw error; // Re-throw cancellation to stop the process immediately
+							}
+							console.warn(
+								`[ContextService] Failed to generate embedding for ${relativePath}: ${error.message}`
+							);
+							// Continue even if embedding fails for one file, as it shouldn't block the whole process
+						}
+					}
+				},
+				{ concurrency: 5 } // Limit concurrent embedding calls to prevent rate limits or memory issues
+			);
+
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: `Generated ${generatedEmbeddingsCount} file embedding(s).`,
+			});
+			// End of new embedding generation block
+
 			// Add cancellation check before AI-based selection processes
 			if (cancellationToken?.isCancellationRequested) {
 				throw new Error("Operation cancelled by user.");
@@ -504,6 +554,8 @@ export class ContextService {
 						fileDependencies,
 						preSelectedHeuristicFiles: heuristicSelectedFiles, // NEW: Pass heuristicSelectedFiles
 						fileSummaries: fileSummariesForAI, // NEW: Pass the generated file summaries
+						fileEmbeddings: fileEmbeddings, // 4. Add fileEmbeddings
+						embeddingService: this.embeddingService, // 4. Add embeddingService
 					};
 					const selectedFiles = await selectRelevantFilesAI(selectionOptions);
 

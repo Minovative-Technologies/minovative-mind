@@ -17,6 +17,9 @@ export const ERROR_AI_TIMEOUT = "ERROR_GEMINI_AI_TIMEOUT";
 // NEW: Define the initial AI response timeout in milliseconds (e.g., 45 seconds)
 const INITIAL_AI_RESPONSE_TIMEOUT_MS = 45000;
 
+// 1. Add a new exported constant EMBEDDING_MODEL_NAME
+export const EMBEDDING_MODEL_NAME = "text-embedding-004";
+
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
 let currentApiKey: string | null = null;
@@ -280,6 +283,141 @@ export async function* generateContentStream(
 		throw new Error(errorMessage);
 	} finally {
 		// 6. Add a finally block to ensure clearTimeout is called
+		clearTimeout(timeoutId);
+	}
+}
+
+/**
+ * 2. Implement a new exported async function generateEmbedding.
+ * Generates an embedding vector for the given text using the specified model.
+ *
+ * @param apiKey The Google Gemini API key.
+ * @param modelName The specific Gemini embedding model name (e.g., "text-embedding-004").
+ * @param text The text to embed.
+ * @param token Optional cancellation token from VS Code.
+ * @returns A promise that resolves to an array of numbers representing the embedding.
+ * @throws {Error} If the operation is cancelled, times out, or other API errors occur.
+ */
+export async function generateEmbedding(
+	apiKey: string,
+	modelName: string,
+	text: string,
+	token?: vscode.CancellationToken
+): Promise<number[]> {
+	console.log(`Gemini: Starting embedding generation for model: ${modelName}`);
+
+	// Immediate cancellation check
+	if (token?.isCancellationRequested) {
+		console.log("Gemini: Embedding generation cancelled before start.");
+		throw new Error(ERROR_OPERATION_CANCELLED);
+	}
+
+	const internalAbortController = new AbortController();
+	const timeoutId = setTimeout(() => {
+		internalAbortController.abort(new Error(ERROR_AI_TIMEOUT));
+	}, INITIAL_AI_RESPONSE_TIMEOUT_MS);
+
+	// Link VS Code CancellationToken to AbortController
+	token?.onCancellationRequested(() => {
+		clearTimeout(timeoutId); // Clear the timeout as we are explicitly cancelling
+		internalAbortController.abort(new Error(ERROR_OPERATION_CANCELLED));
+	});
+
+	try {
+		// Ensure GoogleGenerativeAI client is initialized using initializeGenerativeAI
+		if (!initializeGenerativeAI(apiKey, modelName)) {
+			throw new Error(
+				`Gemini AI client not initialized for embedding. Please check API key and selected model (${modelName}).`
+			);
+		}
+		// model should now be correctly set by initializeGenerativeAI
+		if (!model) {
+			throw new Error(
+				`Gemini embedding model (${modelName}) is not available after initialization attempt.`
+			);
+		}
+
+		// 1. Change the `embedContentRequest` object to specify `content: { role: 'user', parts: [{ text: text }] }`.
+		const embedContentRequest = {
+			content: {
+				role: "user",
+				parts: [{ text: text }],
+			},
+		};
+
+		// Obtain a GenerativeModel for modelName (which will be EMBEDDING_MODEL_NAME)
+		// and pass AbortController's signal to model.embedContent
+		const result = await model.embedContent(embedContentRequest, {
+			signal: internalAbortController.signal,
+		});
+
+		// Check cancellation again after the API call, before returning
+		if (token?.isCancellationRequested) {
+			console.log("Gemini: Embedding generation cancelled after API call.");
+			throw new Error(ERROR_OPERATION_CANCELLED);
+		}
+
+		// 2. Update all occurrences of `result.embedding.value` to `result.embedding.values`.
+		if (
+			!result ||
+			!result.embedding ||
+			!Array.isArray(result.embedding.values)
+		) {
+			throw new Error(
+				"Invalid embedding response from Gemini API: Missing or invalid embedding values."
+			);
+		}
+
+		console.log(
+			`Gemini: Embedding generated successfully for model: ${modelName}. Vector length: ${result.embedding.values.length}`
+		);
+		return result.embedding.values;
+	} catch (error: any) {
+		console.error(
+			`Gemini: Error during embedding generation (${modelName}):`,
+			error
+		);
+
+		// Implement try-catch for error handling, re-throwing specific errors
+		if (error instanceof Error) {
+			if (error.message === ERROR_AI_TIMEOUT) {
+				throw error; // Re-throw the timeout error
+			}
+			if (error.message === ERROR_OPERATION_CANCELLED) {
+				throw error;
+			}
+		}
+
+		let errorMessage = `An error occurred during embedding with the Gemini API (${modelName}).`;
+		const lowerErrorMessage = (error.message || "").toLowerCase();
+		const status = error.httpGoogleError?.code || error.status;
+
+		if (lowerErrorMessage.includes("quota") || status === 429) {
+			throw new Error(ERROR_QUOTA_EXCEEDED);
+		} else if (
+			lowerErrorMessage.includes("api key not valid") ||
+			status === 400 ||
+			status === 403
+		) {
+			errorMessage = `Invalid API Key for Gemini embedding model ${modelName}. Please verify your key.`;
+			resetClient();
+		} else if (
+			lowerErrorMessage.includes("model not found") ||
+			status === 404
+		) {
+			errorMessage = `The embedding model '${modelName}' is not valid or accessible.`;
+			resetClient();
+		} else if (
+			status === 503 ||
+			lowerErrorMessage.includes("service unavailable")
+		) {
+			throw new Error(ERROR_SERVICE_UNAVAILABLE);
+		} else {
+			errorMessage = `Gemini embedding error (${modelName}): ${error.message}`;
+		}
+		throw new Error(errorMessage);
+	} finally {
+		// Ensure clearTimeout is called
 		clearTimeout(timeoutId);
 	}
 }

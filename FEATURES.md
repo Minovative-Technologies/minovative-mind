@@ -148,6 +148,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 - **Heuristic File Selection:** Uses dependency graphs, symbol analysis, and recent changes to select the most relevant files for context, even in large projects.
 - **AI-Driven File Selection:** Summarizes all or a subset of files and uses the AI to select the most relevant files for the current request, combining both heuristic and AI-driven approaches for optimal context.
+- **Semantic Embedding-Based Selection:** Leverages AI-generated numerical embeddings of file content and the user's query/context. These embeddings allow the system to calculate semantic similarity scores, ensuring that the most conceptually relevant files are prioritized and included in the AI's context. This enhances the precision of AI-driven file selection.
 
 ### Project Change Logging
 

@@ -14,6 +14,7 @@ import * as sidebarTypes from "./common/sidebarTypes";
 import { FirebaseUser } from "../firebase/firebaseService";
 import { AIRequestService } from "../services/aiRequestService";
 import { ContextService } from "../services/contextService";
+import { EmbeddingService } from "../services/embeddingService"; // New import for EmbeddingService
 import { handleWebviewMessage } from "../services/webviewMessageHandler";
 import { PlanService } from "../services/planService";
 import { ChatService } from "../services/chatService";
@@ -75,6 +76,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	// Services
 	public aiRequestService: AIRequestService;
 	public contextService: ContextService;
+	public embeddingService: EmbeddingService; // New declaration for EmbeddingService
 	public planService: PlanService;
 	public chatService: ChatService;
 	public commitService: CommitService;
@@ -118,12 +120,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.apiKeyManager,
 			this.postMessageToWebview.bind(this)
 		);
+		// NEW: Instantiate EmbeddingService before ContextService
+		this.embeddingService = new EmbeddingService(
+			this.apiKeyManager,
+			this.postMessageToWebview.bind(this)
+		);
 		this.contextService = new ContextService(
 			this.settingsManager,
 			this.chatHistoryManager,
 			this.changeLogger,
 			this.aiRequestService,
-			this.postMessageToWebview.bind(this)
+			this.postMessageToWebview.bind(this),
+			this.embeddingService // Pass the newly created embeddingService instance here as the sixth argument
 		);
 
 		this.gitConflictResolutionService = new GitConflictResolutionService(
