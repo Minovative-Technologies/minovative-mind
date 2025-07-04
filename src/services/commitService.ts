@@ -84,11 +84,16 @@ export class CommitService {
 			const stagedFiles = await getGitStagedFiles(rootPath);
 
 			if (!diff || diff.trim() === "") {
-				this.provider.chatHistoryManager.addHistoryEntry(
-					"model",
+				// Remove the direct chat history entry
+				// this.provider.chatHistoryManager.addHistoryEntry(
+				// 	"model",
+				// 	"No changes staged to commit."
+				// );
+				// Modify the endUserOperation call to pass the specific message
+				await this.provider.endUserOperation(
+					"success",
 					"No changes staged to commit."
 				);
-				this.provider.postMessageToWebview({ type: "aiResponseEnd" });
 				return;
 			}
 

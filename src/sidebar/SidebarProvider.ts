@@ -358,9 +358,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	 * ensures UI inputs are re-enabled, and provides an optional status update.
 	 * This method centralizes the logic for ending user operations (success, failure, cancellation, or review transition).
 	 * @param outcome The final outcome of the operation, or "review" if transitioning to a review state.
+	 * @param customStatusMessage An optional custom message to display instead of the default outcome-based message.
 	 */
 	public async endUserOperation(
-		outcome: sidebarTypes.ExecutionOutcome | "review"
+		outcome: sidebarTypes.ExecutionOutcome | "review",
+		customStatusMessage?: string // Added optional parameter
 	): Promise<void> {
 		console.log(
 			`[SidebarProvider] Ending user operation with outcome: ${outcome}`
@@ -388,26 +390,33 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		let statusMessage = "";
 		let isError = false;
 
-		switch (outcome) {
-			case "success":
-				statusMessage = "Operation completed successfully.";
-				break;
-			case "cancelled":
-				statusMessage = "Operation cancelled.";
-				isError = true;
-				break;
-			case "failed":
-				statusMessage = "Operation failed. Check sidebar for details.";
-				isError = true;
-				break;
-			case "review":
-				statusMessage =
-					"Operation paused for user review. Please review the proposed changes.";
-				break;
-			default:
-				statusMessage = `Operation ended with unknown outcome: ${outcome}.`;
-				isError = true;
-				break;
+		if (customStatusMessage) {
+			// If a custom message is provided, use it and determine isError based on outcome
+			statusMessage = customStatusMessage;
+			isError = outcome === "cancelled" || outcome === "failed";
+		} else {
+			// Fallback to existing switch logic if no custom message
+			switch (outcome) {
+				case "success":
+					statusMessage = "Operation completed successfully.";
+					break;
+				case "cancelled":
+					statusMessage = "Operation cancelled.";
+					isError = true;
+					break;
+				case "failed":
+					statusMessage = "Operation failed. Check sidebar for details.";
+					isError = true;
+					break;
+				case "review":
+					statusMessage =
+						"Operation paused for user review. Please review the proposed changes.";
+					break;
+				default:
+					statusMessage = `Operation ended with unknown outcome: ${outcome}.`;
+					isError = true;
+					break;
+			}
 		}
 
 		if (statusMessage) {
@@ -420,24 +429,29 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	public async cancelActiveOperation(): Promise<void> {
-		// Cancel any actively running tasks
+	public async triggerUniversalCancellation(): Promise<void> {
+		console.log("[SidebarProvider] Triggering universal cancellation...");
 		this.activeOperationCancellationTokenSource?.cancel();
-		// Kill any child processes started by the extension
-		this.activeChildProcesses.forEach((cp) => cp.kill());
+		this.activeChildProcesses.forEach((cp) => {
+			console.log(
+				`[SidebarProvider] Killing child process with PID: ${cp.pid}`
+			);
+			cp.kill();
+		});
 		this.activeChildProcesses = [];
-
-		// Centralize state cleanup and UI re-enablement
+		this.pendingPlanGenerationContext = null;
+		this.lastPlanGenerationContext = null;
+		this.pendingCommitReviewData = null;
+		this.currentAiStreamingState = null;
 		await this.endUserOperation("cancelled");
+		console.log("[SidebarProvider] Universal cancellation complete.");
+	}
+
+	public async cancelActiveOperation(): Promise<void> {
+		await this.triggerUniversalCancellation();
 	}
 
 	public async cancelPendingPlan(): Promise<void> {
-		// Provide a direct VS Code notification for the user
-		vscode.window.showInformationMessage(
-			"Minovative Mind: Plan review cancelled."
-		);
-
-		// Centralize state cleanup and UI re-enablement
-		await this.endUserOperation("cancelled");
+		await this.triggerUniversalCancellation();
 	}
 }

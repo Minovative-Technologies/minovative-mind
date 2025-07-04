@@ -31,5 +31,6 @@ export const appState: WebviewAppState = {
 	isApiKeySet: false,
 	isLoading: false,
 	isCommitActionInProgress: false, // Added as per instruction
+	isCancellationInProgress: false, // Initialize the new flag
 	totalKeys: 0,
 };

@@ -39,18 +39,21 @@ function setLoadingState(
 	const commitReviewVisible =
 		elements.commitReviewContainer.style.display !== "none";
 
-	console.log(
-		`[setLoadingState] UI Display States: planConfirmationContainer=${elements.planConfirmationContainer.style.display}, planParseErrorContainer=${elements.planParseErrorContainer.style.display}, commitReviewContainer=${elements.commitReviewContainer.style.display}, isCommandSuggestionsVisible=${appState.isCommandSuggestionsVisible}`
-	);
-
-	// Determine enablement for core chat controls (send button, chat input, model select)
-	const enableSendControls =
+	// Introduce new constants for granular control
+	const canInteractWithMainChatControls =
 		!loading &&
 		appState.isApiKeySet &&
 		!planConfirmationVisible &&
 		!planParseErrorVisible &&
 		!commitReviewVisible &&
-		!appState.isCommandSuggestionsVisible;
+		!appState.isCancellationInProgress;
+
+	const canSendCurrentInput =
+		canInteractWithMainChatControls && !appState.isCommandSuggestionsVisible;
+
+	console.log(
+		`[setLoadingState] UI Display States: planConfirmationContainer=${elements.planConfirmationContainer.style.display}, planParseErrorContainer=${elements.planParseErrorContainer.style.display}, commitReviewContainer=${elements.commitReviewContainer.style.display}, isCommandSuggestionsVisible=${appState.isCommandSuggestionsVisible}`
+	);
 
 	// Determine enablement for chat history management buttons
 	const canInteractWithChatHistoryButtons =
@@ -61,18 +64,13 @@ function setLoadingState(
 		!appState.isCommandSuggestionsVisible;
 
 	console.log(
-		`[setLoadingState] Final computed enableSendControls=${enableSendControls}, canInteractWithChatHistoryButtons=${canInteractWithChatHistoryButtons}`
+		`[setLoadingState] Final computed canInteractWithMainChatControls=${canInteractWithMainChatControls}, canSendCurrentInput=${canSendCurrentInput}, canInteractWithChatHistoryButtons=${canInteractWithChatHistoryButtons}`
 	);
 
 	// Apply disabled states to main chat interface elements
-	elements.sendButton.disabled = !enableSendControls;
-	elements.chatInput.disabled = loading;
-	elements.modelSelect.disabled =
-		!!appState.isLoading ||
-		!!planConfirmationVisible ||
-		!!planParseErrorVisible ||
-		!!commitReviewVisible ||
-		!!appState.isCommandSuggestionsVisible;
+	elements.chatInput.disabled = !canInteractWithMainChatControls;
+	elements.modelSelect.disabled = !canInteractWithMainChatControls;
+	elements.sendButton.disabled = !canSendCurrentInput;
 
 	// Apply disabled states to API key management controls
 	const enableApiKeyControls =
@@ -131,7 +129,8 @@ function setLoadingState(
 		loading &&
 		!planConfirmationVisible &&
 		!planParseErrorVisible &&
-		!commitReviewVisible
+		!commitReviewVisible &&
+		!appState.isCancellationInProgress
 	) {
 		elements.cancelGenerationButton.style.display = "inline-flex";
 	} else {

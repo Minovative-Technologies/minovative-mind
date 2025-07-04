@@ -10,18 +10,6 @@ export async function handleWebviewMessage(
 ): Promise<void> {
 	console.log(`[MessageHandler] Message received: ${data.type}`);
 
-	// Handle cancellation messages first
-	if (data.type === "cancelGeneration") {
-		console.log("[MessageHandler] Cancelling current operation...");
-		provider.cancelActiveOperation();
-		return;
-	}
-	if (data.type === "cancelPlanExecution") {
-		console.log("[MessageHandler] Cancelling pending plan confirmation...");
-		provider.cancelPendingPlan();
-		return;
-	}
-
 	// Prevent new operations if one is ongoing
 	const allowedDuringBackground = [
 		"webviewReady",
@@ -40,6 +28,7 @@ export async function handleWebviewMessage(
 		"openFile", // Allowed as a direct user interaction
 		"toggleRelevantFilesDisplay", // Allowed as a UI interaction
 		"openSettingsPanel",
+		"universalCancel", // New universal cancellation message, must be allowed during background operations
 	];
 
 	if (
@@ -59,6 +48,11 @@ export async function handleWebviewMessage(
 	}
 
 	switch (data.type) {
+		case "universalCancel":
+			console.log("[MessageHandler] Received universal cancellation request.");
+			await provider.triggerUniversalCancellation();
+			break;
+
 		case "webviewReady":
 			console.log("[MessageHandler] Webview ready. Initializing UI state.");
 			await provider.handleWebviewReady();

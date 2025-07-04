@@ -1,4 +1,5 @@
 import { RequiredDomElements } from "../types/webviewTypes";
+import { appState } from "../state/appState";
 
 export function updateApiKeyStatus(
 	elements: RequiredDomElements,
@@ -39,20 +40,21 @@ export function updateStatus(
 	elements.statusArea.style.color = isError
 		? "var(--vscode-errorForeground)"
 		: "var(--vscode-descriptionForeground)";
+
 	if (!isError) {
 		setTimeout(() => {
 			// Only clear if the current content is still the one set by this timeout
 			if (elements.statusArea.textContent === sanitizedText) {
 				elements.statusArea.textContent = "";
 			}
-		}, 15000); // 15 seconds for non-error messages
+		}, 30000); // 30 seconds for non-error messages
 	} else {
 		setTimeout(() => {
 			// Only clear if the current content is still the one set by this timeout
 			if (elements.statusArea.textContent === sanitizedText) {
 				elements.statusArea.textContent = "";
 			}
-		}, 30000); // 30 seconds for error messages
+		}, 45000); // 45 seconds for error messages
 	}
 }
 

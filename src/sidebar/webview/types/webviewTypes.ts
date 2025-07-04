@@ -69,5 +69,6 @@ export interface WebviewAppState {
 	isApiKeySet: boolean;
 	isLoading: boolean;
 	isCommitActionInProgress: boolean;
+	isCancellationInProgress: boolean;
 	totalKeys: number;
 }

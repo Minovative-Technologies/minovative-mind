@@ -288,6 +288,18 @@ export function initializeMessageBusHandler(
 
 				resetStreamingAnimationState();
 
+				if (appState.isCancellationInProgress) {
+					// If cancellation is in progress, suppress status updates from aiResponseEnd.
+					// The final status will be handled by the 'statusUpdate' message from the backend.
+					appState.isCommitActionInProgress = false;
+					// setLoadingState(false, elements); // This line is removed as inputs should stay disabled during cancellation.
+					updateEmptyChatPlaceholderVisibility(elements);
+					console.log(
+						"[Webview] aiResponseEnd status update suppressed due to ongoing cancellation. Inputs remain disabled."
+					);
+					break;
+				}
+
 				if (!message.success && message.error) {
 					const errorMessageContent =
 						typeof message.error === "string"
@@ -390,8 +402,8 @@ export function initializeMessageBusHandler(
 					commitMessage,
 					stagedFiles,
 					postMessageToExtension,
-					updateStatus, // Corrected argument order
-					setLoadingState // Corrected argument order
+					updateStatus,
+					setLoadingState
 				);
 				break;
 			}
@@ -518,6 +530,15 @@ export function initializeMessageBusHandler(
 			case "statusUpdate": {
 				if (typeof message.value === "string") {
 					updateStatus(elements, message.value, message.isError ?? false);
+					if (
+						appState.isCancellationInProgress &&
+						message.value.toLowerCase().includes("cancelled")
+					) {
+						appState.isCancellationInProgress = false;
+						console.log(
+							"[Webview] Cancellation flow confirmed and completed by statusUpdate. isCancellationInProgress reset."
+						);
+					}
 				}
 				break;
 			}
@@ -730,14 +751,26 @@ export function initializeMessageBusHandler(
 					elements.planConfirmationContainer &&
 					elements.planConfirmationContainer.style.display !== "none";
 
-				if (!planConfirmationActive && appState.pendingPlanData) {
-					appState.pendingPlanData = null;
-					updateStatus(
-						elements,
-						"Inputs re-enabled; any non-visible pending plan confirmation has been cleared."
+				if (!appState.isCancellationInProgress) {
+					// Only update status if not in a cancellation flow
+					if (!planConfirmationActive && appState.pendingPlanData) {
+						appState.pendingPlanData = null;
+						updateStatus(
+							elements,
+							"Inputs re-enabled; any non-visible pending plan confirmation has been cleared."
+						);
+					} else if (!planConfirmationActive) {
+						updateStatus(elements, "Inputs re-enabled.");
+					}
+				} else {
+					// If cancellation is in progress, pendingPlanData should still be cleared
+					// if relevant, but no new status message from reenableInput itself.
+					if (!planConfirmationActive && appState.pendingPlanData) {
+						appState.pendingPlanData = null;
+					}
+					console.log(
+						"[Webview] reenableInput skipped status update due to ongoing cancellation."
 					);
-				} else if (!planConfirmationActive) {
-					updateStatus(elements, "Inputs re-enabled.");
 				}
 				break;
 			}

@@ -190,12 +190,21 @@ export function initializeButtonEventListeners(
 	// Cancel Generation Button
 	cancelGenerationButton.addEventListener("click", () => {
 		console.log("Cancel Generation button clicked.");
-		postMessageToExtension({ type: "cancelGeneration" });
-		updateStatus(elements, "Cancelling operation..."); // Pass elements
+		// Start of modifications
+		elements.planConfirmationContainer.style.display = "none";
+		elements.planParseErrorContainer.style.display = "none";
+		elements.commitReviewContainer.style.display = "none";
+		appState.pendingPlanData = null;
+		appState.pendingCommitReviewData = null;
+		// End of modifications
+
+		appState.isCancellationInProgress = true; // NEW LINE
+		postMessageToExtension({ type: "universalCancel" }); // Modified type
+		updateStatus(elements, "Cancelling operations...", false); // Modified status message
 		// After cancelling, immediately disable the button and set loading to false.
 		// The `reenableInput` message from the extension might also do this, but
 		// a quick UI response is good.
-		setLoadingState(false, elements); // This will hide the cancel button itself too
+		// setLoadingState(false, elements); // This line is removed per instructions.
 		stopTypingAnimation(); // Ensure typing animation stops
 		// Clear any current streaming message content if it was interrupted
 		if (appState.currentAiMessageContentElement) {
