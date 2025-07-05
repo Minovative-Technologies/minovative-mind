@@ -11,7 +11,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - General Q&A: Supports general programming questions, debugging help, and conceptual inquiries.
 - **Displays relevant file paths within AI chat responses, providing interactive elements to collapse/expand the file list and open files directly.**
 - **Enables HTML rendering in Markdown chat responses for richer content.**
-- **Animated ellipsis effect in loading messages for improved feedback.**
+- **Intelligent Command Suggestions & Autocomplete:** As you type `/` in the chat input, the extension provides real-time suggestions and autocomplete options for available commands (e.g., `/plan`, `/fix`, `/docs`, `/commit`), improving discoverability and efficiency.
 
 ### Enhanced AI Reasoning (Thinking Capabilities)
 
@@ -49,6 +49,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
   - `run_command`: Execute shell commands in the integrated terminal (e.g., `npm install`, `git commit`).
 - **User Confirmation for Commands:** For security, users are prompted with a confirmation dialog before any `run_command` step is executed, allowing them to "Allow Command" or "Skip Command".
 - **Interactive Execution Feedback:** Provides real-time progress updates in `VS Code` notifications and the sidebar chat. Includes a simulated "typing" animation for AI-generated content in the editor (Premium Tier).
+- **Per-step AI Rationale:** For file creation and modification steps in a plan, the AI now provides a concise 'mini-plan' or explanation of its approach directly in the chat, offering real-time insight into its actions before applying changes.
 - **File Diffs in Chat:** Displays real-time file changes (diffs) directly within the chat interface for `create_file` and `modify_file` plan steps, with enhanced execution messages indicating diff availability.
 - **Cancellation:** Users can cancel an ongoing plan execution at any time via the `VS Code` progress notification.
 - **Resilient Plan Execution:** Enhances robustness by automatically retrying failed plan steps (with 10s, 15s, 20s delays) for transient errors like API overloads, network issues, or newly-identified 'Service Unavailable' (503) responses. Crucially, it now includes robust error handling to prevent AI API error messages from being written into files, ensuring file integrity. For persistent failures or exhausted retries, users are prompted with options to 'Retry Step', 'Skip Step', or 'Cancel Plan', preventing mid-plan halts and preserving progress.
@@ -63,6 +64,8 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - Quick Execution: Can be triggered by typing `/commit` in the chat or clicking a dedicated "Commit Changes" button in the sidebar.
 - Streamlined Process: Automatically stages pending changes (`git add .`), analyzes the diff, generates a conventional commit message, and executes the `git commit` command.
 - Interactive Review: A user-facing review step is provided for generated Git commit messages before they are actually executed, allowing users to approve or modify.
+- **Editable AI-Generated Commit Messages:** Provides the flexibility to review and edit the AI-generated commit message before confirming the commit, giving you final control over the commit message.
+- **Persistent Commit Review State:** If you close the sidebar or VS Code during a Git commit review, the extension intelligently restores the review state, ensuring continuity and preventing loss of context.
 
 ## Account & Subscription Management
 
@@ -88,7 +91,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - Easy Configuration: Users can easily add their `Google Gemini API` keys directly within the `Minovative Mind sidebar`.
 - Secure Storage: API keys are securely stored using `VS Code's` built-in secret storage and are not exposed or sent outside the local environment, except directly to `Google's Gemini API` endpoints.
 - Multi-Key Support: Allows adding and managing multiple API keys.
-- Proactive API Key Switching: The extension automatically cycles through configured API keys if one hits a quota limit or encounters common API errors, ensuring uninterrupted service. Additionally, keys will rotate on every AI API call to distribute cost and usage for efficiency. Users can also manually switch to the next or previous key, or delete the active key.
+- Proactive API Key Switching: The extension automatically cycles through configured API keys if one hits a quota limit or encounters common API errors, ensuring uninterrupted service. Additionally and most importantly, keys will rotate on every API call to distribute cost and usage for efficiency. Users can also manually switch to the next or previous key, or delete the active key.
 
 ### Flexible AI Model Selection
 
@@ -124,6 +127,8 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - **Persistence:** Users can save their entire chat history, including displayed file diffs and relevant files, to a `JSON` file on their local machine for later review or to preserve important discussions/AI-generated content.
 - **Restoration:** Previously saved chat histories can be loaded, providing the AI with context from past conversations for more coherent follow-ups across sessions. Chat history also automatically restores to the webview following actions like commit confirmation, cancellation, and plan execution updates.
 - **Clear Chat:** Option to clear the current conversation.
+- **Individual Message Deletion:** Provides granular control, allowing users to remove specific chat entries from their history.
+- **Persistent Relevant Files Display:** The expanded/collapsed state of file lists displayed in AI chat responses is now preserved across sessions for enhanced usability.
 
 ### Copy Message Feature
 
@@ -133,6 +138,8 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 - Status Updates: Provides clear status messages in the sidebar for ongoing operations (e.g., "`Generating documentation…`", "`Executing Step 1…`").
 - Error Indicators: Displays distinct visual cues for error messages within the chat and status area.
+- **Enhanced Loading States & UI Restoration:** Includes animated ellipsis effects in loading messages for improved feedback. The UI seamlessly restores its active loading/generating state (including typing animations and disabled inputs) even after the sidebar is closed/reopened or `VS Code` is restarted, ensuring a consistent and uninterrupted user experience.
+- **Code Block and Diff Syntax Highlighting:** Enhances readability of AI-generated code blocks and file differences by applying syntax highlighting, making it easier to review and understand code snippets.
 - **Code Block Rendering:** Ensures code blocks displayed in the chat (e.g., within AI responses or diffs) are properly word-wrapped to prevent horizontal scrolling and improve readability.
 - **Diff Syntax Highlighting:** File diffs displayed in the chat interface are rendered with syntax highlighting for added and removed lines, enhancing clarity and reviewability.
 
