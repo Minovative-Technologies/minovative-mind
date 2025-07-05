@@ -683,7 +683,7 @@ export class PlanService {
 					),
 					isError: true,
 				});
-				// this.provider.postMessageToWebview({ type: "reenableInput" }); // REMOVED
+				// this.provider.postMessageToWebview({ type: "reenableInput" }); //
 				await this.provider.endUserOperation("failed"); // Signal failure and re-enable input
 			}
 		}
@@ -797,7 +797,7 @@ export class PlanService {
 				plan.planDescription || "Unnamed Plan",
 				outcome
 			);
-			// this.provider.postMessageToWebview({ type: "reenableInput" }); // REMOVED
+			// this.provider.postMessageToWebview({ type: "reenableInput" }); //
 			await this.provider.endUserOperation(outcome); // REPLACED with centralized call
 		}
 	}

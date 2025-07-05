@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
-import * as sidebarTypes from "../sidebar/common/sidebarTypes"; // 1. Add import
 
 export class ChatService {
 	constructor(private provider: SidebarProvider) {}

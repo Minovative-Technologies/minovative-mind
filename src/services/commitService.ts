@@ -84,12 +84,6 @@ export class CommitService {
 			const stagedFiles = await getGitStagedFiles(rootPath);
 
 			if (!diff || diff.trim() === "") {
-				// Remove the direct chat history entry
-				// this.provider.chatHistoryManager.addHistoryEntry(
-				// 	"model",
-				// 	"No changes staged to commit."
-				// );
-				// Modify the endUserOperation call to pass the specific message
 				await this.provider.endUserOperation(
 					"success",
 					"No changes staged to commit."
@@ -120,7 +114,7 @@ export class CommitService {
 					  "\n\n"
 					: "";
 
-			const commitMessagePrompt = `You are an AI expert in Git. Your task is to generate a short, concise, but highly accurate commit message based on the provided staged changes. Prioritize the detailed file-by-file summaries for content, and use the overall diff for additional context if needed. Make the commit messages in past tense. Provide the commit message without any markdown formatting. There needs to be 0 markdown formatting. Make sure the commit message follow the commit message best practices with no markdown formatting.
+			const commitMessagePrompt = `You are an AI expert in Git. Your task is to generate a minimal, short, concise, but highly accurate commit message based on the provided staged changes. Prioritize the detailed file-by-file summaries for content, and use the overall diff for additional context if needed. Make the commit messages in past tense. Provide the commit message without any markdown formatting. There needs to be 0 markdown formatting. Make sure the commit message follow the software development commit message best practices.
 
 			${detailedSummaries}Overall Staged Diff:
 			\`\`\`diff

@@ -747,7 +747,7 @@ div#commit-message-display tr:nth-child(even),
 #input-container {
 	display: flex;
 	align-items: flex-end; /* Align items to the bottom */
-	/* REMOVED: margin-bottom: var(--element-spacing); */
+	/*: margin-bottom: var(--element-spacing); */
 	flex-shrink: 0;
 	border: 1px solid var(--vscode-input-border); /* Changed border color */
 	border-radius: var(--border-radius);

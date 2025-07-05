@@ -764,7 +764,7 @@ export function createPerStepExplanationPrompt(
     - WHAT you are about to do for the file "${stepFilePath}".
     - WHY you are doing it, referencing the specific instruction provided.
     - HOW this action fits into the overall plan and the broader project context.
-    - SUMMARY of the entire concise plan.
+    - SUMMARY that's short for the current step.
 
     --- Instructions for Detailed Explanation: ---
     *   **Be Comprehensive:** Describe **what** the AI is about to do for the specific file/action in great detail.
@@ -805,7 +805,7 @@ export async function _performModification(
 	languageId: string,
 	filePath: string,
 	modelName: string,
-	aiRequestService: AIRequestService, // REMOVED apiKey: string, ADDED aiRequestService
+	aiRequestService: AIRequestService, // ApiKey: string, ADDED aiRequestService
 	token: vscode.CancellationToken,
 	isMergeOperation: boolean = false // isMergeOperation parameter
 ): Promise<string> {

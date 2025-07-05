@@ -152,8 +152,8 @@ export async function executePlanStep(
 							step.modificationPrompt,
 							path.extname(targetFileUri.fsPath).substring(1), // Get language ID (e.g., 'ts' from 'file.ts')
 							targetFileUri.fsPath,
-							modelName, // Pass correct modelName
-							aiRequestService, // Pass AIRequestService instance
+							modelName,
+							aiRequestService,
 							token
 						);
 					} catch (aiError: any) {
