@@ -105,6 +105,26 @@ export interface EnhancedAccuracyConfig {
 }
 
 /**
+ * Configuration for inline edit system
+ */
+export interface InlineEditConfig {
+	/** Enable inline edit generation for precise file modifications */
+	enableInlineEdits: boolean;
+
+	/** Threshold for when to fallback from inline edits to full file modification (0.0-1.0) */
+	inlineEditFallbackThreshold: number;
+
+	/** Maximum number of edit instructions to generate per file */
+	maxEditInstructions: number;
+
+	/** Enable validation of edit instructions before applying */
+	validateEditInstructions: boolean;
+
+	/** Enable detailed logging of edit operations */
+	enableEditLogging: boolean;
+}
+
+/**
  * Default configuration for enhanced accuracy
  */
 export const DEFAULT_ENHANCED_ACCURACY_CONFIG: EnhancedAccuracyConfig = {
@@ -200,6 +220,17 @@ export const DEFAULT_ENHANCED_ACCURACY_CONFIG: EnhancedAccuracyConfig = {
 			enablePackageStructure: true,
 		},
 	},
+};
+
+/**
+ * Default inline edit configuration
+ */
+export const DEFAULT_INLINE_EDIT_CONFIG: InlineEditConfig = {
+	enableInlineEdits: true,
+	inlineEditFallbackThreshold: 0.3,
+	maxEditInstructions: 10,
+	validateEditInstructions: true,
+	enableEditLogging: true,
 };
 
 /**

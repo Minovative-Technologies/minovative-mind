@@ -3,6 +3,10 @@ import * as sidebarTypes from "../common/sidebarTypes";
 import * as vscode from "vscode";
 import { TEMPERATURE } from "../common/sidebarConstants";
 import { AIRequestService } from "../../services/aiRequestService";
+import {
+	InlineEditInstruction,
+	EnhancedCodeGenerator,
+} from "../../ai/enhancedCodeGeneration";
 
 export function createInitialPlanningExplanationPrompt(
 	projectContext: string,
@@ -876,4 +880,47 @@ export async function _performModification(
 	}
 
 	return modifiedContent;
+}
+
+/**
+ * Perform inline edits using precise edit instructions
+ */
+export async function _performInlineModification(
+	originalFileContent: string,
+	modificationPrompt: string,
+	languageId: string,
+	filePath: string,
+	modelName: string,
+	aiRequestService: AIRequestService,
+	token: vscode.CancellationToken,
+	isMergeOperation: boolean = false
+): Promise<{
+	editInstructions: InlineEditInstruction[];
+	validation: any;
+}> {
+	// Create enhanced code generator instance
+	const enhancedGenerator = new EnhancedCodeGenerator(
+		aiRequestService,
+		vscode.workspace.workspaceFolders?.[0]?.uri || vscode.Uri.file("")
+	);
+
+	// Generate inline edit instructions
+	const result = await enhancedGenerator.generateInlineEditInstructions(
+		filePath,
+		modificationPrompt,
+		originalFileContent,
+		{
+			projectContext: "", // Will be filled by the caller if needed
+			relevantSnippets: "",
+			editorContext: undefined,
+			activeSymbolInfo: undefined,
+		},
+		modelName,
+		token
+	);
+
+	return {
+		editInstructions: result.editInstructions,
+		validation: result.validation,
+	};
 }
