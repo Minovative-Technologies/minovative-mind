@@ -1,10 +1,7 @@
 import * as vscode from "vscode";
 import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
-import { isFeatureAllowed } from "./sidebar/utils/featureGating";
-import { SettingsProvider } from "./sidebar/SettingsProvider";
 import { cleanCodeOutput } from "./utils/codeUtils";
-import { initializeFirebase } from "./firebase/firebaseService";
 import * as sidebarTypes from "./sidebar/common/sidebarTypes";
 import { hasMergeConflicts } from "./utils/mergeUtils"; // Added import for mergeUtils
 
@@ -25,21 +22,6 @@ async function executeExplainAction(
 	const selection = editor.selection;
 	if (selection.isEmpty) {
 		return { success: false, error: "No text selected." };
-	}
-
-	// Feature gating check for explain_selection
-	if (
-		!isFeatureAllowed(
-			sidebarProvider.currentUserTier,
-			sidebarProvider.isSubscriptionActive,
-			"explain_selection"
-		)
-	) {
-		return {
-			success: false,
-			error:
-				"This feature is not allowed for your current subscription plan. Please check your settings in the sidebar.",
-		};
 	}
 
 	const selectedText = editor.document.getText(selection);
@@ -138,21 +120,6 @@ async function executeDocsAction(
 	fileName: string,
 	effectiveRange: vscode.Range // Renamed from selectionRange
 ): Promise<ActionResult> {
-	// Feature gating check for generate_documentation
-	if (
-		!isFeatureAllowed(
-			sidebarProvider.currentUserTier,
-			sidebarProvider.isSubscriptionActive,
-			"generate_documentation"
-		)
-	) {
-		return {
-			success: false,
-			error:
-				"This feature is not allowed for your current subscription plan. Please check your settings in the sidebar.",
-		};
-	}
-
 	const activeApiKey = sidebarProvider.apiKeyManager.getActiveApiKey();
 	const selectedModel = sidebarProvider.settingsManager.getSelectedModelName();
 
@@ -276,12 +243,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		workspaceRootUri
 	);
 
-	// PROMPT Call initializeFirebase before sidebarProvider.initialize()
-	// to proactively load user data and link the callback.
-	await initializeFirebase(
-		sidebarProvider.updateUserAuthAndTierFromFirebase.bind(sidebarProvider)
-	);
-
 	// --- Initialize Provider (Await Key & Settings Loading) ---
 	await sidebarProvider.initialize(); // Ensure keys and settings are loaded before registering commands
 
@@ -290,28 +251,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.window.registerWebviewViewProvider(
 			SidebarProvider.viewType,
 			sidebarProvider
-		)
-	);
-
-	// Create and register the SettingsProvider
-	const settingsProvider = new SettingsProvider(
-		context.extensionUri,
-		sidebarProvider
-	);
-	context.subscriptions.push(
-		vscode.window.registerWebviewViewProvider(
-			SettingsProvider.viewType,
-			settingsProvider
-		)
-	);
-	context.subscriptions.push(
-		vscode.commands.registerCommand(
-			"minovative-mind.openSettingsPanel",
-			async () => {
-				vscode.window.showInformationMessage(
-					"Please open the Minovative Mind settings panel to sign in."
-				);
-			}
 		)
 	);
 
@@ -530,21 +469,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			} else {
 				// Any other instruction, including custom prompts, will use plan_from_editor_custom
 				actionTypeForGating = "plan_from_editor_custom";
-			}
-
-			// Feature gating check
-			if (
-				!isFeatureAllowed(
-					sidebarProvider.currentUserTier,
-					sidebarProvider.isSubscriptionActive,
-					actionTypeForGating,
-					instruction // Pass instruction as the fourth argument
-				)
-			) {
-				vscode.window.showErrorMessage(
-					"This feature is not allowed for your current subscription plan. Please check your settings in the sidebar."
-				);
-				return;
 			}
 
 			let result: sidebarTypes.PlanGenerationResult = {

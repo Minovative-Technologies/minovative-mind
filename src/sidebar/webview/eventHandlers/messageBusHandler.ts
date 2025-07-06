@@ -656,28 +656,6 @@ export function initializeMessageBusHandler(
 					`[messageBusHandler] authStateUpdate received. isSignedIn: ${isSignedIn}`
 				);
 
-				if (elements.signUpButton) {
-					const newDisplay = isSignedIn ? "none" : "inline-block";
-					elements.signUpButton.style.display = newDisplay;
-					console.log(
-						`[messageBusHandler] signUpButton display set to: '${newDisplay}' based on isSignedIn: ${isSignedIn}`
-					);
-				} else {
-					console.warn(
-						"[messageBusHandler] authStateUpdate: signUpButton element not found when trying to update visibility."
-					);
-				}
-				if (elements.signInButton) {
-					const newDisplay = isSignedIn ? "none" : "inline-block";
-					elements.signInButton.style.display = newDisplay;
-					console.log(
-						`[messageBusHandler] signInButton display set to: '${newDisplay}' based on isSignedIn: ${isSignedIn}`
-					);
-				} else {
-					console.warn(
-						"[messageBusHandler] authStateUpdate: signInButton element not found when trying to update visibility."
-					);
-				}
 				break;
 			}
 			case "updateRelevantFilesDisplay": {

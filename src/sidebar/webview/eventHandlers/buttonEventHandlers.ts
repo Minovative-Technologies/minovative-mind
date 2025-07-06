@@ -50,8 +50,7 @@ export function initializeButtonEventListeners(
 		commitMessageTextarea,
 		confirmCommitButton,
 		cancelCommitButton,
-		signUpButton,
-		signInButton,
+
 		cancelGenerationButton,
 		chatContainer,
 	} = elements;
@@ -163,28 +162,6 @@ export function initializeButtonEventListeners(
 		postMessageToExtension({ type: "cancelPlanExecution" });
 		updateStatus(elements, "Plan generation retry cancelled."); // Pass elements
 		setLoadingState(false, elements);
-	});
-
-	// Sign Up Button
-	signUpButton.addEventListener("click", () => {
-		console.log(
-			"[buttonEventHandlers] Sign Up button clicked. Posting openExternalLink message."
-		);
-		postMessageToExtension({
-			type: "openExternalLink",
-			url: "https://www.minovativemind.dev/registration/signin",
-		});
-	});
-
-	// Sign In Button
-	signInButton.addEventListener("click", () => {
-		console.log(
-			"[buttonEventHandlers] Sign In button clicked. Posting openSettingsPanel message."
-		);
-		postMessageToExtension({
-			type: "openSettingsPanel",
-			panelId: "minovativeMindSidebarViewSettings",
-		});
 	});
 
 	// Cancel Generation Button

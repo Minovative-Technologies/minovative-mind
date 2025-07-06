@@ -93,12 +93,7 @@ export function initializeDomElements(): RequiredDomElements | null {
 	const emptyChatPlaceholder = document.getElementById(
 		"empty-chat-placeholder"
 	) as HTMLDivElement;
-	const signUpButton = document.getElementById(
-		"signUpButton"
-	) as HTMLButtonElement;
-	const signInButton = document.getElementById(
-		"signInButton"
-	) as HTMLButtonElement;
+
 	const chatInputControlsWrapper = document.getElementById(
 		"chat-input-controls-wrapper"
 	) as HTMLDivElement;
@@ -139,8 +134,7 @@ export function initializeDomElements(): RequiredDomElements | null {
 		confirmCommitButton,
 		cancelCommitButton,
 		emptyChatPlaceholder,
-		signUpButton,
-		signInButton,
+
 		chatInputControlsWrapper,
 		commandSuggestionsContainer,
 	};

@@ -58,13 +58,6 @@ export async function handleWebviewMessage(
 			await provider.handleWebviewReady();
 			break;
 
-		case "requestAuthState":
-			provider.postMessageToWebview({
-				type: "authStateUpdate",
-				value: provider.getAuthStatePayload(),
-			});
-			break;
-
 		case "planRequest": {
 			const userRequest = data.value;
 			provider.chatHistoryManager.addHistoryEntry(

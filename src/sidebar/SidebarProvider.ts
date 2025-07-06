@@ -18,7 +18,6 @@ import { handleWebviewMessage } from "../services/webviewMessageHandler";
 import { PlanService } from "../services/planService";
 import { ChatService } from "../services/chatService";
 import { CommitService } from "../services/commitService";
-import { AuthService } from "../services/authService";
 import { GitConflictResolutionService } from "../services/gitConflictResolutionService";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
@@ -35,12 +34,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public get isSidebarVisible(): boolean {
 		return !!this._view && this._view.visible;
 	}
-
-	// Auth State Events
-	private _onDidAuthStateChange: vscode.EventEmitter<sidebarTypes.AuthStateUpdatePayload> =
-		new vscode.EventEmitter<sidebarTypes.AuthStateUpdatePayload>();
-	public readonly onDidAuthStateChange: vscode.Event<sidebarTypes.AuthStateUpdatePayload> =
-		this._onDidAuthStateChange.event;
 
 	// State
 	public activeOperationCancellationTokenSource:
@@ -59,13 +52,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	} | null = null;
 	public isGeneratingUserRequest: boolean = false; // Added property
 
-	// Auth State
-	public isUserSignedIn: boolean = false;
-	public currentUserTier: sidebarTypes.UserTier = "free";
-	public isSubscriptionActive: boolean = false;
-	public userUid: string | undefined;
-	public userEmail: string | undefined;
-
 	// --- MANAGERS & SERVICES ---
 	public apiKeyManager: ApiKeyManager;
 	public settingsManager: SettingsManager;
@@ -78,7 +64,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public planService: PlanService;
 	public chatService: ChatService;
 	public commitService: CommitService;
-	public authService: AuthService;
 	public gitConflictResolutionService: GitConflictResolutionService; // Service instance
 
 	constructor(
@@ -139,7 +124,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 		this.chatService = new ChatService(this);
 		this.commitService = new CommitService(this);
-		this.authService = new AuthService(this);
 
 		// Listen for secret changes to reload API keys
 		context.secrets.onDidChange((e) => {
@@ -155,47 +139,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public async initialize(): Promise<void> {
 		await this.apiKeyManager.initialize();
 		this.settingsManager.initialize();
-	}
-
-	// --- AUTH & USER STATE METHODS ---
-	public updateUserAuthAndTierFromFirebase(
-		user: FirebaseUser | null,
-		subscriptionData: sidebarTypes.UserSubscriptionData | null
-	): void {
-		this.isUserSignedIn = user !== null;
-		this.userUid = user?.uid;
-		this.userEmail = user?.email || undefined;
-
-		if (
-			user &&
-			(subscriptionData?.subscriptionStatus === "active" ||
-				subscriptionData?.subscriptionStatus === "trialing")
-		) {
-			this.isSubscriptionActive = true;
-			this.currentUserTier = "pro";
-		} else {
-			this.isSubscriptionActive = false;
-			this.currentUserTier = "free";
-		}
-
-		console.log(
-			`[SidebarProvider] Auth State Updated: SignedIn=${this.isUserSignedIn}, Tier=${this.currentUserTier}`
-		);
-		this.postMessageToWebview({
-			type: "authStateUpdate",
-			value: this.getAuthStatePayload(),
-		});
-		this._onDidAuthStateChange.fire(this.getAuthStatePayload());
-	}
-
-	public getAuthStatePayload(): sidebarTypes.AuthStateUpdatePayload {
-		return {
-			isSignedIn: this.isUserSignedIn,
-			uid: this.userUid,
-			email: this.userEmail,
-			tier: this.currentUserTier,
-			isSubscriptionActive: this.isSubscriptionActive,
-		};
 	}
 
 	// --- WEBVIEW ---
@@ -244,10 +187,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.apiKeyManager.loadKeysFromStorage();
 		this.settingsManager.updateWebviewModelList();
 		this.chatHistoryManager.restoreChatHistoryToWebview();
-		this.postMessageToWebview({
-			type: "authStateUpdate",
-			value: this.getAuthStatePayload(),
-		});
 
 		// 1. Prioritize active AI streaming progress (e.g., for long chat responses)
 		if (

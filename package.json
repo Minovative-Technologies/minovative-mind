@@ -43,13 +43,6 @@
 		"views": {
 			"minovative-mind": [
 				{
-					"id": "minovativeMindSidebarViewSettings",
-					"name": "Settings",
-					"type": "webview",
-					"contextualTitle": "Settings",
-					"icon": "media/mino-logo-dark.png"
-				},
-				{
 					"id": "minovativeMindSidebarView",
 					"name": "Minovative Mind Tools",
 					"type": "webview",
@@ -73,11 +66,6 @@
 			{
 				"command": "minovative-mind.explainSelection",
 				"title": "Generate Explanation",
-				"category": "Minovative Mind"
-			},
-			{
-				"command": "minovative-mind.openSettingsPanel",
-				"title": "Open Minovative Mind Settings Panel",
 				"category": "Minovative Mind"
 			}
 		],

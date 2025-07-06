@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { GenerationConfig } from "@google/generative-ai";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
-import { isFeatureAllowed } from "../sidebar/utils/featureGating";
 import * as sidebarTypes from "../sidebar/common/sidebarTypes"; // Import sidebarTypes
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
 import {
@@ -54,13 +53,7 @@ export class PlanService {
 
 	// --- CHAT-INITIATED PLAN ---
 	public async handleInitialPlanRequest(userRequest: string): Promise<void> {
-		const {
-			currentUserTier,
-			isSubscriptionActive,
-			settingsManager,
-			apiKeyManager,
-			changeLogger,
-		} = this.provider;
+		const { settingsManager, apiKeyManager, changeLogger } = this.provider;
 		const modelName = settingsManager.getSelectedModelName();
 		const apiKey = apiKeyManager.getActiveApiKey();
 
@@ -70,18 +63,6 @@ export class PlanService {
 				value:
 					"Action blocked: No active API key found. Please add or select an API key in the sidebar settings.",
 				isError: true,
-			});
-			return;
-		}
-
-		if (
-			!isFeatureAllowed(currentUserTier, isSubscriptionActive, "plan_from_chat")
-		) {
-			const restrictedMessage =
-				"This feature is available for Premium users. Please upgrade, on the website, for full functionality.";
-			this.provider.postMessageToWebview({
-				type: "aiResponseEnd",
-				error: restrictedMessage,
 			});
 			return;
 		}
@@ -302,8 +283,7 @@ export class PlanService {
 		diagnosticsString?: string,
 		isMergeOperation: boolean = false // Added isMergeOperation parameter
 	): Promise<sidebarTypes.PlanGenerationResult> {
-		const { settingsManager, apiKeyManager, changeLogger, isUserSignedIn } =
-			this.provider;
+		const { settingsManager, apiKeyManager, changeLogger } = this.provider;
 		const modelName = settingsManager.getSelectedModelName();
 		const apiKey = apiKeyManager.getActiveApiKey();
 
@@ -318,14 +298,6 @@ export class PlanService {
 				error:
 					"Action blocked: No VS Code workspace folder is currently open. Please open a project folder to proceed.",
 			};
-		}
-
-		if (!isUserSignedIn) {
-			initialProgress?.report({
-				message: "Please sign in to use this feature.",
-				increment: 100,
-			});
-			return { success: false, error: "Please sign in to use this feature." };
 		}
 
 		this.provider.activeOperationCancellationTokenSource =

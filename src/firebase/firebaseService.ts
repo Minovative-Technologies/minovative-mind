@@ -14,10 +14,7 @@ import {
 	onSnapshot,
 	Unsubscribe,
 } from "firebase/firestore";
-import {
-	FirebaseConfigPayload,
-	UserSubscriptionData,
-} from "../sidebar/common/sidebarTypes";
+import { FirebaseConfigPayload } from "../sidebar/common/sidebarTypes";
 
 export type FirebaseUser = User;
 
@@ -44,15 +41,9 @@ let onAuthStateChangedFirstFire = true; // New module-level flag
 
 /**
  * Initializes Firebase and sets up auth state and Firestore subscription listeners.
- * @param onAuthStateChangeCallback Callback function invoked on auth state or subscription data changes.
  * @returns A Promise that resolves once the initial authentication state and subscription data has been processed.
  */
-export const initializeFirebase = (
-	onAuthStateChangeCallback: (
-		user: FirebaseUser | null,
-		subscriptionData: UserSubscriptionData | null
-	) => void
-): Promise<void> => {
+export const initializeFirebase = (): Promise<void> => {
 	if (initialLoadPromise) {
 		console.warn(
 			"Firebase app initialization already in progress or completed."
@@ -88,12 +79,6 @@ export const initializeFirebase = (
 					"[FirebaseService] Failsafe: Initial Firebase load timed out after 15 seconds. Resolving with default state."
 				);
 				// Call onAuthStateChangeCallback with default free state
-				onAuthStateChangeCallback(null, {
-					subscriptionStatus: "free",
-					subscriptionPeriodEnd: null,
-					email: "",
-					uid: "",
-				});
 				safeResolve(); // Resolve using the safeResolve helper
 			}
 		}, 15000); // 15 seconds
@@ -116,24 +101,6 @@ export const initializeFirebase = (
 					unsubscribeFirestoreListener = onSnapshot(
 						userDocRef,
 						(docSnapshot) => {
-							let subscriptionData: UserSubscriptionData | null = null;
-							if (docSnapshot.exists()) {
-								subscriptionData = docSnapshot.data() as UserSubscriptionData;
-							} else {
-								// Document doesn't exist. Do NOT create it or write default status to Firestore.
-								// Instead, default to 'free' in application state only.
-								console.warn(
-									`[FirebaseService] User document for ${user.uid} not found. Defaulting to 'free' in application state only.`
-								);
-								subscriptionData = {
-									subscriptionStatus: "free",
-									subscriptionPeriodEnd: null,
-									email: user.email || "",
-									uid: user.uid,
-								};
-							}
-							onAuthStateChangeCallback(user, subscriptionData);
-							// Resolve the promise after the first onSnapshot fires successfully
 							console.log(
 								"[FirebaseService] Resolving: User signed in, Firestore snapshot received."
 							);
@@ -145,13 +112,6 @@ export const initializeFirebase = (
 						},
 						(error) => {
 							console.error("Error listening to user document:", error);
-							// On error, still pass user but default subscription data to 'free' instead of null.
-							onAuthStateChangeCallback(user, {
-								subscriptionStatus: "free",
-								subscriptionPeriodEnd: null,
-								email: user?.email || "",
-								uid: user?.uid || "",
-							});
 							// Resolve the promise after the first onSnapshot errors
 							console.log(
 								"[FirebaseService] Resolving: User signed in, Firestore snapshot error."
@@ -165,8 +125,6 @@ export const initializeFirebase = (
 					);
 				} else {
 					// User signed out.
-					onAuthStateChangeCallback(null, null);
-					// Resolve the promise immediately if no user is signed in
 					console.log("[FirebaseService] Resolving: No user signed in.");
 					// Check onAuthStateChangedFirstFire
 					if (onAuthStateChangedFirstFire) {
@@ -180,7 +138,6 @@ export const initializeFirebase = (
 		} catch (error) {
 			console.error("Error initializing Firebase:", error);
 			// Ensure the promise resolves even if Firebase initialization itself fails
-			onAuthStateChangeCallback(null, null); // Ensure callback is called on init failure
 			console.log(
 				"[FirebaseService] Resolving: Firebase initialization failed."
 			);
@@ -189,58 +146,6 @@ export const initializeFirebase = (
 	});
 
 	return initialLoadPromise;
-};
-
-/**
- * Signs in a user with email and password.
- * @param email User's email.
- * @param password User's password.
- * @returns Promise that resolves with the user credential.
- */
-export const signIn = async (
-	email: string,
-	password: string
-): Promise<User> => {
-	if (!auth) {
-		throw new Error(
-			"Firebase Auth not initialized. Call initializeFirebase first."
-		);
-	}
-	try {
-		const userCredential = await signInWithEmailAndPassword(
-			auth,
-			email,
-			password
-		);
-		return userCredential.user;
-	} catch (error) {
-		console.error("Error signing in:", error);
-		throw error;
-	}
-};
-
-/**
- * Signs out the current user.
- * @returns Promise that resolves when the user is signed out.
- */
-export const signOutUser = async (): Promise<void> => {
-	if (!auth) {
-		throw new Error(
-			"Firebase Auth not initialized. Call initializeFirebase first."
-		);
-	}
-
-	try {
-		await signOut(auth);
-		if (unsubscribeFirestoreListener) {
-			unsubscribeFirestoreListener(); // Clean up listener on sign out
-			unsubscribeFirestoreListener = null;
-		}
-		console.log("User signed out successfully.");
-	} catch (error) {
-		console.error("Error signing out:", error);
-		throw error;
-	}
 };
 
 /**

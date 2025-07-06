@@ -33,8 +33,7 @@ export interface RequiredDomElements {
 	confirmCommitButton: HTMLButtonElement;
 	cancelCommitButton: HTMLButtonElement;
 	emptyChatPlaceholder: HTMLDivElement;
-	signUpButton: HTMLButtonElement;
-	signInButton: HTMLButtonElement;
+
 	chatInputControlsWrapper: HTMLDivElement;
 	commandSuggestionsContainer: HTMLDivElement;
 }
