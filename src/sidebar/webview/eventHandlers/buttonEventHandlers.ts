@@ -159,9 +159,19 @@ export function initializeButtonEventListeners(
 		console.log("Cancel Parse Error button clicked.");
 		// The hidePlanParseErrorUI function already handles setting display: none and clearing content
 		hidePlanParseErrorUI(elements);
-		postMessageToExtension({ type: "cancelPlanExecution" });
-		updateStatus(elements, "Plan generation retry cancelled."); // Pass elements
-		setLoadingState(false, elements);
+		appState.isCancellationInProgress = true; // Set cancellation flag
+		postMessageToExtension({ type: "universalCancel" }); // Use universal cancel for immediate cancellation
+		updateStatus(elements, "Cancelling operations...", false); // Pass elements
+		stopTypingAnimation(); // Ensure typing animation stops
+		// Clear any current streaming message content if it was interrupted
+		if (appState.currentAiMessageContentElement) {
+			appState.currentAccumulatedText += appState.typingBuffer;
+			appState.currentAiMessageContentElement.textContent =
+				appState.currentAccumulatedText;
+			appState.currentAiMessageContentElement = null;
+			appState.typingBuffer = "";
+			appState.currentAccumulatedText = "";
+		}
 	});
 
 	// Cancel Generation Button
