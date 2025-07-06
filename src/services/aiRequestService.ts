@@ -9,6 +9,11 @@ import {
 	ERROR_SERVICE_UNAVAILABLE, // MODIFICATION 1: Import new error constant
 	generateContentStream,
 } from "../ai/gemini";
+import {
+	ParallelProcessor,
+	ParallelTask,
+	ParallelTaskResult,
+} from "../utils/parallelProcessor";
 
 export class AIRequestService {
 	constructor(
@@ -212,5 +217,117 @@ export class AIRequestService {
 			// It serves as a robust fallback for unexpected loop termination conditions.
 			return `An unexpected error occurred after all retries for model ${modelName}. Last error: ${result}`;
 		}
+	}
+
+	/**
+	 * Execute multiple AI requests in parallel with concurrency control
+	 */
+	public async generateMultipleInParallel(
+		requests: Array<{
+			id: string;
+			prompt: string;
+			modelName: string;
+			history?: readonly HistoryEntry[];
+			generationConfig?: GenerationConfig;
+			priority?: number;
+		}>,
+		config: {
+			maxConcurrency?: number;
+			timeout?: number;
+			retries?: number;
+		} = {}
+	): Promise<Map<string, ParallelTaskResult<string>>> {
+		const tasks: ParallelTask<string>[] = requests.map((request) => ({
+			id: request.id,
+			task: () =>
+				this.generateWithRetry(
+					request.prompt,
+					request.modelName,
+					request.history,
+					`parallel-${request.id}`,
+					request.generationConfig,
+					undefined,
+					undefined,
+					false
+				),
+			priority: request.priority ?? 0,
+			timeout: config.timeout,
+			retries: config.retries,
+		}));
+
+		return ParallelProcessor.executeParallel(tasks, {
+			maxConcurrency: config.maxConcurrency ?? 3, // Limit concurrent AI requests
+			defaultTimeout: config.timeout ?? 60000, // 60 seconds default
+			defaultRetries: config.retries ?? 1,
+			enableRetries: true,
+			enableTimeout: true,
+		});
+	}
+
+	/**
+	 * Process multiple files in parallel with AI analysis
+	 */
+	public async processFilesInParallel<T>(
+		files: vscode.Uri[],
+		processor: (file: vscode.Uri) => Promise<T>,
+		config: {
+			maxConcurrency?: number;
+			timeout?: number;
+			retries?: number;
+		} = {}
+	): Promise<Map<string, ParallelTaskResult<T>>> {
+		return ParallelProcessor.processFilesInParallel(files, processor, {
+			maxConcurrency: config.maxConcurrency ?? 4,
+			defaultTimeout: config.timeout ?? 30000,
+			defaultRetries: config.retries ?? 2,
+			enableRetries: true,
+			enableTimeout: true,
+		});
+	}
+
+	/**
+	 * Execute AI requests in batches to manage memory and API limits
+	 */
+	public async generateInBatches(
+		requests: Array<{
+			id: string;
+			prompt: string;
+			modelName: string;
+			history?: readonly HistoryEntry[];
+			generationConfig?: GenerationConfig;
+			priority?: number;
+		}>,
+		batchSize: number = 5,
+		config: {
+			maxConcurrency?: number;
+			timeout?: number;
+			retries?: number;
+		} = {}
+	): Promise<Map<string, ParallelTaskResult<string>>> {
+		const tasks: ParallelTask<string>[] = requests.map((request) => ({
+			id: request.id,
+			task: () =>
+				this.generateWithRetry(
+					request.prompt,
+					request.modelName,
+					request.history,
+					`batch-${request.id}`,
+					request.generationConfig,
+					undefined,
+					undefined,
+					false
+				),
+			priority: request.priority ?? 0,
+			timeout: config.timeout,
+			retries: config.retries,
+		}));
+
+		return ParallelProcessor.executeInBatches(tasks, batchSize, {
+			maxConcurrency: config.maxConcurrency ?? 3,
+			defaultTimeout: config.timeout ?? 60000,
+			defaultRetries: config.retries ?? 1,
+			enableRetries: true,
+			enableTimeout: true,
+		});
 	}
 }

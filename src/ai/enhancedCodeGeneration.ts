@@ -1,8 +1,11 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { AIRequestService } from "../services/aiRequestService";
-import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
+import {
+	IncrementalCodeUpdater,
+	CodeChange,
+} from "../utils/incrementalCodeUpdater";
 
 /**
  * Enhanced code generation with improved accuracy through:
@@ -83,7 +86,54 @@ export class EnhancedCodeGenerator {
 		modelName: string,
 		token?: vscode.CancellationToken
 	): Promise<{ content: string; validation: CodeValidationResult }> {
-		// Try inline edits first if enabled
+		// Try incremental updates first if enabled
+		if (this.config.enableInlineEdits) {
+			try {
+				const incrementalChanges =
+					await IncrementalCodeUpdater.generateMinimalChanges(
+						currentContent,
+						modificationPrompt,
+						{
+							projectContext: context.projectContext,
+							relevantSnippets: context.relevantSnippets,
+							filePath: filePath,
+						},
+						this.aiRequestService,
+						modelName,
+						token
+					);
+
+				if (incrementalChanges.length > 0) {
+					// Apply incremental changes to generate the final content
+					const modifiedContent = this._applyIncrementalChangesToContent(
+						currentContent,
+						incrementalChanges
+					);
+
+					// Validate the result
+					const validation = await this._validateCode(
+						filePath,
+						modifiedContent
+					);
+
+					return {
+						content: modifiedContent,
+						validation: {
+							...validation,
+							incrementalChanges: incrementalChanges,
+							usedIncrementalUpdates: true,
+						},
+					};
+				}
+			} catch (error) {
+				console.warn(
+					"Incremental update generation failed, falling back to inline edits:",
+					error
+				);
+			}
+		}
+
+		// Try inline edits as fallback
 		if (this.config.enableInlineEdits) {
 			try {
 				const inlineResult = await this.generateInlineEditInstructions(
@@ -1323,6 +1373,96 @@ Return ONLY the JSON object:`;
 	}
 
 	/**
+	 * Apply incremental changes to content
+	 */
+	private _applyIncrementalChangesToContent(
+		content: string,
+		changes: CodeChange[]
+	): string {
+		const lines = content.split("\n");
+		const sortedChanges = [...changes].sort(
+			(a, b) => b.range.start.line - a.range.start.line
+		); // Sort in reverse order to maintain line numbers
+
+		for (const change of sortedChanges) {
+			const startLine = change.range.start.line;
+			const endLine = change.range.end.line;
+			const startChar = change.range.start.character;
+			const endChar = change.range.end.character;
+
+			if (change.type === "insert") {
+				// Insert new text at the specified position
+				const newLines = change.newText.split("\n");
+				if (newLines.length === 1) {
+					// Single line insertion
+					const line = lines[startLine] || "";
+					const before = line.substring(0, startChar);
+					const after = line.substring(startChar);
+					lines[startLine] = before + change.newText + after;
+				} else {
+					// Multi-line insertion
+					const firstLine = lines[startLine] || "";
+					const before = firstLine.substring(0, startChar);
+					const after = firstLine.substring(startChar);
+
+					lines[startLine] = before + newLines[0];
+					lines.splice(startLine + 1, 0, ...newLines.slice(1, -1));
+					if (newLines.length > 1) {
+						lines.splice(
+							startLine + newLines.length - 1,
+							0,
+							newLines[newLines.length - 1] + after
+						);
+					}
+				}
+			} else if (change.type === "delete") {
+				// Delete the specified range
+				if (startLine === endLine) {
+					// Same line deletion
+					const line = lines[startLine] || "";
+					lines[startLine] =
+						line.substring(0, startChar) + line.substring(endChar);
+				} else {
+					// Multi-line deletion
+					const firstLine = lines[startLine] || "";
+					const lastLine = lines[endLine] || "";
+					lines[startLine] =
+						firstLine.substring(0, startChar) + lastLine.substring(endChar);
+					lines.splice(startLine + 1, endLine - startLine);
+				}
+			} else if (change.type === "replace" || change.type === "modify") {
+				// Replace the specified range
+				if (startLine === endLine) {
+					// Same line replacement
+					const line = lines[startLine] || "";
+					lines[startLine] =
+						line.substring(0, startChar) +
+						change.newText +
+						line.substring(endChar);
+				} else {
+					// Multi-line replacement
+					const firstLine = lines[startLine] || "";
+					const lastLine = lines[endLine] || "";
+					const newLines = change.newText.split("\n");
+
+					lines[startLine] = firstLine.substring(0, startChar) + newLines[0];
+					lines.splice(
+						startLine + 1,
+						endLine - startLine,
+						...newLines.slice(1, -1)
+					);
+					if (newLines.length > 1) {
+						lines[startLine + newLines.length - 1] =
+							newLines[newLines.length - 1] + lastLine.substring(endChar);
+					}
+				}
+			}
+		}
+
+		return lines.join("\n");
+	}
+
+	/**
 	 * Original full file modification method (fallback)
 	 */
 	private async _modifyFileContentFull(
@@ -1385,6 +1525,8 @@ export interface CodeValidationResult {
 	suggestions: string[];
 	editInstructions?: InlineEditInstruction[];
 	usedInlineEdits?: boolean;
+	incrementalChanges?: CodeChange[];
+	usedIncrementalUpdates?: boolean;
 }
 
 export interface CodeIssue {
