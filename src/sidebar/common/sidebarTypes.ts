@@ -1,7 +1,6 @@
 // src/sidebar/common/sidebarTypes.ts
 import * as vscode from "vscode";
 import { Content } from "@google/generative-ai"; // Assuming History might be needed if HistoryEntry evolves
-import { Timestamp } from "firebase/firestore"; // Import Timestamp for Firestore dates
 
 // Define the specific structure for parts within HistoryEntry
 export interface HistoryEntryPart {

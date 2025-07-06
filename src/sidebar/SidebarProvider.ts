@@ -11,7 +11,6 @@ import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
 import { getHtmlForWebview } from "./ui/webviewHelper";
 import * as sidebarConstants from "./common/sidebarConstants";
 import * as sidebarTypes from "./common/sidebarTypes";
-import { FirebaseUser } from "../firebase/firebaseService";
 import { AIRequestService } from "../services/aiRequestService";
 import { ContextService } from "../services/contextService";
 import { handleWebviewMessage } from "../services/webviewMessageHandler";
