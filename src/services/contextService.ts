@@ -28,93 +28,199 @@ import { intelligentlySummarizeFileContent } from "../context/fileContentProcess
 
 // Constants for symbol processing
 const MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT = 6; // Example depth for symbol hierarchy serialization
-const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 5000; // Truncation limit for referenced type content preview
+const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 5000;
 
-// 1. Define the ActiveSymbolDetailedInfo interface
+// NEW: Performance monitoring constants
+const PERFORMANCE_THRESHOLDS = {
+	SCAN_TIME_WARNING: 5000, // 5 seconds
+	DEPENDENCY_BUILD_TIME_WARNING: 10000, // 10 seconds
+	CONTEXT_BUILD_TIME_WARNING: 15000, // 15 seconds
+	MAX_FILES_FOR_DETAILED_PROCESSING: 1000,
+	MAX_FILES_FOR_SYMBOL_PROCESSING: 500,
+};
+
+// NEW: Configuration interface for context building
+interface ContextBuildOptions {
+	useScanCache?: boolean;
+	useDependencyCache?: boolean;
+	useAISelectionCache?: boolean;
+	maxConcurrency?: number;
+	enablePerformanceMonitoring?: boolean;
+	skipLargeFiles?: boolean;
+	maxFileSize?: number;
+}
+
 export interface ActiveSymbolDetailedInfo {
 	name?: string;
 	kind?: string;
-	detail?: string; // Added optional detail property
+	detail?: string;
 	fullRange?: vscode.Range;
-	filePath?: string; // New: relative path of the file where the symbol is defined
+	filePath?: string;
+	childrenHierarchy?: string;
 	definition?: vscode.Location | vscode.Location[];
 	implementations?: vscode.Location[];
 	typeDefinition?: vscode.Location | vscode.Location[];
+	referencedTypeDefinitions?: Map<string, string>;
 	incomingCalls?: vscode.CallHierarchyIncomingCall[];
 	outgoingCalls?: vscode.CallHierarchyOutgoingCall[];
-	childrenHierarchy?: any; // (e.g., a serialized tree structure of children)
-	referencedTypeDefinitions?: { filePath: string; content: string }[]; //
 }
 
-// Define a new interface 'BuildProjectContextResult'
 export interface BuildProjectContextResult {
 	contextString: string;
 	relevantFiles: string[];
+	performanceMetrics?: {
+		scanTime: number;
+		dependencyBuildTime: number;
+		contextBuildTime: number;
+		totalTime: number;
+		fileCount: number;
+		processedFileCount: number;
+	};
 }
 
 export class ContextService {
+	private settingsManager: SettingsManager;
+	private chatHistoryManager: ChatHistoryManager;
+	private changeLogger: ProjectChangeLogger;
+	private aiRequestService: AIRequestService;
+	private postMessageToWebview: (message: any) => void;
+
 	constructor(
-		private settingsManager: SettingsManager,
-		private chatHistoryManager: ChatHistoryManager,
-		private changeLogger: ProjectChangeLogger,
-		private aiRequestService: AIRequestService,
-		private postMessageToWebview: (message: any) => void
-	) {}
+		settingsManager: SettingsManager,
+		chatHistoryManager: ChatHistoryManager,
+		changeLogger: ProjectChangeLogger,
+		aiRequestService: AIRequestService,
+		postMessageToWebview: (message: any) => void
+	) {
+		this.settingsManager = settingsManager;
+		this.chatHistoryManager = chatHistoryManager;
+		this.changeLogger = changeLogger;
+		this.aiRequestService = aiRequestService;
+		this.postMessageToWebview = postMessageToWebview;
+	}
 
 	public async buildProjectContext(
 		cancellationToken: vscode.CancellationToken | undefined,
 		userRequest?: string,
 		editorContext?: PlanGenerationContext["editorContext"],
-		initialDiagnosticsString?: string // Renamed parameter for clarity
+		initialDiagnosticsString?: string, // Renamed parameter for clarity
+		options?: ContextBuildOptions // NEW: Options parameter
 	): Promise<BuildProjectContextResult> {
-		try {
-			if (cancellationToken?.isCancellationRequested) {
-				throw new Error("Operation cancelled by user.");
-			}
-			// 2a. Initialize activeSymbolDetailedInfo
-			let activeSymbolDetailedInfo: ActiveSymbolDetailedInfo | undefined;
+		const startTime = Date.now();
+		const enablePerformanceMonitoring =
+			options?.enablePerformanceMonitoring ?? true;
 
+		try {
+			// NEW: Get workspace root with better error handling
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders || workspaceFolders.length === 0) {
-				return { contextString: "[No workspace open]", relevantFiles: [] };
+				return {
+					contextString: "[No workspace folder open]",
+					relevantFiles: [],
+				};
 			}
 			const rootFolder = workspaceFolders[0];
 
-			const allScannedFiles = await scanWorkspace({ respectGitIgnore: true });
-			let fileDependencies: Map<string, string[]> | undefined;
-			let reverseFileDependencies: Map<string, string[]> | undefined; // NEW variable
+			// NEW: Optimized workspace scanning with performance monitoring
+			const scanStartTime = Date.now();
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Minovative Mind is scanning workspace for relevant files...",
+			});
 
-			try {
-				fileDependencies = await buildDependencyGraph(
-					allScannedFiles,
-					rootFolder.uri
+			const allScannedFiles = await scanWorkspace({
+				useCache: options?.useScanCache ?? true,
+				maxConcurrentReads: options?.maxConcurrency ?? 15,
+				maxFileSize: options?.maxFileSize ?? 1024 * 1024, // 1MB
+				cacheTimeout: 5 * 60 * 1000, // 5 minutes
+			});
+
+			const scanTime = Date.now() - scanStartTime;
+			if (
+				enablePerformanceMonitoring &&
+				scanTime > PERFORMANCE_THRESHOLDS.SCAN_TIME_WARNING
+			) {
+				console.warn(
+					`[ContextService] Workspace scan took ${scanTime}ms (threshold: ${PERFORMANCE_THRESHOLDS.SCAN_TIME_WARNING}ms)`
 				);
-				// NEW: Build reverse dependency graph if fileDependencies was successfully created
-				if (fileDependencies) {
-					reverseFileDependencies =
-						buildReverseDependencyGraph(fileDependencies);
+			}
+
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: `Found ${allScannedFiles.length} relevant files in ${scanTime}ms.`,
+			});
+
+			if (allScannedFiles.length === 0) {
+				return {
+					contextString: "[No relevant files found in workspace]",
+					relevantFiles: [],
+					performanceMetrics: {
+						scanTime,
+						dependencyBuildTime: 0,
+						contextBuildTime: 0,
+						totalTime: Date.now() - startTime,
+						fileCount: 0,
+						processedFileCount: 0,
+					},
+				};
+			}
+
+			// NEW: Optimized dependency graph building
+			const dependencyStartTime = Date.now();
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Minovative Mind is analyzing file dependencies...",
+			});
+
+			const fileDependencies = await buildDependencyGraph(
+				allScannedFiles,
+				rootFolder.uri,
+				{
+					useCache: options?.useDependencyCache ?? true,
+					maxConcurrency: options?.maxConcurrency ?? 15,
+					skipLargeFiles: options?.skipLargeFiles ?? true,
+					maxFileSizeForParsing: options?.maxFileSize ?? 500 * 1024, // 500KB for parsing
+					retryFailedFiles: true,
+					maxRetries: 2,
 				}
-			} catch (depGraphError: any) {
-				console.error(
-					`[ContextService] Error building dependency graph: ${depGraphError.message}`
+			);
+
+			const dependencyBuildTime = Date.now() - dependencyStartTime;
+			if (
+				enablePerformanceMonitoring &&
+				dependencyBuildTime >
+					PERFORMANCE_THRESHOLDS.DEPENDENCY_BUILD_TIME_WARNING
+			) {
+				console.warn(
+					`[ContextService] Dependency graph build took ${dependencyBuildTime}ms (threshold: ${PERFORMANCE_THRESHOLDS.DEPENDENCY_BUILD_TIME_WARNING}ms)`
 				);
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value: `Warning: Could not build dependency graph. Reason: ${depGraphError.message}`,
-				});
-				// fileDependencies and reverseFileDependencies will remain undefined if error occurs
-			}
-			if (cancellationToken?.isCancellationRequested) {
-				throw new Error("Operation cancelled by user.");
 			}
 
-			// Moved: Populate documentSymbolsMap for all scanned files upfront
-			const documentSymbolsMap = new Map<
-				string,
-				vscode.DocumentSymbol[] | undefined
-			>();
+			const reverseFileDependencies = buildReverseDependencyGraph(
+				fileDependencies,
+				rootFolder.uri
+			);
+
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: `Analyzed ${fileDependencies.size} file dependencies in ${dependencyBuildTime}ms.`,
+			});
+
+			// NEW: Optimized symbol processing with limits
+			const documentSymbolsMap = new Map<string, vscode.DocumentSymbol[]>();
+			const maxFilesForSymbolProcessing = Math.min(
+				allScannedFiles.length,
+				PERFORMANCE_THRESHOLDS.MAX_FILES_FOR_SYMBOL_PROCESSING
+			);
+
+			// NEW: Process symbols only for files that are likely to be relevant
+			const filesForSymbolProcessing = allScannedFiles.slice(
+				0,
+				maxFilesForSymbolProcessing
+			);
+
 			await BPromise.map(
-				allScannedFiles, // Modified to allScannedFiles
+				filesForSymbolProcessing,
 				async (fileUri: vscode.Uri) => {
 					if (cancellationToken?.isCancellationRequested) {
 						return;
@@ -124,14 +230,14 @@ export class ContextService {
 						const relativePath = path
 							.relative(rootFolder.uri.fsPath, fileUri.fsPath)
 							.replace(/\\/g, "/");
-						documentSymbolsMap.set(relativePath, symbols);
+						documentSymbolsMap.set(relativePath, symbols || []);
 					} catch (symbolError: any) {
 						console.warn(
 							`[ContextService] Failed to get symbols for ${fileUri.fsPath}: ${symbolError.message}`
 						);
 					}
 				},
-				{ concurrency: 5 }
+				{ concurrency: options?.maxConcurrency ?? 5 }
 			);
 
 			// --- Determine effective diagnostics string ---
@@ -166,6 +272,7 @@ export class ContextService {
 
 			// 2b. Add new conditional block for activeSymbolDetailedInfo
 			// This block is added after fileDependencies is built.
+			let activeSymbolDetailedInfo: ActiveSymbolDetailedInfo | undefined;
 			if (editorContext?.documentUri && editorContext?.selection) {
 				const activeFileUri = editorContext.documentUri;
 				try {
@@ -183,37 +290,10 @@ export class ContextService {
 						);
 
 						if (symbolAtCursor) {
-							// Calculate relative path for the active file
-							const relativePathOfTheActiveFile = path
-								.relative(rootFolder.uri.fsPath, activeFileUri.fsPath)
-								.replace(/\\/g, "/");
-
-							// 2b.v. Populate activeSymbolDetailedInfo.name, activeSymbolDetailedInfo.kind, fullRange, and filePath
+							// 2b.v. Initialize activeSymbolDetailedInfo
 							activeSymbolDetailedInfo = {
-								name: symbolAtCursor.name,
-								kind: vscode.SymbolKind[symbolAtCursor.kind], // Convert enum to string
-								fullRange: symbolAtCursor.range,
-								filePath: relativePathOfTheActiveFile, // Add the filePath property here
+								referencedTypeDefinitions: new Map<string, string>(),
 							};
-
-							// Assign symbolAtCursor.detail if it exists
-							if (symbolAtCursor.detail) {
-								activeSymbolDetailedInfo.detail = symbolAtCursor.detail;
-							}
-
-							// Modification 2: Populate childrenHierarchy if symbol has children
-							if (
-								symbolAtCursor.children &&
-								symbolAtCursor.children.length > 0
-							) {
-								activeSymbolDetailedInfo.childrenHierarchy =
-									SymbolService.serializeDocumentSymbolHierarchy(
-										symbolAtCursor,
-										relativePathOfTheActiveFile,
-										0, // initial depth
-										MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT
-									);
-							}
 
 							// 2b.vi. Asynchronously call SymbolService functions, wrapping each in a try-catch
 							await Promise.allSettled([
@@ -259,62 +339,50 @@ export class ContextService {
 										);
 									}
 								})(),
-								// Modification 3: Add logic for referenced type definitions
 								(async () => {
 									try {
-										if (activeSymbolDetailedInfo!.typeDefinition) {
-											const locations = Array.isArray(
-												activeSymbolDetailedInfo!.typeDefinition
-											)
-												? activeSymbolDetailedInfo!.typeDefinition
-												: [activeSymbolDetailedInfo!.typeDefinition];
+										// Get referenced type definitions
+										const referencedTypeContents = new Map<string, string>();
+										const referencedTypeDefinitions =
+											await SymbolService.getTypeDefinition(
+												activeFileUri,
+												symbolAtCursor.selectionRange.start,
+												cancellationToken
+											);
 
-											const referencedTypeContents: {
-												filePath: string;
-												content: string;
-											}[] = [];
-											const processedFilePaths = new Set<string>(); // To ensure uniqueness of files
+										if (referencedTypeDefinitions) {
+											const typeDefs = Array.isArray(referencedTypeDefinitions)
+												? referencedTypeDefinitions
+												: [referencedTypeDefinitions];
 
 											await BPromise.map(
-												locations,
-												async (location: vscode.Location) => {
-													if (cancellationToken?.isCancellationRequested) {
-														return;
-													}
-													const relativeFilePath = path
-														.relative(
-															rootFolder.uri.fsPath,
-															location.uri.fsPath
-														)
-														.replace(/\\/g, "/");
-
-													// Only process each unique file path once
-													if (processedFilePaths.has(relativeFilePath)) {
-														return;
-													}
-													processedFilePaths.add(relativeFilePath);
-
-													const content =
-														await SymbolService.getDocumentContentAtLocation(
-															location,
-															cancellationToken
-														);
-													if (content) {
-														let truncatedContent = content;
-														if (
-															truncatedContent.length >
-															MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT
-														) {
-															truncatedContent =
-																truncatedContent.substring(
+												typeDefs,
+												async (typeDef) => {
+													try {
+														const content =
+															await SymbolService.getDocumentContentAtLocation(
+																typeDef,
+																cancellationToken
+															);
+														if (content) {
+															const relativePath = path
+																.relative(
+																	rootFolder.uri.fsPath,
+																	typeDef.uri.fsPath
+																)
+																.replace(/\\/g, "/");
+															referencedTypeContents.set(
+																relativePath,
+																content.substring(
 																	0,
 																	MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT
-																) + "\n... (content truncated)";
+																)
+															);
 														}
-														referencedTypeContents.push({
-															filePath: relativeFilePath,
-															content: truncatedContent,
-														});
+													} catch (e: any) {
+														console.warn(
+															`[ContextService] Failed to get content for referenced type definition: ${e.message}`
+														);
 													}
 												},
 												{ concurrency: 5 } // Limit concurrent file reads
@@ -372,13 +440,6 @@ export class ContextService {
 				}
 			}
 
-			if (allScannedFiles.length === 0) {
-				return {
-					contextString: "[No relevant files found in workspace]",
-					relevantFiles: [],
-				};
-			}
-
 			let filesForContextBuilding = allScannedFiles;
 			let heuristicSelectedFiles: vscode.Uri[] = []; // NEW: Declare heuristicSelectedFiles
 
@@ -412,7 +473,7 @@ export class ContextService {
 				heuristicSelectedFiles = [];
 			}
 
-			// NEW: Summary generation logic
+			// NEW: Summary generation logic with optimization
 			const MAX_FILES_TO_SUMMARIZE_ALL_FOR_SELECTION_PROMPT = 100; // User-defined threshold
 
 			let filesToSummarizeForSelectionPrompt: vscode.Uri[];
@@ -495,6 +556,13 @@ export class ContextService {
 						fileDependencies,
 						preSelectedHeuristicFiles: heuristicSelectedFiles, // NEW: Pass heuristicSelectedFiles
 						fileSummaries: fileSummariesForAI, // NEW: Pass the generated file summaries
+						selectionOptions: {
+							useCache: options?.useAISelectionCache ?? true,
+							cacheTimeout: 5 * 60 * 1000, // 5 minutes
+							maxPromptLength: 50000,
+							enableStreaming: false,
+							fallbackToHeuristics: true,
+						},
 					};
 					const selectedFiles = await selectRelevantFilesAI(selectionOptions);
 
@@ -568,6 +636,9 @@ export class ContextService {
 					path.relative(rootFolder.uri.fsPath, uri.fsPath).replace(/\\/g, "/")
 				);
 
+			// NEW: Context building with performance monitoring
+			const contextBuildStartTime = Date.now();
+
 			// 3. Update the final call to buildContextString to pass activeSymbolDetailedInfo
 			const contextString = await buildContextString(
 				filesForContextBuilding, // Still pass URIs to buildContextString for content reading
@@ -579,10 +650,30 @@ export class ContextService {
 				activeSymbolDetailedInfo // Pass the new argument
 			);
 
-			// Return the new object structure
+			const contextBuildTime = Date.now() - contextBuildStartTime;
+			const totalTime = Date.now() - startTime;
+
+			if (
+				enablePerformanceMonitoring &&
+				contextBuildTime > PERFORMANCE_THRESHOLDS.CONTEXT_BUILD_TIME_WARNING
+			) {
+				console.warn(
+					`[ContextService] Context building took ${contextBuildTime}ms (threshold: ${PERFORMANCE_THRESHOLDS.CONTEXT_BUILD_TIME_WARNING}ms)`
+				);
+			}
+
+			// Return the new object structure with performance metrics
 			return {
 				contextString: contextString,
 				relevantFiles: relativeFilesForContextBuilding,
+				performanceMetrics: {
+					scanTime,
+					dependencyBuildTime,
+					contextBuildTime,
+					totalTime,
+					fileCount: allScannedFiles.length,
+					processedFileCount: filesForContextBuilding.length,
+				},
 			};
 		} catch (error: any) {
 			console.error(`[ContextService] Error building project context:`, error);

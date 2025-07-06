@@ -11,6 +11,28 @@ import * as SymbolService from "../services/symbolService";
 const MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION = 350;
 export { MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION };
 
+// NEW: Cache interface for AI selection results
+interface AISelectionCache {
+	timestamp: number;
+	selectedFiles: vscode.Uri[];
+	userRequest: string;
+	activeFile?: string;
+	fileCount: number;
+	heuristicFilesCount: number;
+}
+
+// NEW: Cache storage
+const aiSelectionCache = new Map<string, AISelectionCache>();
+
+// NEW: Configuration for AI selection
+interface AISelectionOptions {
+	useCache?: boolean;
+	cacheTimeout?: number;
+	maxPromptLength?: number;
+	enableStreaming?: boolean;
+	fallbackToHeuristics?: boolean;
+}
+
 export interface SelectRelevantFilesAIOptions {
 	userRequest: string;
 	chatHistory: ReadonlyArray<HistoryEntry>;
@@ -38,10 +60,97 @@ export interface SelectRelevantFilesAIOptions {
 	) => Promise<string>;
 	modelName: string;
 	cancellationToken?: vscode.CancellationToken;
+	selectionOptions?: AISelectionOptions; // NEW: Selection options
+}
+
+/**
+ * NEW: Generate cache key for AI selection
+ */
+function generateAISelectionCacheKey(
+	userRequest: string,
+	allScannedFiles: ReadonlyArray<vscode.Uri>,
+	activeEditorContext?: PlanGenerationContext["editorContext"],
+	preSelectedHeuristicFiles?: vscode.Uri[]
+): string {
+	const activeFile = activeEditorContext?.filePath || "";
+	const heuristicFiles =
+		preSelectedHeuristicFiles
+			?.map((f) => f.fsPath)
+			.sort()
+			.join("|") || "";
+	const fileCount = allScannedFiles.length;
+
+	// Create a hash-like key from the request and context
+	const keyComponents = [
+		userRequest.substring(0, 100), // First 100 chars of request
+		activeFile,
+		heuristicFiles,
+		fileCount.toString(),
+	];
+
+	return keyComponents.join("|");
+}
+
+/**
+ * NEW: Truncate and optimize prompt for better performance
+ */
+function optimizePrompt(
+	contextPrompt: string,
+	dependencyInfo: string,
+	fileListString: string,
+	maxLength: number = 50000
+): string {
+	let totalLength =
+		contextPrompt.length + dependencyInfo.length + fileListString.length;
+
+	if (totalLength <= maxLength) {
+		return contextPrompt + dependencyInfo + fileListString;
+	}
+
+	// NEW: Smart truncation strategy
+	const targetLength = maxLength - 2000; // Leave room for instructions
+
+	// Prioritize context prompt (most important)
+	let optimizedContext = contextPrompt;
+	let optimizedDependency = dependencyInfo;
+	let optimizedFileList = fileListString;
+
+	// If still too long, truncate file list (least important for selection)
+	if (totalLength > targetLength) {
+		const fileListLines = fileListString.split("\n");
+		const maxFileLines = Math.floor(
+			(targetLength - contextPrompt.length - dependencyInfo.length) / 100
+		);
+
+		if (fileListLines.length > maxFileLines) {
+			optimizedFileList =
+				fileListLines.slice(0, maxFileLines).join("\n") +
+				`\n... and ${fileListLines.length - maxFileLines} more files`;
+		}
+	}
+
+	// If still too long, truncate dependency info
+	if (
+		optimizedContext.length +
+			optimizedDependency.length +
+			optimizedFileList.length >
+		targetLength
+	) {
+		const maxDependencyLength =
+			targetLength - optimizedContext.length - optimizedFileList.length;
+		if (optimizedDependency.length > maxDependencyLength) {
+			optimizedDependency =
+				optimizedDependency.substring(0, maxDependencyLength) +
+				"...(truncated)";
+		}
+	}
+
+	return optimizedContext + optimizedDependency + optimizedFileList;
 }
 
 /**
  * Uses an AI model to select the most relevant files for a given user request and context.
+ * Now includes caching, better prompt optimization, and performance improvements.
  */
 export async function selectRelevantFilesAI(
 	options: SelectRelevantFilesAIOptions
@@ -60,10 +169,35 @@ export async function selectRelevantFilesAI(
 		aiModelCall,
 		modelName,
 		cancellationToken,
+		selectionOptions,
 	} = options;
 
 	if (allScannedFiles.length === 0) {
 		return [];
+	}
+
+	// NEW: Check cache first
+	const useCache = selectionOptions?.useCache ?? true;
+	const cacheTimeout = selectionOptions?.cacheTimeout ?? 5 * 60 * 1000; // 5 minutes default
+
+	if (useCache) {
+		const cacheKey = generateAISelectionCacheKey(
+			userRequest,
+			allScannedFiles,
+			activeEditorContext,
+			preSelectedHeuristicFiles
+		);
+
+		const cached = aiSelectionCache.get(cacheKey);
+		if (cached && Date.now() - cached.timestamp < cacheTimeout) {
+			console.log(
+				`Using cached AI selection results for request: ${userRequest.substring(
+					0,
+					50
+				)}...`
+			);
+			return cached.selectedFiles;
+		}
 	}
 
 	// Initialize the set of final selected URIs with any heuristically pre-selected files
@@ -216,21 +350,22 @@ export async function selectRelevantFilesAI(
 		})
 		.join("\n");
 
+	// NEW: Optimize prompt length
+	const maxPromptLength = selectionOptions?.maxPromptLength ?? 50000;
+	const optimizedPrompt = optimizePrompt(
+		contextPrompt,
+		dependencyInfo,
+		fileListString,
+		maxPromptLength
+	);
+
 	const selectionPrompt = `
 	You are an AI assistant helping a developer focus on the most relevant parts of their codebase.
 	Based on the user's request, active editor context, chat history, and the provided project file information, please select a subset of files from the "Available Project Files" list that are most pertinent to fulfilling the user's request.
 
 	-- Context Prompt --
-	${contextPrompt}
+	${optimizedPrompt}
 	-- End Context Prompt --
-
-	-- Dependency Info --
-	${dependencyInfo}
-	-- End Dependency Info --
-	
-	-- Available Project Files (with optional summaries) --
-	${fileListString}
-	-- End Available Project Files --
 
 	Instructions for your response:
 	1.  Analyze all the provided information to understand the user's goal.
@@ -238,7 +373,7 @@ export async function selectRelevantFilesAI(
 	3.  Carefully examine the 'Internal File Relationships' section if present, as it provides crucial context on how files relate to each other, forming logical modules or feature areas.
 	4.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes. Prioritize files that are imported by the active file, or by other files you deem highly relevant to the user's request.
 	5.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
-	6.  If no specific files from the list seem particularly relevant *beyond the heuristically pre-selected ones* (e.g., the request is very general or can be answered without looking at other files beyond the active one and its immediate module), return an empty JSON array \`[]\`. This indicates you are not adding *new* files to the heuristic set.
+	6.  If no specific files from the list seem particularly relevant *beyond the heuristically pre-selected ones* (e.g., the request is very general or can be answered without looking at other files beyond the active one and its immediate module), return an empty JSON array \`[]\`
 	7.  Do NOT include any files not present in the "Available Project Files" list.
 	8.  Your entire response should be ONLY the JSON array. Do not include any other text, explanations, or markdown formatting.
 
@@ -246,7 +381,7 @@ export async function selectRelevantFilesAI(
 `;
 
 	console.log(
-		"[SmartContextSelector] Sending prompt to AI for file selection:",
+		`[SmartContextSelector] Sending optimized prompt to AI for file selection (${selectionPrompt.length} chars):`,
 		selectionPrompt
 	);
 
@@ -296,7 +431,27 @@ export async function selectRelevantFilesAI(
 				selectedPaths
 			);
 			// Fallback to just heuristic files if AI response is invalid
-			return Array.from(finalSelectedUris);
+			const result = Array.from(finalSelectedUris);
+
+			// NEW: Cache the fallback result
+			if (useCache) {
+				const cacheKey = generateAISelectionCacheKey(
+					userRequest,
+					allScannedFiles,
+					activeEditorContext,
+					preSelectedHeuristicFiles
+				);
+				aiSelectionCache.set(cacheKey, {
+					timestamp: Date.now(),
+					selectedFiles: result,
+					userRequest,
+					activeFile: activeEditorContext?.filePath,
+					fileCount: allScannedFiles.length,
+					heuristicFilesCount: preSelectedHeuristicFiles?.length || 0,
+				});
+			}
+
+			return result;
 		}
 
 		for (const selectedPath of selectedPaths as string[]) {
@@ -317,8 +472,28 @@ export async function selectRelevantFilesAI(
 				);
 			}
 		}
+
+		// NEW: Cache the successful result
+		const result = Array.from(finalSelectedUris);
+		if (useCache) {
+			const cacheKey = generateAISelectionCacheKey(
+				userRequest,
+				allScannedFiles,
+				activeEditorContext,
+				preSelectedHeuristicFiles
+			);
+			aiSelectionCache.set(cacheKey, {
+				timestamp: Date.now(),
+				selectedFiles: result,
+				userRequest,
+				activeFile: activeEditorContext?.filePath,
+				fileCount: allScannedFiles.length,
+				heuristicFilesCount: preSelectedHeuristicFiles?.length || 0,
+			});
+		}
+
 		// Return the combined set of heuristic and AI-selected files
-		return Array.from(finalSelectedUris);
+		return result;
 	} catch (error) {
 		console.error(
 			"[SmartContextSelector] Error during AI file selection:",
@@ -326,6 +501,73 @@ export async function selectRelevantFilesAI(
 		);
 		// In case of an error (API error, parsing error, etc.),
 		// fall back to the heuristically pre-selected files.
-		return Array.from(finalSelectedUris);
+		const result = Array.from(finalSelectedUris);
+
+		// NEW: Cache the error fallback result
+		if (useCache) {
+			const cacheKey = generateAISelectionCacheKey(
+				userRequest,
+				allScannedFiles,
+				activeEditorContext,
+				preSelectedHeuristicFiles
+			);
+			aiSelectionCache.set(cacheKey, {
+				timestamp: Date.now(),
+				selectedFiles: result,
+				userRequest,
+				activeFile: activeEditorContext?.filePath,
+				fileCount: allScannedFiles.length,
+				heuristicFilesCount: preSelectedHeuristicFiles?.length || 0,
+			});
+		}
+
+		return result;
 	}
+}
+
+/**
+ * NEW: Clear AI selection cache for a specific workspace or all workspaces
+ */
+export function clearAISelectionCache(workspacePath?: string): void {
+	if (workspacePath) {
+		// Clear entries for this workspace
+		for (const [key, cache] of aiSelectionCache.entries()) {
+			if (key.includes(workspacePath)) {
+				aiSelectionCache.delete(key);
+			}
+		}
+		console.log(`Cleared AI selection cache for: ${workspacePath}`);
+	} else {
+		aiSelectionCache.clear();
+		console.log("Cleared all AI selection caches");
+	}
+}
+
+/**
+ * NEW: Get AI selection cache statistics
+ */
+export function getAISelectionCacheStats(): {
+	size: number;
+	entries: Array<{
+		request: string;
+		age: number;
+		fileCount: number;
+		selectedCount: number;
+		heuristicCount: number;
+	}>;
+} {
+	const entries = Array.from(aiSelectionCache.entries()).map(
+		([key, cache]) => ({
+			request: cache.userRequest.substring(0, 50) + "...",
+			age: Date.now() - cache.timestamp,
+			fileCount: cache.fileCount,
+			selectedCount: cache.selectedFiles.length,
+			heuristicCount: cache.heuristicFilesCount,
+		})
+	);
+
+	return {
+		size: aiSelectionCache.size,
+		entries,
+	};
 }

@@ -472,26 +472,28 @@ export async function buildContextString(
 		// 3. Add referencedTypeDefinitions
 		if (
 			activeSymbolDetailedInfo.referencedTypeDefinitions &&
-			activeSymbolDetailedInfo.referencedTypeDefinitions.length > 0
+			activeSymbolDetailedInfo.referencedTypeDefinitions.size > 0
 		) {
 			activeSymbolDetailSection += `  Referenced Type Definitions:\n`;
 			let count = 0;
-			for (const def of activeSymbolDetailedInfo.referencedTypeDefinitions) {
+			for (const [
+				filePath,
+				content,
+			] of activeSymbolDetailedInfo.referencedTypeDefinitions) {
 				if (count >= MAX_REFERENCED_TYPES_TO_INCLUDE) {
 					activeSymbolDetailSection += `    ... (${
-						activeSymbolDetailedInfo.referencedTypeDefinitions.length - count
+						activeSymbolDetailedInfo.referencedTypeDefinitions.size - count
 					} more referenced types omitted)\n`;
 					break;
 				}
 
-				const relativePath = def.filePath;
-				let contentPreview = def.content;
+				let contentPreview = content;
 				if (contentPreview.length > MAX_REFERENCED_TYPE_CONTENT_CHARS) {
 					contentPreview =
 						contentPreview.substring(0, MAX_REFERENCED_TYPE_CONTENT_CHARS) +
 						"\n... (content truncated)";
 				}
-				activeSymbolDetailSection += `    File: ${relativePath}\n`;
+				activeSymbolDetailSection += `    File: ${filePath}\n`;
 				activeSymbolDetailSection += `    Content:\n\`\`\`\n${contentPreview}\n\`\`\`\n`;
 				count++;
 			}
