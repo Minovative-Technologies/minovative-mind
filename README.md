@@ -37,6 +37,24 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - **Diagnostic-Aware Modifications**: The AI leverages relevant VS Code diagnostics (warnings, errors) in a more contextual manner, thanks to deeper integration with a dedicated diagnostic service, leading to more accurate and problem-solving custom modifications for both targeted selections and whole-file operations.
 - **Production-Ready Code Focus**: AI persona updated to focus on generating production-ready, robust, and secure code.
 
+#### Enhanced AI Code Generation Accuracy
+
+- **Overview**: Minovative Mind now provides more accurate, reliable, and production-ready code through a comprehensive system of improvements.
+- **Key Areas of Improvement**:
+  - **Enhanced Context Analysis**: Deeper understanding of project structure, dependencies, active symbols, diagnostics, and framework detection.
+  - **Improved Prompt Engineering**: More specific, framework, and language-aware instructions for the AI.
+  - **Code Validation & Refinement**: Automatic validation for syntax, imports, and best practices with iterative refinement loops.
+  - **Framework-Specific Optimizations**: Tailored guidance to ensure generated code adheres to specific framework conventions.
+  - **Error Prevention & Correction**: Proactive detection and automatic fixing of common coding errors.
+
+#### Inline Edit System
+
+- **Purpose**: This system allows the AI to make precise, targeted changes to files instead of rewriting entire files. This approach leads to significantly better accuracy, performance, and user experience.
+- **Mechanism (Conceptual)**: The AI generates specific edit instructions (e.g., add lines, remove lines, change content within a line range) which the system applies directly to the file. It includes robust validation with an automatic fallback mechanism to full file modification if inline edits fail or are invalid, ensuring reliability.
+- **Key Benefits**:
+  - **Precision**: Only specific lines are modified, preserving existing code, formatting, and structure, and avoiding accidental changes.
+  - **Robustness**: Built-in validation and an intelligent fallback system ensure modifications are applied correctly, even in complex scenarios.
+
 ## Advanced Workflow & Automation
 
 ### AI-Driven Planning and Execution
@@ -145,6 +163,15 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - **Diff Syntax Highlighting**: File diffs displayed in the chat interface are rendered with syntax highlighting for added and removed lines, enhancing clarity and reviewability.
 
 ## Advanced Context & Project Awareness
+
+### Optimized Search & Context Selection
+
+- **Overview**: Comprehensive optimizations have been implemented across the extension's search and context selection system. These improvements drastically enhance performance, reduce latency, and elevate the user experience when gathering project context for AI operations.
+- **Key Optimizations Implemented**:
+  - **Workspace Scanner Enhancements**: Features intelligent caching, efficient file type and size filtering, and concurrent processing for faster workspace scans.
+  - **Dependency Graph Builder Improvements**: Incorporates multi-level caching, batch processing, retry logic, and enhanced concurrency for building robust dependency graphs.
+  - **Smart Context Selector Refinements**: Includes AI selection caching, optimized prompt truncation, and robust fallback mechanisms to ensure relevant context is always provided efficiently.
+- **Overall Benefits**: Results in faster response times, more efficient resource usage, improved reliability, enhanced user experience with real-time progress feedback, better scalability for large codebases, and comprehensive performance monitoring.
 
 ### Deep Symbol and Dependency Context
 
