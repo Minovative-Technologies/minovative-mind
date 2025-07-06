@@ -15,7 +15,7 @@
 	],
 	"version": "1.10.1",
 	"publisher": "MinovativeTechnologies",
-	"icon": "media/mino-logo-dark.png",
+	"icon": "$(star)",
 	"banner": {
 		"color": "#3A456C",
 		"theme": "dark"
@@ -36,7 +36,7 @@
 				{
 					"id": "minovative-mind",
 					"title": "Minovative Mind",
-					"icon": "media/minovative-logo-192x192.png"
+					"icon": "$(star)"
 				}
 			]
 		},
@@ -47,7 +47,7 @@
 					"name": "Minovative Mind Tools",
 					"type": "webview",
 					"contextualTitle": "Minovative Mind",
-					"icon": "media/mino-logo-dark.png"
+					"icon": "$(star)"
 				}
 			]
 		},
