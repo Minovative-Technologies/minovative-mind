@@ -29,9 +29,9 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 - **Flexible Instructions (Premium Tier)**: Users can select any code snippet or operate on the **entire active file if no selection is present**, and provide free-form instructions (e.g., "Refactor this function to use async/await").
 - **Quick Access**: Triggered via a keyboard shortcut (`Ctrl+M` or `Cmd+M`) or the editor's right-click context menu (`Minovative Mind > Custom Modifications`).
-- **AI-Generated Documentation (`/docs`)**: Typing `/docs` for selected code automatically generates appropriate documentation (e.g., `JSDoc`, `Python docstrings`) and inserts it directly into the file.
+- **AI-Generated Documentation (`/docs`)**: Typing `/docs` for selected code automatically generates appropriate documentation (e.g., `JSDoc`, `Python doc-strings`) and inserts it directly into the file.
 - **Automated Code Fixing (`/fix`) (Premium Tier)**: Typing `/fix` prompts the AI to analyze selected code, or the **entire active file if no selection is present**, including relevant `VS Code` diagnostics (warnings, errors), and propose/apply fixes directly within the editor.
-- **AI Merge Conflict Resolution (`/merge`) (Premium Tier)**: Automatically detects and resolves Git merge conflicts in the active file. The AI analyzes conflict markers, generates a semantically coherent merged version, applies the resolution, and unmarks the file as conflicted, streamlining a common tedious task.
+- **AI Merge Conflict Resolution (`/merge`) (Premium Tier)**: Automatically detects and resolves Git merge conflicts in the active file. The AI analyzes conflict markers, generates a semantically coherent merged version, applies the resolution, and un-marks the file as conflicted, streamlining a common tedious task.
 - **Symbol-Aware Refactoring**: Leverages VS Code's symbol information (functions, classes, variables, references, definitions, and types) to enable more precise, comprehensive, and robust refactorings and modifications across your entire project.
 - **Modular Code Generation**: The AI is explicitly instructed to promote modular code generation principles, encouraging maintainable and scalable solutions.
 - **Diagnostic-Aware Modifications**: The AI leverages relevant VS Code diagnostics (warnings, errors) in a more contextual manner, thanks to deeper integration with a dedicated diagnostic service, leading to more accurate and problem-solving custom modifications for both targeted selections and whole-file operations.
@@ -104,7 +104,7 @@ Introduced core services and utilities for advanced AI-driven development.
 
 - **Seamless Integration**: A dedicated 'Sign In' button triggers a command that guides users to the Minovative Mind settings panel, allowing them to effortlessly authenticate their Minovative Mind account directly within VS Code.
 - **Secure Sessions**: The extension securely manages user authentication sessions, enabling personalized feature access and preferences.
-- **Firebase Integration**: Uses Firebase for secure user authentication and to manage subscription status and usage quotas. No longer creates default user documents in Firestore, aligning with privacy best practices.
+- **Firebase Integration**: Uses Firebase for secure user authentication and to manage subscription status and usage quotas. No longer creates default user documents in FireStore, aligning with privacy best practices.
 
 ### Flexible Subscription Tiers
 
@@ -146,6 +146,7 @@ Introduced core services and utilities for advanced AI-driven development.
 - **Comprehensive Understanding**: The AI intelligently considers the active file content, selected code, relevant diagnostics (warnings/errors) from VS Code, chat history, the overall project structure, **significantly enhanced relevant file context**, **and improved utilization of detailed symbol information** (definitions, references), along with TypeScript-aware dependency graph analysis (respecting `tsconfig.json`/`jsconfig.json` for accurate module resolution), to provide highly relevant and accurate responses.
 - **File Change Tracking**: Includes a dedicated context section for the AI that lists recently modified and created file paths, providing the AI with up-to-date awareness of active development changes within the workspace.
 - **Automatic URL Context Integration**: Automatically extracts and processes URLs from user messages and AI responses, fetching their content to provide additional context. This feature works seamlessly for both chat messages and plan requests, enhancing the AI's understanding of external resources and documentation.
+- **Google Search Grounding**: Toggle the "Grounding with Google Search" option in the chat interface to enable AI responses that are grounded with real-time web search results. This feature enhances the AI's ability to provide up-to-date information and references from the internet, making responses more accurate and current for questions about recent technologies, frameworks, or documentation.
 
 ### Built-in Troubleshooting Guidance
 
@@ -220,7 +221,7 @@ Introduced core services and utilities for advanced AI-driven development.
 
 ## Internal Architecture Highlights
 
-- **Firebase Integration**: Uses Firebase for secure user authentication and to manage subscription status and usage quotas. No longer creates default user documents in Firestore, aligning with privacy best practices.
+- **Firebase Integration**: Uses Firebase for secure user authentication and to manage subscription status and usage quotas. No longer creates default user documents in FireStore, aligning with privacy best practices.
 - **Dynamic Feature Gating**: Features are dynamically enabled or disabled based on user tier, authentication, and subscription status, using a centralized feature gating utility.
 - **Settings Management**: User preferences (e.g., smart context, model selection) are managed and persisted, affecting extension behavior in real time.
 - **Git Integration**: Can stage all changes in the workspace and build/execute git commit commands with AI-generated messages.

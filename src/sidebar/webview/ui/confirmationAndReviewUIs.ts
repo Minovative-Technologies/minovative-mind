@@ -455,6 +455,8 @@ export function handleCancelPlanExecution(
 		appState.typingBuffer = "";
 		appState.currentAccumulatedText = "";
 	}
+	// Re-enable inputs after cancellation cleanup
+	setLoadingState(false, elements);
 }
 
 /**
@@ -559,4 +561,6 @@ export function handleCancelCommit(
 		appState.typingBuffer = "";
 		appState.currentAccumulatedText = "";
 	}
+	// Re-enable inputs after cancellation cleanup
+	setLoadingState(false, elements);
 }

@@ -172,6 +172,8 @@ export function initializeButtonEventListeners(
 			appState.typingBuffer = "";
 			appState.currentAccumulatedText = "";
 		}
+		// Re-enable inputs after cancellation cleanup
+		setLoadingState(false, elements);
 	});
 
 	// Cancel Generation Button
@@ -203,6 +205,8 @@ export function initializeButtonEventListeners(
 			appState.typingBuffer = "";
 			appState.currentAccumulatedText = "";
 		}
+		// Re-enable inputs after cancellation cleanup
+		setLoadingState(false, elements);
 	});
 
 	// Chat Container (for message actions: copy, delete, open file)
