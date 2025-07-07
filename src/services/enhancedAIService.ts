@@ -6,13 +6,24 @@ import { EnhancedPromptBuilder } from "../ai/enhancedPromptBuilder";
 import { ActiveSymbolDetailedInfo } from "./contextService";
 
 /**
+ * Real-time feedback interface for enhanced AI service
+ */
+interface EnhancedAIFeedback {
+	stage: string;
+	message: string;
+	progress: number;
+	details?: any;
+}
+
+/**
  * Enhanced AI service that provides more accurate code generation
  * by integrating multiple improvements:
- * 1. Better context analysis
+ * 1. Better context analysis with caching
  * 2. Enhanced prompts
  * 3. Code validation and refinement
  * 4. Framework-specific optimizations
  * 5. Error prevention and correction
+ * 6. Real-time feedback loop
  */
 export class EnhancedAIService {
 	private enhancedCodeGenerator: EnhancedCodeGenerator;
@@ -25,13 +36,17 @@ export class EnhancedAIService {
 	) {
 		this.enhancedCodeGenerator = new EnhancedCodeGenerator(
 			aiRequestService,
-			workspaceRoot
+			workspaceRoot,
+			{
+				enableRealTimeFeedback: true,
+				maxFeedbackIterations: 5,
+			}
 		);
 		this.enhancedContextBuilder = new EnhancedContextBuilder();
 	}
 
 	/**
-	 * Enhanced plan generation with better accuracy
+	 * Enhanced plan generation with better accuracy and caching
 	 */
 	public async generateEnhancedPlan(
 		userRequest: string | undefined,
@@ -47,12 +62,14 @@ export class EnhancedAIService {
 			textualPlanExplanation?: string;
 		},
 		modelName: string,
-		token?: vscode.CancellationToken
+		token?: vscode.CancellationToken,
+		feedbackCallback?: (feedback: EnhancedAIFeedback) => void
 	): Promise<{ plan: any; context: string; accuracy: PlanAccuracyMetrics }> {
-		// Step 1: Build enhanced context
-		this.postMessageToWebview({
-			type: "statusUpdate",
-			value: "Building enhanced context for better accuracy...",
+		// Step 1: Build enhanced context with caching
+		this._sendFeedback(feedbackCallback, {
+			stage: "context_building",
+			message: "Building enhanced context with caching...",
+			progress: 10,
 		});
 
 		const enhancedContext =
@@ -70,10 +87,15 @@ export class EnhancedAIService {
 				}
 			);
 
+		// Log cache statistics
+		const cacheStats = this.enhancedContextBuilder.getCacheStats();
+		console.log(`[EnhancedAIService] Context cache stats:`, cacheStats);
+
 		// Step 2: Create enhanced planning prompt
-		this.postMessageToWebview({
-			type: "statusUpdate",
-			value: "Creating enhanced planning prompt...",
+		this._sendFeedback(feedbackCallback, {
+			stage: "prompt_creation",
+			message: "Creating enhanced planning prompt...",
+			progress: 30,
 		});
 
 		const enhancedPrompt = EnhancedPromptBuilder.createEnhancedPlanningPrompt(
@@ -91,9 +113,10 @@ export class EnhancedAIService {
 		);
 
 		// Step 3: Generate plan with enhanced accuracy
-		this.postMessageToWebview({
-			type: "statusUpdate",
-			value: "Generating enhanced execution plan...",
+		this._sendFeedback(feedbackCallback, {
+			stage: "plan_generation",
+			message: "Generating enhanced execution plan...",
+			progress: 50,
 		});
 
 		const planResponse = await this.aiRequestService.generateWithRetry(
@@ -110,12 +133,29 @@ export class EnhancedAIService {
 		);
 
 		// Step 4: Validate and analyze plan accuracy
+		this._sendFeedback(feedbackCallback, {
+			stage: "plan_validation",
+			message: "Validating and analyzing plan accuracy...",
+			progress: 80,
+		});
+
 		const plan = this._parseAndValidatePlan(planResponse);
 		const accuracyMetrics = this._analyzePlanAccuracy(
 			plan,
 			userRequest,
 			options
 		);
+
+		this._sendFeedback(feedbackCallback, {
+			stage: "completion",
+			message: "Enhanced plan generation completed!",
+			progress: 100,
+			details: {
+				planSteps: plan.steps?.length || 0,
+				accuracyScore: accuracyMetrics.overall,
+				cacheStats,
+			},
+		});
 
 		return {
 			plan,
@@ -125,7 +165,7 @@ export class EnhancedAIService {
 	}
 
 	/**
-	 * Enhanced file content generation with validation
+	 * Enhanced file content generation with real-time feedback
 	 */
 	public async generateEnhancedFileContent(
 		filePath: string,
@@ -137,16 +177,34 @@ export class EnhancedAIService {
 			activeSymbolInfo?: ActiveSymbolDetailedInfo;
 		},
 		modelName: string,
-		token?: vscode.CancellationToken
+		token?: vscode.CancellationToken,
+		feedbackCallback?: (feedback: EnhancedAIFeedback) => void
 	): Promise<{
 		content: string;
 		validation: any;
 		accuracy: CodeAccuracyMetrics;
 	}> {
-		// Step 1: Generate content with enhanced generator
-		this.postMessageToWebview({
-			type: "statusUpdate",
-			value: `Generating enhanced content for ${filePath}...`,
+		// Convert feedback callback for code generator
+		const codeFeedbackCallback = feedbackCallback
+			? (feedback: any) => {
+					feedbackCallback({
+						stage: `code_generation_${feedback.stage}`,
+						message: feedback.message,
+						progress: feedback.progress,
+						details: {
+							issues: feedback.issues,
+							suggestions: feedback.suggestions,
+							iterations: feedback.iterations,
+						},
+					});
+			  }
+			: undefined;
+
+		// Step 1: Generate content with enhanced generator and real-time feedback
+		this._sendFeedback(feedbackCallback, {
+			stage: "code_generation_start",
+			message: `Generating enhanced content for ${filePath}...`,
+			progress: 0,
 		});
 
 		const result = await this.enhancedCodeGenerator.generateFileContent(
@@ -154,15 +212,34 @@ export class EnhancedAIService {
 			generatePrompt,
 			context,
 			modelName,
-			token
+			token,
+			codeFeedbackCallback
 		);
 
 		// Step 2: Analyze code accuracy
+		this._sendFeedback(feedbackCallback, {
+			stage: "accuracy_analysis",
+			message: "Analyzing code accuracy...",
+			progress: 90,
+		});
+
 		const accuracyMetrics = this._analyzeCodeAccuracy(
 			result.content,
 			filePath,
 			context
 		);
+
+		this._sendFeedback(feedbackCallback, {
+			stage: "code_generation_complete",
+			message: "Code generation completed successfully!",
+			progress: 100,
+			details: {
+				filePath,
+				validationIssues: result.validation.issues.length,
+				accuracyScore: accuracyMetrics.overall,
+				iterations: result.validation.iterations,
+			},
+		});
 
 		return {
 			content: result.content,
@@ -172,7 +249,7 @@ export class EnhancedAIService {
 	}
 
 	/**
-	 * Enhanced file modification with intelligent analysis
+	 * Enhanced file modification with real-time feedback
 	 */
 	public async modifyEnhancedFileContent(
 		filePath: string,
@@ -185,16 +262,33 @@ export class EnhancedAIService {
 			activeSymbolInfo?: ActiveSymbolDetailedInfo;
 		},
 		modelName: string,
-		token?: vscode.CancellationToken
+		token?: vscode.CancellationToken,
+		feedbackCallback?: (feedback: EnhancedAIFeedback) => void
 	): Promise<{
 		content: string;
 		validation: any;
 		accuracy: CodeAccuracyMetrics;
 	}> {
+		// Convert feedback callback for code generator
+		const codeFeedbackCallback = feedbackCallback
+			? (feedback: any) => {
+					feedbackCallback({
+						stage: `code_modification_${feedback.stage}`,
+						message: feedback.message,
+						progress: feedback.progress,
+						details: {
+							issues: feedback.issues,
+							suggestions: feedback.suggestions,
+						},
+					});
+			  }
+			: undefined;
+
 		// Step 1: Modify content with enhanced generator
-		this.postMessageToWebview({
-			type: "statusUpdate",
-			value: `Modifying ${filePath} with enhanced accuracy...`,
+		this._sendFeedback(feedbackCallback, {
+			stage: "code_modification_start",
+			message: `Modifying ${filePath} with enhanced accuracy...`,
+			progress: 0,
 		});
 
 		const result = await this.enhancedCodeGenerator.modifyFileContent(
@@ -207,12 +301,29 @@ export class EnhancedAIService {
 		);
 
 		// Step 2: Analyze modification accuracy
+		this._sendFeedback(feedbackCallback, {
+			stage: "modification_analysis",
+			message: "Analyzing modification accuracy...",
+			progress: 90,
+		});
+
 		const accuracyMetrics = this._analyzeModificationAccuracy(
 			currentContent,
 			result.content,
 			filePath,
 			context
 		);
+
+		this._sendFeedback(feedbackCallback, {
+			stage: "code_modification_complete",
+			message: "File modification completed successfully!",
+			progress: 100,
+			details: {
+				filePath,
+				validationIssues: result.validation.issues.length,
+				accuracyScore: accuracyMetrics.overall,
+			},
+		});
 
 		return {
 			content: result.content,
@@ -277,6 +388,58 @@ export class EnhancedAIService {
 			validation: result.validation,
 			accuracy: accuracyMetrics,
 		};
+	}
+
+	/**
+	 * Preload context for frequently accessed files
+	 */
+	public async preloadContext(
+		relevantFiles: vscode.Uri[],
+		options: any = {}
+	): Promise<void> {
+		try {
+			await this.enhancedContextBuilder.preloadContext(
+				relevantFiles,
+				this.workspaceRoot,
+				options
+			);
+		} catch (error) {
+			console.warn(`[EnhancedAIService] Failed to preload context:`, error);
+		}
+	}
+
+	/**
+	 * Get context cache statistics
+	 */
+	public getContextCacheStats(): {
+		hits: number;
+		misses: number;
+		size: number;
+	} {
+		return this.enhancedContextBuilder.getCacheStats();
+	}
+
+	/**
+	 * Clear context cache
+	 */
+	public clearContextCache(): void {
+		this.enhancedContextBuilder.clearCache();
+	}
+
+	/**
+	 * Send feedback to callback if provided
+	 */
+	private _sendFeedback(
+		callback?: (feedback: EnhancedAIFeedback) => void,
+		feedback?: EnhancedAIFeedback
+	): void {
+		if (callback && feedback) {
+			try {
+				callback(feedback);
+			} catch (error) {
+				console.warn("Error in feedback callback:", error);
+			}
+		}
 	}
 
 	/**

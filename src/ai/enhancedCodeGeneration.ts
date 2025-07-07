@@ -8,6 +8,17 @@ import {
 } from "../utils/incrementalCodeUpdater";
 
 /**
+ * Real-time feedback interface for code generation
+ */
+interface RealTimeFeedback {
+	stage: string;
+	message: string;
+	issues: CodeIssue[];
+	suggestions: string[];
+	progress: number; // 0-100
+}
+
+/**
  * Enhanced code generation with improved accuracy through:
  * 1. Better context analysis
  * 2. Code validation and refinement
@@ -15,6 +26,7 @@ import {
  * 4. Style consistency enforcement
  * 5. Error prevention
  * 6. Inline edit support for precise modifications
+ * 7. Real-time feedback loop for immediate validation
  */
 export class EnhancedCodeGenerator {
 	constructor(
@@ -23,16 +35,21 @@ export class EnhancedCodeGenerator {
 		private config: {
 			enableInlineEdits?: boolean;
 			inlineEditFallbackThreshold?: number;
+			enableRealTimeFeedback?: boolean;
+			maxFeedbackIterations?: number;
 		} = {}
 	) {
 		// Set defaults
 		this.config.enableInlineEdits = this.config.enableInlineEdits ?? true;
 		this.config.inlineEditFallbackThreshold =
 			this.config.inlineEditFallbackThreshold ?? 0.3;
+		this.config.enableRealTimeFeedback =
+			this.config.enableRealTimeFeedback ?? true;
+		this.config.maxFeedbackIterations = this.config.maxFeedbackIterations ?? 5;
 	}
 
 	/**
-	 * Enhanced file content generation with validation and refinement
+	 * Enhanced file content generation with real-time feedback loop
 	 */
 	public async generateFileContent(
 		filePath: string,
@@ -44,30 +61,41 @@ export class EnhancedCodeGenerator {
 			activeSymbolInfo?: ActiveSymbolDetailedInfo;
 		},
 		modelName: string,
-		token?: vscode.CancellationToken
+		token?: vscode.CancellationToken,
+		feedbackCallback?: (feedback: RealTimeFeedback) => void
 	): Promise<{ content: string; validation: CodeValidationResult }> {
-		// Step 1: Generate initial content with enhanced context
-		const initialContent = await this._generateInitialContent(
-			filePath,
-			generatePrompt,
-			context,
-			modelName,
-			token
-		);
+		if (this.config.enableRealTimeFeedback) {
+			return this._generateWithRealTimeFeedback(
+				filePath,
+				generatePrompt,
+				context,
+				modelName,
+				token,
+				feedbackCallback
+			);
+		} else {
+			// Fallback to original method
+			const initialContent = await this._generateInitialContent(
+				filePath,
+				generatePrompt,
+				context,
+				modelName,
+				token
+			);
 
-		// Step 2: Validate and refine the generated content
-		const validation = await this._validateAndRefineContent(
-			filePath,
-			initialContent,
-			context,
-			modelName,
-			token
-		);
+			const validation = await this._validateAndRefineContent(
+				filePath,
+				initialContent,
+				context,
+				modelName,
+				token
+			);
 
-		return {
-			content: validation.finalContent,
-			validation,
-		};
+			return {
+				content: validation.finalContent,
+				validation,
+			};
+		}
 	}
 
 	/**
@@ -1513,6 +1541,541 @@ Return ONLY the JSON object:`;
 			},
 		};
 	}
+
+	/**
+	 * Generate content with real-time feedback loop
+	 */
+	private async _generateWithRealTimeFeedback(
+		filePath: string,
+		generatePrompt: string,
+		context: {
+			projectContext: string;
+			relevantSnippets: string;
+			editorContext?: any;
+			activeSymbolInfo?: ActiveSymbolDetailedInfo;
+		},
+		modelName: string,
+		token?: vscode.CancellationToken,
+		feedbackCallback?: (feedback: RealTimeFeedback) => void
+	): Promise<{ content: string; validation: CodeValidationResult }> {
+		let currentContent = "";
+		let iteration = 0;
+		let totalIssues = 0;
+		let resolvedIssues = 0;
+
+		// Send initial feedback
+		this._sendFeedback(feedbackCallback, {
+			stage: "initialization",
+			message: "Starting code generation with real-time validation...",
+			issues: [],
+			suggestions: [
+				"Analyzing project context",
+				"Preparing generation strategy",
+			],
+			progress: 0,
+		});
+
+		try {
+			// Step 1: Generate initial content
+			this._sendFeedback(feedbackCallback, {
+				stage: "generation",
+				message: "Generating initial code structure...",
+				issues: [],
+				suggestions: ["Creating file structure", "Adding imports"],
+				progress: 20,
+			});
+
+			currentContent = await this._generateInitialContent(
+				filePath,
+				generatePrompt,
+				context,
+				modelName,
+				token
+			);
+
+			// Step 2: Real-time validation and correction loop
+			while (iteration < this.config.maxFeedbackIterations!) {
+				if (token?.isCancellationRequested) {
+					throw new Error("Operation cancelled");
+				}
+
+				iteration++;
+				this._sendFeedback(feedbackCallback, {
+					stage: "validation",
+					message: `Validating code (iteration ${iteration}/${this.config.maxFeedbackIterations})...`,
+					issues: [],
+					suggestions: [
+						"Checking syntax",
+						"Validating imports",
+						"Analyzing structure",
+					],
+					progress: 20 + iteration * 15,
+				});
+
+				// Validate current content
+				const validation = await this._validateCode(filePath, currentContent);
+				const currentIssues = validation.issues.length;
+
+				if (currentIssues === 0) {
+					// No issues found, we're done
+					this._sendFeedback(feedbackCallback, {
+						stage: "completion",
+						message: "Code generation completed successfully!",
+						issues: [],
+						suggestions: validation.suggestions,
+						progress: 100,
+					});
+
+					return {
+						content: currentContent,
+						validation: {
+							...validation,
+							finalContent: currentContent,
+							iterations: iteration,
+							totalIssues: totalIssues,
+							resolvedIssues: resolvedIssues,
+						},
+					};
+				}
+
+				// Track issues
+				totalIssues += currentIssues;
+
+				this._sendFeedback(feedbackCallback, {
+					stage: "correction",
+					message: `Found ${currentIssues} issues, applying corrections...`,
+					issues: validation.issues,
+					suggestions: [
+						"Fixing syntax errors",
+						"Correcting imports",
+						"Improving structure",
+					],
+					progress: 20 + iteration * 15,
+				});
+
+				// Apply corrections
+				const correctedContent = await this._applyRealTimeCorrections(
+					filePath,
+					currentContent,
+					validation.issues,
+					context,
+					modelName,
+					token
+				);
+
+				// Check if corrections actually improved the code
+				const correctedValidation = await this._validateCode(
+					filePath,
+					correctedContent
+				);
+				const correctedIssues = correctedValidation.issues.length;
+
+				if (correctedIssues < currentIssues) {
+					// Corrections helped
+					resolvedIssues += currentIssues - correctedIssues;
+					currentContent = correctedContent;
+
+					this._sendFeedback(feedbackCallback, {
+						stage: "improvement",
+						message: `Resolved ${
+							currentIssues - correctedIssues
+						} issues (${correctedIssues} remaining)...`,
+						issues: correctedValidation.issues,
+						suggestions: correctedValidation.suggestions,
+						progress: 20 + iteration * 15,
+					});
+				} else if (correctedIssues === currentIssues) {
+					// No improvement, try different approach
+					this._sendFeedback(feedbackCallback, {
+						stage: "alternative",
+						message: "Trying alternative correction approach...",
+						issues: validation.issues,
+						suggestions: ["Using different strategy", "Analyzing patterns"],
+						progress: 20 + iteration * 15,
+					});
+
+					const alternativeContent = await this._applyAlternativeCorrections(
+						filePath,
+						currentContent,
+						validation.issues,
+						context,
+						modelName,
+						token
+					);
+
+					const alternativeValidation = await this._validateCode(
+						filePath,
+						alternativeContent
+					);
+
+					if (alternativeValidation.issues.length < currentIssues) {
+						currentContent = alternativeContent;
+						resolvedIssues +=
+							currentIssues - alternativeValidation.issues.length;
+					} else {
+						// No improvement with alternative approach, break to avoid infinite loop
+						break;
+					}
+				} else {
+					// Corrections made things worse, revert and break
+					this._sendFeedback(feedbackCallback, {
+						stage: "revert",
+						message:
+							"Corrections made issues worse, reverting to previous version...",
+						issues: validation.issues,
+						suggestions: [
+							"Using previous version",
+							"Manual review recommended",
+						],
+						progress: 20 + iteration * 15,
+					});
+					break;
+				}
+			}
+
+			// Final validation
+			const finalValidation = await this._validateCode(
+				filePath,
+				currentContent
+			);
+
+			this._sendFeedback(feedbackCallback, {
+				stage: "final",
+				message: `Code generation completed with ${finalValidation.issues.length} remaining issues`,
+				issues: finalValidation.issues,
+				suggestions: finalValidation.suggestions,
+				progress: 100,
+			});
+
+			return {
+				content: currentContent,
+				validation: {
+					...finalValidation,
+					finalContent: currentContent,
+					iterations: iteration,
+					totalIssues: totalIssues,
+					resolvedIssues: resolvedIssues,
+				},
+			};
+		} catch (error) {
+			this._sendFeedback(feedbackCallback, {
+				stage: "error",
+				message: `Code generation failed: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+				issues: [],
+				suggestions: [
+					"Check error details",
+					"Try again with different approach",
+				],
+				progress: 100,
+			});
+
+			throw error;
+		}
+	}
+
+	/**
+	 * Apply real-time corrections based on validation issues
+	 */
+	private async _applyRealTimeCorrections(
+		filePath: string,
+		content: string,
+		issues: CodeIssue[],
+		context: any,
+		modelName: string,
+		token?: vscode.CancellationToken
+	): Promise<string> {
+		// Group issues by type for targeted correction
+		const syntaxIssues = issues.filter((i) => i.type === "syntax");
+		const importIssues = issues.filter((i) => i.type === "unused_import");
+		const practiceIssues = issues.filter((i) => i.type === "best_practice");
+		const securityIssues = issues.filter((i) => i.type === "security");
+
+		let correctedContent = content;
+
+		// Apply corrections in order of priority
+		if (syntaxIssues.length > 0) {
+			correctedContent = await this._correctSyntaxIssues(
+				filePath,
+				correctedContent,
+				syntaxIssues,
+				context,
+				modelName,
+				token
+			);
+		}
+
+		if (importIssues.length > 0) {
+			correctedContent = await this._correctImportIssues(
+				filePath,
+				correctedContent,
+				importIssues,
+				context,
+				modelName,
+				token
+			);
+		}
+
+		if (practiceIssues.length > 0) {
+			correctedContent = await this._correctPracticeIssues(
+				filePath,
+				correctedContent,
+				practiceIssues,
+				context,
+				modelName,
+				token
+			);
+		}
+
+		if (securityIssues.length > 0) {
+			correctedContent = await this._correctSecurityIssues(
+				filePath,
+				correctedContent,
+				securityIssues,
+				context,
+				modelName,
+				token
+			);
+		}
+
+		return correctedContent;
+	}
+
+	/**
+	 * Apply alternative correction strategy when standard corrections fail
+	 */
+	private async _applyAlternativeCorrections(
+		filePath: string,
+		content: string,
+		issues: CodeIssue[],
+		context: any,
+		modelName: string,
+		token?: vscode.CancellationToken
+	): Promise<string> {
+		const alternativePrompt = `The code has the following issues that need to be fixed using a different approach:
+
+**Issues to Address:**
+${issues
+	.map((issue) => `- ${issue.type}: ${issue.message} (Line ${issue.line})`)
+	.join("\n")}
+
+**Current Content:**
+\`\`\`${this._getLanguageId(path.extname(filePath))}
+${content}
+\`\`\`
+
+**Alternative Correction Strategy:**
+- Use a completely different approach to fix these issues
+- Consider architectural changes if needed
+- Focus on the root cause rather than symptoms
+- Ensure the solution is more robust and maintainable
+
+**Project Context:**
+${context.projectContext}
+
+Provide ONLY the corrected file content without any markdown formatting:`;
+
+		return await this.aiRequestService.generateWithRetry(
+			alternativePrompt,
+			modelName,
+			undefined,
+			"alternative code correction",
+			undefined,
+			undefined,
+			token
+		);
+	}
+
+	/**
+	 * Correct syntax issues
+	 */
+	private async _correctSyntaxIssues(
+		filePath: string,
+		content: string,
+		issues: CodeIssue[],
+		context: any,
+		modelName: string,
+		token?: vscode.CancellationToken
+	): Promise<string> {
+		const syntaxPrompt = `Fix the following syntax issues in the code:
+
+**Syntax Issues:**
+${issues.map((issue) => `- Line ${issue.line}: ${issue.message}`).join("\n")}
+
+**Current Content:**
+\`\`\`${this._getLanguageId(path.extname(filePath))}
+${content}
+\`\`\`
+
+**Correction Instructions:**
+- Fix all syntax errors
+- Ensure proper language syntax
+- Maintain the original functionality
+- Keep the code structure intact
+
+**Project Context:**
+${context.projectContext}
+
+Provide ONLY the corrected file content without any markdown formatting:`;
+
+		return await this.aiRequestService.generateWithRetry(
+			syntaxPrompt,
+			modelName,
+			undefined,
+			"syntax correction",
+			undefined,
+			undefined,
+			token
+		);
+	}
+
+	/**
+	 * Correct import issues
+	 */
+	private async _correctImportIssues(
+		filePath: string,
+		content: string,
+		issues: CodeIssue[],
+		context: any,
+		modelName: string,
+		token?: vscode.CancellationToken
+	): Promise<string> {
+		const importPrompt = `Fix the following import issues in the code:
+
+**Import Issues:**
+${issues.map((issue) => `- Line ${issue.line}: ${issue.message}`).join("\n")}
+
+**Current Content:**
+\`\`\`${this._getLanguageId(path.extname(filePath))}
+${content}
+\`\`\`
+
+**Correction Instructions:**
+- Remove unused imports
+- Add missing imports
+- Fix import paths
+- Ensure all imports are necessary and correct
+
+**Project Context:**
+${context.projectContext}
+
+Provide ONLY the corrected file content without any markdown formatting:`;
+
+		return await this.aiRequestService.generateWithRetry(
+			importPrompt,
+			modelName,
+			undefined,
+			"import correction",
+			undefined,
+			undefined,
+			token
+		);
+	}
+
+	/**
+	 * Correct best practice issues
+	 */
+	private async _correctPracticeIssues(
+		filePath: string,
+		content: string,
+		issues: CodeIssue[],
+		context: any,
+		modelName: string,
+		token?: vscode.CancellationToken
+	): Promise<string> {
+		const practicePrompt = `Fix the following best practice issues in the code:
+
+**Best Practice Issues:**
+${issues.map((issue) => `- Line ${issue.line}: ${issue.message}`).join("\n")}
+
+**Current Content:**
+\`\`\`${this._getLanguageId(path.extname(filePath))}
+${content}
+\`\`\`
+
+**Correction Instructions:**
+- Follow coding best practices
+- Improve code readability
+- Use proper naming conventions
+- Apply design patterns where appropriate
+- Ensure code is maintainable
+
+**Project Context:**
+${context.projectContext}
+
+Provide ONLY the corrected file content without any markdown formatting:`;
+
+		return await this.aiRequestService.generateWithRetry(
+			practicePrompt,
+			modelName,
+			undefined,
+			"best practice correction",
+			undefined,
+			undefined,
+			token
+		);
+	}
+
+	/**
+	 * Correct security issues
+	 */
+	private async _correctSecurityIssues(
+		filePath: string,
+		content: string,
+		issues: CodeIssue[],
+		context: any,
+		modelName: string,
+		token?: vscode.CancellationToken
+	): Promise<string> {
+		const securityPrompt = `Fix the following security issues in the code:
+
+**Security Issues:**
+${issues.map((issue) => `- Line ${issue.line}: ${issue.message}`).join("\n")}
+
+**Current Content:**
+\`\`\`${this._getLanguageId(path.extname(filePath))}
+${content}
+\`\`\`
+
+**Correction Instructions:**
+- Fix all security vulnerabilities
+- Use secure coding practices
+- Validate inputs properly
+- Handle sensitive data correctly
+- Follow security best practices
+
+**Project Context:**
+${context.projectContext}
+
+Provide ONLY the corrected file content without any markdown formatting:`;
+
+		return await this.aiRequestService.generateWithRetry(
+			securityPrompt,
+			modelName,
+			undefined,
+			"security correction",
+			undefined,
+			undefined,
+			token
+		);
+	}
+
+	/**
+	 * Send feedback to callback if provided
+	 */
+	private _sendFeedback(
+		callback?: (feedback: RealTimeFeedback) => void,
+		feedback?: RealTimeFeedback
+	): void {
+		if (callback && feedback) {
+			try {
+				callback(feedback);
+			} catch (error) {
+				console.warn("Error in feedback callback:", error);
+			}
+		}
+	}
 }
 
 /**
@@ -1527,6 +2090,9 @@ export interface CodeValidationResult {
 	usedInlineEdits?: boolean;
 	incrementalChanges?: CodeChange[];
 	usedIncrementalUpdates?: boolean;
+	iterations?: number;
+	totalIssues?: number;
+	resolvedIssues?: number;
 }
 
 export interface CodeIssue {

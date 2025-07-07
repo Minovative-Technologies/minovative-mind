@@ -47,6 +47,16 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
   - **Framework-Specific Optimizations**: Tailored guidance to ensure generated code adheres to specific framework conventions.
   - **Error Prevention & Correction**: Proactive detection and automatic fixing of common coding errors.
 
+#### AI Code Correction Mechanisms
+
+The extension employs a sophisticated, multi-stage correction and refinement process to ensure high-quality code:
+
+- **Immediate Validation**: Validates code after each generation step
+- **Progressive Correction**: Fixes issues in order of priority (syntax → imports → practices → security)
+- **Alternative Strategies**: Tries different approaches when standard corrections fail
+- **Progress Tracking**: Provides detailed progress updates with stage information
+- **Iteration Limits**: Prevents infinite loops with configurable iteration limits
+
 #### Inline Edit System
 
 - **Purpose**: This system allows the AI to make precise, targeted changes to files instead of rewriting entire files. This approach leads to significantly better accuracy, performance, and user experience.
@@ -207,6 +217,15 @@ Introduced core services and utilities for advanced AI-driven development.
 ## Advanced File and Workspace Processing
 
 The system employs sophisticated processing mechanisms to analyze codebases efficiently. It utilizes **Incremental Context Building**, processing files individually and progressively building context where insights from prior files inform subsequent analysis. This is coupled with **Detailed File Analysis**, which assesses file complexity, detects its purpose, generates AI insights, tracks dependencies, and collects vital file statistics. For enhanced user visibility, **Progress Tracking** offers real-time updates, file-by-file feedback, and performance metrics. Furthermore, it supports efficient and concurrent **Batch Processing** with configurable sizes and optimized memory usage.
+
+## Caching Mechanisms
+
+The extension incorporates sophisticated caching strategies to enhance performance and responsiveness:
+
+- **Smart Cache Keys**: Based on file paths, options, and workspace context for precise caching.
+- **Staleness Detection**: Automatically invalidates cache entries when underlying files change, ensuring data freshness.
+- **Cache Management**: Employs an LRU (Least Recently Used) eviction policy to manage cache size efficiently, removing older entries when the cache reaches its maximum capacity.
+- **Preloading**: Allows for preloading context for frequently accessed files, significantly reducing lookup times and improving user experience.
 
 ## Security & Safety Features
 

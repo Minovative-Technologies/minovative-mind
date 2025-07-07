@@ -14,6 +14,12 @@ export interface EnhancedAccuracyConfig {
 		includeDiagnostics: boolean;
 		includeRecentChanges: boolean;
 		prioritizeActiveSymbol: boolean;
+		// New context caching settings
+		enableCaching: boolean;
+		cacheMaxSize: number;
+		cacheTTL: number; // in milliseconds
+		cacheStalenessThreshold: number; // in milliseconds
+		enablePreloading: boolean;
 	};
 
 	// Code generation enhancement settings
@@ -25,6 +31,11 @@ export interface EnhancedAccuracyConfig {
 		enableImportAnalysis: boolean;
 		enableTypeChecking: boolean;
 		maxRefinementAttempts: number;
+		// New real-time feedback settings
+		enableRealTimeFeedback: boolean;
+		maxFeedbackIterations: number;
+		enableProgressiveGeneration: boolean;
+		enableAlternativeCorrections: boolean;
 	};
 
 	// Prompt enhancement settings
@@ -102,6 +113,14 @@ export interface EnhancedAccuracyConfig {
 			enablePackageStructure: boolean;
 		};
 	};
+
+	// Performance monitoring settings
+	performance: {
+		enableMetrics: boolean;
+		enableProfiling: boolean;
+		logCacheStats: boolean;
+		logFeedbackStats: boolean;
+	};
 }
 
 /**
@@ -138,6 +157,12 @@ export const DEFAULT_ENHANCED_ACCURACY_CONFIG: EnhancedAccuracyConfig = {
 		includeDiagnostics: true,
 		includeRecentChanges: true,
 		prioritizeActiveSymbol: true,
+		// New context caching settings
+		enableCaching: true,
+		cacheMaxSize: 50,
+		cacheTTL: 5 * 60 * 1000, // 5 minutes
+		cacheStalenessThreshold: 2 * 60 * 1000, // 2 minutes
+		enablePreloading: true,
 	},
 
 	codeGeneration: {
@@ -148,6 +173,11 @@ export const DEFAULT_ENHANCED_ACCURACY_CONFIG: EnhancedAccuracyConfig = {
 		enableImportAnalysis: true,
 		enableTypeChecking: true,
 		maxRefinementAttempts: 3,
+		// New real-time feedback settings
+		enableRealTimeFeedback: true,
+		maxFeedbackIterations: 5,
+		enableProgressiveGeneration: true,
+		enableAlternativeCorrections: true,
 	},
 
 	prompts: {
@@ -219,6 +249,13 @@ export const DEFAULT_ENHANCED_ACCURACY_CONFIG: EnhancedAccuracyConfig = {
 			enableExceptionHandling: true,
 			enablePackageStructure: true,
 		},
+	},
+
+	performance: {
+		enableMetrics: true,
+		enableProfiling: true,
+		logCacheStats: true,
+		logFeedbackStats: true,
 	},
 };
 
@@ -322,6 +359,50 @@ export class EnhancedAccuracyConfigManager {
 		language: keyof EnhancedAccuracyConfig["languages"]
 	) {
 		return this.config.languages[language];
+	}
+
+	/**
+	 * Get performance configuration
+	 */
+	public getPerformanceConfig() {
+		return this.config.performance;
+	}
+
+	/**
+	 * Check if context caching is enabled
+	 */
+	public isContextCachingEnabled(): boolean {
+		return this.config.context.enableCaching;
+	}
+
+	/**
+	 * Check if real-time feedback is enabled
+	 */
+	public isRealTimeFeedbackEnabled(): boolean {
+		return this.config.codeGeneration.enableRealTimeFeedback;
+	}
+
+	/**
+	 * Get cache configuration
+	 */
+	public getCacheConfig() {
+		return {
+			maxSize: this.config.context.cacheMaxSize,
+			ttl: this.config.context.cacheTTL,
+			stalenessThreshold: this.config.context.cacheStalenessThreshold,
+		};
+	}
+
+	/**
+	 * Get feedback configuration
+	 */
+	public getFeedbackConfig() {
+		return {
+			maxIterations: this.config.codeGeneration.maxFeedbackIterations,
+			enableProgressive: this.config.codeGeneration.enableProgressiveGeneration,
+			enableAlternative:
+				this.config.codeGeneration.enableAlternativeCorrections,
+		};
 	}
 
 	/**

@@ -6,18 +6,231 @@ import { ActiveSymbolDetailedInfo } from "../services/contextService";
 import { intelligentlySummarizeFileContent } from "./fileContentProcessor";
 
 /**
+ * Cache entry for enhanced context
+ */
+interface ContextCacheEntry {
+	context: string;
+	timestamp: number;
+	fileHashes: Map<string, string>;
+	optionsHash: string;
+}
+
+/**
  * Enhanced context builder that provides more accurate and relevant context
- * to improve AI code generation accuracy
+ * to improve AI code generation accuracy with caching support
  */
 export class EnhancedContextBuilder {
 	private static readonly MAX_CONTEXT_LENGTH = 100000; // Increased for better accuracy
 	private static readonly MAX_FILE_LENGTH = 15000; // Increased for better file understanding
 	private static readonly MAX_SYMBOL_CHARS = 8000; // Increased for better symbol understanding
 
+	// Cache configuration
+	private static readonly CACHE_MAX_SIZE = 50; // Maximum number of cached entries
+	private static readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes TTL
+	private static readonly CACHE_STALENESS_THRESHOLD = 2 * 60 * 1000; // 2 minutes staleness threshold
+
+	// Context cache
+	private contextCache = new Map<string, ContextCacheEntry>();
+	private cacheHits = 0;
+	private cacheMisses = 0;
+
 	/**
-	 * Build enhanced context with better accuracy and relevance
+	 * Build enhanced context with caching support
 	 */
 	public async buildEnhancedContext(
+		relevantFiles: vscode.Uri[],
+		workspaceRoot: vscode.Uri,
+		options: {
+			userRequest?: string;
+			activeSymbolInfo?: ActiveSymbolDetailedInfo;
+			recentChanges?: FileChangeEntry[];
+			dependencyGraph?: Map<string, string[]>;
+			documentSymbols?: Map<string, vscode.DocumentSymbol[] | undefined>;
+			diagnostics?: vscode.Diagnostic[];
+			chatHistory?: any[];
+		} = {}
+	): Promise<string> {
+		// Try to get cached context first
+		const cacheKey = this._generateContextCacheKey(
+			relevantFiles,
+			workspaceRoot,
+			options
+		);
+		const cached = this.contextCache.get(cacheKey);
+
+		if (cached && !this._isContextStale(cached, relevantFiles, workspaceRoot)) {
+			this.cacheHits++;
+			console.log(
+				`[EnhancedContextBuilder] Cache hit for context with ${relevantFiles.length} files`
+			);
+			return cached.context;
+		}
+
+		this.cacheMisses++;
+		console.log(
+			`[EnhancedContextBuilder] Cache miss for context with ${relevantFiles.length} files`
+		);
+
+		// Build fresh context
+		const freshContext = await this._buildFreshContext(
+			relevantFiles,
+			workspaceRoot,
+			options
+		);
+
+		// Cache the fresh context
+		this._cacheContext(
+			cacheKey,
+			freshContext,
+			relevantFiles,
+			workspaceRoot,
+			options
+		);
+
+		return freshContext;
+	}
+
+	/**
+	 * Generate a cache key for the context
+	 */
+	private _generateContextCacheKey(
+		relevantFiles: vscode.Uri[],
+		workspaceRoot: vscode.Uri,
+		options: any
+	): string {
+		// Create a deterministic cache key based on file paths and options
+		const filePaths = relevantFiles
+			.map((uri) => path.relative(workspaceRoot.fsPath, uri.fsPath))
+			.sort()
+			.join("|");
+
+		const optionsHash = this._hashOptions(options);
+
+		return `${workspaceRoot.fsPath}|${filePaths}|${optionsHash}`;
+	}
+
+	/**
+	 * Hash options for cache key generation
+	 */
+	private _hashOptions(options: any): string {
+		const relevantOptions = {
+			userRequest: options.userRequest,
+			activeSymbolPath: options.activeSymbolInfo?.filePath,
+			recentChangesCount: options.recentChanges?.length || 0,
+			diagnosticsCount: options.diagnostics?.length || 0,
+			chatHistoryCount: options.chatHistory?.length || 0,
+		};
+
+		return JSON.stringify(relevantOptions);
+	}
+
+	/**
+	 * Check if cached context is stale
+	 */
+	private async _isContextStale(
+		cached: ContextCacheEntry,
+		relevantFiles: vscode.Uri[],
+		workspaceRoot: vscode.Uri
+	): Promise<boolean> {
+		// Check if cache entry is too old
+		const now = Date.now();
+		if (now - cached.timestamp > EnhancedContextBuilder.CACHE_TTL) {
+			return true;
+		}
+
+		// Check if any files have been modified since cache was created
+		for (const fileUri of relevantFiles) {
+			try {
+				const stats = await vscode.workspace.fs.stat(fileUri);
+				const fileHash = `${stats.mtime}-${stats.size}`;
+				const cachedHash = cached.fileHashes.get(fileUri.fsPath);
+
+				if (cachedHash !== fileHash) {
+					console.log(
+						`[EnhancedContextBuilder] File ${fileUri.fsPath} has changed, invalidating cache`
+					);
+					return true;
+				}
+			} catch (error) {
+				console.warn(
+					`[EnhancedContextBuilder] Could not check file stats for ${fileUri.fsPath}:`,
+					error
+				);
+				return true; // Assume stale if we can't check
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Cache context with file hashes
+	 */
+	private async _cacheContext(
+		cacheKey: string,
+		context: string,
+		relevantFiles: vscode.Uri[],
+		workspaceRoot: vscode.Uri,
+		options: any
+	): Promise<void> {
+		// Collect file hashes for staleness detection
+		const fileHashes = new Map<string, string>();
+
+		for (const fileUri of relevantFiles) {
+			try {
+				const stats = await vscode.workspace.fs.stat(fileUri);
+				const fileHash = `${stats.mtime}-${stats.size}`;
+				fileHashes.set(fileUri.fsPath, fileHash);
+			} catch (error) {
+				console.warn(
+					`[EnhancedContextBuilder] Could not get file stats for ${fileUri.fsPath}:`,
+					error
+				);
+			}
+		}
+
+		const cacheEntry: ContextCacheEntry = {
+			context,
+			timestamp: Date.now(),
+			fileHashes,
+			optionsHash: this._hashOptions(options),
+		};
+
+		// Manage cache size
+		if (this.contextCache.size >= EnhancedContextBuilder.CACHE_MAX_SIZE) {
+			this._evictOldestCacheEntry();
+		}
+
+		this.contextCache.set(cacheKey, cacheEntry);
+		console.log(
+			`[EnhancedContextBuilder] Cached context for ${relevantFiles.length} files`
+		);
+	}
+
+	/**
+	 * Evict the oldest cache entry when cache is full
+	 */
+	private _evictOldestCacheEntry(): void {
+		let oldestKey: string | undefined;
+		let oldestTimestamp = Date.now();
+
+		for (const [key, entry] of this.contextCache.entries()) {
+			if (entry.timestamp < oldestTimestamp) {
+				oldestTimestamp = entry.timestamp;
+				oldestKey = key;
+			}
+		}
+
+		if (oldestKey) {
+			this.contextCache.delete(oldestKey);
+			console.log(`[EnhancedContextBuilder] Evicted oldest cache entry`);
+		}
+	}
+
+	/**
+	 * Build fresh context (original implementation)
+	 */
+	private async _buildFreshContext(
 		relevantFiles: vscode.Uri[],
 		workspaceRoot: vscode.Uri,
 		options: {
@@ -477,5 +690,47 @@ export class EnhancedContextBuilder {
 			activeSymbolDetailedInfo,
 			maxAllowedLength
 		);
+	}
+
+	/**
+	 * Get cache statistics
+	 */
+	public getCacheStats(): { hits: number; misses: number; size: number } {
+		return {
+			hits: this.cacheHits,
+			misses: this.cacheMisses,
+			size: this.contextCache.size,
+		};
+	}
+
+	/**
+	 * Clear the context cache
+	 */
+	public clearCache(): void {
+		this.contextCache.clear();
+		this.cacheHits = 0;
+		this.cacheMisses = 0;
+		console.log(`[EnhancedContextBuilder] Cache cleared`);
+	}
+
+	/**
+	 * Preload context for frequently accessed files
+	 */
+	public async preloadContext(
+		relevantFiles: vscode.Uri[],
+		workspaceRoot: vscode.Uri,
+		options: any = {}
+	): Promise<void> {
+		try {
+			await this.buildEnhancedContext(relevantFiles, workspaceRoot, options);
+			console.log(
+				`[EnhancedContextBuilder] Preloaded context for ${relevantFiles.length} files`
+			);
+		} catch (error) {
+			console.warn(
+				`[EnhancedContextBuilder] Failed to preload context:`,
+				error
+			);
+		}
 	}
 }

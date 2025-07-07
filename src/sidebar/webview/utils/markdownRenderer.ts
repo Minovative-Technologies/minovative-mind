@@ -14,9 +14,12 @@ export const md: MarkdownIt = new MarkdownIt({
 		// If a language is specified and highlight.js supports it
 		if (lang && hljs.getLanguage(lang)) {
 			try {
-				// Highlight the string and return the HTML value
-				return hljs.highlight(str, { language: lang, ignoreIllegals: true })
-					.value;
+				// Highlight the string and return the HTML value with language data attribute
+				const highlighted = hljs.highlight(str, {
+					language: lang,
+					ignoreIllegals: true,
+				}).value;
+				return `<pre class="hljs" data-language="${lang}"><code>${highlighted}</code></pre>`;
 			} catch (__) {
 				// Fallback in case of highlighting error
 				console.warn(`[MarkdownIt] Highlight.js failed for language ${lang}.`);
@@ -26,8 +29,11 @@ export const md: MarkdownIt = new MarkdownIt({
 		// Render as a basic preformatted code block with escaped HTML.
 		// This uses md.utils.escapeHtml, which is part of the MarkdownIt instance itself,
 		// ensuring it remains self-contained.
+		const languageAttr = lang ? ` data-language="${lang}"` : "";
 		return (
-			'<pre class="hljs"><code>' + md.utils.escapeHtml(str) + "</code></pre>"
+			`<pre class="hljs"${languageAttr}><code>` +
+			md.utils.escapeHtml(str) +
+			"</code></pre>"
 		);
 	},
 });

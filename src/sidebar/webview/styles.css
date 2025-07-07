@@ -620,12 +620,12 @@ div#commit-message-display pre,
 	background-color: var(
 		--vscode-textCodeBlock-background
 	); /* VSCode var for code block bg */
-	padding: 10px;
-	border-radius: var(--border-radius);
+	padding: 12px 16px; /* Increased padding for better visual appeal */
+	border-radius: 6px; /* Slightly more rounded corners */
 	margin-top: 0.8em;
 	margin-bottom: 0.8em;
 	border: 1px solid var(--vscode-editorWidget-border, var(--border-color)); /* Subtle border */
-	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle inset shadow */
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1), inset 0 1px 2px rgba(0, 0, 0, 0.05); /* Enhanced shadow for depth */
 	white-space: pre-wrap; /* Preserve whitespace and allow wrapping */
 	overflow-wrap: break-word; /* Ensure long lines and words wrap correctly within the code block, preventing horizontal scrolling. */
 	overflow-x: auto; /* Enable horizontal scrolling for very long lines */
@@ -637,6 +637,44 @@ div#commit-message-display pre,
 		monospace
 	); /* Use VSCode editor font family */
 	font-size: 0.95em; /* Slightly smaller font for code blocks */
+	position: relative; /* For potential pseudo-elements */
+}
+
+/* Enhanced code block styling with subtle gradient background */
+div#commit-message-display pre::before,
+.message pre::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 3px;
+	background: linear-gradient(
+		90deg,
+		var(--vscode-focusBorder, #007fd4) 0%,
+		var(--vscode-textLink-foreground, #3794ff) 50%,
+		var(--vscode-focusBorder, #007fd4) 100%
+	);
+	border-radius: 6px 6px 0 0;
+	opacity: 0.8;
+}
+
+/* Language indicator for code blocks */
+div#commit-message-display pre::after,
+.message pre::after {
+	content: attr(data-language);
+	position: absolute;
+	top: 8px;
+	right: 12px;
+	font-size: 0.75em;
+	color: var(--vscode-descriptionForeground, #858585);
+	background: var(--vscode-editorWidget-background, rgba(0, 0, 0, 0.1));
+	padding: 2px 6px;
+	border-radius: 3px;
+	opacity: 0.7;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
 }
 /* General styling for code elements (both inline and block), ensuring common font-family */
 div#commit-message-display code,
@@ -664,15 +702,204 @@ div#commit-message-display pre code,
 	white-space: pre-wrap; /* Allow wrapping within code blocks */
 	font-size: 0.95em; /* Explicitly set font size for code inside pre */
 }
+
+/* Enhanced syntax highlighting for code blocks */
+/* Keywords and built-in functions */
+div#commit-message-display pre .hljs-keyword,
+.message pre .hljs-keyword,
+div#commit-message-display pre .hljs-built_in,
+.message pre .hljs-built_in {
+	color: var(--vscode-editor-foreground);
+	font-weight: 600;
+}
+
+/* Strings and literals */
+div#commit-message-display pre .hljs-string,
+.message pre .hljs-string,
+div#commit-message-display pre .hljs-literal,
+.message pre .hljs-literal {
+	color: var(--vscode-textPreformat-foreground, #d7ba7d);
+}
+
+/* Comments */
+div#commit-message-display pre .hljs-comment,
+.message pre .hljs-comment {
+	color: var(--vscode-descriptionForeground, #6a9955);
+	font-style: italic;
+}
+
+/* Numbers */
+div#commit-message-display pre .hljs-number,
+.message pre .hljs-number {
+	color: var(--vscode-textPreformat-foreground, #b5cea8);
+}
+
+/* Function names */
+div#commit-message-display pre .hljs-function .hljs-title,
+.message pre .hljs-function .hljs-title {
+	color: var(--vscode-textLink-foreground, #dcdcaa);
+}
+
+/* Class names */
+div#commit-message-display pre .hljs-title,
+.message pre .hljs-title {
+	color: var(--vscode-textLink-foreground, #4ec9b0);
+}
+
+/* Variables and parameters */
+div#commit-message-display pre .hljs-variable,
+.message pre .hljs-variable,
+div#commit-message-display pre .hljs-params,
+.message pre .hljs-params {
+	color: var(--vscode-editor-foreground);
+}
+
+/* Operators */
+div#commit-message-display pre .hljs-operator,
+.message pre .hljs-operator {
+	color: var(--vscode-editor-foreground);
+	font-weight: 500;
+}
+
+/* Punctuation */
+div#commit-message-display pre .hljs-punctuation,
+.message pre .hljs-punctuation {
+	color: var(--vscode-editor-foreground);
+	opacity: 0.8;
+}
+
+/* Type annotations and interfaces */
+div#commit-message-display pre .hljs-type,
+.message pre .hljs-type {
+	color: var(--vscode-textLink-foreground, #4ec9b0);
+	font-weight: 500;
+}
+
+/* Regular expressions */
+div#commit-message-display pre .hljs-regexp,
+.message pre .hljs-regexp {
+	color: var(--vscode-textPreformat-foreground, #d16969);
+}
+
+/* Template literals and interpolation */
+div#commit-message-display pre .hljs-template-string,
+.message pre .hljs-template-string,
+div#commit-message-display pre .hljs-subst,
+.message pre .hljs-subst {
+	color: var(--vscode-textPreformat-foreground, #ce9178);
+}
+
+/* HTML tags */
+div#commit-message-display pre .hljs-tag,
+.message pre .hljs-tag {
+	color: var(--vscode-textLink-foreground, #569cd6);
+}
+
+/* HTML attributes */
+div#commit-message-display pre .hljs-attr,
+.message pre .hljs-attr {
+	color: var(--vscode-textPreformat-foreground, #9cdcfe);
+}
+
+/* CSS properties */
+div#commit-message-display pre .hljs-property,
+.message pre .hljs-property {
+	color: var(--vscode-textPreformat-foreground, #9cdcfe);
+}
+
+/* CSS values */
+div#commit-message-display pre .hljs-value,
+.message pre .hljs-value {
+	color: var(--vscode-textPreformat-foreground, #ce9178);
+}
+
+/* Import/export statements */
+div#commit-message-display pre .hljs-keyword.hljs-import,
+.message pre .hljs-keyword.hljs-import,
+div#commit-message-display pre .hljs-keyword.hljs-export,
+.message pre .hljs-keyword.hljs-export {
+	color: var(--vscode-textLink-foreground, #c586c0);
+}
+
+/* Console and debug statements */
+div#commit-message-display pre .hljs-built_in.hljs-title,
+.message pre .hljs-built_in.hljs-title {
+	color: var(--vscode-textLink-foreground, #dcdcaa);
+}
+
+/* Error and warning colors */
+div#commit-message-display pre .hljs-error,
+.message pre .hljs-error {
+	color: var(--vscode-errorForeground, #f44747);
+}
+
+/* Success and info colors */
+div#commit-message-display pre .hljs-success,
+.message pre .hljs-success {
+	color: var(--vscode-textPreformat-foreground, #4ec9b0);
+}
+
+/* Hover effect for code blocks */
+div#commit-message-display pre:hover,
+.message pre:hover {
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15),
+		inset 0 1px 2px rgba(0, 0, 0, 0.05);
+	transform: translateY(-1px);
+	transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+/* Better spacing for code blocks within messages */
+div#commit-message-display pre + pre,
+.message pre + pre {
+	margin-top: 1.2em; /* More space between consecutive code blocks */
+}
+
+/* Enhanced styling for code blocks with specific languages */
+div#commit-message-display pre[data-language="typescript"],
+.message pre[data-language="typescript"],
+div#commit-message-display pre[data-language="javascript"],
+.message pre[data-language="javascript"] {
+	border-left: 4px solid var(--vscode-textLink-foreground, #3794ff);
+}
+
+div#commit-message-display pre[data-language="css"],
+.message pre[data-language="css"],
+div#commit-message-display pre[data-language="scss"],
+.message pre[data-language="scss"] {
+	border-left: 4px solid var(--vscode-textPreformat-foreground, #d7ba7d);
+}
+
+div#commit-message-display pre[data-language="html"],
+.message pre[data-language="html"] {
+	border-left: 4px solid var(--vscode-errorForeground, #f44747);
+}
+
+div#commit-message-display pre[data-language="json"],
+.message pre[data-language="json"] {
+	border-left: 4px solid var(--vscode-textPreformat-foreground, #ce9178);
+}
+
+div#commit-message-display pre[data-language="python"],
+.message pre[data-language="python"] {
+	border-left: 4px solid var(--vscode-textLink-foreground, #4ec9b0);
+}
+
+div#commit-message-display pre[data-language="bash"],
+.message pre[data-language="bash"],
+div#commit-message-display pre[data-language="shell"],
+.message pre[data-language="shell"] {
+	border-left: 4px solid var(--vscode-descriptionForeground, #6a9955);
+}
 /* Inline code styling (code not inside a pre block) */
 div#commit-message-display :not(pre) > code,
 .message :not(pre) > code {
-	background-color: var(
-		--vscode-textCodeBlock-background,
-		rgba(0, 0, 0, 0.07)
-	); /* Subtle background for inline code */
-	padding: 0.2em 0.4em;
-	border-radius: var(--border-radius);
+	background: linear-gradient(
+		135deg,
+		var(--vscode-textCodeBlock-background, rgba(0, 0, 0, 0.07)) 0%,
+		var(--vscode-editorWidget-background, rgba(0, 0, 0, 0.05)) 100%
+	); /* Subtle gradient background */
+	padding: 0.3em 0.6em; /* Slightly more padding for better visual appeal */
+	border-radius: 4px; /* Slightly more rounded */
 	font-size: 0.9em; /* Slightly smaller for inline code */
 	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
 	white-space: nowrap; /* Prevent inline code from wrapping if possible */
@@ -683,6 +910,9 @@ div#commit-message-display :not(pre) > code,
 		"Fira Code",
 		monospace
 	); /* Ensure monospace font for inline code */
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+	color: var(--vscode-editor-foreground); /* Ensure proper text color */
+	font-weight: 500; /* Slightly bolder for better readability */
 }
 
 /* Horizontal Rules */
