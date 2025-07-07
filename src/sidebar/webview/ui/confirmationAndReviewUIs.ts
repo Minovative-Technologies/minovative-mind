@@ -457,6 +457,8 @@ export function handleCancelPlanExecution(
 	}
 	// Re-enable inputs after cancellation cleanup
 	setLoadingState(false, elements);
+	// Reset cancellation flag so UI can be re-enabled for next interaction
+	appState.isCancellationInProgress = false;
 }
 
 /**
