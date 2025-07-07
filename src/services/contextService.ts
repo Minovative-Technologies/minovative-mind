@@ -25,6 +25,8 @@ import {
 import * as SymbolService from "./symbolService";
 import { DiagnosticService } from "../utils/diagnosticUtils";
 import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor"; // NEW: Import for file content summarization
+import { SequentialContextService } from "./sequentialContextService"; // NEW: Import sequential context service
+import { DEFAULT_MODEL } from "../sidebar/common/sidebarConstants";
 
 // Constants for symbol processing
 const MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT = 6; // Example depth for symbol hierarchy serialization
@@ -32,10 +34,10 @@ const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 5000;
 
 // NEW: Performance monitoring constants
 const PERFORMANCE_THRESHOLDS = {
-	SCAN_TIME_WARNING: 5000, // 5 seconds
+	SCAN_TIME_WARNING: 15000, // 5 seconds
 	DEPENDENCY_BUILD_TIME_WARNING: 10000, // 10 seconds
 	CONTEXT_BUILD_TIME_WARNING: 15000, // 15 seconds
-	MAX_FILES_FOR_DETAILED_PROCESSING: 1000,
+	MAX_FILES_FOR_DETAILED_PROCESSING: 2000,
 	MAX_FILES_FOR_SYMBOL_PROCESSING: 500,
 };
 
@@ -84,6 +86,7 @@ export class ContextService {
 	private changeLogger: ProjectChangeLogger;
 	private aiRequestService: AIRequestService;
 	private postMessageToWebview: (message: any) => void;
+	private sequentialContextService?: SequentialContextService;
 
 	constructor(
 		settingsManager: SettingsManager,
@@ -97,6 +100,25 @@ export class ContextService {
 		this.changeLogger = changeLogger;
 		this.aiRequestService = aiRequestService;
 		this.postMessageToWebview = postMessageToWebview;
+	}
+
+	/**
+	 * Initialize sequential context service if not already initialized
+	 */
+	private initializeSequentialContextService(): SequentialContextService {
+		if (!this.sequentialContextService) {
+			const workspaceFolders = vscode.workspace.workspaceFolders;
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+				throw new Error("No workspace folder open");
+			}
+			const workspaceRoot = workspaceFolders[0].uri;
+			this.sequentialContextService = new SequentialContextService(
+				this.aiRequestService,
+				workspaceRoot,
+				this.postMessageToWebview
+			);
+		}
+		return this.sequentialContextService;
 	}
 
 	public async buildProjectContext(
@@ -686,6 +708,75 @@ export class ContextService {
 				contextString: `[Error building project context: ${error.message}]`,
 				relevantFiles: [],
 			};
+		}
+	}
+
+	/**
+	 * Build context using sequential file processing
+	 */
+	public async buildSequentialProjectContext(
+		userRequest: string,
+		options?: {
+			enableSequentialProcessing?: boolean;
+			maxFilesPerBatch?: number;
+			summaryLength?: number;
+			enableDetailedAnalysis?: boolean;
+			includeDependencies?: boolean;
+			complexityThreshold?: "low" | "medium" | "high";
+			modelName?: string;
+			onProgress?: (
+				currentFile: string,
+				totalFiles: number,
+				progress: number
+			) => void;
+			onFileProcessed?: (summary: any) => void;
+		}
+	): Promise<BuildProjectContextResult> {
+		try {
+			const sequentialService = this.initializeSequentialContextService();
+
+			const result = await sequentialService.buildSequentialContext(
+				userRequest,
+				{
+					enableSequentialProcessing:
+						options?.enableSequentialProcessing ?? true,
+					maxFilesPerBatch: options?.maxFilesPerBatch ?? 10,
+					summaryLength: options?.summaryLength ?? 2000,
+					enableDetailedAnalysis: options?.enableDetailedAnalysis ?? true,
+					includeDependencies: options?.includeDependencies ?? true,
+					complexityThreshold: options?.complexityThreshold ?? "medium",
+					modelName: options?.modelName ?? DEFAULT_MODEL,
+					onProgress: options?.onProgress,
+					onFileProcessed: options?.onFileProcessed,
+				}
+			);
+
+			return {
+				contextString: result.contextString,
+				relevantFiles: result.relevantFiles.map((uri) =>
+					vscode.workspace.asRelativePath(uri)
+				),
+				performanceMetrics: {
+					scanTime: result.processingMetrics.totalTime,
+					dependencyBuildTime: 0, // Not applicable for sequential processing
+					contextBuildTime: result.processingMetrics.totalTime,
+					totalTime: result.processingMetrics.totalTime,
+					fileCount: result.processingMetrics.totalFiles,
+					processedFileCount: result.processingMetrics.processedFiles,
+				},
+			};
+		} catch (error) {
+			console.error("Error in sequential context building:", error);
+			// Fallback to traditional context building
+			return this.buildProjectContext(
+				undefined,
+				userRequest,
+				undefined,
+				undefined,
+				{
+					enablePerformanceMonitoring: false,
+				}
+			);
 		}
 	}
 }

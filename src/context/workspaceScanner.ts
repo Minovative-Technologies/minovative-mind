@@ -9,6 +9,7 @@ interface ScanOptions {
 	respectGitIgnore?: boolean;
 	additionalIgnorePatterns?: string[];
 	maxConcurrentReads?: number; // Optional concurrency limit
+	maxConcurrency?: number; // Alternative name for maxConcurrentReads
 	fileTypeFilter?: string[]; // NEW: Filter by file extensions
 	maxFileSize?: number; // NEW: Skip files larger than this (in bytes)
 	useCache?: boolean; // NEW: Enable caching of scan results

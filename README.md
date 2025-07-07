@@ -104,7 +104,6 @@ Introduced core services and utilities for advanced AI-driven development.
 
 - **Seamless Integration**: A dedicated 'Sign In' button triggers a command that guides users to the Minovative Mind settings panel, allowing them to effortlessly authenticate their Minovative Mind account directly within VS Code.
 - **Secure Sessions**: The extension securely manages user authentication sessions, enabling personalized feature access and preferences.
-- **Firebase Integration**: Uses Firebase for secure user authentication and to manage subscription status and usage quotas. No longer creates default user documents in FireStore, aligning with privacy best practices.
 
 ### Flexible Subscription Tiers
 
@@ -205,6 +204,10 @@ Introduced core services and utilities for advanced AI-driven development.
 - **Granular Status Updates**: Provides detailed status updates in the sidebar and chat, including warnings and errors for dependency graph building, file selection, and context generation.
 - **Fallback Strategies**: If smart context selection fails, falls back to heuristic selection, the active file, or a subset of files, ensuring the AI always receives some context.
 
+## Advanced File and Workspace Processing
+
+The system employs sophisticated processing mechanisms to analyze codebases efficiently. It utilizes **Incremental Context Building**, processing files individually and progressively building context where insights from prior files inform subsequent analysis. This is coupled with **Detailed File Analysis**, which assesses file complexity, detects its purpose, generates AI insights, tracks dependencies, and collects vital file statistics. For enhanced user visibility, **Progress Tracking** offers real-time updates, file-by-file feedback, and performance metrics. Furthermore, it supports efficient and concurrent **Batch Processing** with configurable sizes and optimized memory usage.
+
 ## Security & Safety Features
 
 ### File System Security
@@ -221,7 +224,6 @@ Introduced core services and utilities for advanced AI-driven development.
 
 ## Internal Architecture Highlights
 
-- **Firebase Integration**: Uses Firebase for secure user authentication and to manage subscription status and usage quotas. No longer creates default user documents in FireStore, aligning with privacy best practices.
 - **Dynamic Feature Gating**: Features are dynamically enabled or disabled based on user tier, authentication, and subscription status, using a centralized feature gating utility.
 - **Settings Management**: User preferences (e.g., smart context, model selection) are managed and persisted, affecting extension behavior in real time.
 - **Git Integration**: Can stage all changes in the workspace and build/execute git commit commands with AI-generated messages.
