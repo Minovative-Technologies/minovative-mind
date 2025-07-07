@@ -107,25 +107,54 @@ export function appendMessage(
 			preCode.classList.add("diff-code");
 
 			const codeElement = document.createElement("code");
-			codeElement.classList.add("language-diff"); // Instruct highlight.js it's a diff
-			codeElement.classList.add("hljs"); // Add highlight.js base class
+			codeElement.classList.add("language-diff");
+			codeElement.classList.add("hljs");
 
-			let highlightedHtml = "";
-			try {
-				highlightedHtml = md.render(
-					`\`\`\`diff\n${trimmedDiffContent}\n\`\`\``
-				);
-				// md.render with code fence will internally call hljs.highlight and escape HTML.
-				// We need to strip the <pre><code> tags and just get the inner HTML.
-				const tempDiv = document.createElement("div");
-				tempDiv.innerHTML = highlightedHtml;
-				const innerCode = tempDiv.querySelector("code")?.innerHTML;
-				highlightedHtml = innerCode || md.utils.escapeHtml(trimmedDiffContent); // Fallback
-			} catch (e) {
-				console.error("Error highlighting diff content:", e);
-				highlightedHtml = md.utils.escapeHtml(trimmedDiffContent);
-			}
-			codeElement.innerHTML = highlightedHtml;
+			// Split diff into lines and render each with gutter
+			const diffLines = trimmedDiffContent.split("\n");
+			let oldLine = 1;
+			let newLine = 1;
+			diffLines.forEach((line) => {
+				const lineWrapper = document.createElement("div");
+				lineWrapper.classList.add("diff-line");
+
+				const gutter = document.createElement("span");
+				gutter.classList.add("diff-gutter");
+
+				const lineNumber = document.createElement("span");
+				lineNumber.classList.add("diff-linenumber");
+				const sign = document.createElement("span");
+				sign.classList.add("diff-sign");
+
+				if (line.startsWith("+")) {
+					lineNumber.textContent = newLine.toString();
+					sign.textContent = "+";
+					newLine++;
+					gutter.style.color = "#4caf50";
+					lineWrapper.classList.add("hljs-addition");
+				} else if (line.startsWith("-")) {
+					lineNumber.textContent = oldLine.toString();
+					sign.textContent = "-";
+					oldLine++;
+					gutter.style.color = "#e53935";
+					lineWrapper.classList.add("hljs-deletion");
+				} else {
+					lineNumber.textContent = oldLine.toString();
+					sign.textContent = " ";
+					oldLine++;
+					newLine++;
+				}
+
+				gutter.appendChild(lineNumber);
+				gutter.appendChild(sign);
+				lineWrapper.appendChild(gutter);
+
+				const codeSpan = document.createElement("span");
+				codeSpan.textContent = line.replace(/^[-+ ]/, "");
+				lineWrapper.appendChild(codeSpan);
+
+				codeElement.appendChild(lineWrapper);
+			});
 
 			preCode.appendChild(codeElement);
 			diffContainer.appendChild(preCode);

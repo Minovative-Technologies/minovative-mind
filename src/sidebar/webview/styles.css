@@ -1434,145 +1434,133 @@ code#failed-json-display {
 
 /* Styles for the diff container */
 .diff-container {
-	background-color: var(
-		--vscode-editor-background
-	); /* Use VS Code editor background */
-	border-radius: 4px;
-	padding: 12px 15px;
+	background-color: var(--vscode-editor-background);
+	border-radius: 6px;
+	padding: 0;
 	margin-top: 10px;
-	margin-bottom: 10px; /* Add some space below the diff */
+	margin-bottom: 10px;
 	font-family: var(
 		--vscode-editor-font-family,
 		"SF Mono",
 		"Cascadia Code",
 		"Fira Code",
 		monospace
-	); /* Monospaced font for code */
-	font-size: 0.95em; /* Use consistent font size for diff container */
-	border: 1px solid var(--vscode-editorGroup-border); /* Subtle border for clarity */
+	);
+	font-size: 0.97em;
+	border: 1.5px solid var(--vscode-editorGroup-border);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+	overflow: auto;
 }
 
-/* NEW: Styles for the diff header when there IS diff content */
 .diff-container .diff-header {
-	font-size: 0.9em; /* Slightly smaller than code text */
-	color: var(--vscode-descriptionForeground); /* Subtle text color */
-	font-style: italic; /* Visually differentiate as metadata */
-	margin-bottom: 8px; /* Space between header and code lines */
-	padding-bottom: 5px; /* Space above the separator line */
-	border-bottom: 1px dashed var(--vscode-editorGroup-border); /* Subtle dashed separator */
-	/* Adjust padding to align with code lines' horizontal padding */
-	padding-left: 0;
-	padding-right: 0;
-}
-
-/* Styles for the diff container when there's no content */
-.diff-container.no-diff-content {
-	opacity: 0.7;
-	font-style: italic;
-	padding-top: 5px;
-	padding-bottom: 5px;
-	border: none;
-	background-color: transparent;
-}
-
-/* Adjust header within no-diff-content state */
-.diff-container.no-diff-content .diff-header {
-	border-bottom: none;
-	padding-bottom: 0;
+	font-size: 0.9em;
 	color: var(--vscode-descriptionForeground);
-	font-style: italic; /* Consistent italic style */
-}
-
-/* --- highlight.js Base and Token Styles --- */
-.hljs {
-	color: var(--vscode-editor-foreground);
-	background: transparent;
-	display: block;
-	padding: 0;
-}
-
-.hljs-comment,
-.hljs-quote {
-	color: var(--vscode-editor-inlayHint-foreground, #6a9955);
 	font-style: italic;
-}
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-tag,
-.hljs-name {
-	color: var(--vscode-terminal-ansiBrightMagenta, #c586c0);
-}
-.hljs-string,
-.hljs-selector-attr,
-.hljs-selector-pseudo,
-.hljs-attribute,
-.hljs-regexp,
-.hljs-template-variable {
-	color: var(--vscode-terminal-ansiGreen, #9cdcfe);
-}
-.hljs-literal,
-.hljs-number,
-.hljs-variable {
-	color: var(--vscode-terminal-ansiBlue, #569cd6);
-}
-.hljs-built_in,
-.hljs-doctag,
-.hljs-type,
-.hljs-section,
-.hljs-title {
-	color: var(--vscode-terminal-ansiYellow, #dcdcaa);
-}
-.hljs-function,
-.hljs-symbol,
-.hljs-class,
-.hljs-params {
-	color: var(--vscode-terminal-ansiCyan, #4ec9b0);
-}
-.hljs-property,
-.hljs-attr {
-	color: var(--vscode-terminal-ansiBrightBlue, #9cdcfe);
-}
-.hljs-meta {
-	color: var(--vscode-textCodeBlock-foreground, #c586c0);
-}
-.hljs-operator {
-	color: var(--vscode-editor-foreground);
+	margin-bottom: 0;
+	padding: 10px 18px 5px 20px;
+	border-bottom: 1px dashed var(--vscode-editorGroup-border);
+	background: var(--vscode-editorWidget-background);
+	border-radius: 6px 6px 0 0;
 }
 
-/* Specific styles for highlight.js's diff output classes and .diff-code (<pre> tag within diff-container) */
+.diff-code {
+	padding: 0;
+	margin: 0;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	overflow-x: auto;
+}
+
+.diff-line {
+	display: flex;
+	align-items: flex-start;
+	font-family: inherit;
+	font-size: inherit;
+	line-height: 1.6;
+	transition: background 0.15s;
+	user-select: text;
+	min-height: 1.6em;
+}
+.diff-line:hover {
+	background: var(--vscode-editor-lineHighlightBackground, #2a2d2e);
+}
+.diff-gutter {
+	width: 38px;
+	min-width: 38px;
+	max-width: 38px;
+	background: var(--vscode-editorGutter-background, #23272e);
+	color: var(--vscode-editorLineNumber-foreground, #858585);
+	text-align: right;
+	padding: 0 8px 0 0;
+	user-select: none;
+	border-right: 1px solid var(--vscode-editorGroup-border);
+	font-size: 0.93em;
+	opacity: 0.85;
+}
+.diff-linenumber {
+	display: inline-block;
+	width: 22px;
+	text-align: right;
+	margin-right: 2px;
+}
+.diff-gutter .diff-sign {
+	display: inline-block;
+	width: 10px;
+	text-align: center;
+	font-weight: bold;
+}
+.diff-code code {
+	padding: 0;
+	background: none;
+	color: var(--vscode-editor-foreground);
+	border-radius: 0;
+	box-shadow: none;
+	border: none;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+	overflow-wrap: break-word;
+	font-size: inherit;
+	display: block;
+}
 .diff-code .hljs-addition {
 	background-color: var(--vscode-diffEditor-insertedTextBackground);
 	color: inherit;
 	display: block;
-	padding: 2px 10px;
+	padding: 0 10px;
 	margin: 0;
 	white-space: pre-wrap;
+	word-wrap: break-word;
 	overflow-wrap: break-word;
+	border-left: 3px solid #4caf50;
 }
 .diff-code .hljs-deletion {
 	background-color: var(--vscode-diffEditor-removedTextBackground);
 	color: inherit;
 	display: block;
-	padding: 2px 10px;
+	padding: 0 10px;
 	margin: 0;
 	white-space: pre-wrap;
+	word-wrap: break-word;
 	overflow-wrap: break-word;
+	border-left: 3px solid #e53935;
 }
 .diff-code code > span:not(.hljs-addition):not(.hljs-deletion) {
 	display: block;
-	padding: 2px 10px;
+	padding: 0 10px;
 	color: var(--vscode-editor-foreground);
 	white-space: pre-wrap;
+	word-wrap: break-word;
 	overflow-wrap: break-word;
 }
-.diff-code {
-	/* This is the <pre> tag with class 'diff-code' */
-	padding: 0;
-	background-color: transparent;
-	border: none;
-	box-shadow: none;
-	margin: 0;
-	overflow-x: auto;
+
+/* Style for the code content span within diff lines */
+.diff-line > span:last-child {
+	flex: 1;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+	overflow-wrap: break-word;
+	min-width: 0;
 }
 
 /* --- Phase 2: Styling the Commit Review UI --- */
