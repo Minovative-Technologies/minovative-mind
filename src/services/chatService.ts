@@ -5,7 +5,10 @@ import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 export class ChatService {
 	constructor(private provider: SidebarProvider) {}
 
-	public async handleRegularChat(userMessage: string): Promise<void> {
+	public async handleRegularChat(
+		userMessage: string,
+		groundingEnabled: boolean = false
+	): Promise<void> {
 		const { settingsManager } = this.provider;
 		const modelName = settingsManager.getSelectedModelName();
 
@@ -17,6 +20,13 @@ export class ChatService {
 		let finalAiResponseText: string | null = null;
 
 		try {
+			// If grounding with Google Search is enabled, perform search and augment userMessage or context.
+			if (groundingEnabled) {
+				// TODO: Implement Google Search API call and context augmentation here.
+				// Example: const googleResults = await performGoogleSearch(userMessage);
+				// Then, append or prepend results to userMessage or projectContext.
+			}
+
 			const projectContext =
 				await this.provider.contextService.buildProjectContext(
 					token,

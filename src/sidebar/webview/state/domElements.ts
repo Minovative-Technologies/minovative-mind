@@ -100,6 +100,9 @@ export function initializeDomElements(): RequiredDomElements | null {
 	const commandSuggestionsContainer = document.getElementById(
 		"command-suggestions-container"
 	) as HTMLDivElement;
+	const groundingToggle = document.getElementById(
+		"grounding-toggle"
+	) as HTMLInputElement;
 
 	// The current implementation of main.ts does not retrieve planConfirmationContainer,
 	// confirmPlanButton, or cancelPlanButton via getElementById at startup.
@@ -137,6 +140,7 @@ export function initializeDomElements(): RequiredDomElements | null {
 
 		chatInputControlsWrapper,
 		commandSuggestionsContainer,
+		groundingToggle,
 	};
 
 	const missingElements: string[] = [];

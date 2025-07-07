@@ -106,7 +106,12 @@ export function sendMessage(
 		// Ensure appendMessage and updateStatus pass 'elements' as their first argument
 		appendMessage(elements, "You", fullMessage, "user-message", true);
 		updateStatus(elements, "Sending message to AI...");
-		postMessageToExtension({ type: "chatMessage", value: fullMessage });
+		const groundingEnabled = elements.groundingToggle?.checked ?? false;
+		postMessageToExtension({
+			type: "chatMessage",
+			value: fullMessage,
+			groundingEnabled,
+		});
 	}
 
 	console.log("[MessageSender] Message sent to extension.");

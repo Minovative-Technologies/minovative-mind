@@ -133,6 +133,7 @@ export async function handleWebviewMessage(
 
 		case "chatMessage": {
 			const userMessage = data.value;
+			const groundingEnabled = !!data.groundingEnabled;
 			if (userMessage.trim().toLowerCase() === "/commit") {
 				// If a /commit command is sent via chat input,
 				// ensure a cancellation token is prepared and passed.
@@ -145,7 +146,10 @@ export async function handleWebviewMessage(
 				);
 			} else {
 				provider.chatHistoryManager.addHistoryEntry("user", userMessage);
-				await provider.chatService.handleRegularChat(userMessage);
+				await provider.chatService.handleRegularChat(
+					userMessage,
+					groundingEnabled
+				);
 			}
 			break;
 		}

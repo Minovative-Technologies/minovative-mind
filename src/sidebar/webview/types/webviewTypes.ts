@@ -36,6 +36,7 @@ export interface RequiredDomElements {
 
 	chatInputControlsWrapper: HTMLDivElement;
 	commandSuggestionsContainer: HTMLDivElement;
+	groundingToggle: HTMLInputElement;
 }
 
 export interface PendingPlanData {
