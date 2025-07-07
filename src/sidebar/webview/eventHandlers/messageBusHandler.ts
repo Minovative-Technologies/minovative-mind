@@ -648,6 +648,8 @@ export function initializeMessageBusHandler(
 				appState.pendingCommitReviewData = null; // Ensure this is reset too
 				updateEmptyChatPlaceholderVisibility(elements);
 				document.documentElement.scrollTop = 0;
+				// Ensure buttons are properly enabled after restoring history
+				setLoadingState(false, elements);
 				break;
 			}
 			case "authStateUpdate": {
