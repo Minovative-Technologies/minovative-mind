@@ -28,17 +28,21 @@ import { GitConflictResolutionService } from "./gitConflictResolutionService";
 import { applyAITextEdits } from "../utils/codeUtils"; // For applying precise text edits
 import { DiagnosticService } from "../utils/diagnosticUtils"; // Import DiagnosticService
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter"; // Import formatUserFacingErrorMessage
+import { UrlContextService } from "./urlContextService";
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
 	private readonly MAX_TRANSIENT_STEP_RETRIES = 3;
 	private readonly MAX_CORRECTION_PLAN_ATTEMPTS = 3; // Max attempts for AI to generate a valid correction *plan*
+	private urlContextService: UrlContextService;
 
 	constructor(
 		private provider: SidebarProvider,
 		private workspaceRootUri: vscode.Uri | undefined, // Add workspaceRootUri
 		private gitConflictResolutionService: GitConflictResolutionService // Add GitConflictResolutionService
-	) {}
+	) {
+		this.urlContextService = new UrlContextService();
+	}
 
 	/**
 	 * Triggers the UI to display the textual plan for review.
@@ -114,12 +118,19 @@ export class PlanService {
 				throw new Error(contextString);
 			}
 
+			// Process URLs in user request for context
+			const urlContexts =
+				await this.urlContextService.processMessageForUrlContext(userRequest);
+			const urlContextString =
+				this.urlContextService.formatUrlContexts(urlContexts);
+
 			const textualPlanPrompt = createInitialPlanningExplanationPrompt(
 				contextString,
 				userRequest,
 				undefined,
 				undefined,
-				[...this.provider.chatHistoryManager.getChatHistory()]
+				[...this.provider.chatHistoryManager.getChatHistory()],
+				urlContextString
 			);
 
 			let accumulatedTextualResponse = "";
@@ -500,6 +511,14 @@ export class PlanService {
 			const formattedRecentChanges =
 				this._formatRecentChangesForPrompt(recentChanges);
 
+			// Process URLs in the original user request for context
+			const urlContexts =
+				await this.urlContextService.processMessageForUrlContext(
+					planContext.originalUserRequest || ""
+				);
+			const urlContextString =
+				this.urlContextService.formatUrlContexts(urlContexts);
+
 			// Initial prompt creation outside the loop. This variable will be updated for retries.
 			let currentJsonPlanningPrompt = createPlanningPrompt(
 				planContext.type === "chat"
@@ -510,7 +529,8 @@ export class PlanService {
 				undefined, // No initial diagnostics/retry string
 				planContext.chatHistory,
 				planContext.textualPlanExplanation,
-				formattedRecentChanges
+				formattedRecentChanges,
+				urlContextString
 			);
 
 			// Start of the retry loop
@@ -600,7 +620,8 @@ export class PlanService {
 							retryFeedbackString, // Pass the retry feedback here for next AI call
 							planContext.chatHistory,
 							planContext.textualPlanExplanation,
-							formattedRecentChanges
+							formattedRecentChanges,
+							urlContextString
 						);
 					} else {
 						// All retries exhausted, break loop to handle final failure after the loop

@@ -13,7 +13,8 @@ export function createInitialPlanningExplanationPrompt(
 	userRequest?: string,
 	editorContext?: sidebarTypes.PlanGenerationContext["editorContext"],
 	diagnosticsString?: string,
-	chatHistory?: sidebarTypes.HistoryEntry[]
+	chatHistory?: sidebarTypes.HistoryEntry[],
+	urlContextString?: string
 ): string {
 	let specificContextPrompt = "";
 	let mainInstructions = "";
@@ -155,6 +156,8 @@ export function createInitialPlanningExplanationPrompt(
 
     Chat History: ${chatHistoryForPrompt}
 
+    ${urlContextString ? `URL Context: ${urlContextString}` : ""}
+
     *** Broader Project Context (Reference Only) ***
     ${projectContext}
     *** End Broader Project Context ***
@@ -172,7 +175,8 @@ export function createPlanningPrompt(
 	combinedDiagnosticsAndRetryString: string | undefined,
 	chatHistory: sidebarTypes.HistoryEntry[] | undefined,
 	textualPlanExplanation: string,
-	recentChanges: string | undefined // Modified to accept pre-formatted string
+	recentChanges: string | undefined, // Modified to accept pre-formatted string
+	urlContextString?: string
 ): string {
 	let actualDiagnosticsString: string | undefined = undefined;
 	let extractedRetryInstruction: string | undefined = undefined;
@@ -564,6 +568,12 @@ export function createPlanningPrompt(
     --- Broader Project Context (Reference Only) ---
     ${projectContext}
     --- End Broader Project Context ---
+
+    ${
+			urlContextString
+				? `--- URL Context ---\n${urlContextString}\n--- End URL Context ---`
+				: ""
+		}
 
     --- Recent Changes ---
     ${recentChangesForPrompt}

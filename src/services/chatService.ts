@@ -1,9 +1,14 @@
 import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
+import { UrlContextService } from "./urlContextService";
 
 export class ChatService {
-	constructor(private provider: SidebarProvider) {}
+	private urlContextService: UrlContextService;
+
+	constructor(private provider: SidebarProvider) {
+		this.urlContextService = new UrlContextService();
+	}
 
 	public async handleRegularChat(
 		userMessage: string,
@@ -20,6 +25,18 @@ export class ChatService {
 		let finalAiResponseText: string | null = null;
 
 		try {
+			// Automatically process URLs in the user message for context
+			const urlContexts =
+				await this.urlContextService.processMessageForUrlContext(userMessage);
+			const urlContextString =
+				this.urlContextService.formatUrlContexts(urlContexts);
+
+			if (urlContexts.length > 0) {
+				console.log(
+					`[ChatService] Processed ${urlContexts.length} URLs for context`
+				);
+			}
+
 			// If grounding with Google Search is enabled, perform search and augment userMessage or context.
 			if (groundingEnabled) {
 				// TODO: Implement Google Search API call and context augmentation here.
@@ -49,7 +66,11 @@ export class ChatService {
 				value: { modelName, relevantFiles: projectContext.relevantFiles },
 			});
 
-			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown. If the user wants you to implement code changes, guide them to use the "/plan [user prompt]" for requests they want you to code. Give them a "/plan [prompt]" use case according to the user query for them to use. Make sure the "/plan [prompt]" is without Markdown.\n\nProject Context:\n${projectContext.contextString}\n\nUser Query:\n${userMessage}\n\nAssistant Response:`;
+			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown. If the user wants you to implement code changes, guide them to use the "/plan [user prompt]" for requests they want you to code. Give them a "/plan [prompt]" use case according to the user query for them to use. Make sure the "/plan [prompt]" is without Markdown.\n\nProject Context:\n${
+				projectContext.contextString
+			}${
+				urlContextString ? `\n\n${urlContextString}` : ""
+			}\n\nUser Query:\n${userMessage}\n\nAssistant Response:`;
 
 			let accumulatedResponse = "";
 			finalAiResponseText =
@@ -81,6 +102,17 @@ export class ChatService {
 			if (finalAiResponseText.toLowerCase().startsWith("error:")) {
 				success = false;
 			} else {
+				// Process URLs in AI response for context in future interactions
+				const aiResponseUrlContexts =
+					await this.urlContextService.processMessageForUrlContext(
+						accumulatedResponse
+					);
+				if (aiResponseUrlContexts.length > 0) {
+					console.log(
+						`Found ${aiResponseUrlContexts.length} URLs in AI response`
+					);
+				}
+
 				this.provider.chatHistoryManager.addHistoryEntry(
 					"model",
 					accumulatedResponse,

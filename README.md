@@ -145,6 +145,7 @@ Introduced core services and utilities for advanced AI-driven development.
 
 - **Comprehensive Understanding**: The AI intelligently considers the active file content, selected code, relevant diagnostics (warnings/errors) from VS Code, chat history, the overall project structure, **significantly enhanced relevant file context**, **and improved utilization of detailed symbol information** (definitions, references), along with TypeScript-aware dependency graph analysis (respecting `tsconfig.json`/`jsconfig.json` for accurate module resolution), to provide highly relevant and accurate responses.
 - **File Change Tracking**: Includes a dedicated context section for the AI that lists recently modified and created file paths, providing the AI with up-to-date awareness of active development changes within the workspace.
+- **Automatic URL Context Integration**: Automatically extracts and processes URLs from user messages and AI responses, fetching their content to provide additional context. This feature works seamlessly for both chat messages and plan requests, enhancing the AI's understanding of external resources and documentation.
 
 ### Built-in Troubleshooting Guidance
 
