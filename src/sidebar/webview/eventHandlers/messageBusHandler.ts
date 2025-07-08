@@ -754,6 +754,7 @@ export function initializeMessageBusHandler(
 				}
 				break;
 			}
+
 			default:
 				console.warn(
 					"[Webview] Received unknown message type from extension:",

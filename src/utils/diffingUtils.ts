@@ -387,3 +387,143 @@ export async function generateFileChangeSummary(
 		formattedDiff: formattedDiff,
 	};
 }
+
+/**
+ * Parse a diff hunk and convert it to VS Code text edits
+ * Handles additions (+), deletions (-), and context lines
+ */
+export function parseDiffHunkToTextEdits(
+	diffHunk: string,
+	document: vscode.TextDocument,
+	startLineOffset: number = 0
+): { range: vscode.Range; newText: string }[] {
+	const edits: { range: vscode.Range; newText: string }[] = [];
+	const lines = diffHunk.split("\n").filter((line) => line.trim() !== "");
+
+	let currentLine = startLineOffset;
+	let inDeletion = false;
+	let deletionStart: vscode.Position | null = null;
+	let deletionEnd: vscode.Position | null = null;
+
+	for (const line of lines) {
+		if (line.startsWith("+")) {
+			// Addition: insert new text
+			const newText = line.substring(1) + "\n";
+			const insertPos = document.positionAt(
+				document.offsetAt(new vscode.Position(currentLine, 0))
+			);
+
+			edits.push({
+				range: new vscode.Range(insertPos, insertPos),
+				newText: newText,
+			});
+
+			// Don't increment currentLine for insertions
+		} else if (line.startsWith("-")) {
+			// Deletion: mark the range to delete
+			if (!inDeletion) {
+				deletionStart = document.positionAt(
+					document.offsetAt(new vscode.Position(currentLine, 0))
+				);
+				inDeletion = true;
+			}
+
+			// Update deletion end position
+			deletionEnd = document.positionAt(
+				document.offsetAt(new vscode.Position(currentLine, 0)) +
+					document.lineAt(currentLine).text.length
+			);
+
+			currentLine++;
+		} else {
+			// Context line or unchanged line
+			if (inDeletion) {
+				// End the current deletion
+				if (deletionStart && deletionEnd) {
+					edits.push({
+						range: new vscode.Range(deletionStart, deletionEnd),
+						newText: "",
+					});
+				}
+				inDeletion = false;
+				deletionStart = null;
+				deletionEnd = null;
+			}
+			currentLine++;
+		}
+	}
+
+	// Handle any remaining deletion at the end
+	if (inDeletion && deletionStart && deletionEnd) {
+		edits.push({
+			range: new vscode.Range(deletionStart, deletionEnd),
+			newText: "",
+		});
+	}
+
+	return edits;
+}
+
+/**
+ * Apply diff hunks to a document
+ * This is a robust version that handles edge cases and validates the edits
+ */
+export async function applyDiffHunkToDocument(
+	document: vscode.TextDocument,
+	diffHunk: string,
+	startLineOffset: number = 0,
+	token?: vscode.CancellationToken
+): Promise<{ success: boolean; error?: string }> {
+	try {
+		// Parse the diff hunk into text edits
+		const edits = parseDiffHunkToTextEdits(diffHunk, document, startLineOffset);
+
+		if (edits.length === 0) {
+			return { success: false, error: "No valid edits found in diff hunk" };
+		}
+
+		// Validate edits before applying
+		for (const edit of edits) {
+			if (token?.isCancellationRequested) {
+				return { success: false, error: "Operation cancelled" };
+			}
+
+			// Check if the range is valid for this document
+			if (
+				edit.range.start.line >= document.lineCount ||
+				edit.range.end.line >= document.lineCount
+			) {
+				return {
+					success: false,
+					error: `Edit range out of bounds: ${edit.range.start.line}-${edit.range.end.line} (document has ${document.lineCount} lines)`,
+				};
+			}
+		}
+
+		// Apply the edits
+		const editor = await vscode.window.showTextDocument(document);
+		await editor.edit(
+			(editBuilder) => {
+				for (const edit of edits) {
+					if (token?.isCancellationRequested) {
+						break;
+					}
+					editBuilder.replace(edit.range, edit.newText);
+				}
+			},
+			{
+				undoStopBefore: true,
+				undoStopAfter: true,
+			}
+		);
+
+		return { success: true };
+	} catch (error) {
+		return {
+			success: false,
+			error: `Failed to apply diff hunk: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		};
+	}
+}

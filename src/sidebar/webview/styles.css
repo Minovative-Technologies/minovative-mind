@@ -2093,3 +2093,30 @@ ul#staged-files-list li.empty-state {
 	background-color: var(--vscode-list-activeSelectionBackground);
 	color: var(--vscode-list-activeSelectionForeground);
 }
+
+.diff-hunk-container {
+	border-radius: 4px;
+	margin-bottom: 6px;
+	background: var(--vscode-editorWidget-background, #23272e);
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+	padding-bottom: 2px;
+	transition: border-color 0.2s, opacity 0.2s;
+	position: relative;
+	border: 2px solid var(--vscode-editorWidget-border, #444);
+}
+.diff-hunk-container:hover {
+	border-color: var(--vscode-focusBorder, #007acc);
+}
+.diff-hunk-container {
+	border-radius: 4px;
+	margin-bottom: 6px;
+	background: var(--vscode-editorWidget-background, #23272e);
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+	padding-bottom: 2px;
+	transition: border-color 0.2s, opacity 0.2s;
+	position: relative;
+	border: 2px solid var(--vscode-editorWidget-border, #444);
+}
+.diff-hunk-container:hover {
+	border-color: var(--vscode-focusBorder, #007acc);
+}

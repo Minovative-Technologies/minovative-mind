@@ -3,6 +3,7 @@ import { SidebarProvider } from "../sidebar/SidebarProvider";
 import * as path from "path";
 import { ToggleRelevantFilesDisplayMessage } from "../sidebar/common/sidebarTypes";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
+import { applyDiffHunkToDocument } from "../utils/diffingUtils";
 
 export async function handleWebviewMessage(
 	data: any,
@@ -485,6 +486,85 @@ export async function handleWebviewMessage(
 			}
 			await provider.endUserOperation("review"); // Add this call as per instructions
 			// The webview's messageBusHandler.ts will show the commit review UI based on this message.
+			break;
+		}
+
+		case "acceptInlineEditHunk": {
+			const { hunkIndex, filePath, hunkDiff } = data;
+			console.log(
+				"[Extension] Accept Inline Edit Hunk:",
+				hunkIndex,
+				filePath,
+				hunkDiff
+			);
+
+			if (!filePath) {
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Error: No file path provided for inline edit",
+					isError: true,
+				});
+				break;
+			}
+
+			if (!hunkDiff) {
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Error: No diff content provided for inline edit",
+					isError: true,
+				});
+				break;
+			}
+
+			try {
+				// Resolve the file path
+				const workspaceRoot = vscode.workspace.workspaceFolders?.[0];
+				if (!workspaceRoot) {
+					throw new Error("No workspace folder found");
+				}
+
+				const fileUri = vscode.Uri.joinPath(workspaceRoot.uri, filePath);
+
+				// Check if file exists
+				try {
+					await vscode.workspace.fs.stat(fileUri);
+				} catch {
+					throw new Error(`File not found: ${filePath}`);
+				}
+
+				// Open the document
+				const document = await vscode.workspace.openTextDocument(fileUri);
+
+				// Apply the diff hunk
+				const result = await applyDiffHunkToDocument(
+					document,
+					hunkDiff,
+					0, // startLineOffset - you might want to calculate this based on the hunk
+					provider.activeOperationCancellationTokenSource?.token
+				);
+
+				if (result.success) {
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: `Successfully applied inline edit to ${filePath}`,
+					});
+				} else {
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: `Failed to apply inline edit: ${result.error}`,
+						isError: true,
+					});
+				}
+			} catch (error) {
+				const errorMessage =
+					error instanceof Error ? error.message : String(error);
+				console.error("[Extension] Error applying inline edit:", error);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Error applying inline edit: ${errorMessage}`,
+					isError: true,
+				});
+			}
 			break;
 		}
 

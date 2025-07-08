@@ -10,6 +10,7 @@ import { appState } from "../state/appState";
 import { stopTypingAnimation, startTypingAnimation } from "./typingAnimation";
 import { updateEmptyChatPlaceholderVisibility } from "./statusManager";
 import { RequiredDomElements } from "../types/webviewTypes";
+import { initializeDomElements } from "../state/domElements";
 
 /**
  * Appends a chat message to the chat container.
@@ -114,7 +115,28 @@ export function appendMessage(
 			const diffLines = trimmedDiffContent.split("\n");
 			let oldLine = 1;
 			let newLine = 1;
-			diffLines.forEach((line) => {
+			let hunkBuffer: HTMLDivElement[] = [];
+			let hunkStartIndex = 0;
+
+			function flushHunk(hunk: HTMLDivElement[], hunkIndex: number) {
+				if (hunk.length === 0) {
+					return;
+				}
+				// Wrap hunk lines in a container
+				const hunkContainer = document.createElement("div");
+				hunkContainer.classList.add("diff-hunk-container");
+				hunk.forEach((lineWrapper: HTMLDivElement) =>
+					hunkContainer.appendChild(lineWrapper)
+				);
+				codeElement.appendChild(hunkContainer);
+			}
+
+			let currentHunk: HTMLDivElement[] = [];
+			let hunkIndex = 0;
+			let inHunk = false;
+			let totalHunks = 0;
+
+			diffLines.forEach((line, i) => {
 				const lineWrapper = document.createElement("div");
 				lineWrapper.classList.add("diff-line");
 
@@ -126,18 +148,21 @@ export function appendMessage(
 				const sign = document.createElement("span");
 				sign.classList.add("diff-sign");
 
+				let isChange = false;
 				if (line.startsWith("+")) {
 					lineNumber.textContent = newLine.toString();
 					sign.textContent = "+";
 					newLine++;
 					gutter.style.color = "#4caf50";
 					lineWrapper.classList.add("hljs-addition");
+					isChange = true;
 				} else if (line.startsWith("-")) {
 					lineNumber.textContent = oldLine.toString();
 					sign.textContent = "-";
 					oldLine++;
 					gutter.style.color = "#e53935";
 					lineWrapper.classList.add("hljs-deletion");
+					isChange = true;
 				} else {
 					lineNumber.textContent = oldLine.toString();
 					sign.textContent = " ";
@@ -153,7 +178,25 @@ export function appendMessage(
 				codeSpan.textContent = line.replace(/^[-+ ]/, "");
 				lineWrapper.appendChild(codeSpan);
 
-				codeElement.appendChild(lineWrapper);
+				// Group consecutive change lines into hunks
+				if (isChange) {
+					currentHunk.push(lineWrapper);
+					inHunk = true;
+				} else {
+					if (inHunk) {
+						flushHunk(currentHunk, hunkIndex++);
+						totalHunks++;
+						currentHunk = [];
+						inHunk = false;
+					}
+					codeElement.appendChild(lineWrapper);
+				}
+				// If last line, flush any remaining hunk
+				if (i === diffLines.length - 1 && currentHunk.length > 0) {
+					flushHunk(currentHunk, hunkIndex++);
+					totalHunks++;
+					currentHunk = [];
+				}
 			});
 
 			preCode.appendChild(codeElement);

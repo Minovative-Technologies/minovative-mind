@@ -4,6 +4,7 @@ import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import neces
 import { cleanCodeOutput } from "./utils/codeUtils";
 import * as sidebarTypes from "./sidebar/common/sidebarTypes";
 import { hasMergeConflicts } from "./utils/mergeUtils"; // Added import for mergeUtils
+import { LiveCodeGenerationService } from "./services/liveCodeGenerationService";
 
 // Helper function type definition for AI action results (kept for potential future use)
 type ActionResult =
@@ -585,6 +586,192 @@ export async function activate(context: vscode.ExtensionContext) {
 			);
 		})
 	);
+
+	// Live Code Generation Command
+	const liveCodeGenerationDisposable = vscode.commands.registerCommand(
+		"minovative-mind.generateCodeLive",
+		async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				vscode.window.showWarningMessage("No active editor found.");
+				return;
+			}
+
+			// Get the prompt from user
+			const prompt = await vscode.window.showInputBox({
+				prompt: "Enter your code generation prompt:",
+				placeHolder: "e.g., Create a React component for a todo list",
+				title: "Minovative Mind: Live Code Generation",
+			});
+
+			if (!prompt) {
+				vscode.window.showInformationMessage("Live code generation cancelled.");
+				return;
+			}
+
+			// Get model name
+			const selectedModel =
+				sidebarProvider.settingsManager.getSelectedModelName();
+			if (!selectedModel) {
+				vscode.window.showErrorMessage(
+					"Minovative Mind: No AI model selected. Please check the sidebar."
+				);
+				return;
+			}
+
+			// Create live code generation service
+			const liveCodeService = new LiveCodeGenerationService(
+				sidebarProvider.aiRequestService,
+				workspaceRootUri || vscode.Uri.file(""),
+				{
+					chunkSize: 3,
+					delayMs: 50,
+					showTypingAnimation: true,
+					enableRealTimeValidation: true,
+					maxValidationIterations: 3,
+				}
+			);
+
+			// Execute live code generation
+			await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: `Minovative Mind: Live Code Generation (${selectedModel})...`,
+					cancellable: true,
+				},
+				async (progress, token) => {
+					try {
+						await liveCodeService.generateCodeLive(
+							editor,
+							prompt,
+							{
+								projectContext: "Live code generation",
+								relevantSnippets: "",
+								editorContext: undefined,
+								activeSymbolInfo: undefined,
+							},
+							selectedModel,
+							token,
+							(feedback) => {
+								progress.report({
+									message: feedback.message,
+									increment:
+										feedback.progress - (progress.report as any).lastProgress ||
+										0,
+								});
+								(progress.report as any).lastProgress = feedback.progress;
+							}
+						);
+
+						vscode.window.showInformationMessage(
+							"Minovative Mind: Live code generation completed successfully!"
+						);
+					} catch (error) {
+						const errorMessage =
+							error instanceof Error ? error.message : String(error);
+						vscode.window.showErrorMessage(
+							`Minovative Mind: Live code generation failed: ${errorMessage}`
+						);
+					}
+				}
+			);
+		}
+	);
+	context.subscriptions.push(liveCodeGenerationDisposable);
+
+	// Live Code Modification Command
+	const liveCodeModificationDisposable = vscode.commands.registerCommand(
+		"minovative-mind.modifyCodeLive",
+		async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				vscode.window.showWarningMessage("No active editor found.");
+				return;
+			}
+
+			// Get the modification prompt from user
+			const prompt = await vscode.window.showInputBox({
+				prompt: "Enter your code modification prompt:",
+				placeHolder: "e.g., Add error handling to this function",
+				title: "Minovative Mind: Live Code Modification",
+			});
+
+			if (!prompt) {
+				vscode.window.showInformationMessage(
+					"Live code modification cancelled."
+				);
+				return;
+			}
+
+			// Get model name
+			const selectedModel =
+				sidebarProvider.settingsManager.getSelectedModelName();
+			if (!selectedModel) {
+				vscode.window.showErrorMessage(
+					"Minovative Mind: No AI model selected. Please check the sidebar."
+				);
+				return;
+			}
+
+			// Create live code generation service
+			const liveCodeService = new LiveCodeGenerationService(
+				sidebarProvider.aiRequestService,
+				workspaceRootUri || vscode.Uri.file(""),
+				{
+					chunkSize: 3,
+					delayMs: 50,
+					showTypingAnimation: true,
+					enableRealTimeValidation: true,
+					maxValidationIterations: 3,
+				}
+			);
+
+			// Execute live code modification
+			await vscode.window.withProgress(
+				{
+					location: vscode.ProgressLocation.Notification,
+					title: `Minovative Mind: Live Code Modification (${selectedModel})...`,
+					cancellable: true,
+				},
+				async (progress, token) => {
+					try {
+						await liveCodeService.modifyCodeLive(
+							editor,
+							prompt,
+							{
+								projectContext: "Live code modification",
+								relevantSnippets: "",
+								editorContext: undefined,
+								activeSymbolInfo: undefined,
+							},
+							selectedModel,
+							token,
+							(feedback) => {
+								progress.report({
+									message: feedback.message,
+									increment:
+										feedback.progress - (progress.report as any).lastProgress ||
+										0,
+								});
+								(progress.report as any).lastProgress = feedback.progress;
+							}
+						);
+
+						vscode.window.showInformationMessage(
+							"Minovative Mind: Live code modification completed successfully!"
+						);
+					} catch (error) {
+						const errorMessage =
+							error instanceof Error ? error.message : String(error);
+						vscode.window.showErrorMessage(
+							`Minovative Mind: Live code modification failed: ${errorMessage}`
+						);
+					}
+				}
+			);
+		}
+	);
+	context.subscriptions.push(liveCodeModificationDisposable);
 } // End activate function
 
 // --- Deactivate Function ---
