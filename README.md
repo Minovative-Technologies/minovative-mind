@@ -90,7 +90,7 @@ Introduced core services and utilities for advanced AI-driven development.
   - `run_command`: Execute shell commands in the integrated terminal (e.g., `npm install`, `git commit`).
 - **User Confirmation for Commands**: For security, users are prompted with a confirmation dialog before any `run_command` step is executed, allowing them to "Allow Command" or "Skip Command".
 - **Interactive Execution Feedback**: Provides real-time progress updates in `VS Code` notifications and the sidebar chat. Includes a simulated "typing" animation for AI-generated content in the editor (Premium Tier).
-- **Per-step AI Rationale**: For file creation and modification steps in a plan, the AI now provides a concise 'mini-plan' or explanation of its approach directly in the chat, offering real-time insight into its actions before applying changes.
+
 - **File Diffs in Chat**: Displays real-time file changes (diffs) directly within the chat interface for `create_file` and `modify_file` plan steps, with enhanced execution messages indicating diff availability.
 - **Cancellation**: Users can cancel an ongoing plan execution at any time via the `VS Code` progress notification.
 - **Resilient Plan Execution**: Enhances robustness by automatically retrying failed plan steps (with 10s, 15s, 20s delays) for transient errors like API overloads, network issues, or newly-identified 'Service Unavailable' (503) responses. Crucially, it now includes robust error handling to prevent AI API error messages from being written into files, ensuring file integrity. For persistent failures or exhausted retries, users are prompted with options to 'Retry Step', 'Skip Step', or 'Cancel Plan', preventing mid-plan halts and preserving progress.
@@ -184,6 +184,27 @@ Introduced core services and utilities for advanced AI-driven development.
 - **Diff Syntax Highlighting**: File diffs displayed in the chat interface are rendered with syntax highlighting for added and removed lines, enhancing clarity and reviewability.
 
 ## Advanced Context & Project Awareness
+
+### Enhanced Precision Search System
+
+- **Ultra-Precision Search**: Multi-factor scoring system that considers path matching, semantic analysis, dependencies, and symbol relationships for intelligent relevance scoring
+- **Dynamic Context Sizing**: Automatically adjusts context size based on request complexity
+- **Smart Truncation**: Preserves important code elements (imports, exports, function definitions) while reducing file size
+- **Progressive Loading**: Loads context progressively to optimize performance
+
+### Performance Optimizations
+
+- **Intelligent Caching**: Smart cache management with precision-based invalidation
+- **Concurrent Processing**: Parallel file scanning and dependency analysis
+- **Resource Management**: Configurable limits for file sizes, context length, and processing time
+- **Progressive Enhancement**: Starts with fast heuristics, then applies AI for refinement
+
+### Quality Assurance
+
+- **Accuracy Validation**: Real-time validation of search accuracy and relevance
+- **Feedback Loop**: Learns from user interactions to improve future searches
+- **Quality Metrics**: Comprehensive metrics for precision, recall, and confidence
+- **Continuous Improvement**: Self-optimizing system that adapts to usage patterns
 
 ### Optimized Search & Context Selection
 
