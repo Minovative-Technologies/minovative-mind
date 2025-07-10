@@ -654,13 +654,6 @@ export class PlanService {
 					},
 				});
 				this.provider.currentExecutionOutcome = "failed";
-				// >>> REPLACE with showErrorNotification <<<
-				showErrorNotification(
-					lastParsingError || "Failed to parse AI plan.",
-					"Failed to parse AI plan after multiple attempts. Check sidebar for retry options.",
-					"Minovative Mind: ",
-					planContext.workspaceRootUri
-				);
 				await this.provider.endUserOperation("failed"); // Signal failure and re-enable input
 				return; // Important: return here to stop further execution
 			}
@@ -922,13 +915,6 @@ The 'File Path' itself conveys important structural information; ensure the cont
 								console.error(
 									`[MinovativeMind] ${errorDetails}\nProblematic AI Output:\n${content}`
 								);
-								showErrorNotification(
-									new Error(errorDetails),
-									"AI generated an error message instead of code.",
-									`File creation failed for '${step.path}': `,
-									rootUri,
-									"Open Chat"
-								);
 								throw new Error(
 									`AI output validation failed for ${step.path}: Generated error message.`
 								);
@@ -1031,13 +1017,6 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 							const errorDetails = `AI attempted to modify '${step.path}' but generated an error message instead of code. Please inspect AI output in chat.`;
 							console.error(
 								`[MinovativeMind] ${errorDetails}\nProblematic AI Output:\n${modifiedContent}`
-							);
-							showErrorNotification(
-								new Error(errorDetails),
-								"AI generated an error message instead of code.",
-								`File modification failed for '${step.path}': `,
-								rootUri,
-								"Open Chat" // Offer to open chat, if that's a relevant action
 							);
 							// Crucial: Throw an error to stop execution of this step and trigger the step retry/skip/cancel logic
 							throw new Error(
