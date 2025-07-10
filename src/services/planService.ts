@@ -1445,6 +1445,7 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 
 			let allErrorsAndWarnings: vscode.Diagnostic[] = [];
 			let aggregatedFormattedDiagnostics = "";
+			const filesWithIssues = new Set<vscode.Uri>();
 
 			// Collect diagnostics from all affected files
 			for (const fileUri of affectedFileUris) {
@@ -1458,6 +1459,7 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 
 				if (errorsAndWarningsForFile.length > 0) {
 					allErrorsAndWarnings.push(...errorsAndWarningsForFile);
+					filesWithIssues.add(fileUri);
 					const formattedForFile =
 						await DiagnosticService.formatContextualDiagnostics(
 							fileUri,
@@ -1485,7 +1487,7 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 				});
 				return true; // Success! All diagnostics resolved.
 			} else {
-				const fileNames = Array.from(affectedFileUris)
+				const fileNames = Array.from(filesWithIssues)
 					.map((uri) => path.relative(rootUri.fsPath, uri.fsPath))
 					.join(", ");
 				this._postChatUpdateForPlanExecution({
