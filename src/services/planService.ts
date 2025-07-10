@@ -28,7 +28,6 @@ import { applyAITextEdits } from "../utils/codeUtils"; // For applying precise t
 import { DiagnosticService } from "../utils/diagnosticUtils"; // Import DiagnosticService
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter"; // Import formatUserFacingErrorMessage
 import { showErrorNotification } from "../utils/notificationUtils"; // Add this import
-import { isAIOutputLikelyErrorMessage } from "../utils/aiOutputValidator"; // Add this import
 import { UrlContextService } from "./urlContextService";
 
 export class PlanService {
@@ -908,18 +907,6 @@ The 'File Path' itself conveys important structural information; ensure the cont
 								undefined,
 								combinedToken
 							);
-
-							// >>> NEW VALIDATION LOGIC FOR CREATE FILE <<<
-							if (isAIOutputLikelyErrorMessage(content ?? "")) {
-								const errorDetails = `AI attempted to create '${step.path}' but generated an error message instead of code. Please inspect AI output in chat.`;
-								console.error(
-									`[MinovativeMind] ${errorDetails}\nProblematic AI Output:\n${content}`
-								);
-								throw new Error(
-									`AI output validation failed for ${step.path}: Generated error message.`
-								);
-							}
-							// >>> END NEW VALIDATION LOGIC <<<
 						}
 						await typeContentIntoEditor(editor, content ?? "", combinedToken);
 
@@ -1011,19 +998,6 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 							.replace(/^```[a-z]*\n?/, "")
 							.replace(/\n?```$/, "")
 							.trim();
-
-						// >>> NEW VALIDATION LOGIC FOR MODIFY FILE <<<
-						if (isAIOutputLikelyErrorMessage(modifiedContent)) {
-							const errorDetails = `AI attempted to modify '${step.path}' but generated an error message instead of code. Please inspect AI output in chat.`;
-							console.error(
-								`[MinovativeMind] ${errorDetails}\nProblematic AI Output:\n${modifiedContent}`
-							);
-							// Crucial: Throw an error to stop execution of this step and trigger the step retry/skip/cancel logic
-							throw new Error(
-								`AI output validation failed for ${step.path}: Generated error message.`
-							);
-						}
-						// >>> END NEW VALIDATION LOGIC <<<
 
 						if (modifiedContent !== existingContent) {
 							// Ensure the file is open in an editor to apply precise edits
