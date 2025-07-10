@@ -13,6 +13,11 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - **HTML Rendering**: Enables HTML rendering in Markdown chat responses for richer content.
 - **Intelligent Command Suggestions & Autocomplete**: As you type `/` in the chat input, the extension provides real-time suggestions and autocomplete options for available commands (e.g., `/plan`, `/fix`, `/docs`, `/commit`), improving discoverability and efficiency.
 - **Copy Message Feature**: A "Copy Message" button is integrated with AI chat responses, allowing users to easily copy the generated text (including formatted code blocks) to their clipboard.
+- **Edit Message Feature**: This feature allows you to correct typos, refine previous questions, or adjust context for the AI, enabling more precise and effective interactions.
+  - **Activation**: Click the 'Edit Message' (pencil) icon next to your message in the chat history.
+  - **Editing Mechanism**: Your message will transform into an editable text area. Modify your text as needed.
+  - **Submission/Cancellation**: Press `Enter` (without `Shift`) or click outside the text area to apply your changes. Press `Escape` to discard changes and revert the message to its original state.
+  - **Impact on Chat History and AI Interaction**: Upon submission, your message in the chat history will be updated, and all subsequent AI responses following that message will be cleared. The AI will then re-process the conversation using your edited message as the new context, allowing for real-time refinement of interactions.
 
 ### Enhanced AI Reasoning (Thinking Capabilities)
 
