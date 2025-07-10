@@ -735,7 +735,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				},
 				async (progress, token) => {
 					try {
-						await liveCodeService.modifyCodeLive(
+						await liveCodeService.generateAndApplyInlineEdits(
 							editor,
 							prompt,
 							{
