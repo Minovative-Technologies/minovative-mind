@@ -148,6 +148,17 @@ export class AIRequestService {
 							-4
 						)}.`
 					);
+					// Insert new lines here as per instructions
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: `API quota limit hit. Pausing for 1 minute before retrying.`,
+						isError: true,
+					});
+					await new Promise((resolve) => setTimeout(resolve, 60000));
+					if (token?.isCancellationRequested) {
+						throw new Error(ERROR_OPERATION_CANCELLED);
+					}
+					// Existing logic continues after the delay and cancellation check
 				} else if (errorMessage === ERROR_SERVICE_UNAVAILABLE) {
 					// MODIFICATION 3: New service unavailable condition
 					result = ERROR_SERVICE_UNAVAILABLE; // Mark result to retry with same key
