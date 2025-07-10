@@ -524,6 +524,37 @@ export function createPlanningPrompt(
     **Strict Instruction:** Your JSON plan MUST be a direct, accurate translation of the detailed steps provided in the "Detailed Textual Plan Explanation" section above. Ensure EVERY action described in the textual plan is represented as a step in the JSON, using the correct 'action', 'path', 'description', and relevant content/prompt/command fields as described in the format section. NEVER omit steps or invent new ones not present in the textual explanation.
     `;
 
+	const planningInstructions = `
+    You are an expert senior software engineer. Your task is to generate a detailed, step-by-step execution plan in JSON format.
+
+    **CRITICAL PLANNING REQUIREMENTS:**
+    1. **Avoid Cosmetic Changes**: When creating modification steps, ensure they only make substantial code changes, not cosmetic formatting or whitespace-only modifications
+    2. **Preserve Existing Structure**: Modification prompts should preserve existing code structure, indentation, and formatting unless explicitly requested to change them
+    3. **Minimal Invasiveness**: Focus on surgical precision - only modify what's necessary to achieve the goal
+    4. **Maintain Code Style**: Respect the existing code style and conventions in the project
+    5. **Substantial Modifications Only**: Ensure modification_prompt instructions result in meaningful code changes, not just reformatting
+
+    **PLANNING GUIDELINES:**
+    1. **Analyze Dependencies:** Consider how changes might affect other parts of the codebase. Generate
+    2. **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
+    3. **Consult Recent Project Changes:** Always consult the "Recent Project Changes (During Current Workflow Execution)" section. Your plan MUST build upon these prior changes. Avoid generating steps that redundantly re-create files already created, or redundantly modify files already changed in prior steps and whose desired state is reflected by that prior modification. Instead, if multiple logical changes are needed for one file, combine *all* those required modifications into a **single** \`modification_prompt\` for that file's \`modify_file\` step. This ensures efficiency and avoids unnecessary operations.
+    4. Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
+    5. Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
+    6. Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. **Crucially, the 'description' field MUST be included and populated for EVERY step, regardless of the action type.** Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
+    7. **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\`
+    8. **JSON String Escaping:** When providing string values within the JSON (e.g., for \`content\`, \`generate_prompt\`, \`modification_prompt\`, \`description\`, \`path\`, \`command\`), ensure that special characters are correctly escaped according to JSON rules:
+        *   Newline (\`\\n\`) must be escaped as \`\\n\`.
+        *   Carriage return (\`\\r\`) must be escaped as \`\\r\`.
+        *   Backslash (\`\\\`) must be escaped as \`\\\`.
+        *   Double quote (\`"\`) must be escaped as \`"\`.
+    9. JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
+    10. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for developers.
+    11. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
+
+    **IMPORTANT:** For modification steps, ensure the modification_prompt is specific and actionable, focusing on substantial changes rather than cosmetic formatting. The AI will be instructed to preserve existing formatting and only make the requested functional changes.
+
+    Generate the execution plan:`;
+
 	return `
     You are an expert senior software engineer. Your ONLY task is to create a step-by-step execution plan in JSON format.
 
@@ -589,8 +620,9 @@ export function createPlanningPrompt(
     ${fewShotExamples}
     --- End Few Examples ---
 
-    Execution Plan (ONLY JSON):
-    `;
+    **IMPORTANT:** For modification steps, ensure the modification_prompt is specific and actionable, focusing on substantial changes rather than cosmetic formatting. The AI will be instructed to preserve existing formatting and only make the requested functional changes.
+
+    Generate the execution plan:`;
 }
 
 export function createCorrectionPlanPrompt(
@@ -646,6 +678,21 @@ export function createCorrectionPlanPrompt(
         You are an expert senior software engineer. Your ONLY task is to generate a JSON ExecutionPlan to fix errors.
 
         The previous attempt to generate/modify code resulted in the following diagnostics across potentially multiple files. Your plan MUST resolve ALL reported diagnostics. DO NOT revert or change files that were already successfully modified or created during the current workflow execution, unless explicitly required to fix a new diagnostic reported below.
+
+        **CRITICAL REQUIREMENTS TO AVOID COSMETIC CHANGES:**
+        1. **Preserve Exact Formatting**: Maintain the existing indentation, spacing, and line breaks exactly as they are
+        2. **No Whitespace-Only Changes**: Do not modify spaces, tabs, or line endings unless explicitly requested
+        3. **Preserve Comments**: Keep all existing comments in their exact positions and formatting
+        4. **Maintain Import Order**: Keep imports in their current order unless new imports are specifically needed
+        5. **Preserve Code Style**: Do not reformat code or change coding style unless explicitly requested
+        6. **Minimal Changes**: Make only the specific changes needed to fix the diagnostics, nothing more
+        7. **Preserve Empty Lines**: Keep existing empty lines and paragraph breaks exactly as they are
+
+        **SUBSTANTIAL CHANGES ONLY:**
+        - Only modify code that directly addresses the reported diagnostics
+        - Do not rewrite or reformat existing code that doesn't need changes
+        - Preserve all existing functionality unless explicitly asked to change it
+        - Maintain the exact same structure and organization
 
         Your plan MUST resolve ALL reported diagnostics by generating a valid ExecutionPlan in JSON format. For create_file and modify_file steps, ensure the path field is **non-empty, a relative string** (e.g., 'src/utils/myFile.ts') to the workspace root, and accurately reflects the file being acted upon. This path is critical for successful execution.
 
@@ -747,6 +794,21 @@ export async function _performModification(
     --- Specialized Merge Instruction ---
     ${specializedMergeInstruction}
     --- End Specialized Merge Instruction ---
+
+    **CRITICAL REQUIREMENTS TO AVOID COSMETIC CHANGES:**
+    1. **Preserve Exact Formatting**: Maintain the existing indentation, spacing, and line breaks exactly as they are
+    2. **No Whitespace-Only Changes**: Do not modify spaces, tabs, or line endings unless explicitly requested
+    3. **Preserve Comments**: Keep all existing comments in their exact positions and formatting
+    4. **Maintain Import Order**: Keep imports in their current order unless new imports are specifically needed
+    5. **Preserve Code Style**: Do not reformat code or change coding style unless explicitly requested
+    6. **Minimal Changes**: Make only the specific changes requested, nothing more
+    7. **Preserve Empty Lines**: Keep existing empty lines and paragraph breaks exactly as they are
+
+    **SUBSTANTIAL CHANGES ONLY:**
+    - Only modify code that directly addresses the modification instructions
+    - Do not rewrite or reformat existing code that doesn't need changes
+    - Preserve all existing functionality unless explicitly asked to change it
+    - Maintain the exact same structure and organization
 
     **Crucially, ensure the generated code is modular, readable, adheres to common coding standards for ${languageId}, and is production-ready, efficient, and maintainable.**
 

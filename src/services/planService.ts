@@ -947,41 +947,57 @@ The 'File Path' itself conveys important structural information; ensure the cont
 						);
 
 						const modificationPrompt = `You are an expert software engineer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.
+
+**CRITICAL REQUIREMENTS TO AVOID COSMETIC CHANGES:**
+1. **Preserve Exact Formatting**: Maintain the existing indentation, spacing, and line breaks exactly as they are
+2. **No Whitespace-Only Changes**: Do not modify spaces, tabs, or line endings unless explicitly requested
+3. **Preserve Comments**: Keep all existing comments in their exact positions and formatting
+4. **Maintain Import Order**: Keep imports in their current order unless new imports are specifically needed
+5. **Preserve Code Style**: Do not reformat code or change coding style unless explicitly requested
+6. **Minimal Changes**: Make only the specific changes requested, nothing more
+7. **Preserve Empty Lines**: Keep existing empty lines and paragraph breaks exactly as they are
+
+**SUBSTANTIAL CHANGES ONLY:**
+- Only modify code that directly addresses the modification instructions
+- Do not rewrite or reformat existing code that doesn't need changes
+- Preserve all existing functionality unless explicitly asked to change it
+- Maintain the exact same structure and organization
+
 Crucially, return the ENTIRE content of the file. Do not omit existing code that is not being modified. The response must be a full, complete, and syntactically valid version of the file after the specified changes are applied.
 Integrate all changes seamlessly with the existing code structure. This includes maintaining existing function/class definitions, preserving unused imports (unless explicitly instructed to remove them), and ensuring that new or modified code integrates without breaking existing logic or introducing new errors.
 Review the 'Existing File Content' and all provided context to ensure no regressions are introduced and that the file remains fully functional and robust.
 When modifying specific parts, leverage detailed symbol information (if available in 'Broader Project Context') to understand their full implications and interconnectedness with other parts of the codebase.
 
-						The modified code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.
+The modified code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.
 
-						File Path:
-						${step.path}
+File Path:
+${step.path}
 
-						Modification Instructions:
-						${step.modification_prompt}
+Modification Instructions:
+${step.modification_prompt}
 
-						--- Broader Project Context ---
-						${context.projectContext}
-						--- End Broader Project Context ---
+--- Broader Project Context ---
+${context.projectContext}
+--- End Broader Project Context ---
 
-						${
-							context.editorContext
-								? `--- Editor Context ---\n${JSON.stringify(
-										context.editorContext,
-										null,
-										2
-								  )}\n--- End Editor Context ---\n\n`
-								: ""
-						}${this._formatChatHistoryForPrompt(context.chatHistory)}
+${
+	context.editorContext
+		? `--- Editor Context ---\n${JSON.stringify(
+				context.editorContext,
+				null,
+				2
+		  )}\n--- End Editor Context ---\n\n`
+		: ""
+}${this._formatChatHistoryForPrompt(context.chatHistory)}
 
-						--- Relevant Project Snippets (for context) ---
-						${relevantSnippets}
+--- Relevant Project Snippets (for context) ---
+${relevantSnippets}
 
-						--- Existing File Content ---
-						${existingContent}
-						--- End Existing File Content ---
+--- Existing File Content ---
+${existingContent}
+--- End Existing File Content ---
 
-						Complete Modified File Content:`;
+Complete Modified File Content:`;
 
 						let modifiedContent =
 							await this.provider.aiRequestService.generateWithRetry(
@@ -999,7 +1015,13 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 							.replace(/\n?```$/, "")
 							.trim();
 
-						if (modifiedContent !== existingContent) {
+						// Enhanced change detection to avoid cosmetic-only modifications
+						const hasSubstantialChanges = this._hasSubstantialChanges(
+							existingContent,
+							modifiedContent
+						);
+
+						if (hasSubstantialChanges) {
 							// Ensure the file is open in an editor to apply precise edits
 							let document: vscode.TextDocument;
 							let editor: vscode.TextEditor;
@@ -1058,13 +1080,13 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 								timestamp: Date.now(),
 							});
 						} else {
-							// If content is identical, still count as success, but no diff/change log
+							// If content is identical or only cosmetic changes, still count as success, but no diff/change log
 							this.provider.postMessageToWebview({
 								type: "appendRealtimeModelMessage",
 								value: {
 									text: `Step ${index + 1} OK: File \`${
 										step.path
-									}\` content is already as desired, no modification applied.`,
+									}\` content is already as desired, no substantial modifications needed.`,
 								},
 							});
 						}
@@ -1406,6 +1428,112 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 						.join("\n")}`
 			)
 			.join("\n---\n")}\n--- End Recent Chat History ---`;
+	}
+
+	/**
+	 * Determines if the changes between original and modified content are substantial
+	 * rather than just cosmetic (whitespace, formatting, etc.)
+	 */
+	private _hasSubstantialChanges(
+		originalContent: string,
+		modifiedContent: string
+	): boolean {
+		// If content is identical, no changes
+		if (originalContent === modifiedContent) {
+			return false;
+		}
+
+		// Normalize whitespace for comparison
+		const normalizeWhitespace = (content: string): string => {
+			return content
+				.replace(/\r\n/g, "\n") // Normalize line endings
+				.replace(/\r/g, "\n") // Normalize carriage returns
+				.replace(/\t/g, "    ") // Convert tabs to spaces
+				.replace(/[ \t]+/g, " ") // Collapse multiple spaces/tabs
+				.replace(/\n\s*\n/g, "\n") // Remove empty lines
+				.trim(); // Remove leading/trailing whitespace
+		};
+
+		const normalizedOriginal = normalizeWhitespace(originalContent);
+		const normalizedModified = normalizeWhitespace(modifiedContent);
+
+		// If normalized content is identical, changes are only cosmetic
+		if (normalizedOriginal === normalizedModified) {
+			return false;
+		}
+
+		// Check for substantial changes by analyzing the differences
+		const originalLines = originalContent.split("\n");
+		const modifiedLines = modifiedContent.split("\n");
+
+		// Count non-whitespace-only changes
+		let substantialChangeCount = 0;
+		const maxLines = Math.max(originalLines.length, modifiedLines.length);
+
+		for (let i = 0; i < maxLines; i++) {
+			const originalLine = originalLines[i] || "";
+			const modifiedLine = modifiedLines[i] || "";
+
+			// Skip if both lines are empty or whitespace-only
+			if (originalLine.trim() === "" && modifiedLine.trim() === "") {
+				continue;
+			}
+
+			// Check if the lines are substantially different (not just whitespace)
+			const originalTrimmed = originalLine.trim();
+			const modifiedTrimmed = modifiedLine.trim();
+
+			if (originalTrimmed !== modifiedTrimmed) {
+				// This is a substantial change
+				substantialChangeCount++;
+			}
+		}
+
+		// Consider changes substantial if there are meaningful differences
+		// Require at least 1 substantial change or if the normalized content differs significantly
+		const normalizedDiffRatio = this._calculateNormalizedDiffRatio(
+			normalizedOriginal,
+			normalizedModified
+		);
+
+		return substantialChangeCount > 0 || normalizedDiffRatio > 0.05; // 5% threshold for normalized differences
+	}
+
+	/**
+	 * Calculates the ratio of differences between normalized content
+	 */
+	private _calculateNormalizedDiffRatio(
+		normalizedOriginal: string,
+		normalizedModified: string
+	): number {
+		const maxLength = Math.max(
+			normalizedOriginal.length,
+			normalizedModified.length
+		);
+
+		if (maxLength === 0) {
+			return 0;
+		}
+
+		// Simple character-by-character comparison
+		let differences = 0;
+		const minLength = Math.min(
+			normalizedOriginal.length,
+			normalizedModified.length
+		);
+
+		for (let i = 0; i < minLength; i++) {
+			if (normalizedOriginal[i] !== normalizedModified[i]) {
+				differences++;
+			}
+		}
+
+		// Add differences for the longer string's extra characters
+		differences += Math.abs(
+			normalizedOriginal.length - normalizedModified.length
+		);
+
+		return differences / maxLength;
 	}
 
 	// Add new _performFinalValidationAndCorrection method
