@@ -43,7 +43,14 @@ export class DiagnosticService {
 		selection?: vscode.Range,
 		maxTotalChars: number = 25000,
 		maxPerSeverity: number = 25,
-		token?: vscode.CancellationToken // Make token optional
+		token?: vscode.CancellationToken, // Make token optional
+		// NEW PARAMETER: Specify which severities to include. Defaults to all.
+		includeSeverities: vscode.DiagnosticSeverity[] = [
+			vscode.DiagnosticSeverity.Error,
+			vscode.DiagnosticSeverity.Warning,
+			vscode.DiagnosticSeverity.Information,
+			vscode.DiagnosticSeverity.Hint,
+		]
 	): Promise<string | undefined> {
 		const allDiagnostics = DiagnosticService.getDiagnosticsForUri(documentUri);
 		if (!allDiagnostics || allDiagnostics.length === 0) {
@@ -91,8 +98,10 @@ export class DiagnosticService {
 
 		if (selection) {
 			// Scenario 1: User has a selection - prioritize diagnostics within selection
-			filteredDiagnostics = allDiagnostics.filter((d) =>
-				selection.intersection(d.range)
+			filteredDiagnostics = allDiagnostics.filter(
+				(d) =>
+					selection?.intersection(d.range) &&
+					includeSeverities.includes(d.severity)
 			);
 			// Sort by severity (Error > Warning > Info > Hint) and then by line number
 			filteredDiagnostics.sort((a, b) => {
@@ -102,10 +111,9 @@ export class DiagnosticService {
 				return a.range.start.line - b.range.start.line;
 			});
 		} else {
-			// Scenario 2: No selection (whole file) - prioritize errors over warnings
-			// Filter out hints as they are often less critical for AI fixes
-			const relevantDiagnostics = allDiagnostics.filter(
-				(d) => d.severity !== vscode.DiagnosticSeverity.Hint
+			// Scenario 2: No selection (whole file) - filter by includeSeverities
+			const relevantDiagnostics = allDiagnostics.filter((d) =>
+				includeSeverities.includes(d.severity)
 			);
 
 			const errors = relevantDiagnostics.filter(
@@ -117,16 +125,27 @@ export class DiagnosticService {
 			const infos = relevantDiagnostics.filter(
 				(d) => d.severity === vscode.DiagnosticSeverity.Information
 			);
+			const hints = relevantDiagnostics.filter(
+				(d) => d.severity === vscode.DiagnosticSeverity.Hint
+			);
 
 			// Sort each group by line number
 			errors.sort((a, b) => a.range.start.line - b.range.start.line);
 			warnings.sort((a, b) => a.range.start.line - b.range.start.line);
 			infos.sort((a, b) => a.range.start.line - b.range.start.line);
+			hints.sort((a, b) => a.range.start.line - b.range.start.line);
 
-			// Combine: All errors, then limited warnings, then limited infos
+			// Combine: All errors, then limited warnings (if included), then limited infos (if included), etc.
 			filteredDiagnostics.push(...errors);
-			filteredDiagnostics.push(...warnings.slice(0, maxPerSeverity));
-			filteredDiagnostics.push(...infos.slice(0, maxPerSeverity / 2)); // Half as many infos
+			if (includeSeverities.includes(vscode.DiagnosticSeverity.Warning)) {
+				filteredDiagnostics.push(...warnings.slice(0, maxPerSeverity));
+			}
+			if (includeSeverities.includes(vscode.DiagnosticSeverity.Information)) {
+				filteredDiagnostics.push(...infos.slice(0, maxPerSeverity / 2)); // Half as many infos
+			}
+			if (includeSeverities.includes(vscode.DiagnosticSeverity.Hint)) {
+				filteredDiagnostics.push(...hints.slice(0, maxPerSeverity / 4)); // Even fewer hints
+			}
 		}
 
 		if (filteredDiagnostics.length === 0) {

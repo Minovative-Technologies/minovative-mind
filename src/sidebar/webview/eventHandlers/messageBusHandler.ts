@@ -614,6 +614,16 @@ export function initializeMessageBusHandler(
 				setLoadingState(message.value as boolean, elements);
 				break;
 			}
+			case "planExecutionStarted": {
+				appState.isPlanExecutionInProgress = true;
+				setLoadingState(appState.isLoading, elements);
+				break;
+			}
+			case "planExecutionEnded": {
+				appState.isPlanExecutionInProgress = false;
+				setLoadingState(appState.isLoading, elements);
+				break;
+			}
 			case "chatCleared": {
 				if (elements.chatContainer) {
 					elements.chatContainer.innerHTML = "";
@@ -623,6 +633,7 @@ export function initializeMessageBusHandler(
 				hideAllConfirmationAndReviewUIs(elements);
 				appState.pendingPlanData = null; // Ensure this is reset too
 				appState.pendingCommitReviewData = null; // Ensure this is reset too
+				appState.isPlanExecutionInProgress = false; // Reset plan execution state
 				updateEmptyChatPlaceholderVisibility(elements);
 				break;
 			}
@@ -675,6 +686,7 @@ export function initializeMessageBusHandler(
 				hideAllConfirmationAndReviewUIs(elements);
 				appState.pendingPlanData = null; // Ensure this is reset too
 				appState.pendingCommitReviewData = null; // Ensure this is reset too
+				appState.isPlanExecutionInProgress = false; // Reset plan execution state
 				updateEmptyChatPlaceholderVisibility(elements);
 				break;
 			}
@@ -753,6 +765,7 @@ export function initializeMessageBusHandler(
 				hideAllConfirmationAndReviewUIs(elements);
 
 				appState.isCommitActionInProgress = false; // Added as per instructions
+				appState.isPlanExecutionInProgress = false; // Reset plan execution state
 
 				console.log(
 					"[reenableInput] Calling setLoadingState(false); Confirming appState.isLoading is now false."

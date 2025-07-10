@@ -79,5 +79,6 @@ export interface WebviewAppState {
 	isLoading: boolean;
 	isCommitActionInProgress: boolean;
 	isCancellationInProgress: boolean;
+	isPlanExecutionInProgress: boolean; // New property to track plan execution state
 	totalKeys: number;
 }

@@ -471,10 +471,48 @@ export class PlanService {
 					  ),
 			};
 		} finally {
+			// Determine if the generated response is a confirmable plan
+			const isConfirmablePlanResponse =
+				finalResult.success &&
+				!!this.provider.pendingPlanGenerationContext?.textualPlanExplanation;
+
+			// Construct the aiResponseEnd message, ensuring plan-related data is included if applicable
+			const aiResponseEndValue: Record<string, any> = {
+				success: finalResult.success,
+				// Only provide error if 'success' is false or it's a cancellation
+				error: finalResult.success
+					? undefined // No error if successful
+					: finalResult.error,
+			};
+
+			if (
+				isConfirmablePlanResponse &&
+				this.provider.pendingPlanGenerationContext
+			) {
+				// Ensure plan-specific flags and data are sent for the webview to pick up
+				aiResponseEndValue.isPlanResponse = true;
+				aiResponseEndValue.requiresConfirmation = true;
+				// Structure planData for webview, similar to how restorePendingPlanConfirmation uses it
+				aiResponseEndValue.planData = {
+					type: "textualPlanPending", // Use "textualPlanPending" for webview message
+					originalRequest:
+						this.provider.pendingPlanGenerationContext.type === "chat"
+							? this.provider.pendingPlanGenerationContext.originalUserRequest
+							: undefined,
+					originalInstruction:
+						this.provider.pendingPlanGenerationContext.type === "editor"
+							? this.provider.pendingPlanGenerationContext.editorContext
+									?.instruction
+							: undefined,
+					relevantFiles:
+						this.provider.pendingPlanGenerationContext.relevantFiles,
+				};
+			}
+
+			// Post the message to webview
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
-				success: finalResult.success,
-				error: finalResult.error,
+				...aiResponseEndValue,
 			});
 			disposable?.dispose();
 			this.provider.activeOperationCancellationTokenSource?.dispose();
@@ -495,6 +533,12 @@ export class PlanService {
 			"model",
 			"User confirmed. Generating detailed execution plan (JSON)..."
 		);
+
+		// Notify webview that structured plan generation is starting - this will hide the stop button
+		this.provider.postMessageToWebview({
+			type: "updateLoadingState",
+			value: true,
+		});
 
 		let structuredPlanJsonString = "";
 		const token = this.provider.activeOperationCancellationTokenSource?.token;
@@ -653,11 +697,19 @@ export class PlanService {
 					},
 				});
 				this.provider.currentExecutionOutcome = "failed";
+
+				// Notify webview that structured plan generation has ended
+				this.provider.postMessageToWebview({
+					type: "updateLoadingState",
+					value: false,
+				});
+
 				await this.provider.endUserOperation("failed"); // Signal failure and re-enable input
 				return; // Important: return here to stop further execution
 			}
 
 			// If we reached here, executablePlan is valid. Proceed with execution.
+			// Note: We don't set loading state to false here because _executePlan will manage it
 			this.provider.pendingPlanGenerationContext = null;
 			await this._executePlan(
 				executablePlan,
@@ -666,6 +718,13 @@ export class PlanService {
 			);
 		} catch (error: any) {
 			const isCancellation = error.message === ERROR_OPERATION_CANCELLED;
+
+			// Notify webview that structured plan generation has ended
+			this.provider.postMessageToWebview({
+				type: "updateLoadingState",
+				value: false,
+			});
+
 			if (isCancellation) {
 				this.provider.postMessageToWebview({
 					type: "statusUpdate",
@@ -707,6 +766,17 @@ export class PlanService {
 			});
 			return;
 		}
+
+		// Notify webview that plan execution is starting - this will hide the stop button
+		this.provider.postMessageToWebview({
+			type: "updateLoadingState",
+			value: true,
+		});
+
+		// Notify webview that plan execution has started
+		this.provider.postMessageToWebview({
+			type: "planExecutionStarted",
+		});
 
 		try {
 			await vscode.window.withProgress(
@@ -798,6 +868,18 @@ export class PlanService {
 				plan.planDescription || "Unnamed Plan",
 				outcome
 			);
+
+			// Notify webview that plan execution has ended - this will re-enable inputs and show stop button if needed
+			this.provider.postMessageToWebview({
+				type: "updateLoadingState",
+				value: false,
+			});
+
+			// Notify webview that plan execution has ended
+			this.provider.postMessageToWebview({
+				type: "planExecutionEnded",
+			});
+
 			// this.provider.postMessageToWebview({ type: "reenableInput" }); //
 			await this.provider.endUserOperation(outcome); // REPLACED with centralized call
 		}
@@ -1571,31 +1653,33 @@ Complete Modified File Content:`;
 			// Give VS Code a moment to update diagnostics for all files
 			await new Promise((resolve) => setTimeout(resolve, 500));
 
-			let allErrorsAndWarnings: vscode.Diagnostic[] = [];
+			let allErrors: vscode.Diagnostic[] = [];
 			let aggregatedFormattedDiagnostics = "";
-			const filesWithIssues = new Set<vscode.Uri>();
+			const filesWithErrors = new Set<vscode.Uri>();
 
 			// Collect diagnostics from all affected files
 			for (const fileUri of affectedFileUris) {
 				const diagnosticsForFile =
 					DiagnosticService.getDiagnosticsForUri(fileUri);
-				const errorsAndWarningsForFile = diagnosticsForFile.filter(
-					(d) =>
-						d.severity === vscode.DiagnosticSeverity.Error ||
-						d.severity === vscode.DiagnosticSeverity.Warning
+				const errorsForFile = diagnosticsForFile.filter(
+					(d) => d.severity === vscode.DiagnosticSeverity.Error
 				);
 
-				if (errorsAndWarningsForFile.length > 0) {
-					allErrorsAndWarnings.push(...errorsAndWarningsForFile);
-					filesWithIssues.add(fileUri);
+				if (errorsForFile.length > 0) {
+					// Only proceed if actual errors are found
+					allErrors.push(...errorsForFile); // This array will now ONLY contain errors
+					filesWithErrors.add(fileUri); // filesWithErrors will now ONLY contain files with errors
+
+					// Call formatContextualDiagnostics with the new `includeSeverities` parameter
 					const formattedForFile =
 						await DiagnosticService.formatContextualDiagnostics(
 							fileUri,
 							rootUri,
-							undefined,
-							5000,
-							undefined,
-							token
+							undefined, // No selection
+							5000, // Max total chars
+							undefined, // Use default maxPerSeverity for errors
+							token,
+							[vscode.DiagnosticSeverity.Error] // EXPLICITLY request ONLY Error diagnostics
 						);
 					if (formattedForFile) {
 						aggregatedFormattedDiagnostics += formattedForFile + "\n";
@@ -1603,25 +1687,25 @@ Complete Modified File Content:`;
 				}
 			}
 
-			if (allErrorsAndWarnings.length === 0) {
+			if (allErrors.length === 0) {
 				const fileNames = Array.from(affectedFileUris)
 					.map((uri) => path.relative(rootUri.fsPath, uri.fsPath))
 					.join(", ");
 				this._postChatUpdateForPlanExecution({
 					type: "appendRealtimeModelMessage",
 					value: {
-						text: `All modifications validated successfully for: \`${fileNames}\`. No errors or warnings found.`,
+						text: `All modifications validated successfully for: \`${fileNames}\`. No errors found.`,
 					},
 				});
 				return true; // Success! All diagnostics resolved.
 			} else {
-				const fileNames = Array.from(filesWithIssues)
+				const fileNames = Array.from(filesWithErrors)
 					.map((uri) => path.relative(rootUri.fsPath, uri.fsPath))
 					.join(", ");
 				this._postChatUpdateForPlanExecution({
 					type: "appendRealtimeModelMessage",
 					value: {
-						text: `Final validation failed for files: \`${fileNames}\` (found ${allErrorsAndWarnings.length} issues). Attempting AI self-correction (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
+						text: `Final validation failed for files: \`${fileNames}\` (found ${allErrors.length} errors). Attempting AI self-correction (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
 						isError: true,
 					},
 				});
@@ -1754,10 +1838,10 @@ Complete Modified File Content:`;
 		this._postChatUpdateForPlanExecution({
 			type: "appendRealtimeModelMessage",
 			value: {
-				text: `Overall validation failed after ${this.MAX_CORRECTION_PLAN_ATTEMPTS} attempts to auto-correct. Please review the affected files manually.`,
+				text: `Overall validation failed after ${this.MAX_CORRECTION_PLAN_ATTEMPTS} attempts to auto-correct errors. Please review the affected files manually.`,
 				isError: true,
 			},
 		});
-		return false; // All attempts exhausted, still issues
+		return false; // All attempts exhausted, still errors
 	}
 }

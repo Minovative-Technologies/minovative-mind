@@ -130,7 +130,8 @@ function setLoadingState(
 		!planConfirmationVisible &&
 		!planParseErrorVisible &&
 		!commitReviewVisible &&
-		!appState.isCancellationInProgress
+		!appState.isCancellationInProgress &&
+		!appState.isPlanExecutionInProgress // Hide stop button during plan execution
 	) {
 		elements.cancelGenerationButton.style.display = "inline-flex";
 	} else {

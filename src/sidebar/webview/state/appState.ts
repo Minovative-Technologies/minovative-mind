@@ -32,5 +32,6 @@ export const appState: WebviewAppState = {
 	isLoading: false,
 	isCommitActionInProgress: false, // Added as per instruction
 	isCancellationInProgress: false, // Initialize the new flag
+	isPlanExecutionInProgress: false, // Initialize plan execution tracking
 	totalKeys: 0,
 };
