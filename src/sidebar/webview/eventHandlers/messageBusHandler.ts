@@ -53,37 +53,9 @@ export function initializeMessageBusHandler(
 					message.relevantFiles
 				);
 
-				if (
-					message.isPlanResponse &&
-					message.requiresConfirmation &&
-					message.planData
-				) {
-					console.log("Received aiResponse with confirmable plan.");
-					// Ensure createPlanConfirmationUI is called once to set up its event listeners
-					createPlanConfirmationUI(
-						elements,
-						postMessageToExtension,
-						updateStatus,
-						setLoadingState
-					);
-					appState.pendingPlanData = message.planData as {
-						type: string;
-						originalRequest?: string;
-						originalInstruction?: string;
-						relevantFiles?: string[];
-					};
-					showPlanConfirmationUI(
-						elements,
-						appState.pendingPlanData,
-						postMessageToExtension,
-						updateStatus,
-						setLoadingState
-					);
-					setLoadingState(false, elements);
-					if (elements.cancelGenerationButton) {
-						elements.cancelGenerationButton.style.display = "none";
-					}
-				} else if (message.isLoading === false) {
+				// REMOVED: This block was prematurely showing the plan confirmation UI.
+				// The plan confirmation UI should only be shown after aiResponseEnd for streaming plans.
+				if (message.isLoading === false) {
 					setLoadingState(false, elements);
 				}
 				break;
@@ -131,6 +103,9 @@ export function initializeMessageBusHandler(
 					const deleteButton = restoredMessageElement.querySelector(
 						".delete-button"
 					) as HTMLButtonElement | null;
+					const editButton = restoredMessageElement.querySelector(
+						".edit-button"
+					) as HTMLButtonElement | null;
 
 					if (appState.currentAiMessageContentElement) {
 						// Populate the accumulated text from the restored state
@@ -148,6 +123,9 @@ export function initializeMessageBusHandler(
 							if (deleteButton) {
 								deleteButton.disabled = false;
 							}
+							if (editButton) {
+								editButton.disabled = false;
+							}
 							stopTypingAnimation(); // Ensure animation is stopped
 						} else {
 							// If the stream is NOT complete, render accumulated content PLUS the loading dots.
@@ -160,6 +138,9 @@ export function initializeMessageBusHandler(
 							} // Disable buttons while generating
 							if (deleteButton) {
 								deleteButton.disabled = true;
+							}
+							if (editButton) {
+								editButton.disabled = true;
 							}
 						}
 
@@ -260,61 +241,100 @@ export function initializeMessageBusHandler(
 			case "aiResponseEnd": {
 				stopTypingAnimation();
 				console.log("Received aiResponseEnd. Stream finished.");
+
+				const isCancellation =
+					typeof message.error === "string" &&
+					message.error.includes("cancelled");
+
 				if (appState.currentAiMessageContentElement) {
 					appState.currentAccumulatedText += appState.typingBuffer;
-					const renderedHtml = md.render(appState.currentAccumulatedText);
-					appState.currentAiMessageContentElement.innerHTML = renderedHtml;
+					let finalContentHtml: string;
+
+					if (!message.success && isCancellation) {
+						finalContentHtml = md.render("*Operation cancelled.*");
+					} else if (!message.success && message.error) {
+						const errorMessageContent =
+							typeof message.error === "string"
+								? message.error
+								: "Unknown error occurred during AI response streaming.";
+						finalContentHtml = md.render(`Error: ${errorMessageContent}`);
+					} else {
+						finalContentHtml = md.render(appState.currentAccumulatedText);
+					}
+					// Ensure rendering happens BEFORE plan confirmation logic
+					appState.currentAiMessageContentElement.innerHTML = finalContentHtml;
 
 					const messageElement =
 						appState.currentAiMessageContentElement.parentElement;
 					if (messageElement) {
-						const copyButton = messageElement.querySelector(
-							".copy-button"
-						) as HTMLButtonElement | null;
-						if (copyButton) {
-							copyButton.disabled = false;
-						}
-						const deleteButton = messageElement.querySelector(
-							".delete-button"
-						) as HTMLButtonElement | null;
-						if (deleteButton) {
-							deleteButton.disabled = false;
-						}
+						// Re-enable copy, delete, and edit buttons on the message
+						messageElement
+							.querySelector(".copy-button")
+							?.removeAttribute("disabled");
+						messageElement
+							.querySelector(".delete-button")
+							?.removeAttribute("disabled");
+						messageElement
+							.querySelector(".edit-button")
+							?.removeAttribute("disabled");
 					}
 				} else {
 					console.warn(
-						"aiResponseEnd received but currentAiMessageContentElement is null. Attempting to clear state."
+						"aiResponseEnd received but currentAiMessageContentElement is null. Fallback to appending new message."
 					);
+					// Fallback: If for some reason the element wasn't tracked, append a new message.
+					// This should generally only happen if a previous streaming message was somehow malformed or lost.
+					if (!message.success && isCancellation) {
+						appendMessage(
+							elements,
+							"Model",
+							md.render("*Operation cancelled.*"),
+							"ai-message error-message",
+							true
+						);
+					} else if (!message.success && message.error) {
+						const errorMessageContent =
+							typeof message.error === "string"
+								? message.error
+								: "Unknown error occurred during AI operation.";
+						appendMessage(
+							elements,
+							"Model",
+							md.render(`Error: ${errorMessageContent}`),
+							"ai-message error-message",
+							true
+						);
+					} else {
+						// If successful but currentAiMessageContentElement was null, append the accumulated text.
+						appendMessage(
+							elements,
+							"Model",
+							md.render(appState.currentAccumulatedText),
+							"ai-message",
+							true
+						);
+					}
 				}
 
-				resetStreamingAnimationState();
+				resetStreamingAnimationState(); // Clear animation state
+				appState.isCancellationInProgress = false; // Reset cancellation flag after processing content update
 
-				appState.isCancellationInProgress = false; // Add this line
+				// Common cleanup for isCommitActionInProgress regardless of outcome
+				appState.isCommitActionInProgress = false;
 
-				if (appState.isCancellationInProgress) {
-					// If cancellation is in progress, suppress status updates from aiResponseEnd.
-					// The final status will be handled by the 'statusUpdate' message from the backend.
-					appState.isCommitActionInProgress = false;
-					// setLoadingState(false, elements); // This line is removed as inputs should stay disabled during cancellation.
-					updateEmptyChatPlaceholderVisibility(elements);
-					console.log(
-						"[Webview] aiResponseEnd status update suppressed due to ongoing cancellation. Inputs remain disabled."
-					);
-					break;
+				// Handle status bar updates for errors/cancellations
+				if (!message.success) {
+					const statusMessage = isCancellation
+						? "AI operation cancelled."
+						: typeof message.error === "string"
+						? `AI Operation Failed: ${message.error}`
+						: "AI operation failed or was cancelled.";
+					updateStatus(elements, statusMessage, true);
 				}
 
-				if (!message.success && message.error) {
-					const errorMessageContent =
-						typeof message.error === "string"
-							? message.error
-							: "Unknown error occurred during AI response streaming.";
-					updateStatus(
-						elements,
-						`AI Stream Error: ${errorMessageContent}`,
-						true
-					);
-				}
-
+				// This block is the SOLE place where showPlanConfirmationUI is called for newly generated plans.
+				// It must contain calls to createPlanConfirmationUI, set appState.pendingPlanData, call showPlanConfirmationUI,
+				// and hide the cancel button.
 				if (message.success && message.isPlanResponse && message.planData) {
 					console.log("aiResponseEnd indicates confirmable plan.");
 					createPlanConfirmationUI(
@@ -336,40 +356,17 @@ export function initializeMessageBusHandler(
 						updateStatus,
 						setLoadingState
 					);
-					appState.isCommitActionInProgress = false; // Added as per instructions
-					setLoadingState(false, elements);
 					if (elements.cancelGenerationButton) {
 						elements.cancelGenerationButton.style.display = "none";
 					}
 				} else if (message.success) {
 					console.log("aiResponseEnd indicates successful chat response.");
-					// appState.isCommitActionInProgress = false; // REMOVED as per instructions
-					setLoadingState(false, elements);
-					updateEmptyChatPlaceholderVisibility(elements);
-				} else {
-					console.log("aiResponseEnd indicates failed streaming operation.");
-					if (message.error) {
-						const errorMessageContent =
-							typeof message.error === "string"
-								? message.error
-								: "Unknown error occurred during AI operation.";
-						// Display the specific error message to the user
-						updateStatus(
-							elements,
-							`AI Operation Failed: ${errorMessageContent}`,
-							true
-						);
-					} else {
-						// Fallback for cases where no specific error message is provided
-						updateStatus(
-							elements,
-							"AI operation failed or was cancelled.",
-							true
-						);
-					}
-					appState.isCommitActionInProgress = false; // Added as per instructions
-					setLoadingState(false, elements); // Ensure inputs are re-enabled
+					// No special UI logic here, main UI state handled at the end
 				}
+
+				// setLoadingState(false, elements) must occur at the very end of this aiResponseEnd block.
+				setLoadingState(false, elements);
+				updateEmptyChatPlaceholderVisibility(elements);
 				break;
 			}
 
@@ -743,6 +740,12 @@ export function initializeMessageBusHandler(
 						) as HTMLButtonElement | null;
 						if (deleteButton) {
 							deleteButton.disabled = false;
+						}
+						const editButton = messageElement.querySelector(
+							".edit-button"
+						) as HTMLButtonElement | null;
+						if (editButton) {
+							editButton.disabled = false;
 						}
 					}
 				}

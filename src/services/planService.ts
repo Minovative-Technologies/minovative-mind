@@ -208,11 +208,6 @@ export class PlanService {
 			};
 			await this.provider.updatePersistedPendingPlanData(dataToPersist);
 			// End of added code
-
-			// Modified UI handling after plan generation
-			await this._handlePostTextualPlanGenerationUI(
-				this.provider.pendingPlanGenerationContext!
-			);
 		} catch (error: any) {
 			if (this.provider.currentAiStreamingState) {
 				this.provider.currentAiStreamingState.isError = true;

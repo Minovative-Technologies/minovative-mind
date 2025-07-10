@@ -24,6 +24,7 @@ import {
 } from "../ui/confirmationAndReviewUIs";
 import { stopTypingAnimation } from "../ui/typingAnimation";
 import { RequiredDomElements } from "../types/webviewTypes"; // Correct import path
+import { md } from "../utils/markdownRenderer"; // Import markdown renderer
 
 /**
  * Initializes all button and interactive element event listeners in the webview.
@@ -179,34 +180,51 @@ export function initializeButtonEventListeners(
 	// Cancel Generation Button
 	cancelGenerationButton.addEventListener("click", () => {
 		console.log("Cancel Generation button clicked.");
-		// Start of modifications
 		elements.planConfirmationContainer.style.display = "none";
 		elements.planParseErrorContainer.style.display = "none";
 		elements.commitReviewContainer.style.display = "none";
 		appState.pendingPlanData = null;
 		appState.pendingCommitReviewData = null;
-		// End of modifications
 
-		appState.isCancellationInProgress = true; // NEW LINE
-		postMessageToExtension({ type: "universalCancel" }); // Modified type
-		updateStatus(elements, "Cancelling operations...", false); // Modified status message
-		// After cancelling, immediately disable the button and set loading to false.
-		// The `reenableInput` message from the extension might also do this, but
-		// a quick UI response is good.
-		// setLoadingState(false, elements); // This line is removed per instructions.
-		stopTypingAnimation(); // Ensure typing animation stops
-		// Clear any current streaming message content if it was interrupted
+		appState.isCancellationInProgress = true; // Set cancellation flag
+
 		if (appState.currentAiMessageContentElement) {
-			appState.currentAccumulatedText += appState.typingBuffer;
-			// Simple text content as markdown rendering might be incomplete
-			appState.currentAiMessageContentElement.textContent =
-				appState.currentAccumulatedText;
+			stopTypingAnimation();
+			appState.currentAiMessageContentElement.innerHTML = md.render(
+				"*Cancelling operation...*"
+			);
+
+			const messageElement =
+				appState.currentAiMessageContentElement.parentElement;
+			if (messageElement) {
+				const copyButton = messageElement.querySelector(
+					".copy-button"
+				) as HTMLButtonElement | null;
+				const deleteButton = messageElement.querySelector(
+					".delete-button"
+				) as HTMLButtonElement | null;
+				const editButton = messageElement.querySelector(
+					".edit-button"
+				) as HTMLButtonElement | null;
+
+				if (copyButton) {
+					copyButton.disabled = true;
+				}
+				if (deleteButton) {
+					deleteButton.disabled = true;
+				}
+				if (editButton) {
+					editButton.disabled = true;
+				}
+			}
 			appState.currentAiMessageContentElement = null;
 			appState.typingBuffer = "";
 			appState.currentAccumulatedText = "";
 		}
-		// Re-enable inputs after cancellation cleanup
-		setLoadingState(false, elements);
+
+		postMessageToExtension({ type: "universalCancel" });
+		updateStatus(elements, "Cancelling operations...", false);
+		// Removed setLoadingState(false, elements); as per instructions, relying on reenableInput
 	});
 
 	// Chat Container (for message actions: copy, delete, open file)
