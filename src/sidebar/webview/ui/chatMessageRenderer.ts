@@ -566,6 +566,43 @@ export function appendMessage(
 	updateEmptyChatPlaceholderVisibility(elements);
 }
 
+/**
+ * Re-enables all message action buttons (copy, delete, edit) for all history messages.
+ * This is called when the loading state changes to false to ensure buttons are interactive.
+ * @param elements An object containing references to all required DOM elements.
+ */
+export function reenableAllMessageActionButtons(
+	elements: RequiredDomElements
+): void {
+	const allHistoryMessages = elements.chatContainer.querySelectorAll(
+		".message[data-is-history='true']"
+	);
+
+	allHistoryMessages.forEach((messageElement) => {
+		const copyButton = messageElement.querySelector(
+			".copy-button"
+		) as HTMLButtonElement | null;
+		const deleteButton = messageElement.querySelector(
+			".delete-button"
+		) as HTMLButtonElement | null;
+		const editButton = messageElement.querySelector(
+			".edit-button"
+		) as HTMLButtonElement | null;
+
+		if (copyButton) {
+			copyButton.disabled = false;
+		}
+		if (deleteButton) {
+			deleteButton.disabled = false;
+		}
+		if (editButton) {
+			editButton.disabled = false;
+		}
+	});
+
+	console.log("[ChatMessageRenderer] Re-enabled all message action buttons.");
+}
+
 // Helper functions (Instruction 6)
 
 function sendEditedMessageToExtension(

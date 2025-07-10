@@ -9,6 +9,7 @@ import {
 	updateStatus,
 } from "./ui/statusManager";
 import { createPlanConfirmationUI } from "./ui/confirmationAndReviewUIs";
+import { reenableAllMessageActionButtons } from "./ui/chatMessageRenderer";
 import { RequiredDomElements } from "./types/webviewTypes";
 
 /**
@@ -175,6 +176,8 @@ function setLoadingState(
 	// Update empty chat placeholder visibility only when not loading
 	if (!loading) {
 		updateEmptyChatPlaceholderVisibility(elements);
+		// Re-enable all message action buttons when loading becomes false
+		reenableAllMessageActionButtons(elements);
 	}
 }
 

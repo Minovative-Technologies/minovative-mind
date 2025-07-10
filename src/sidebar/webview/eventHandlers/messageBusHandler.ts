@@ -1,4 +1,7 @@
-import { appendMessage } from "../ui/chatMessageRenderer";
+import {
+	appendMessage,
+	reenableAllMessageActionButtons,
+} from "../ui/chatMessageRenderer";
 import {
 	updateApiKeyStatus,
 	updateStatus,
@@ -363,6 +366,9 @@ export function initializeMessageBusHandler(
 					console.log("aiResponseEnd indicates successful chat response.");
 					// No special UI logic here, main UI state handled at the end
 				}
+
+				// Re-enable all message action buttons to ensure they're interactive after AI operations
+				reenableAllMessageActionButtons(elements);
 
 				// setLoadingState(false, elements) must occur at the very end of this aiResponseEnd block.
 				setLoadingState(false, elements);
@@ -761,6 +767,9 @@ export function initializeMessageBusHandler(
 						}
 					}
 				}
+
+				// Re-enable all message action buttons to ensure they're interactive
+				reenableAllMessageActionButtons(elements);
 
 				hideAllConfirmationAndReviewUIs(elements);
 
