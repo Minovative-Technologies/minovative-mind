@@ -269,6 +269,7 @@ The extension incorporates sophisticated caching strategies to enhance performan
 - **Git Integration**: Can stage all changes in the workspace and build/execute git commit commands with AI-generated messages.
 - **Utility Features**: Includes utilities for formatting file trees, sanitizing error messages, handling workspace-relative paths, and detecting merge conflicts in file content.
 - **Advanced Error Handling**: Comprehensive error handling with user-friendly messages and automatic retry mechanisms for transient failures.
+- **Enhanced API Error Handling**: The extension now incorporates an advanced, robust retry mechanism for AI API requests. Specifically, it introduces a 60-second (1-minute) delay when a '429 Too Many Requests' (quota exceeded) error occurs. This ensures graceful recovery, prevents continuous hammering of the API, and automatically retries operations after a cool down period, significantly improving the reliability and resilience of AI interactions.
 - **Streaming AI Responses**: Real-time streaming of AI responses with typing animations and progress indicators.
 
 By combining these features, Minovative Mind aims to provide a comprehensive AI-powered assistant directly within `VS Code`, significantly streamlining development tasks and improving overall developer productivity.
