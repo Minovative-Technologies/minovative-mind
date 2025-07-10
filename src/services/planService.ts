@@ -27,6 +27,8 @@ import { GitConflictResolutionService } from "./gitConflictResolutionService";
 import { applyAITextEdits } from "../utils/codeUtils"; // For applying precise text edits
 import { DiagnosticService } from "../utils/diagnosticUtils"; // Import DiagnosticService
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter"; // Import formatUserFacingErrorMessage
+import { showErrorNotification } from "../utils/notificationUtils"; // Add this import
+import { isAIOutputLikelyErrorMessage } from "../utils/aiOutputValidator"; // Add this import
 import { UrlContextService } from "./urlContextService";
 
 export class PlanService {
@@ -657,8 +659,12 @@ export class PlanService {
 					},
 				});
 				this.provider.currentExecutionOutcome = "failed";
-				vscode.window.showErrorMessage(
-					`Minovative Mind: Failed to parse AI plan after ${this.MAX_PLAN_PARSE_RETRIES} attempts. Check sidebar for retry options.`
+				// >>> REPLACE with showErrorNotification <<<
+				showErrorNotification(
+					lastParsingError || "Failed to parse AI plan.",
+					"Failed to parse AI plan after multiple attempts. Check sidebar for retry options.",
+					"Minovative Mind: ",
+					planContext.workspaceRootUri
 				);
 				await this.provider.endUserOperation("failed"); // Signal failure and re-enable input
 				return; // Important: return here to stop further execution
@@ -913,6 +919,25 @@ The 'File Path' itself conveys important structural information; ensure the cont
 								undefined,
 								combinedToken
 							);
+
+							// >>> NEW VALIDATION LOGIC FOR CREATE FILE <<<
+							if (isAIOutputLikelyErrorMessage(content ?? "")) {
+								const errorDetails = `AI attempted to create '${step.path}' but generated an error message instead of code. Please inspect AI output in chat.`;
+								console.error(
+									`[MinovativeMind] ${errorDetails}\nProblematic AI Output:\n${content}`
+								);
+								showErrorNotification(
+									new Error(errorDetails),
+									"AI generated an error message instead of code.",
+									`File creation failed for '${step.path}': `,
+									rootUri,
+									"Open Chat"
+								);
+								throw new Error(
+									`AI output validation failed for ${step.path}: Generated error message.`
+								);
+							}
+							// >>> END NEW VALIDATION LOGIC <<<
 						}
 						await typeContentIntoEditor(editor, content ?? "", combinedToken);
 
@@ -1004,6 +1029,26 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 							.replace(/^```[a-z]*\n?/, "")
 							.replace(/\n?```$/, "")
 							.trim();
+
+						// >>> NEW VALIDATION LOGIC FOR MODIFY FILE <<<
+						if (isAIOutputLikelyErrorMessage(modifiedContent)) {
+							const errorDetails = `AI attempted to modify '${step.path}' but generated an error message instead of code. Please inspect AI output in chat.`;
+							console.error(
+								`[MinovativeMind] ${errorDetails}\nProblematic AI Output:\n${modifiedContent}`
+							);
+							showErrorNotification(
+								new Error(errorDetails),
+								"AI generated an error message instead of code.",
+								`File modification failed for '${step.path}': `,
+								rootUri,
+								"Open Chat" // Offer to open chat, if that's a relevant action
+							);
+							// Crucial: Throw an error to stop execution of this step and trigger the step retry/skip/cancel logic
+							throw new Error(
+								`AI output validation failed for ${step.path}: Generated error message.`
+							);
+						}
+						// >>> END NEW VALIDATION LOGIC <<<
 
 						if (modifiedContent !== existingContent) {
 							// Ensure the file is open in an editor to apply precise edits
@@ -1160,11 +1205,13 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 								isError: true,
 							},
 						});
-						const userChoice = await vscode.window.showErrorMessage(
-							`Minovative Mind: Step ${
+						const userChoice = await showErrorNotification(
+							error, // Pass the original error for better formatting context
+							`Step ${
 								index + 1
-							}/${totalSteps} failed: ${errorMsg}\n\nWhat would you like to do?`,
-							{ modal: true }, // Modal to block further interaction until decision
+							}/${totalSteps} failed. What would you like to do?`, // Default message for notification
+							`Plan Step Failed for '${step.description}': `, // Context prefix for notification
+							rootUri, // Pass workspace root for path sanitization
 							"Retry Step",
 							"Skip Step",
 							"Cancel Plan"

@@ -18,6 +18,11 @@ import { PlanService } from "../services/planService";
 import { ChatService } from "../services/chatService";
 import { CommitService } from "../services/commitService";
 import { GitConflictResolutionService } from "../services/gitConflictResolutionService";
+import {
+	showInfoNotification,
+	showWarningNotification,
+	showErrorNotification,
+} from "../utils/notificationUtils"; // Add this import
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -415,5 +420,69 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	public async cancelPendingPlan(): Promise<void> {
 		await this.triggerUniversalCancellation();
+	}
+
+	private async _showPlanCompletionNotification(
+		description: string,
+		outcome: sidebarTypes.ExecutionOutcome
+	): Promise<void> {
+		let message: string;
+		let isError: boolean;
+
+		switch (outcome) {
+			case "success":
+				message = `Plan for '${description}' completed successfully!`;
+				isError = false;
+				break;
+			case "cancelled":
+				message = `Plan for '${description}' was cancelled.`;
+				isError = true;
+				break;
+			case "failed":
+				message = `Plan for '${description}' failed. Check sidebar for details.`;
+				isError = true;
+				break;
+		}
+
+		this.chatHistoryManager.addHistoryEntry("model", message);
+		this.chatHistoryManager.restoreChatHistoryToWebview();
+
+		if (this.isSidebarVisible === true) {
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: message,
+				isError: isError,
+			});
+		} else {
+			let notificationFunction: (
+				message: string,
+				...items: string[]
+			) => Thenable<string | undefined>;
+
+			switch (outcome) {
+				case "success":
+					notificationFunction = showInfoNotification; // Use new utility
+					break;
+				case "cancelled":
+					notificationFunction = showWarningNotification; // Use new utility
+					break;
+				case "failed":
+					notificationFunction = (msg: string, ...items: string[]) =>
+						showErrorNotification(
+							msg,
+							`Plan for '${description}' failed.`,
+							"Minovative Mind: ",
+							this.workspaceRootUri,
+							...items
+						); // Use new utility, pass original message to it
+					break;
+			}
+
+			const result = await notificationFunction(message, "Open Sidebar"); // Pass message and items
+
+			if (result === "Open Sidebar") {
+				vscode.commands.executeCommand("minovative-mind.activitybar.focus");
+			}
+		}
 	}
 }
