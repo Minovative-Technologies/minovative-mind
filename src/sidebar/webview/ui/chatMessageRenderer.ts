@@ -4,13 +4,14 @@ import {
 	faExclamationTriangle,
 	faCopy,
 	faTrashCan,
+	faPenToSquare, // Added for edit button
 } from "../utils/iconHelpers";
 import { postMessageToExtension } from "../utils/vscodeApi";
 import { appState } from "../state/appState";
 import { stopTypingAnimation, startTypingAnimation } from "./typingAnimation";
 import { updateEmptyChatPlaceholderVisibility } from "./statusManager";
 import { RequiredDomElements } from "../types/webviewTypes";
-import { initializeDomElements } from "../state/domElements";
+import { initializeDomElements } from "../state/domElements"; // Preserving unused import
 
 /**
  * Appends a chat message to the chat container.
@@ -19,12 +20,12 @@ import { initializeDomElements } from "../state/domElements";
  * @param elements An object containing references to all required DOM elements.
  * @param sender The sender of the message (e.g., "You", "Model", "System").
  * @param text The content of the message in Markdown format.
- * @param className Additional CSS classes to apply to the message element.
- * @param isHistoryMessage True if this message is being restored from history.
- * @param diffContent Optional string content for a code diff block.
- * @param relevantFiles Optional array of file paths related to the AI response.
- * @param messageIndexForHistory Optional index of the message in history for data-attributes.
- * @param isRelevantFilesExpandedForHistory Optional boolean indicating if relevant files should be expanded for history messages.
+ * @param className Optional CSS classes for the message element.
+ * @param isHistoryMessage Whether the message is loaded from history.
+ * @param diffContent Optional string for code diff to display.
+ * @param relevantFiles Optional array of strings for relevant files.
+ * @param messageIndexForHistory Optional index for messages loaded from history, used for editing/deleting.
+ * @param isRelevantFilesExpandedForHistory Optional boolean indicating if relevant files section was expanded in history.
  */
 export function appendMessage(
 	elements: RequiredDomElements,
@@ -115,10 +116,8 @@ export function appendMessage(
 			const diffLines = trimmedDiffContent.split("\n");
 			let oldLine = 1;
 			let newLine = 1;
-			let hunkBuffer: HTMLDivElement[] = [];
-			let hunkStartIndex = 0;
 
-			function flushHunk(hunk: HTMLDivElement[], hunkIndex: number) {
+			function flushHunk(hunk: HTMLDivElement[]) {
 				if (hunk.length === 0) {
 					return;
 				}
@@ -132,9 +131,7 @@ export function appendMessage(
 			}
 
 			let currentHunk: HTMLDivElement[] = [];
-			let hunkIndex = 0;
 			let inHunk = false;
-			let totalHunks = 0;
 
 			diffLines.forEach((line, i) => {
 				const lineWrapper = document.createElement("div");
@@ -184,8 +181,7 @@ export function appendMessage(
 					inHunk = true;
 				} else {
 					if (inHunk) {
-						flushHunk(currentHunk, hunkIndex++);
-						totalHunks++;
+						flushHunk(currentHunk);
 						currentHunk = [];
 						inHunk = false;
 					}
@@ -193,8 +189,7 @@ export function appendMessage(
 				}
 				// If last line, flush any remaining hunk
 				if (i === diffLines.length - 1 && currentHunk.length > 0) {
-					flushHunk(currentHunk, hunkIndex++);
-					totalHunks++;
+					flushHunk(currentHunk);
 					currentHunk = [];
 				}
 			});
@@ -270,6 +265,12 @@ export function appendMessage(
 			li.textContent = filePath;
 			li.dataset.filepath = filePath;
 			li.title = `Open ${filePath}`;
+			li.addEventListener("click", () => {
+				postMessageToExtension({
+					type: "openFile",
+					value: filePath,
+				});
+			});
 			fileList.appendChild(li);
 		});
 
@@ -286,6 +287,7 @@ export function appendMessage(
 
 	let copyButton: HTMLButtonElement | null = null;
 	let deleteButton: HTMLButtonElement | null = null;
+	let editButton: HTMLButtonElement | null = null; // Declare editButton
 
 	if (isHistoryMessage) {
 		if (
@@ -302,12 +304,195 @@ export function appendMessage(
 			deleteButton.title = "Delete Message";
 			setIconForButton(deleteButton, faTrashCan);
 
+			// --- Edit Button Creation (Instruction 2) ---
+			if (className.includes("user-message")) {
+				// Only for user messages
+				editButton = document.createElement("button");
+				editButton.classList.add("edit-button");
+				editButton.title = "Edit Message";
+				setIconForButton(editButton, faPenToSquare); // Set the edit icon
+			}
+
+			// NEW LOGIC for initial button disabled state based on appState.isLoading
+			const disableButtonsInitially = appState.isLoading;
+
+			if (copyButton) {
+				copyButton.disabled = disableButtonsInitially;
+			}
+			if (deleteButton) {
+				deleteButton.disabled = disableButtonsInitially;
+			}
+			if (editButton) {
+				editButton.disabled = disableButtonsInitially;
+			}
+
 			const messageActions = document.createElement("div");
 			messageActions.classList.add("message-actions");
 			messageActions.appendChild(copyButton);
 			messageActions.appendChild(deleteButton);
+			// --- Append Edit Button (Instruction 3) ---
+			if (editButton) {
+				messageActions.appendChild(editButton);
+			}
 
 			messageElement.appendChild(messageActions);
+
+			// --- Edit Mode Activation (Instruction 4) and Key Event Handling (Instruction 5) ---
+			if (editButton) {
+				editButton.addEventListener("click", () => {
+					// Get the messageIndexForHistory
+					if (messageIndexForHistory === undefined) {
+						console.error(
+							"[ChatMessageRenderer] Message index not found for editing."
+						);
+						return;
+					}
+
+					// Get the currentTextElement and store its textContent as originalText
+					const currentTextElement = messageElement.querySelector(
+						".message-text-content"
+					) as HTMLSpanElement;
+					const originalText = currentTextElement?.textContent || "";
+
+					// Create a new textarea element
+					const textarea = document.createElement("textarea");
+					textarea.classList.add("message-text-content", "editing-textarea");
+					textarea.value = originalText.trim(); // Set textarea.value to originalText.trim()
+					textarea.rows = Math.max(3, originalText.split("\n").length); // Set textarea.rows
+
+					// Replace currentTextElement with textarea
+					currentTextElement?.replaceWith(textarea);
+
+					// Hide messageActions during editing
+					if (messageActions) {
+						messageActions.style.opacity = "0";
+						messageActions.style.pointerEvents = "none";
+					}
+
+					// Focus the textarea
+					textarea.focus();
+
+					// Inner event handlers to manage scope and allow removal
+					const handleKeydown = (e: KeyboardEvent) => {
+						if (e.key === "Enter" && !e.shiftKey) {
+							// On Enter (without Shift)
+							e.preventDefault();
+							const newContent = textarea.value.trim();
+							if (newContent !== originalText.trim()) {
+								// If newContent !== originalText.trim()
+								// 1. Visually update the message: Create new span, replace textarea with span
+								const newTextSpan = document.createElement("span");
+								newTextSpan.classList.add("message-text-content");
+								newTextSpan.innerHTML = md.render(newContent);
+								textarea.replaceWith(newTextSpan);
+
+								// 2. Add the temporary CSS class `user-message-edited-pending-ai` to the parent `messageElement`
+								messageElement.classList.add("user-message-edited-pending-ai");
+
+								// 6. Ensure messageActions for the edited message are visible and interactive.
+								if (messageActions) {
+									messageActions.style.opacity = "1";
+									messageActions.style.pointerEvents = "auto";
+								}
+
+								// 3. Get a reference to `messageElement` and traverse its `nextElementSibling` siblings,
+								//    calling `remove()` on them from `elements.chatContainer` to clear previous AI responses and subsequent user messages.
+								let nextSibling = messageElement.nextElementSibling;
+								while (nextSibling) {
+									const toRemove = nextSibling;
+									nextSibling = toRemove.nextElementSibling; // Get next before removing
+									toRemove.remove();
+								}
+								elements.chatContainer.scrollTop =
+									elements.chatContainer.scrollHeight; // Scroll to bottom after clearing
+
+								// 4. Call `appendMessage(elements, "Model", "", "ai-message loading-message", false);`
+								appendMessage(
+									elements,
+									"Model",
+									"",
+									"ai-message loading-message",
+									false
+								);
+
+								// 5. Call `startTypingAnimation(elements);`
+								startTypingAnimation(elements);
+
+								// 7. After these UI updates, call the now-modified `sendEditedMessageToExtension`.
+								sendEditedMessageToExtension(
+									elements,
+									messageIndexForHistory,
+									newContent
+								);
+							} else {
+								// If content hasn't changed, just revert
+								revertEdit(textarea, originalText, messageActions);
+							}
+							// Remove event listeners after handling Enter/revert
+							textarea.removeEventListener("keydown", handleKeydown);
+							textarea.removeEventListener("blur", handleBlur);
+						} else if (e.key === "Escape") {
+							// On Escape
+							e.preventDefault();
+							revertEdit(textarea, originalText, messageActions); // Call revertEdit()
+							// Remove event listeners
+							textarea.removeEventListener("keydown", handleKeydown);
+							textarea.removeEventListener("blur", handleBlur);
+						}
+					};
+
+					const handleBlur = () => {
+						// On blur
+						const newContent = textarea.value.trim();
+						if (newContent !== originalText.trim()) {
+							// Apply the same UI updates as in handleKeydown 'Enter' block if content changes
+							const newTextSpan = document.createElement("span");
+							newTextSpan.classList.add("message-text-content");
+							newTextSpan.innerHTML = md.render(newContent);
+							textarea.replaceWith(newTextSpan);
+
+							messageElement.classList.add("user-message-edited-pending-ai");
+
+							if (messageActions) {
+								messageActions.style.opacity = "1";
+								messageActions.style.pointerEvents = "auto";
+							}
+
+							let nextSibling = messageElement.nextElementSibling;
+							while (nextSibling) {
+								const toRemove = nextSibling;
+								nextSibling = toRemove.nextElementSibling;
+								toRemove.remove();
+							}
+							elements.chatContainer.scrollTop =
+								elements.chatContainer.scrollHeight;
+
+							appendMessage(
+								elements,
+								"Model",
+								"",
+								"ai-message loading-message",
+								false
+							);
+							startTypingAnimation(elements);
+
+							sendEditedMessageToExtension(
+								elements,
+								messageIndexForHistory,
+								newContent
+							);
+						} else {
+							revertEdit(textarea, originalText, messageActions); // Call revertEdit()
+						}
+						// Remove event listeners
+						textarea.removeEventListener("keydown", handleKeydown);
+						textarea.removeEventListener("blur", handleBlur);
+					};
+
+					textarea.addEventListener("keydown", handleKeydown);
+					textarea.addEventListener("blur", handleBlur);
+				});
+			}
 
 			if (
 				sender === "Model" &&
@@ -331,6 +516,10 @@ export function appendMessage(
 				if (deleteButton) {
 					deleteButton.disabled = true;
 				}
+				if (editButton) {
+					// Also disable edit button for streaming messages
+					editButton.disabled = true;
+				}
 			} else {
 				// Complete message or history message (not streaming)
 				stopTypingAnimation();
@@ -340,11 +529,15 @@ export function appendMessage(
 
 				const renderedHtml = md.render(text);
 				textElement.innerHTML = renderedHtml;
+				// Ensure buttons are enabled for completed messages
 				if (copyButton) {
 					copyButton.disabled = false;
 				}
 				if (deleteButton) {
 					deleteButton.disabled = false;
+				}
+				if (editButton) {
+					editButton.disabled = false;
 				}
 			}
 		} else {
@@ -371,4 +564,39 @@ export function appendMessage(
 	elements.chatContainer.appendChild(messageElement);
 	elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight;
 	updateEmptyChatPlaceholderVisibility(elements);
+}
+
+// Helper functions (Instruction 6)
+
+function sendEditedMessageToExtension(
+	elements: RequiredDomElements,
+	messageIndex: number,
+	newContent: string
+): void {
+	postMessageToExtension({
+		type: "editChatMessage",
+		messageIndex: messageIndex,
+		newContent: newContent,
+	});
+	console.log(
+		`[ChatMessageRenderer] Sent editChatMessage for index ${messageIndex}`
+	);
+	// All DOM manipulation removed as per instruction.
+}
+
+// Helper function to revert an edit or update a message element in UI (if not doing full append for render)
+function revertEdit(
+	textarea: HTMLTextAreaElement,
+	originalText: string,
+	messageActions: HTMLDivElement | null
+) {
+	const originalTextSpan = document.createElement("span");
+	originalTextSpan.classList.add("message-text-content");
+	originalTextSpan.innerHTML = md.render(originalText);
+	textarea.replaceWith(originalTextSpan);
+
+	if (messageActions) {
+		messageActions.style.opacity = "1";
+		messageActions.style.pointerEvents = "auto";
+	}
 }

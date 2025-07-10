@@ -194,6 +194,19 @@ export class PlanService {
 				relevantFiles,
 			};
 
+			// Add the following code here
+			const dataToPersist: sidebarTypes.PersistedPlanData = {
+				type: this.provider.pendingPlanGenerationContext.type,
+				originalUserRequest:
+					this.provider.pendingPlanGenerationContext.originalUserRequest,
+				originalInstruction:
+					this.provider.pendingPlanGenerationContext.editorContext?.instruction,
+				relevantFiles: this.provider.pendingPlanGenerationContext.relevantFiles,
+				textualPlanExplanation: textualPlanResponse, // Pass the full generated text
+			};
+			await this.provider.updatePersistedPendingPlanData(dataToPersist);
+			// End of added code
+
 			// Modified UI handling after plan generation
 			await this._handlePostTextualPlanGenerationUI(
 				this.provider.pendingPlanGenerationContext!
@@ -497,6 +510,8 @@ export class PlanService {
 		let lastFailedJson: string | undefined;
 
 		try {
+			await this.provider.updatePersistedPendingPlanData(null); // Clear persisted data as it's no longer pending confirmation
+
 			if (token?.isCancellationRequested) {
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
@@ -863,8 +878,6 @@ Ensure the generated code is self-contained and immediately functional within th
 Pay close attention to necessary imports based on the file's purpose and its location. If it's a TypeScript file, ensure all types are correctly defined or imported.
 Adhere to the detected coding style, naming conventions (e.g., camelCase for variables, PascalCase for classes), and file organization patterns consistent with the Broader Project Context and Relevant Project Snippets.
 The 'File Path' itself conveys important structural information; ensure the content generated is appropriate for its intended location and adheres to any framework-specific conventions.
-
-							The generated code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.
 
 							File Path:
 							${step.path}

@@ -13,6 +13,7 @@ import {
 	faStop,
 	faCopy,
 	faExclamationTriangle,
+	faPenToSquare, // Import faPenToSquare as per instructions
 } from "@fortawesome/free-solid-svg-icons";
 
 // Add the imported icons to the Font Awesome library for use in the webview.
@@ -30,7 +31,8 @@ library.add(
 	faRedo,
 	faStop,
 	faCopy,
-	faExclamationTriangle
+	faExclamationTriangle,
+	faPenToSquare // Add faPenToSquare to the library as per instructions
 );
 
 /**
@@ -87,4 +89,5 @@ export {
 	faTimes,
 	faRedo,
 	faStop,
+	faPenToSquare, // Export faPenToSquare as per instructions
 };

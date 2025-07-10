@@ -64,6 +64,12 @@ export interface ChatMessage {
 	relevantFiles?: string[];
 }
 
+export interface EditChatMessage {
+	type: "editChatMessage";
+	messageIndex: number; // The index of the message in the chat history array
+	newContent: string; // The new, edited content of the message
+}
+
 export interface PlanGenerationContext {
 	type: "chat" | "editor";
 	originalUserRequest?: string;
@@ -92,6 +98,14 @@ export interface PlanGenerationResult {
 	textualPlanExplanation?: string;
 	context?: PlanGenerationContext;
 	error?: string;
+}
+
+export interface PersistedPlanData {
+	type: "chat" | "editor"; // Indicates if the plan originated from chat or editor context
+	originalUserRequest?: string; // Original request for chat-based plans
+	originalInstruction?: string; // Original instruction for editor-based plans
+	relevantFiles?: string[]; // Files relevant to the plan
+	textualPlanExplanation: string; // The full text of the generated plan (crucial for re-display)
 }
 
 export type ExecutionOutcome = "success" | "cancelled" | "failed";

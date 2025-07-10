@@ -45,8 +45,7 @@ function setLoadingState(
 		appState.isApiKeySet &&
 		!planConfirmationVisible &&
 		!planParseErrorVisible &&
-		!commitReviewVisible &&
-		!appState.isCancellationInProgress;
+		!commitReviewVisible;
 
 	const canSendCurrentInput =
 		canInteractWithMainChatControls && !appState.isCommandSuggestionsVisible;

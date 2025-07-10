@@ -208,6 +208,60 @@ export class ChatHistoryManager {
 		}
 	}
 
+	/**
+	 * Edits a specific user message in the history and truncates all subsequent messages.
+	 * @param index The 0-based index of the user message to edit.
+	 * @param newContent The new text content for the message.
+	 */
+	public editMessageAndTruncate(index: number, newContent: string): void {
+		// 1. Validate index
+		if (
+			typeof index !== "number" ||
+			!Number.isInteger(index) ||
+			index < 0 ||
+			index >= this._chatHistory.length
+		) {
+			const warningMsg = `[ChatHistoryManager] Invalid index provided for editMessageAndTruncate: ${index}. History length: ${this._chatHistory.length}`;
+			console.warn(warningMsg);
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Error: Could not edit message. Invalid index.",
+				isError: true,
+			});
+			return;
+		}
+
+		const messageToEdit = this._chatHistory[index];
+
+		// 2. Validate that it's a 'user' role message
+		if (messageToEdit.role !== "user") {
+			const warningMsg = `[ChatHistoryManager] Attempted to edit non-user message (role: ${messageToEdit.role}) at index ${index}. Operation skipped.`;
+			console.warn(warningMsg);
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Error: Only your own messages can be edited.",
+				isError: true,
+			});
+			return;
+		}
+
+		// 3. Update the text of the first part of the messageToEdit
+		messageToEdit.parts[0].text = newContent;
+
+		// 4. Truncate the array, removing all messages after the edited message.
+		this._chatHistory.splice(index + 1);
+
+		// 5. Call saveHistoryToStorage() to persist the changes.
+		this.saveHistoryToStorage();
+		console.log(
+			`[ChatHistoryManager] Message at index ${index} edited and history truncated successfully.`
+		);
+		this.postMessageToWebview({
+			type: "statusUpdate",
+			value: "Message edited. AI response will be regenerated.",
+		});
+	}
+
 	public async saveChat(): Promise<void> {
 		const options: vscode.SaveDialogOptions = {
 			saveLabel: "Save Chat History",

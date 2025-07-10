@@ -1,7 +1,10 @@
 import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import * as path from "path";
-import { ToggleRelevantFilesDisplayMessage } from "../sidebar/common/sidebarTypes";
+import {
+	ToggleRelevantFilesDisplayMessage,
+	EditChatMessage,
+} from "../sidebar/common/sidebarTypes";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { applyDiffHunkToDocument } from "../utils/diffingUtils";
 
@@ -30,6 +33,7 @@ export async function handleWebviewMessage(
 		"toggleRelevantFilesDisplay", // Allowed as a UI interaction
 		"openSettingsPanel",
 		"universalCancel", // New universal cancellation message, must be allowed during background operations
+		"editChatMessage", // 1. Added "editChatMessage" to the allowedDuringBackground array
 	];
 
 	if (
@@ -441,6 +445,96 @@ export async function handleWebviewMessage(
 				});
 			}
 			break;
+		}
+
+		case "editChatMessage": {
+			// 2. Add a new case for "editChatMessage"
+			const { messageIndex, newContent } = data as EditChatMessage; // 3.a. Destructure data
+
+			// 3.b. Add basic type and content validation
+			if (
+				typeof messageIndex !== "number" ||
+				!Number.isInteger(messageIndex) ||
+				messageIndex < 0 ||
+				typeof newContent !== "string" ||
+				newContent.trim() === ""
+			) {
+				console.error(
+					"[MessageHandler] Invalid data for editChatMessage: messageIndex must be a non-negative integer and newContent a non-empty string.",
+					data
+				);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value:
+						"Error: Invalid message edit request. Please provide a valid message index and non-empty content.",
+					isError: true,
+				});
+				return;
+			}
+
+			console.log(
+				`[MessageHandler] Received editChatMessage for index ${messageIndex}: "${newContent.substring(
+					0,
+					50
+				)}..."`
+			);
+
+			// 3.c. Call provider.triggerUniversalCancellation()
+			await provider.triggerUniversalCancellation();
+			provider.isGeneratingUserRequest = true;
+			await provider.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				true
+			);
+
+			// 3.d. Post a statusUpdate message to the webview
+			provider.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Message edited. Processing new request...",
+			});
+
+			// 3.e. Call provider.chatHistoryManager.editMessageAndTruncate()
+			provider.chatHistoryManager.editMessageAndTruncate(
+				messageIndex,
+				newContent
+			);
+
+			const lowerCaseNewContent = newContent.trim().toLowerCase();
+
+			if (lowerCaseNewContent.startsWith("/plan ")) {
+				const planRequest = newContent.trim().substring("/plan ".length);
+				if (!planRequest) {
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Please provide a description for the plan after /plan.",
+						isError: true,
+					});
+					// Re-enable inputs, as an invalid command was given
+					await provider.endUserOperation(
+						"failed",
+						"Invalid /plan command: missing description."
+					);
+					return;
+				}
+				// Trigger the plan generation flow, similar to a fresh "/plan" command
+				await provider.planService.handleInitialPlanRequest(planRequest);
+			} else if (lowerCaseNewContent === "/commit") {
+				// Ensure activeOperationCancellationTokenSource is re-initialized if it was disposed by triggerUniversalCancellation()
+				if (!provider.activeOperationCancellationTokenSource) {
+					provider.activeOperationCancellationTokenSource =
+						new vscode.CancellationTokenSource();
+				}
+				// Handle /commit command from an edit (if applicable, based on project needs)
+				await provider.commitService.handleCommitCommand(
+					provider.activeOperationCancellationTokenSource.token
+				);
+			} else {
+				// If it's not a recognized command, proceed with regular chat message regeneration
+				await provider.chatService.regenerateAiResponseFromHistory(
+					messageIndex
+				);
+			}
+			break; // 3.g. Include break;
 		}
 
 		case "aiResponseEnd": {

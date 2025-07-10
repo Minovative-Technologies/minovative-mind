@@ -236,6 +236,7 @@ export function initializeMessageBusHandler(
 				console.log(
 					"Received aiResponseStart. Starting stream via appendMessage."
 				);
+				appState.isCancellationInProgress = false; // Add this line
 				appendMessage(
 					elements,
 					"Model",
@@ -287,6 +288,8 @@ export function initializeMessageBusHandler(
 				}
 
 				resetStreamingAnimationState();
+
+				appState.isCancellationInProgress = false; // Add this line
 
 				if (appState.isCancellationInProgress) {
 					// If cancellation is in progress, suppress status updates from aiResponseEnd.
@@ -340,7 +343,7 @@ export function initializeMessageBusHandler(
 					}
 				} else if (message.success) {
 					console.log("aiResponseEnd indicates successful chat response.");
-					appState.isCommitActionInProgress = false; // Added as per instructions
+					// appState.isCommitActionInProgress = false; // REMOVED as per instructions
 					setLoadingState(false, elements);
 					updateEmptyChatPlaceholderVisibility(elements);
 				} else {
@@ -455,12 +458,25 @@ export function initializeMessageBusHandler(
 			case "restorePendingPlanConfirmation":
 				if (message.value) {
 					console.log("Received restorePendingPlanConfirmation.");
-					appState.pendingPlanData = message.value as {
+					const restoredPlanData = message.value as {
 						type: string;
 						originalRequest?: string;
 						originalInstruction?: string;
 						relevantFiles?: string[];
+						textualPlanExplanation: string; // NEW: Ensure this is typed
 					};
+					appState.pendingPlanData = restoredPlanData; // Assign to appState
+
+					// ADDED: Append the restored textual plan explanation to the chat UI
+					appendMessage(
+						elements,
+						"Model",
+						restoredPlanData.textualPlanExplanation, // Use the restored text
+						"ai-message",
+						true, // Treat as history-backed
+						undefined,
+						restoredPlanData.relevantFiles
+					);
 
 					createPlanConfirmationUI(
 						elements,
@@ -636,6 +652,22 @@ export function initializeMessageBusHandler(
 						}
 					});
 					updateStatus(elements, "Chat history restored.");
+
+					// Select all elements within elements.chatContainer that have the class .user-message-edited-pending-ai.
+					const editedMessages = elements.chatContainer.querySelectorAll(
+						".user-message-edited-pending-ai"
+					);
+					// Iterate through these selected elements and remove the user-message-edited-pending-ai class from each.
+					editedMessages.forEach((msg) => {
+						msg.classList.remove("user-message-edited-pending-ai");
+					});
+
+					// Call setLoadingState(appState.isLoading, elements); to ensure all UI elements' enabled/disabled states are correctly updated based on the current appState.isLoading.
+					setLoadingState(appState.isLoading, elements);
+
+					// Ensure elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight; is called after all messages are appended to guarantee the chat scrolls to the bottom.
+					elements.chatContainer.scrollTop =
+						elements.chatContainer.scrollHeight;
 				} else {
 					updateStatus(
 						elements,
@@ -647,9 +679,6 @@ export function initializeMessageBusHandler(
 				appState.pendingPlanData = null; // Ensure this is reset too
 				appState.pendingCommitReviewData = null; // Ensure this is reset too
 				updateEmptyChatPlaceholderVisibility(elements);
-				document.documentElement.scrollTop = 0;
-				// Ensure buttons are properly enabled after restoring history
-				setLoadingState(false, elements);
 				break;
 			}
 			case "authStateUpdate": {

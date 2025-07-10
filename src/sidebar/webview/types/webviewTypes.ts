@@ -51,6 +51,15 @@ export interface PendingCommitReviewData {
 	stagedFiles: string[];
 }
 
+/**
+ * Message type sent from webview to extension when a chat message is edited.
+ */
+export interface EditChatMessage {
+	type: "editChatMessage";
+	messageIndex: number; // The index of the message in the chat history array
+	newContent: string; // The new, edited content of the message
+}
+
 export interface WebviewAppState {
 	currentAiMessageContentElement: HTMLSpanElement | null;
 	currentAccumulatedText: string;
