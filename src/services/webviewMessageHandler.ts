@@ -7,7 +7,6 @@ import {
 } from "../sidebar/common/sidebarTypes";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { applyDiffHunkToDocument } from "../utils/diffingUtils";
-import { showErrorNotification } from "../utils/notificationUtils"; // Add this import
 
 export async function handleWebviewMessage(
 	data: any,
@@ -417,15 +416,6 @@ export async function handleWebviewMessage(
 					),
 					isError: true,
 				});
-				// >>> ADD POP-UP HERE <<<
-				showErrorNotification(
-					new Error(
-						`Attempted to open file outside workspace: ${relativeFilePathFromWebview}`
-					),
-					"Security alert: File operation blocked. Attempted to open a file outside the current workspace.",
-					"Minovative Mind: ",
-					vscode.workspace.workspaceFolders?.[0]?.uri
-				);
 				return;
 			}
 
@@ -454,13 +444,6 @@ export async function handleWebviewMessage(
 					value: formattedError,
 					isError: true,
 				});
-				// >>> ADD POP-UP HERE <<<
-				showErrorNotification(
-					openError,
-					"Failed to open the specified file.",
-					"Minovative Mind: Error opening file: ",
-					vscode.workspace.workspaceFolders?.[0]?.uri
-				);
 			}
 			break;
 		}

@@ -167,9 +167,9 @@ export class AIRequestService {
 					);
 					this.postMessageToWebview({
 						type: "statusUpdate",
-						value: `AI service temporarily unavailable. Retrying...`,
+						value: `AI service temporarily unavailable. Waiting 1 minute before retrying...`,
 					});
-					await new Promise((resolve) => setTimeout(resolve, 30000)); // 30-second delay
+					await new Promise((resolve) => setTimeout(resolve, 60000)); // 60-second delay (1 minute)
 					continue; // MODIFICATION 4: Stay in the loop with the same key
 				} else {
 					// For any other non-retryable error, set result and exit the loop / return immediately

@@ -801,7 +801,8 @@ export class PlanService {
 			this.provider.activeChildProcesses = [];
 
 			const outcome = this.provider.currentExecutionOutcome ?? "failed";
-			await this._showPlanCompletionNotification(
+			// Use the provider's notification method to avoid duplicate notifications
+			await this.provider.showPlanCompletionNotification(
 				plan.planDescription || "Unnamed Plan",
 				outcome
 			);
@@ -1452,63 +1453,6 @@ When modifying specific parts, leverage detailed symbol information (if availabl
 						.join("\n")}`
 			)
 			.join("\n---\n")}\n--- End Recent Chat History ---`;
-	}
-
-	private async _showPlanCompletionNotification(
-		description: string,
-		outcome: sidebarTypes.ExecutionOutcome
-	): Promise<void> {
-		let message: string;
-		let isError: boolean;
-
-		switch (outcome) {
-			case "success":
-				message = `Plan for '${description}' completed successfully!`;
-				isError = false;
-				break;
-			case "cancelled":
-				message = `Plan for '${description}' was cancelled.`;
-				isError = true;
-				break;
-			case "failed":
-				message = `Plan for '${description}' failed. Check sidebar for details.`;
-				isError = true;
-				break;
-		}
-
-		this.provider.chatHistoryManager.addHistoryEntry("model", message);
-		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
-
-		if (this.provider.isSidebarVisible === true) {
-			this.provider.postMessageToWebview({
-				type: "statusUpdate",
-				value: message,
-				isError: isError,
-			});
-		} else {
-			let notificationFunction: (
-				message: string,
-				...items: string[]
-			) => Thenable<string | undefined>;
-
-			switch (outcome) {
-				case "success":
-					notificationFunction = vscode.window.showInformationMessage;
-					break;
-				case "cancelled":
-					notificationFunction = vscode.window.showWarningMessage;
-					break;
-				case "failed":
-					notificationFunction = vscode.window.showErrorMessage;
-					break;
-			}
-
-			const result = await notificationFunction(message, "Open Sidebar");
-
-			if (result === "Open Sidebar") {
-				vscode.commands.executeCommand("minovative-mind.activitybar.focus");
-			}
-		}
 	}
 
 	// Add new _performFinalValidationAndCorrection method

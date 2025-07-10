@@ -422,7 +422,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		await this.triggerUniversalCancellation();
 	}
 
-	private async _showPlanCompletionNotification(
+	public async showPlanCompletionNotification(
 		description: string,
 		outcome: sidebarTypes.ExecutionOutcome
 	): Promise<void> {
@@ -467,15 +467,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					notificationFunction = showWarningNotification; // Use new utility
 					break;
 				case "failed":
-					notificationFunction = (msg: string, ...items: string[]) =>
-						showErrorNotification(
-							msg,
-							`Plan for '${description}' failed.`,
-							"Minovative Mind: ",
-							this.workspaceRootUri,
-							...items
-						); // Use new utility, pass original message to it
-					break;
+					// For failed outcomes, only update status within sidebar, no additional native pop-up
+					// This ensures any specific error already reported is the sole native notification
+					this.postMessageToWebview({
+						type: "statusUpdate",
+						value: message,
+						isError: true,
+					});
+					return;
 			}
 
 			const result = await notificationFunction(message, "Open Sidebar"); // Pass message and items
