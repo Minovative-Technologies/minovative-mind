@@ -8,7 +8,7 @@ import {
 	updateEmptyChatPlaceholderVisibility,
 } from "../ui/statusManager";
 import { appState } from "../state/appState";
-import { AiStreamingState } from "../../common/sidebarTypes";
+import { AiStreamingState, PersistedPlanData } from "../../common/sidebarTypes";
 import {
 	stopTypingAnimation,
 	startTypingAnimation,
@@ -566,13 +566,8 @@ export function initializeMessageBusHandler(
 			case "restorePendingPlanConfirmation":
 				if (message.value) {
 					console.log("Received restorePendingPlanConfirmation.");
-					const restoredPlanData = message.value as {
-						type: string;
-						originalRequest?: string;
-						originalInstruction?: string;
-						relevantFiles?: string[];
-						textualPlanExplanation: string; // NEW: Ensure this is typed
-					};
+					// Update the type cast to include textualPlanExplanation for comprehensive restoration
+					const restoredPlanData = message.value as PersistedPlanData; // Use the more complete type from sidebarTypes
 					appState.pendingPlanData = restoredPlanData; // Assign to appState
 
 					// ADDED: Append the restored textual plan explanation to the chat UI

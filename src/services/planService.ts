@@ -450,6 +450,16 @@ export class PlanService {
 				relevantFiles,
 			};
 
+			// ADDED: Persist the pending plan data here for editor-initiated plans
+			const dataToPersist: sidebarTypes.PersistedPlanData = {
+				type: "editor", // Explicitly "editor"
+				originalInstruction: editorCtx.instruction,
+				relevantFiles: relevantFiles,
+				textualPlanExplanation: textualPlanResponse, // crucial for re-display
+			};
+			await this.provider.updatePersistedPendingPlanData(dataToPersist);
+			// END ADDED
+
 			// Removed UI handling block as per instructions
 
 			finalResult = {

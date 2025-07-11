@@ -49,6 +49,7 @@ export interface PendingPlanData {
 	originalRequest?: string;
 	originalInstruction?: string;
 	relevantFiles?: string[];
+	textualPlanExplanation?: string; // ADDED
 }
 
 export interface PendingCommitReviewData {
