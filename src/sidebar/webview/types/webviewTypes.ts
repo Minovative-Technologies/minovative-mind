@@ -37,6 +37,11 @@ export interface RequiredDomElements {
 	chatInputControlsWrapper: HTMLDivElement;
 	commandSuggestionsContainer: HTMLDivElement;
 	groundingToggle: HTMLInputElement;
+
+	// Token usage display elements
+	tokenUsageContainer: HTMLDivElement;
+	tokenUsageDisplay: HTMLDivElement;
+	tokenUsageToggle: HTMLButtonElement;
 }
 
 export interface PendingPlanData {
@@ -81,4 +86,5 @@ export interface WebviewAppState {
 	isCancellationInProgress: boolean;
 	isPlanExecutionInProgress: boolean; // New property to track plan execution state
 	totalKeys: number;
+	isTokenUsageVisible: boolean; // New property to track token usage visibility
 }

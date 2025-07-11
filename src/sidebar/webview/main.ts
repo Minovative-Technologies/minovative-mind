@@ -11,6 +11,30 @@ import {
 import { createPlanConfirmationUI } from "./ui/confirmationAndReviewUIs";
 import { reenableAllMessageActionButtons } from "./ui/chatMessageRenderer";
 import { RequiredDomElements } from "./types/webviewTypes";
+import { setIconForButton } from "./utils/iconHelpers";
+import { faChartLine } from "./utils/iconHelpers";
+
+/**
+ * Updates token usage display with current statistics
+ */
+function updateTokenUsageDisplay(elements: RequiredDomElements): void {
+	// Request token statistics from extension
+	postMessageToExtension({ type: "getTokenStatistics" });
+}
+
+/**
+ * Toggles token usage display visibility
+ */
+function toggleTokenUsageDisplay(elements: RequiredDomElements): void {
+	appState.isTokenUsageVisible = !appState.isTokenUsageVisible;
+	elements.tokenUsageContainer.style.display = appState.isTokenUsageVisible
+		? "block"
+		: "none";
+
+	if (appState.isTokenUsageVisible) {
+		updateTokenUsageDisplay(elements);
+	}
+}
 
 /**
  * Updates the loading state of the webview UI, controlling the visibility and
@@ -225,6 +249,14 @@ function initializeWebview(): void {
 	initializeInputEventListeners(elements, setLoadingState);
 	initializeButtonEventListeners(elements, setLoadingState);
 	initializeMessageBusHandler(elements, setLoadingState);
+
+	// Add token usage toggle event listener
+	elements.tokenUsageToggle.addEventListener("click", () => {
+		toggleTokenUsageDisplay(elements);
+	});
+
+	// Set icon for token usage button
+	setIconForButton(elements.tokenUsageToggle, faChartLine);
 
 	// Perform initial UI setup for dynamically created components or visibility
 	createPlanConfirmationUI(

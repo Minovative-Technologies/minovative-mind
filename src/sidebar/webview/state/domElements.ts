@@ -104,6 +104,17 @@ export function initializeDomElements(): RequiredDomElements | null {
 		"grounding-toggle"
 	) as HTMLInputElement;
 
+	// Token usage elements
+	const tokenUsageContainer = document.getElementById(
+		"token-usage-container"
+	) as HTMLDivElement;
+	const tokenUsageDisplay = document.getElementById(
+		"token-usage-display"
+	) as HTMLDivElement;
+	const tokenUsageToggle = document.getElementById(
+		"token-usage-toggle"
+	) as HTMLButtonElement;
+
 	// The current implementation of main.ts does not retrieve planConfirmationContainer,
 	// confirmPlanButton, or cancelPlanButton via getElementById at startup.
 	// Instead, they are dynamically created within createPlanConfirmationUI()
@@ -141,6 +152,11 @@ export function initializeDomElements(): RequiredDomElements | null {
 		chatInputControlsWrapper,
 		commandSuggestionsContainer,
 		groundingToggle,
+
+		// Token usage elements
+		tokenUsageContainer,
+		tokenUsageDisplay,
+		tokenUsageToggle,
 	};
 
 	const missingElements: string[] = [];

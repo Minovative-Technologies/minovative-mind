@@ -14,11 +14,13 @@ import {
 	ParallelTask,
 	ParallelTaskResult,
 } from "../utils/parallelProcessor";
+import { TokenTrackingService } from "./tokenTrackingService";
 
 export class AIRequestService {
 	constructor(
 		private apiKeyManager: ApiKeyManager,
-		private postMessageToWebview: (message: any) => void
+		private postMessageToWebview: (message: any) => void,
+		private tokenTrackingService?: TokenTrackingService
 	) {}
 
 	/**
@@ -113,16 +115,60 @@ export class AIRequestService {
 					isMergeOperation
 				);
 
+				let chunkCount = 0;
 				for await (const chunk of stream) {
 					if (token?.isCancellationRequested) {
 						throw new Error(ERROR_OPERATION_CANCELLED);
 					}
 					accumulatedResult += chunk;
+					chunkCount++;
+
+					// Update token tracking in real-time every 10 chunks
+					if (this.tokenTrackingService && chunkCount % 10 === 0) {
+						const estimates =
+							this.tokenTrackingService.getRealTimeTokenEstimates(
+								prompt,
+								accumulatedResult
+							);
+
+						// Send real-time update with current estimates
+						this.tokenTrackingService.triggerRealTimeUpdate();
+					}
+
 					if (streamCallbacks?.onChunk) {
 						await streamCallbacks.onChunk(chunk);
 					}
 				}
 				result = accumulatedResult; // Store successful result
+
+				// Track token usage with improved accuracy
+				if (this.tokenTrackingService) {
+					// Calculate input tokens including history and context
+					let totalInputText = prompt;
+					if (history && history.length > 0) {
+						// Add history to input calculation
+						const historyText = history
+							.map((entry) => entry.parts.map((part) => part.text).join(" "))
+							.join(" ");
+						totalInputText = historyText + " " + prompt;
+					}
+
+					const inputTokens =
+						this.tokenTrackingService.estimateTokens(totalInputText);
+					const outputTokens =
+						this.tokenTrackingService.estimateTokens(accumulatedResult);
+
+					this.tokenTrackingService.trackTokenUsage(
+						inputTokens,
+						outputTokens,
+						requestType,
+						modelName,
+						totalInputText.length > 1000
+							? totalInputText.substring(0, 1000) + "..."
+							: totalInputText
+					);
+				}
+
 				if (streamCallbacks?.onComplete) {
 					streamCallbacks.onComplete();
 				}

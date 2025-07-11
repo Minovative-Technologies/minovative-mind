@@ -18,6 +18,7 @@ import { PlanService } from "../services/planService";
 import { ChatService } from "../services/chatService";
 import { CommitService } from "../services/commitService";
 import { GitConflictResolutionService } from "../services/gitConflictResolutionService";
+import { TokenTrackingService } from "../services/tokenTrackingService";
 import {
 	showInfoNotification,
 	showWarningNotification,
@@ -71,6 +72,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public chatService: ChatService;
 	public commitService: CommitService;
 	public gitConflictResolutionService: GitConflictResolutionService; // Service instance
+	public tokenTrackingService: TokenTrackingService;
 
 	constructor(
 		extensionUri: vscode.Uri,
@@ -105,6 +107,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 		this.changeLogger = new ProjectChangeLogger();
 
+		// Initialize token tracking service
+		this.tokenTrackingService = new TokenTrackingService();
+
+		// Register for real-time token updates
+		this.tokenTrackingService.onTokenUpdate((stats) => {
+			this.postMessageToWebview({
+				type: "updateTokenStatistics",
+				value: this.tokenTrackingService.getFormattedStatistics(),
+			});
+		});
+
 		// Load persistent state for isGeneratingUserRequest
 		this.isGeneratingUserRequest = context.workspaceState.get<boolean>(
 			"minovativeMind.isGeneratingUserRequest",
@@ -114,7 +127,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		// Instantiate services, passing dependencies
 		this.aiRequestService = new AIRequestService(
 			this.apiKeyManager,
-			this.postMessageToWebview.bind(this)
+			this.postMessageToWebview.bind(this),
+			this.tokenTrackingService
 		);
 		this.contextService = new ContextService(
 			this.settingsManager,

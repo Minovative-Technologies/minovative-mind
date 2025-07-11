@@ -102,6 +102,53 @@ h2 {
 	flex-shrink: 0;
 	min-height: 35px;
 }
+
+/* --- Token Usage Display --- */
+#token-usage-container {
+	background-color: var(--vscode-input-background);
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius);
+	margin: var(--element-spacing) 0;
+	padding: var(--element-spacing);
+	flex-shrink: 0;
+}
+
+#token-usage-display h3 {
+	margin: 0 0 var(--element-spacing) 0;
+	font-size: 1em;
+	color: var(--vscode-sideBar-titleForeground);
+	border-bottom: 1px solid var(--border-color);
+	padding-bottom: 5px;
+}
+
+.token-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+	gap: 8px;
+}
+
+.token-stat-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 4px 8px;
+	background-color: var(--vscode-editor-background);
+	border-radius: 3px;
+	border: 1px solid var(--border-color);
+}
+
+.token-label {
+	font-size: 0.85em;
+	color: var(--vscode-descriptionForeground);
+	font-weight: 500;
+}
+
+.token-value {
+	font-size: 0.9em;
+	color: var(--vscode-editor-foreground);
+	font-weight: 600;
+	font-family: var(--vscode-editor-font-family, monospace);
+}
 .chat-controls h1 {
 	border-bottom: none;
 	flex-grow: 1;

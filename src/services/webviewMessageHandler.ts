@@ -34,6 +34,8 @@ export async function handleWebviewMessage(
 		"openSettingsPanel",
 		"universalCancel", // New universal cancellation message, must be allowed during background operations
 		"editChatMessage", // 1. Added "editChatMessage" to the allowedDuringBackground array
+		"getTokenStatistics", // Allow token statistics requests during background operations
+		"getCurrentTokenEstimates", // Allow current token estimates during background operations
 	];
 
 	if (
@@ -196,6 +198,29 @@ export async function handleWebviewMessage(
 		case "cancelCommit":
 			// No explicit provider.endUserOperation() here; CommitService will handle it
 			provider.commitService.cancelCommit();
+			break;
+
+		case "getTokenStatistics":
+			// Send token statistics to webview
+			const stats = provider.tokenTrackingService.getFormattedStatistics();
+			provider.postMessageToWebview({
+				type: "updateTokenStatistics",
+				value: stats,
+			});
+			break;
+
+		case "getCurrentTokenEstimates":
+			// Send current token estimates for streaming responses
+			const { inputText, outputText } = data.value;
+			const currentEstimates =
+				provider.tokenTrackingService.getCurrentStreamingEstimates(
+					inputText || "",
+					outputText || ""
+				);
+			provider.postMessageToWebview({
+				type: "updateCurrentTokenEstimates",
+				value: currentEstimates,
+			});
 			break;
 
 		case "addApiKey":

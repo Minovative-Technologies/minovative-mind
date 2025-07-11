@@ -22,6 +22,40 @@
       <button id="save-chat-button" title="Save Chat">S</button>
       <button id="load-chat-button" title="Load Chat">L</button>
       <button id="clear-chat-button" title="Clear Chat">C</button>
+      <button id="token-usage-toggle" title="Token Usage"></button>
+    </div>
+  </div>
+
+  <!-- Token Usage Display -->
+  <div id="token-usage-container" style="display: none;">
+    <div id="token-usage-display">
+      <h3>Token Usage Statistics</h3>
+      <div class="token-stats">
+        <div class="token-stat-item">
+          <span class="token-label">Total Input:</span>
+          <span class="token-value" id="total-input-tokens">0</span>
+        </div>
+        <div class="token-stat-item">
+          <span class="token-label">Total Output:</span>
+          <span class="token-value" id="total-output-tokens">0</span>
+        </div>
+        <div class="token-stat-item">
+          <span class="token-label">Total Tokens:</span>
+          <span class="token-value" id="total-tokens">0</span>
+        </div>
+        <div class="token-stat-item">
+          <span class="token-label">Requests:</span>
+          <span class="token-value" id="request-count">0</span>
+        </div>
+        <div class="token-stat-item">
+          <span class="token-label">Avg Input:</span>
+          <span class="token-value" id="avg-input-tokens">0</span>
+        </div>
+        <div class="token-stat-item">
+          <span class="token-label">Avg Output:</span>
+          <span class="token-value" id="avg-output-tokens">0</span>
+        </div>
+      </div>
     </div>
   </div>
 

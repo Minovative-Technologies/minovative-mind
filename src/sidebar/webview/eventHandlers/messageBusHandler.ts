@@ -199,6 +199,38 @@ export function initializeMessageBusHandler(
 				if (existingLoadingMsg) {
 					existingLoadingMsg.remove();
 				}
+				break;
+			}
+
+			case "aiResponse": {
+				appendMessage(
+					elements,
+					"Model",
+					message.value,
+					`ai-message ${message.isError ? "error-message" : ""}`.trim(),
+					true,
+					undefined,
+					message.relevantFiles
+				);
+
+				// REMOVED: This block was prematurely showing the plan confirmation UI.
+				// The plan confirmation UI should only be shown after aiResponseEnd for streaming plans.
+				if (message.isLoading === false) {
+					setLoadingState(false, elements);
+				}
+				break;
+			}
+
+			case "showGenericLoadingMessage": {
+				console.log(
+					"[Webview] Received showGenericLoadingMessage. Displaying generic loading."
+				);
+				// Remove any existing loading message to ensure a clean state
+				const existingLoadingMsg =
+					elements.chatContainer.querySelector(".loading-message");
+				if (existingLoadingMsg) {
+					existingLoadingMsg.remove();
+				}
 
 				// Append a new AI message element. By passing an empty string for text,
 				// appendMessage will automatically trigger the typing animation to show "Generating..." dots.
@@ -373,6 +405,58 @@ export function initializeMessageBusHandler(
 				// setLoadingState(false, elements) must occur at the very end of this aiResponseEnd block.
 				setLoadingState(false, elements);
 				updateEmptyChatPlaceholderVisibility(elements);
+				break;
+			}
+
+			case "updateTokenStatistics": {
+				console.log(
+					"[Webview] Received token statistics update:",
+					message.value
+				);
+				const stats = message.value;
+
+				// Update token usage display
+				const totalInputElement = document.getElementById("total-input-tokens");
+				const totalOutputElement = document.getElementById(
+					"total-output-tokens"
+				);
+				const totalTokensElement = document.getElementById("total-tokens");
+				const requestCountElement = document.getElementById("request-count");
+				const avgInputElement = document.getElementById("avg-input-tokens");
+				const avgOutputElement = document.getElementById("avg-output-tokens");
+
+				if (totalInputElement) totalInputElement.textContent = stats.totalInput;
+				if (totalOutputElement)
+					totalOutputElement.textContent = stats.totalOutput;
+				if (totalTokensElement) totalTokensElement.textContent = stats.total;
+				if (requestCountElement)
+					requestCountElement.textContent = stats.requestCount;
+				if (avgInputElement) avgInputElement.textContent = stats.averageInput;
+				if (avgOutputElement)
+					avgOutputElement.textContent = stats.averageOutput;
+				break;
+			}
+
+			case "updateCurrentTokenEstimates": {
+				console.log(
+					"[Webview] Received current token estimates update:",
+					message.value
+				);
+				const estimates = message.value;
+
+				// Update token usage display with current streaming estimates
+				const totalInputElement = document.getElementById("total-input-tokens");
+				const totalOutputElement = document.getElementById(
+					"total-output-tokens"
+				);
+				const totalTokensElement = document.getElementById("total-tokens");
+
+				if (totalInputElement)
+					totalInputElement.textContent = estimates.inputTokens;
+				if (totalOutputElement)
+					totalOutputElement.textContent = estimates.outputTokens;
+				if (totalTokensElement)
+					totalTokensElement.textContent = estimates.totalTokens;
 				break;
 			}
 
