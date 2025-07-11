@@ -3,7 +3,7 @@ import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
 import { cleanCodeOutput } from "./utils/codeUtils";
 import * as sidebarTypes from "./sidebar/common/sidebarTypes";
-import { hasMergeConflicts, getMergeConflictRanges } from "./utils/mergeUtils"; // Added import for mergeUtils
+import { hasMergeConflicts } from "./utils/mergeUtils"; // Added import for mergeUtils
 import { CodeSelectionService } from "./services/codeSelectionService";
 import { getSymbolsInDocument } from "./services/symbolService";
 import { DiagnosticService } from "./utils/diagnosticUtils";
@@ -12,6 +12,11 @@ import { DiagnosticService } from "./utils/diagnosticUtils";
 type ActionResult =
 	| { success: true; content: string }
 	| { success: false; error: string };
+
+// Add a small helper function for delays
+async function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // --- Helper Function for Predefined Actions (Explain Action Only) ---
 // This is now ONLY used for the 'explain' command directly.
@@ -139,7 +144,7 @@ async function executeDocsAction(
 		};
 	}
 
-	const userInstruction = `Generate comprehensive documentation for the selected code block. The documentation should explain its purpose, functionality, parameters (if any), return values (if any), and any significant side effects or dependencies. Structure the documentation clearly using the native comment syntax for ${languageId} (e.g., JSDoc for TypeScript/JavaScript, Python docstrings for Python). Provide ONLY the raw documentation block. ABSOLUTELY DO NOT include any markdown language fences (e.g., \`\`\`javascript), code examples within fences, conversational text, or explanations. Provide only the raw documentation comments ready for direct insertion into the code.`;
+	const userInstruction = `Generate comprehensive documentation for the selected code block. The documentation should explain its purpose, functionality, parameters (if any), return values (if any), and any significant side effects or dependencies. Structure the documentation clearly using the native comment syntax for ${languageId} (e.g., JSDoc for TypeScript/JavaScript, Python doc strings for Python). Provide ONLY the raw documentation block. ABSOLUTELY DO NOT include any markdown language fences (e.g., \`\`\`javascript), code examples within fences, conversational text, or explanations. Provide only the raw documentation comments ready for direct insertion into the code.`;
 	const systemPrompt = `You are an expert AI programmer and technical writer assisting within VS Code using the ${selectedModel} model. Generate documentation for the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
 
 	const prompt = `
@@ -203,23 +208,6 @@ async function executeDocsAction(
 }
 
 // --- Helper Function for Diagnostics Formatting ---
-async function _getFormattedDiagnostics(
-	documentUri: vscode.Uri
-): Promise<string> {
-	const diagnostics = vscode.languages.getDiagnostics(documentUri);
-	if (diagnostics.length > 0) {
-		return diagnostics
-			.map((d) => {
-				const line = d.range.start.line + 1; // VS Code lines are 0-indexed
-				const char = d.range.start.character + 1; // VS Code chars are 0-indexed
-				const severity = vscode.DiagnosticSeverity[d.severity]; // Convert enum to string (e.g., "Error", "Warning")
-				return `[${line}:${char}] ${severity}: ${d.message}`;
-			})
-			.join("\n");
-	} else {
-		return "No diagnostics found in the document.";
-	}
-}
 // --- End Helper Function ---
 
 // --- Activate Function ---
@@ -267,7 +255,6 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			// Refactor variable declarations as per instructions
 			const originalSelection: vscode.Selection = editor.selection;
 
 			const fullText = editor.document.getText();
@@ -282,8 +269,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			// Initialize variables for intelligent selection
 			let selectedText: string;
-			let effectiveRange: vscode.Range;
-			let diagnosticsString: string | undefined; // Will be set contextually
+			let effectiveRange: vscode.Range = originalSelection;
+			let selectionMethodUsed: string = "initial";
+			let diagnosticsString: string | undefined = undefined; // Will be set contextually
 
 			// Replace showInputBox with showQuickPick
 			const quickPickItems: vscode.QuickPickItem[] = [
@@ -362,132 +350,224 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 			}
 
-			// Check if user has an active selection
-			if (!originalSelection.isEmpty) {
-				// User made a selection: Use it as-is.
+			if (instruction === "/docs") {
+				if (originalSelection.isEmpty) {
+					vscode.window.showWarningMessage(
+						"Please select the code you want to document."
+					);
+					return;
+				}
 				selectedText = editor.document.getText(originalSelection);
 				effectiveRange = originalSelection;
-				// Format diagnostics only relevant to the user's explicit selection
+				// diagnosticsString calculation REMOVED from here per centralization instructions
+			}
+
+			// Re-structure General Selection Logic:
+			if (!originalSelection.isEmpty) {
+				// User made an explicit selection for /fix, /merge, or custom: Use it as-is.
+				selectedText = editor.document.getText(originalSelection);
+				effectiveRange = originalSelection;
+				selectionMethodUsed = "explicit-user-selection";
+				// diagnosticsString calculation REMOVED from here per centralization instructions
+			} else {
+				// No user selection: Attempt automatic semantic selection for /fix, /merge, or custom.
+				console.log(
+					"[Minovative Mind] No explicit user selection. Attempting automatic selection cascade."
+				);
+				let selectionSuccessfullyDetermined = false;
+				const cursorPosition = editor.selection.active;
+				let currentSelection = editor.selection; // Start with cursor position (potentially empty)
+				let expandedSelection: vscode.Selection | undefined;
+				const maxSmartSelectExpansions = 2; // Try expanding twice
+				let lastSelectionTextContent =
+					editor.document.getText(currentSelection);
+				let hasMeaningfulExpansion = false; // Flag to track if smartSelect actually did something useful
+
+				for (let i = 0; i < maxSmartSelectExpansions; i++) {
+					const beforeExpandSelection = currentSelection;
+					await vscode.commands.executeCommand(
+						"editor.action.smartSelect.expand"
+					);
+					await sleep(50); // Allow editor to update
+
+					currentSelection = editor.selection; // Get the new selection
+					const newSelectionTextContent =
+						editor.document.getText(currentSelection);
+
+					// Check if the selection actually changed and if its content meaningfully grew
+					if (
+						!currentSelection.isEqual(beforeExpandSelection) &&
+						newSelectionTextContent !== lastSelectionTextContent
+					) {
+						expandedSelection = currentSelection;
+						lastSelectionTextContent = newSelectionTextContent;
+						hasMeaningfulExpansion = true;
+					} else {
+						// Selection did not expand meaningfully (or not at all), stop trying
+						break;
+					}
+				}
+
+				// Layer 1 (Smart Select Expansion):
+				if (expandedSelection && hasMeaningfulExpansion) {
+					selectedText = editor.document.getText(expandedSelection);
+					effectiveRange = expandedSelection;
+					selectionMethodUsed = "smart-select-expansion";
+					selectionSuccessfullyDetermined = true;
+					vscode.window.showInformationMessage(
+						"Minovative Mind: Automatically selected code block using semantic expansion."
+					);
+					console.log(
+						"[Minovative Mind] Auto-selected using smartSelect.expand."
+					);
+					// diagnosticsString calculation REMOVED from here per centralization instructions
+				} else {
+					console.log(
+						"[Minovative Mind] smartSelect.expand did not yield a useful selection."
+					);
+				}
+
+				// Layer 2 (Document Symbol Fallback):
+				if (
+					!selectionSuccessfullyDetermined &&
+					(instruction === "/fix" || instruction === "custom prompt")
+				) {
+					let symbolRange: vscode.Range | undefined;
+					if (instruction === "/fix") {
+						const symbolWithDiagnostics =
+							await CodeSelectionService.findSymbolWithDiagnostics(
+								editor.document,
+								allDiagnostics,
+								symbols
+							);
+						if (symbolWithDiagnostics) {
+							symbolRange = symbolWithDiagnostics.range;
+							selectionMethodUsed = "symbol-with-diagnostics";
+						}
+					} else if (instruction === "custom prompt") {
+						const enclosingSymbol =
+							await CodeSelectionService.findEnclosingSymbol(
+								editor.document,
+								cursorPosition,
+								symbols
+							);
+						if (enclosingSymbol) {
+							symbolRange = enclosingSymbol.range;
+							selectionMethodUsed = "enclosing-symbol";
+						}
+					}
+
+					if (symbolRange) {
+						selectedText = editor.document.getText(symbolRange);
+						effectiveRange = symbolRange;
+						selectionSuccessfullyDetermined = true;
+						vscode.window.showInformationMessage(
+							`Minovative Mind: Selected code block via symbol-based fallback (${selectionMethodUsed.replace(
+								/-/g,
+								" "
+							)}).`
+						);
+						console.log(
+							`[Minovative Mind] Auto-selected using ${selectionMethodUsed}.`
+						);
+						// diagnosticsString calculation REMOVED from here per centralization instructions
+					}
+					// Previous full-file fallbacks if symbol lookup failed are removed, handled by Layer 4
+				}
+
+				// NEW Layer 3 (Tree-sitter Fallback via Code Blocks):
+				if (
+					!selectionSuccessfullyDetermined &&
+					(instruction === "/fix" || instruction === "custom prompt")
+				) {
+					console.log(
+						"[Minovative Mind] Attempting Tree-sitter (Code Blocks) fallback."
+					);
+					const currentSelectionBeforeTreeSitter = editor.selection;
+
+					try {
+						await vscode.commands.executeCommand("codeBlocks.selectParent");
+						await sleep(50); // Give VS Code a moment to update the selection
+						const treeSitterSelection = editor.selection;
+
+						if (
+							!treeSitterSelection.isEmpty &&
+							!treeSitterSelection.isEqual(currentSelectionBeforeTreeSitter)
+						) {
+							selectedText = editor.document.getText(treeSitterSelection);
+							effectiveRange = treeSitterSelection;
+							selectionSuccessfullyDetermined = true;
+							selectionMethodUsed = "tree-sitter-code-blocks";
+							vscode.window.showInformationMessage(
+								"Minovative Mind: Selected code block via Tree-sitter (Code Blocks) fallback."
+							);
+							console.log(
+								"[Minovative Mind] Auto-selected using Code Blocks (Tree-sitter)."
+							);
+						} else {
+							console.log(
+								"[Minovative Mind] Code Blocks (Tree-sitter) did not yield a useful selection."
+							);
+						}
+					} catch (e) {
+						console.warn(
+							"[Minovative Mind] Error executing 'codeBlocks.selectParent' command:",
+							e
+						);
+						vscode.window.showWarningMessage(
+							"Minovative Mind: Could not use Tree-sitter for selection. Please ensure the 'Code Blocks' extension (id: 'tom-selfin.codeblocks') is installed and enabled."
+						);
+					}
+				}
+
+				// Layer 4 (Full-File Fallback):
+				if (!selectionSuccessfullyDetermined) {
+					if (instruction === "/merge") {
+						if (!hasMergeConflicts(fullText)) {
+							vscode.window.showInformationMessage(
+								`No active merge conflicts detected in '${fileName}'.`
+							);
+							return;
+						}
+						selectedText = fullText;
+						effectiveRange = new vscode.Range(
+							editor.document.positionAt(0),
+							editor.document.positionAt(fullText.length)
+						);
+						selectionMethodUsed = "full-file-for-merge";
+						vscode.window.showInformationMessage(
+							"Minovative Mind: Selected full file for merge operation."
+						);
+						diagnosticsString = undefined;
+					} else {
+						console.log(
+							"[Minovative Mind] All automatic selection methods failed or were not applicable. Falling back to full file selection."
+						);
+						selectedText = fullText;
+						effectiveRange = new vscode.Range(
+							editor.document.positionAt(0),
+							editor.document.positionAt(fullText.length)
+						);
+						selectionMethodUsed = "full-file-fallback";
+						vscode.window.showInformationMessage(
+							"Minovative Mind: Falling back to full file selection."
+						);
+						// diagnosticsString calculation REMOVED from here per centralization instructions
+					}
+				}
+			} // End of else (no explicit user selection)
+
+			// Centralize Diagnostics String Calculation:
+			// Calculate diagnostics based on the determined effectiveRange, unless it's a /merge operation
+			if (instruction !== "/merge") {
 				diagnosticsString = await DiagnosticService.formatContextualDiagnostics(
 					documentUri,
 					sidebarProvider.workspaceRootUri!,
 					effectiveRange
 				);
-			} else {
-				// No user selection: Apply intelligent auto-selection based on command type
-				const cursorPosition = editor.selection.active; // Current cursor position
-
-				if (instruction === "/fix") {
-					// Find the smallest logical block containing diagnostics
-					const symbolWithDiagnostics =
-						await CodeSelectionService.findSymbolWithDiagnostics(
-							editor.document,
-							allDiagnostics,
-							symbols
-						);
-					if (symbolWithDiagnostics) {
-						selectedText = editor.document.getText(symbolWithDiagnostics.range);
-						effectiveRange = symbolWithDiagnostics.range;
-						// Format diagnostics specifically for the auto-selected block
-						diagnosticsString =
-							await DiagnosticService.formatContextualDiagnostics(
-								documentUri,
-								sidebarProvider.workspaceRootUri!,
-								effectiveRange
-							);
-					} else {
-						// Fallback: No relevant block with diagnostics, use entire file
-						selectedText = fullText;
-						effectiveRange = new vscode.Range(
-							editor.document.positionAt(0),
-							editor.document.positionAt(fullText.length)
-						);
-						// Format all diagnostics in the file for full file context
-						diagnosticsString =
-							await DiagnosticService.formatContextualDiagnostics(
-								documentUri,
-								sidebarProvider.workspaceRootUri!,
-								effectiveRange
-							);
-					}
-					// Suppress "No text selected" warning for /fix
-					// No explicit warning needed here as auto-selection is attempted.
-				} else if (instruction === "custom prompt") {
-					// Find the logical block at the cursor position
-					const enclosingSymbol =
-						await CodeSelectionService.findEnclosingSymbol(
-							editor.document,
-							cursorPosition,
-							symbols
-						);
-					if (enclosingSymbol) {
-						selectedText = editor.document.getText(enclosingSymbol.range);
-						effectiveRange = enclosingSymbol.range;
-						// Format diagnostics specifically for the auto-selected block
-						diagnosticsString =
-							await DiagnosticService.formatContextualDiagnostics(
-								documentUri,
-								sidebarProvider.workspaceRootUri!,
-								effectiveRange
-							);
-					} else {
-						// Fallback: No clear logical block, use entire file
-						selectedText = fullText;
-						effectiveRange = new vscode.Range(
-							editor.document.positionAt(0),
-							editor.document.positionAt(fullText.length)
-						);
-						// Format all diagnostics in the file for full file context
-						diagnosticsString =
-							await DiagnosticService.formatContextualDiagnostics(
-								documentUri,
-								sidebarProvider.workspaceRootUri!,
-								effectiveRange
-							);
-					}
-					// Suppress "No text selected" warning for custom prompt
-					// No explicit warning needed here as auto-selection is attempted.
-				} else if (instruction === "/merge") {
-					// For /merge, always send the entire file content, but internally AI will use conflict markers.
-					// First, check if conflicts exist, use existing `hasMergeConflicts` from `mergeUtils.ts`.
-					if (!hasMergeConflicts(fullText)) {
-						vscode.window.showInformationMessage(
-							`No active merge conflicts detected in '${fileName}'.`
-						);
-						return; // Exit if no conflicts
-					}
-					selectedText = fullText;
-					effectiveRange = new vscode.Range(
-						editor.document.positionAt(0),
-						editor.document.positionAt(fullText.length)
-					);
-					diagnosticsString = undefined; // Diagnostics are less relevant for pure merge resolution by the AI.
-					// Suppress "No text selected" warning for /merge
-					// No explicit warning needed here as auto-selection is attempted.
-				} else if (instruction === "/docs") {
-					// As per chat history, /docs still requires an explicit selection or shows warning.
-					// This means the previous user request to auto-select for /docs was superseded by this current, broader request.
-					// So, keep the existing behavior for /docs when no selection.
-					vscode.window.showWarningMessage("No text selected.");
-					return;
-				} else {
-					// Fallback for any other unexpected instruction without selection, though the quick pick limits this.
-					// Treat like a custom prompt with no clear block, default to full file.
-					selectedText = fullText;
-					effectiveRange = new vscode.Range(
-						editor.document.positionAt(0),
-						editor.document.positionAt(fullText.length)
-					);
-					diagnosticsString =
-						await DiagnosticService.formatContextualDiagnostics(
-							documentUri,
-							sidebarProvider.workspaceRootUri!,
-							effectiveRange
-						);
-				}
 			}
 
-			// New /docs instruction handling
+			// New /docs instruction handling (now using the upfront logic, this block still handles execution)
 			if (instruction === "/docs") {
 				const selectedModel =
 					sidebarProvider.settingsManager.getSelectedModelName();
@@ -541,18 +621,6 @@ export async function activate(context: vscode.ExtensionContext) {
 					}
 				);
 				return; // Crucially return here to prevent falling through to planning logic
-			}
-
-			// Original actionTypeForGating logic, adjusted for /docs being handled separately
-			let actionTypeForGating: string;
-			if (instruction === "/fix") {
-				actionTypeForGating = "plan_from_editor_fix";
-			} else if (instruction === "/merge") {
-				// Set actionTypeForGating for /merge
-				actionTypeForGating = "plan_from_editor_merge";
-			} else {
-				// Any other instruction, including custom prompts, will use plan_from_editor_custom
-				actionTypeForGating = "plan_from_editor_custom";
 			}
 
 			let result: sidebarTypes.PlanGenerationResult = {
