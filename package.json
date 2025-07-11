@@ -67,16 +67,6 @@
 				"command": "minovative-mind.explainSelection",
 				"title": "Generate Explanation",
 				"category": "Minovative Mind"
-			},
-			{
-				"command": "minovative-mind.generateCodeLive",
-				"title": "Generate Code Live",
-				"category": "Minovative Mind"
-			},
-			{
-				"command": "minovative-mind.modifyCodeLive",
-				"title": "Modify Code Live",
-				"category": "Minovative Mind"
 			}
 		],
 		"menus": {
@@ -96,14 +86,6 @@
 				{
 					"command": "minovative-mind.explainSelection",
 					"group": "2_analysis@2"
-				},
-				{
-					"command": "minovative-mind.generateCodeLive",
-					"group": "3_generation@3"
-				},
-				{
-					"command": "minovative-mind.modifyCodeLive",
-					"group": "4_live_modification@4"
 				}
 			]
 		},
