@@ -538,7 +538,6 @@ export function handleCancelCommit(
 		);
 		return;
 	}
-	appState.isCommitActionInProgress = true; // Set flag to indicate operation started
 
 	console.log("Cancel Commit button clicked.");
 	if (elements.confirmCommitButton) {

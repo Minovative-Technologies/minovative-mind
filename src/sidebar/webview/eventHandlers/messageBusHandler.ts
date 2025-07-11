@@ -835,6 +835,7 @@ export function initializeMessageBusHandler(
 				console.log(
 					"[reenableInput] Received reenableInput request from provider."
 				);
+				appState.isCancellationInProgress = false; // MOVED TO HERE
 
 				resetStreamingAnimationState();
 
