@@ -3,7 +3,10 @@ import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
 import { cleanCodeOutput } from "./utils/codeUtils";
 import * as sidebarTypes from "./sidebar/common/sidebarTypes";
-import { hasMergeConflicts } from "./utils/mergeUtils"; // Added import for mergeUtils
+import { hasMergeConflicts, getMergeConflictRanges } from "./utils/mergeUtils"; // Added import for mergeUtils
+import { CodeSelectionService } from "./services/codeSelectionService";
+import { getSymbolsInDocument } from "./services/symbolService";
+import { DiagnosticService } from "./utils/diagnosticUtils";
 
 // Helper function type definition for AI action results (kept for potential future use)
 type ActionResult =
@@ -266,17 +269,21 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			// Refactor variable declarations as per instructions
 			const originalSelection: vscode.Selection = editor.selection;
-			let effectiveRange: vscode.Range;
-			let selectedText: string;
 
 			const fullText = editor.document.getText();
 			const languageId = editor.document.languageId;
 			const documentUri = editor.document.uri;
 			const fileName = editor.document.fileName;
-			// Move `diagnosticsString` declaration and assign it by calling the new helper
-			const diagnosticsString: string = await _getFormattedDiagnostics(
-				documentUri
-			);
+
+			// Fetch contextual information for intelligent selection
+			const allDiagnostics =
+				DiagnosticService.getDiagnosticsForUri(documentUri);
+			const symbols = await getSymbolsInDocument(documentUri);
+
+			// Initialize variables for intelligent selection
+			let selectedText: string;
+			let effectiveRange: vscode.Range;
+			let diagnosticsString: string | undefined; // Will be set contextually
 
 			// Replace showInputBox with showQuickPick
 			const quickPickItems: vscode.QuickPickItem[] = [
@@ -355,52 +362,129 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 			}
 
-			// Handle '/fix' with empty selection first
-			if (instruction === "/fix" && originalSelection.isEmpty) {
-				selectedText = fullText; // Set selectedText to the entire document
-				// Set effectiveRange to cover the entire document
-				effectiveRange = new vscode.Range(
-					editor.document.positionAt(0),
-					editor.document.positionAt(fullText.length)
-				);
-				// Diagnostics are now collected universally at the start, no need for redundant collection here.
-				// Crucially, for '/fix' with empty selection, we skip the "No text selected." warning.
-			} else if (instruction === "/docs" && originalSelection.isEmpty) {
-				// This is the check for /docs with empty selection
-				vscode.window.showWarningMessage("No text selected.");
-				return;
-			}
-
-			// Handle '/merge' command
-			else if (instruction === "/merge") {
-				// editor, documentUri, fileName, fullText, languageId, diagnosticsString are already available from above.
-				// Just need to ensure `selectedText` and `effectiveRange` are set and check for conflicts.
-
-				if (!hasMergeConflicts(fullText)) {
-					vscode.window.showInformationMessage(
-						`No active merge conflicts detected in '${fileName}'.`
-					);
-					return; // Exit if no conflicts
-				}
-
-				selectedText = fullText; // Always operate on full file for merge conflicts
-				effectiveRange = new vscode.Range(
-					editor.document.positionAt(0),
-					editor.document.positionAt(fullText.length)
-				);
-			} else if (originalSelection.isEmpty) {
-				// This new block handles all other instructions (custom requests) when no selection is present.
-				selectedText = fullText;
-				effectiveRange = new vscode.Range(
-					editor.document.positionAt(0),
-					editor.document.positionAt(fullText.length)
-				);
-				// Diagnostics are now collected universally at the start, no need for redundant collection here.
-				// Crucially, ensure no warning message is shown in this block, as the expanded scope is intentional.
-			} else {
-				// User has a non-empty originalSelection
+			// Check if user has an active selection
+			if (!originalSelection.isEmpty) {
+				// User made a selection: Use it as-is.
 				selectedText = editor.document.getText(originalSelection);
 				effectiveRange = originalSelection;
+				// Format diagnostics only relevant to the user's explicit selection
+				diagnosticsString = await DiagnosticService.formatContextualDiagnostics(
+					documentUri,
+					sidebarProvider.workspaceRootUri!,
+					effectiveRange
+				);
+			} else {
+				// No user selection: Apply intelligent auto-selection based on command type
+				const cursorPosition = editor.selection.active; // Current cursor position
+
+				if (instruction === "/fix") {
+					// Find the smallest logical block containing diagnostics
+					const symbolWithDiagnostics =
+						await CodeSelectionService.findSymbolWithDiagnostics(
+							editor.document,
+							allDiagnostics,
+							symbols
+						);
+					if (symbolWithDiagnostics) {
+						selectedText = editor.document.getText(symbolWithDiagnostics.range);
+						effectiveRange = symbolWithDiagnostics.range;
+						// Format diagnostics specifically for the auto-selected block
+						diagnosticsString =
+							await DiagnosticService.formatContextualDiagnostics(
+								documentUri,
+								sidebarProvider.workspaceRootUri!,
+								effectiveRange
+							);
+					} else {
+						// Fallback: No relevant block with diagnostics, use entire file
+						selectedText = fullText;
+						effectiveRange = new vscode.Range(
+							editor.document.positionAt(0),
+							editor.document.positionAt(fullText.length)
+						);
+						// Format all diagnostics in the file for full file context
+						diagnosticsString =
+							await DiagnosticService.formatContextualDiagnostics(
+								documentUri,
+								sidebarProvider.workspaceRootUri!,
+								effectiveRange
+							);
+					}
+					// Suppress "No text selected" warning for /fix
+					// No explicit warning needed here as auto-selection is attempted.
+				} else if (instruction === "custom prompt") {
+					// Find the logical block at the cursor position
+					const enclosingSymbol =
+						await CodeSelectionService.findEnclosingSymbol(
+							editor.document,
+							cursorPosition,
+							symbols
+						);
+					if (enclosingSymbol) {
+						selectedText = editor.document.getText(enclosingSymbol.range);
+						effectiveRange = enclosingSymbol.range;
+						// Format diagnostics specifically for the auto-selected block
+						diagnosticsString =
+							await DiagnosticService.formatContextualDiagnostics(
+								documentUri,
+								sidebarProvider.workspaceRootUri!,
+								effectiveRange
+							);
+					} else {
+						// Fallback: No clear logical block, use entire file
+						selectedText = fullText;
+						effectiveRange = new vscode.Range(
+							editor.document.positionAt(0),
+							editor.document.positionAt(fullText.length)
+						);
+						// Format all diagnostics in the file for full file context
+						diagnosticsString =
+							await DiagnosticService.formatContextualDiagnostics(
+								documentUri,
+								sidebarProvider.workspaceRootUri!,
+								effectiveRange
+							);
+					}
+					// Suppress "No text selected" warning for custom prompt
+					// No explicit warning needed here as auto-selection is attempted.
+				} else if (instruction === "/merge") {
+					// For /merge, always send the entire file content, but internally AI will use conflict markers.
+					// First, check if conflicts exist, use existing `hasMergeConflicts` from `mergeUtils.ts`.
+					if (!hasMergeConflicts(fullText)) {
+						vscode.window.showInformationMessage(
+							`No active merge conflicts detected in '${fileName}'.`
+						);
+						return; // Exit if no conflicts
+					}
+					selectedText = fullText;
+					effectiveRange = new vscode.Range(
+						editor.document.positionAt(0),
+						editor.document.positionAt(fullText.length)
+					);
+					diagnosticsString = undefined; // Diagnostics are less relevant for pure merge resolution by the AI.
+					// Suppress "No text selected" warning for /merge
+					// No explicit warning needed here as auto-selection is attempted.
+				} else if (instruction === "/docs") {
+					// As per chat history, /docs still requires an explicit selection or shows warning.
+					// This means the previous user request to auto-select for /docs was superseded by this current, broader request.
+					// So, keep the existing behavior for /docs when no selection.
+					vscode.window.showWarningMessage("No text selected.");
+					return;
+				} else {
+					// Fallback for any other unexpected instruction without selection, though the quick pick limits this.
+					// Treat like a custom prompt with no clear block, default to full file.
+					selectedText = fullText;
+					effectiveRange = new vscode.Range(
+						editor.document.positionAt(0),
+						editor.document.positionAt(fullText.length)
+					);
+					diagnosticsString =
+						await DiagnosticService.formatContextualDiagnostics(
+							documentUri,
+							sidebarProvider.workspaceRootUri!,
+							effectiveRange
+						);
+				}
 			}
 
 			// New /docs instruction handling
