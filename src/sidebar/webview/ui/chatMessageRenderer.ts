@@ -4,29 +4,18 @@ import {
 	faExclamationTriangle,
 	faCopy,
 	faTrashCan,
-	faPenToSquare, // Added for edit button
+	faPenToSquare,
 } from "../utils/iconHelpers";
 import { postMessageToExtension } from "../utils/vscodeApi";
 import { appState } from "../state/appState";
 import { stopTypingAnimation, startTypingAnimation } from "./typingAnimation";
-import { updateEmptyChatPlaceholderVisibility } from "./statusManager";
+import {
+	updateEmptyChatPlaceholderVisibility,
+	updateStatus,
+} from "./statusManager";
 import { RequiredDomElements } from "../types/webviewTypes";
-import { initializeDomElements } from "../state/domElements"; // Preserving unused import
+import { initializeDomElements } from "../state/domElements";
 
-/**
- * Appends a chat message to the chat container.
- * This function handles message rendering, diff display, relevant file listing,
- * and integrates with typing animation and message action buttons.
- * @param elements An object containing references to all required DOM elements.
- * @param sender The sender of the message (e.g., "You", "Model", "System").
- * @param text The content of the message in Markdown format.
- * @param className Optional CSS classes for the message element.
- * @param isHistoryMessage Whether the message is loaded from history.
- * @param diffContent Optional string for code diff to display.
- * @param relevantFiles Optional array of strings for relevant files.
- * @param messageIndexForHistory Optional index for messages loaded from history, used for editing/deleting.
- * @param isRelevantFilesExpandedForHistory Optional boolean indicating if relevant files section was expanded in history.
- */
 export function appendMessage(
 	elements: RequiredDomElements,
 	sender: string,
@@ -172,7 +161,7 @@ export function appendMessage(
 				lineWrapper.appendChild(gutter);
 
 				const codeSpan = document.createElement("span");
-				codeSpan.textContent = line.replace(/^[-+ ]/, "");
+				codeSpan.textContent = line.replace(/^[+\- ]/, "");
 				lineWrapper.appendChild(codeSpan);
 
 				// Group consecutive change lines into hunks
@@ -287,7 +276,7 @@ export function appendMessage(
 
 	let copyButton: HTMLButtonElement | null = null;
 	let deleteButton: HTMLButtonElement | null = null;
-	let editButton: HTMLButtonElement | null = null; // Declare editButton
+	let editButton: HTMLButtonElement | null = null;
 
 	if (isHistoryMessage) {
 		if (
@@ -310,20 +299,31 @@ export function appendMessage(
 				editButton = document.createElement("button");
 				editButton.classList.add("edit-button");
 				editButton.title = "Edit Message";
-				setIconForButton(editButton, faPenToSquare); // Set the edit icon
+				setIconForButton(editButton, faPenToSquare);
 			}
 
-			// NEW LOGIC for initial button disabled state based on appState.isLoading
-			const disableButtonsInitially = appState.isLoading;
-
-			if (copyButton) {
-				copyButton.disabled = disableButtonsInitially;
-			}
-			if (deleteButton) {
-				deleteButton.disabled = disableButtonsInitially;
-			}
-			if (editButton) {
-				editButton.disabled = disableButtonsInitially;
+			// NEW LOGIC for initial button disabled state
+			if (className.includes("user-message")) {
+				if (copyButton) {
+					copyButton.disabled = false;
+				}
+				if (deleteButton) {
+					deleteButton.disabled = false;
+				}
+				if (editButton) {
+					editButton.disabled = false;
+				}
+			} else if (className.includes("ai-message")) {
+				const shouldDisableAiStreamingButtons =
+					sender === "Model" &&
+					text === "" &&
+					!className.includes("error-message");
+				if (copyButton) {
+					copyButton.disabled = shouldDisableAiStreamingButtons;
+				}
+				if (deleteButton) {
+					deleteButton.disabled = shouldDisableAiStreamingButtons;
+				}
 			}
 
 			const messageActions = document.createElement("div");
@@ -340,12 +340,24 @@ export function appendMessage(
 			// --- Edit Mode Activation (Instruction 4) and Key Event Handling (Instruction 5) ---
 			if (editButton) {
 				editButton.addEventListener("click", () => {
-					// Get the messageIndexForHistory
-					if (messageIndexForHistory === undefined) {
+					// Retrieve the message index directly from the DOM element's dataset
+					const messageIndexStr = messageElement.dataset.messageIndex;
+					const messageIndex = messageIndexStr
+						? parseInt(messageIndexStr, 10)
+						: -1; // Parse to number
+
+					// Add robust validation for the retrieved index
+					if (isNaN(messageIndex) || messageIndex < 0) {
 						console.error(
-							"[ChatMessageRenderer] Message index not found for editing."
+							"[ChatMessageRenderer] Invalid message index for editing:",
+							messageIndexStr
 						);
-						return;
+						updateStatus(
+							elements,
+							"Error: Cannot edit message. Please try again or refresh.",
+							true
+						);
+						return; // Prevent further execution if index is invalid
 					}
 
 					// Get the currentTextElement and store its textContent as originalText
@@ -421,7 +433,7 @@ export function appendMessage(
 								// 7. After these UI updates, call the now-modified `sendEditedMessageToExtension`.
 								sendEditedMessageToExtension(
 									elements,
-									messageIndexForHistory,
+									messageIndex,
 									newContent
 								);
 							} else {
@@ -476,11 +488,7 @@ export function appendMessage(
 							);
 							startTypingAnimation(elements);
 
-							sendEditedMessageToExtension(
-								elements,
-								messageIndexForHistory,
-								newContent
-							);
+							sendEditedMessageToExtension(elements, messageIndex, newContent);
 						} else {
 							revertEdit(textarea, originalText, messageActions); // Call revertEdit()
 						}
@@ -505,7 +513,7 @@ export function appendMessage(
 				appState.currentAiMessageContentElement = textElement;
 				appState.currentAccumulatedText = "";
 				appState.typingBuffer = "";
-				startTypingAnimation(elements); // Pass elements
+				startTypingAnimation(elements);
 
 				textElement.innerHTML =
 					'<span class="loading-text">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
@@ -517,7 +525,6 @@ export function appendMessage(
 					deleteButton.disabled = true;
 				}
 				if (editButton) {
-					// Also disable edit button for streaming messages
 					editButton.disabled = true;
 				}
 			} else {
@@ -566,11 +573,6 @@ export function appendMessage(
 	updateEmptyChatPlaceholderVisibility(elements);
 }
 
-/**
- * Re-enables all message action buttons (copy, delete, edit) for all history messages.
- * This is called when the loading state changes to false to ensure buttons are interactive.
- * @param elements An object containing references to all required DOM elements.
- */
 export function reenableAllMessageActionButtons(
 	elements: RequiredDomElements
 ): void {
@@ -603,8 +605,6 @@ export function reenableAllMessageActionButtons(
 	console.log("[ChatMessageRenderer] Re-enabled all message action buttons.");
 }
 
-// Helper functions (Instruction 6)
-
 function sendEditedMessageToExtension(
 	elements: RequiredDomElements,
 	messageIndex: number,
@@ -618,10 +618,8 @@ function sendEditedMessageToExtension(
 	console.log(
 		`[ChatMessageRenderer] Sent editChatMessage for index ${messageIndex}`
 	);
-	// All DOM manipulation removed as per instruction.
 }
 
-// Helper function to revert an edit or update a message element in UI (if not doing full append for render)
 function revertEdit(
 	textarea: HTMLTextAreaElement,
 	originalText: string,

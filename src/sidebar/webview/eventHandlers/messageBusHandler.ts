@@ -351,6 +351,15 @@ export function initializeMessageBusHandler(
 					}
 				}
 
+				// Add logic to select all elements with the class '.user-message-edited-pending-ai'
+				// from 'elements.chatContainer' and remove this class from each of them.
+				const editedMessages = elements.chatContainer.querySelectorAll(
+					".user-message-edited-pending-ai"
+				);
+				editedMessages.forEach((msg) => {
+					msg.classList.remove("user-message-edited-pending-ai");
+				});
+
 				resetStreamingAnimationState(); // Clear animation state
 				appState.isCancellationInProgress = false; // Reset cancellation flag after processing content update
 
@@ -425,15 +434,24 @@ export function initializeMessageBusHandler(
 				const avgInputElement = document.getElementById("avg-input-tokens");
 				const avgOutputElement = document.getElementById("avg-output-tokens");
 
-				if (totalInputElement) totalInputElement.textContent = stats.totalInput;
-				if (totalOutputElement)
+				if (totalInputElement) {
+					totalInputElement.textContent = stats.totalInput;
+				}
+				if (totalOutputElement) {
 					totalOutputElement.textContent = stats.totalOutput;
-				if (totalTokensElement) totalTokensElement.textContent = stats.total;
-				if (requestCountElement)
+				}
+				if (totalTokensElement) {
+					totalTokensElement.textContent = stats.total;
+				}
+				if (requestCountElement) {
 					requestCountElement.textContent = stats.requestCount;
-				if (avgInputElement) avgInputElement.textContent = stats.averageInput;
-				if (avgOutputElement)
+				}
+				if (avgInputElement) {
+					avgInputElement.textContent = stats.averageInput;
+				}
+				if (avgOutputElement) {
 					avgOutputElement.textContent = stats.averageOutput;
+				}
 				break;
 			}
 
@@ -451,12 +469,15 @@ export function initializeMessageBusHandler(
 				);
 				const totalTokensElement = document.getElementById("total-tokens");
 
-				if (totalInputElement)
+				if (totalInputElement) {
 					totalInputElement.textContent = estimates.inputTokens;
-				if (totalOutputElement)
+				}
+				if (totalOutputElement) {
 					totalOutputElement.textContent = estimates.outputTokens;
-				if (totalTokensElement)
+				}
+				if (totalTokensElement) {
 					totalTokensElement.textContent = estimates.totalTokens;
+				}
 				break;
 			}
 
@@ -730,6 +751,7 @@ export function initializeMessageBusHandler(
 			case "restoreHistory": {
 				if (elements.chatContainer && Array.isArray(message.value)) {
 					elements.chatContainer.innerHTML = "";
+					appState.nextMessageIndex = message.value.length; // Synchronize the next message index
 					message.value.forEach((msg: any, index: number) => {
 						if (
 							msg &&

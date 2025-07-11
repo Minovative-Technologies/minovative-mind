@@ -35,4 +35,5 @@ export const appState: WebviewAppState = {
 	isPlanExecutionInProgress: false, // Initialize plan execution tracking
 	totalKeys: 0,
 	isTokenUsageVisible: false, // Initialize token usage visibility
+	nextMessageIndex: 0,
 };

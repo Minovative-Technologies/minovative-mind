@@ -91,20 +91,53 @@ export function sendMessage(
 			);
 			return;
 		}
+		// Increment message index for the new user message before appending
+		const userMessageIndex = appState.nextMessageIndex++;
 		// Ensure appendMessage and updateStatus pass 'elements' as their first argument
-		appendMessage(elements, "You", fullMessage, "user-message", true);
+		appendMessage(
+			elements,
+			"You",
+			fullMessage,
+			"user-message",
+			true,
+			undefined,
+			undefined,
+			userMessageIndex
+		);
 		updateStatus(elements, "Requesting plan generation...");
 		postMessageToExtension({ type: "planRequest", value: planRequest });
 	} else if (lowerMessage === MINOVATIVE_COMMANDS[1]) {
 		// Handles /commit command
+		// Increment message index for the new user message before appending
+		const userMessageIndex = appState.nextMessageIndex++;
 		// Ensure appendMessage and updateStatus pass 'elements' as their first argument
-		appendMessage(elements, "You", fullMessage, "user-message", true);
+		appendMessage(
+			elements,
+			"You",
+			fullMessage,
+			"user-message",
+			true,
+			undefined,
+			undefined,
+			userMessageIndex
+		);
 		updateStatus(elements, "Requesting commit message generation...");
 		postMessageToExtension({ type: "commitRequest" });
 	} else {
 		// Regular chat message
+		// Increment message index for the new user message before appending
+		const userMessageIndex = appState.nextMessageIndex++;
 		// Ensure appendMessage and updateStatus pass 'elements' as their first argument
-		appendMessage(elements, "You", fullMessage, "user-message", true);
+		appendMessage(
+			elements,
+			"You",
+			fullMessage,
+			"user-message",
+			true,
+			undefined,
+			undefined,
+			userMessageIndex
+		);
 		updateStatus(elements, "Sending message to AI...");
 		const groundingEnabled = elements.groundingToggle?.checked ?? false;
 		postMessageToExtension({

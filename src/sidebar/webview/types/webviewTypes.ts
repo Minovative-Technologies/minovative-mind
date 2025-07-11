@@ -87,4 +87,5 @@ export interface WebviewAppState {
 	isPlanExecutionInProgress: boolean; // New property to track plan execution state
 	totalKeys: number;
 	isTokenUsageVisible: boolean; // New property to track token usage visibility
+	nextMessageIndex: number;
 }
