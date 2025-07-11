@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { AIRequestService } from "./aiRequestService";
 import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor";
 import { ActiveSymbolDetailedInfo } from "./contextService";
-import { DEFAULT_MODEL } from "../sidebar/common/sidebarConstants";
+import { DEFAULT_MODEL, TEMPERATURE } from "../sidebar/common/sidebarConstants";
 
 export interface FileSummary {
 	filePath: string;
@@ -245,8 +245,8 @@ export class SequentialFileProcessor {
 					undefined,
 					`file-analysis-${relativePath}`,
 					{
-						temperature: 0.3,
-						maxOutputTokens: 1000,
+						temperature: TEMPERATURE,
+						maxOutputTokens: 3000,
 					}
 				);
 

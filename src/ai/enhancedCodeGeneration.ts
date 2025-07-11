@@ -6,6 +6,7 @@ import {
 	IncrementalCodeUpdater,
 	CodeChange,
 } from "../utils/incrementalCodeUpdater";
+import { TEMPERATURE } from "../sidebar/common/sidebarConstants";
 
 /**
  * Real-time feedback interface for code generation
@@ -1162,7 +1163,7 @@ Generate ONLY the JSON array of edit instructions:`;
 			"inline edit instructions generation",
 			{
 				responseMimeType: "application/json",
-				temperature: 0.1, // Low temperature for precise instructions
+				temperature: TEMPERATURE, // Low temperature for precise instructions
 			},
 			undefined,
 			token
@@ -1269,7 +1270,7 @@ Return ONLY the JSON object:`;
 			"fallback edit instruction",
 			{
 				responseMimeType: "application/json",
-				temperature: 0.1,
+				temperature: TEMPERATURE,
 			},
 			undefined,
 			token

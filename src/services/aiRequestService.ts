@@ -200,7 +200,7 @@ export class AIRequestService {
 						value: `API quota limit hit. Pausing for 1 minute before retrying.`,
 						isError: true,
 					});
-					await new Promise((resolve) => setTimeout(resolve, 60000));
+					await new Promise((resolve) => setTimeout(resolve, 120000));
 					if (token?.isCancellationRequested) {
 						throw new Error(ERROR_OPERATION_CANCELLED);
 					}
@@ -215,7 +215,7 @@ export class AIRequestService {
 						type: "statusUpdate",
 						value: `AI service temporarily unavailable. Waiting 1 minute before retrying...`,
 					});
-					await new Promise((resolve) => setTimeout(resolve, 60000)); // 60-second delay (1 minute)
+					await new Promise((resolve) => setTimeout(resolve, 120000)); // 120-second delay (1 minute)
 					continue; // MODIFICATION 4: Stay in the loop with the same key
 				} else {
 					// For any other non-retryable error, set result and exit the loop / return immediately
@@ -314,7 +314,7 @@ export class AIRequestService {
 
 		return ParallelProcessor.executeParallel(tasks, {
 			maxConcurrency: config.maxConcurrency ?? 3, // Limit concurrent AI requests
-			defaultTimeout: config.timeout ?? 60000, // 60 seconds default
+			defaultTimeout: config.timeout ?? 120000, // 120 seconds default
 			defaultRetries: config.retries ?? 1,
 			enableRetries: true,
 			enableTimeout: true,
@@ -381,7 +381,7 @@ export class AIRequestService {
 
 		return ParallelProcessor.executeInBatches(tasks, batchSize, {
 			maxConcurrency: config.maxConcurrency ?? 3,
-			defaultTimeout: config.timeout ?? 60000,
+			defaultTimeout: config.timeout ?? 120000,
 			defaultRetries: config.retries ?? 1,
 			enableRetries: true,
 			enableTimeout: true,

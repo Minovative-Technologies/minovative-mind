@@ -51,7 +51,7 @@ export class EnhancedWorkflowService {
 		enableIncrementalUpdates: true,
 		enableParallelProcessing: true,
 		enableValidation: true,
-		timeout: 60000,
+		timeout: 120000,
 		retries: 2,
 	};
 

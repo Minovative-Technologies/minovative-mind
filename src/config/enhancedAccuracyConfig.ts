@@ -1,3 +1,5 @@
+import { TEMPERATURE } from "../sidebar/common/sidebarConstants";
+
 /**
  * Configuration for enhanced AI accuracy features
  */
@@ -186,7 +188,7 @@ export const DEFAULT_ENHANCED_ACCURACY_CONFIG: EnhancedAccuracyConfig = {
 		enableFrameworkGuidelines: true,
 		enableQualityStandards: true,
 		enableLanguageSpecificGuidelines: true,
-		temperature: 0.1,
+		temperature: TEMPERATURE,
 	},
 
 	planGeneration: {

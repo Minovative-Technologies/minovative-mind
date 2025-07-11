@@ -4,6 +4,7 @@ import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 import { EnhancedContextBuilder } from "../context/enhancedContextBuilder";
 import { EnhancedPromptBuilder } from "../ai/enhancedPromptBuilder";
 import { ActiveSymbolDetailedInfo } from "./contextService";
+import { TEMPERATURE } from "../sidebar/common/sidebarConstants";
 
 /**
  * Real-time feedback interface for enhanced AI service
@@ -126,7 +127,7 @@ export class EnhancedAIService {
 			"enhanced plan generation",
 			{
 				responseMimeType: "application/json",
-				temperature: 0.1, // Lower temperature for more consistent results
+				temperature: TEMPERATURE, // Lower temperature for more consistent results
 			},
 			undefined,
 			token
