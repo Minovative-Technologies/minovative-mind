@@ -345,8 +345,6 @@ h2 {
 	margin-left: auto;
 	min-height: fit-content;
 	border-color: var(--vscode-list-activeSelectionBackground);
-	overflow-x: scroll;
-	overflow-y: hidden;
 }
 .user-message strong {
 	color: var(--vscode-list-activeSelectionForeground);
@@ -357,8 +355,6 @@ h2 {
 	margin-right: auto;
 	min-height: fit-content;
 	position: relative; /* Ensure .message-actions is positioned relative to this */
-	overflow-x: scroll;
-	overflow-y: hidden;
 }
 /* Specific styling for AI messages that are error messages */
 .ai-message.error-message {
@@ -996,7 +992,9 @@ div#commit-message-display :not(pre) > code,
 	border-radius: 4px; /* Slightly more rounded */
 	font-size: 0.9em; /* Slightly smaller for inline code */
 	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
-	white-space: nowrap; /* Prevent inline code from wrapping if possible */
+	white-space: normal; /* Allow normal text wrapping instead of pre-wrap */
+	word-wrap: break-word; /* Allow long words to break and wrap */
+	overflow-wrap: break-word; /* Modern property for word wrapping */
 	font-family: var(
 		--vscode-editor-font-family,
 		"SF Mono",
