@@ -1861,11 +1861,14 @@ Complete Modified File Content:`;
 		generatedContent: string,
 		filePath: string
 	): void {
-		const lowerCaseContent = generatedContent.toLowerCase();
+		const lowerCaseContent = generatedContent.trim().toLowerCase();
 
+		// Only throw if the entire content is a single error message, not if it merely contains error-related phrases
 		if (
-			lowerCaseContent.startsWith("error:") ||
-			lowerCaseContent.includes("failed to generate")
+			lowerCaseContent === "error:" ||
+			lowerCaseContent.startsWith("error: ") ||
+			lowerCaseContent === "failed to generate" ||
+			lowerCaseContent.startsWith("failed to generate")
 		) {
 			const displayContent =
 				generatedContent.length > 200
