@@ -50,6 +50,9 @@ export function typeNextCharacters(elements: RequiredDomElements): void {
 		appState.currentAiMessageContentElement.innerHTML = md.render(
 			appState.currentAccumulatedText
 		);
+		// Store the original markdown text for copy functionality
+		appState.currentAiMessageContentElement.dataset.originalMarkdown =
+			appState.currentAccumulatedText;
 
 		// Scroll to the bottom of the chat container
 		// elements.chatContainer is guaranteed to be an HTMLDivElement by RequiredDomElements

@@ -285,7 +285,7 @@ export function appendMessage(
 		) {
 			copyButton = document.createElement("button");
 			copyButton.classList.add("copy-button");
-			copyButton.title = "Copy Message";
+			copyButton.title = "Copy Markdown";
 			setIconForButton(copyButton, faCopy);
 
 			deleteButton = document.createElement("button");
@@ -536,6 +536,8 @@ export function appendMessage(
 
 				const renderedHtml = md.render(text);
 				textElement.innerHTML = renderedHtml;
+				// Store the original markdown text for copy functionality
+				textElement.dataset.originalMarkdown = text;
 				// Ensure buttons are enabled for completed messages
 				if (copyButton) {
 					copyButton.disabled = false;

@@ -190,9 +190,11 @@ export function initializeButtonEventListeners(
 
 		if (appState.currentAiMessageContentElement) {
 			stopTypingAnimation();
-			appState.currentAiMessageContentElement.innerHTML = md.render(
-				"*Cancelling operation...*"
-			);
+			const cancellationText = "*Cancelling operation...*";
+			appState.currentAiMessageContentElement.innerHTML =
+				md.render(cancellationText);
+			appState.currentAiMessageContentElement.dataset.originalMarkdown =
+				cancellationText;
 
 			const messageElement =
 				appState.currentAiMessageContentElement.parentElement;
@@ -258,39 +260,45 @@ export function initializeButtonEventListeners(
 				) as HTMLSpanElement | null;
 
 				if (textElement) {
-					const textToCopyHTML = textElement.innerHTML;
+					// Use the original markdown text if available, otherwise fall back to HTML extraction
+					let textToCopy = textElement.dataset.originalMarkdown;
 
-					// Create a temporary div to parse HTML and extract text, handling newlines
-					const tempDiv = document.createElement("div");
-					tempDiv.innerHTML = textToCopyHTML;
+					if (!textToCopy) {
+						// Fallback to the old HTML extraction method if original markdown is not available
+						const textToCopyHTML = textElement.innerHTML;
 
-					// Add newlines before block-level elements for better copy-paste
-					Array.from(
-						tempDiv.querySelectorAll(
-							"p, pre, ul, ol, li, div, br, h1, h2, h3, h4, h5, h6, blockquote, table, tr"
-						)
-					).forEach((el) => {
-						if (el.tagName === "BR") {
-							el.replaceWith("\n");
-						} else if (el.tagName === "LI") {
-							// Ensure new line before each list item, except the first one
-							if (el.previousElementSibling) {
-								el.prepend("\n");
+						// Create a temporary div to parse HTML and extract text, handling newlines
+						const tempDiv = document.createElement("div");
+						tempDiv.innerHTML = textToCopyHTML;
+
+						// Add newlines before block-level elements for better copy-paste
+						Array.from(
+							tempDiv.querySelectorAll(
+								"p, pre, ul, ol, li, div, br, h1, h2, h3, h4, h5, h6, blockquote, table, tr"
+							)
+						).forEach((el) => {
+							if (el.tagName === "BR") {
+								el.replaceWith("\n");
+							} else if (el.tagName === "LI") {
+								// Ensure new line before each list item, except the first one
+								if (el.previousElementSibling) {
+									el.prepend("\n");
+								}
+							} else {
+								// Append newline to other block elements
+								el.append("\n");
 							}
-						} else {
-							// Append newline to other block elements
-							el.append("\n");
-						}
-					});
+						});
 
-					let textToCopy = tempDiv.textContent || tempDiv.innerText || "";
-					// Clean up excessive newlines and trim
-					textToCopy = textToCopy.replace(/\n{3,}/g, "\n\n"); // Reduce 3+ newlines to 2
-					textToCopy = textToCopy.replace(/^\n+/, ""); // Remove leading newlines
-					textToCopy = textToCopy.replace(/\n+$/, ""); // Remove trailing newlines
-					textToCopy = textToCopy.trim(); // Final trim
+						textToCopy = tempDiv.textContent || tempDiv.innerText || "";
+						// Clean up excessive newlines and trim
+						textToCopy = textToCopy.replace(/\n{3,}/g, "\n\n"); // Reduce 3+ newlines to 2
+						textToCopy = textToCopy.replace(/^\n+/, ""); // Remove leading newlines
+						textToCopy = textToCopy.replace(/\n+$/, ""); // Remove trailing newlines
+						textToCopy = textToCopy.trim(); // Final trim
 
-					textToCopy = textToCopy.replace(/\n\s*\n/g, "\n\n"); // Clean up blank lines
+						textToCopy = textToCopy.replace(/\n\s*\n/g, "\n\n"); // Clean up blank lines
+					}
 
 					try {
 						await navigator.clipboard.writeText(textToCopy);
@@ -302,7 +310,7 @@ export function initializeButtonEventListeners(
 
 						setTimeout(() => {
 							copyButton.innerHTML = originalIconHTML;
-							copyButton.title = "Copy Message";
+							copyButton.title = "Copy Markdown";
 						}, 1500);
 					} catch (err) {
 						console.error("Failed to copy text: ", err);

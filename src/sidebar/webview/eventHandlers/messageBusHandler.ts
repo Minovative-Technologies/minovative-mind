@@ -120,6 +120,9 @@ export function initializeMessageBusHandler(
 							appState.currentAiMessageContentElement.innerHTML = md.render(
 								appState.currentAccumulatedText
 							);
+							// Store the original markdown text for copy functionality
+							appState.currentAiMessageContentElement.dataset.originalMarkdown =
+								appState.currentAccumulatedText;
 							if (copyButton) {
 								copyButton.disabled = false;
 							}
@@ -286,18 +289,29 @@ export function initializeMessageBusHandler(
 					let finalContentHtml: string;
 
 					if (!message.success && isCancellation) {
-						finalContentHtml = md.render("*Operation cancelled.*");
+						const cancellationText = "*Operation cancelled.*";
+						finalContentHtml = md.render(cancellationText);
+						appState.currentAiMessageContentElement.dataset.originalMarkdown =
+							cancellationText;
 					} else if (!message.success && message.error) {
 						const errorMessageContent =
 							typeof message.error === "string"
 								? message.error
 								: "Unknown error occurred during AI response streaming.";
-						finalContentHtml = md.render(`Error: ${errorMessageContent}`);
+						const errorText = `Error: ${errorMessageContent}`;
+						finalContentHtml = md.render(errorText);
+						appState.currentAiMessageContentElement.dataset.originalMarkdown =
+							errorText;
 					} else {
 						finalContentHtml = md.render(appState.currentAccumulatedText);
+						appState.currentAiMessageContentElement.dataset.originalMarkdown =
+							appState.currentAccumulatedText;
 					}
 					// Ensure rendering happens BEFORE plan confirmation logic
 					appState.currentAiMessageContentElement.innerHTML = finalContentHtml;
+					// Store the original markdown text for copy functionality
+					appState.currentAiMessageContentElement.dataset.originalMarkdown =
+						appState.currentAccumulatedText;
 
 					const messageElement =
 						appState.currentAiMessageContentElement.parentElement;
@@ -846,6 +860,9 @@ export function initializeMessageBusHandler(
 					appState.currentAccumulatedText += appState.typingBuffer;
 					const renderedHtml = md.render(appState.currentAccumulatedText);
 					appState.currentAiMessageContentElement.innerHTML = renderedHtml;
+					// Store the original markdown text for copy functionality
+					appState.currentAiMessageContentElement.dataset.originalMarkdown =
+						appState.currentAccumulatedText;
 					const messageElement =
 						appState.currentAiMessageContentElement.parentElement;
 					if (messageElement) {
