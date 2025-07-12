@@ -11,6 +11,7 @@ import {
 	ParallelTaskResult,
 } from "../utils/parallelProcessor";
 import { ContextService } from "./contextService";
+import { DEFAULT_MODEL } from "../sidebar/common/sidebarConstants";
 
 export interface WorkflowTask {
 	id: string;
@@ -164,7 +165,7 @@ export class EnhancedWorkflowService {
 			task.filePath,
 			task.prompt,
 			context,
-			"gemini-pro",
+			DEFAULT_MODEL,
 			undefined
 		);
 
@@ -206,7 +207,7 @@ export class EnhancedWorkflowService {
 							filePath: task.filePath,
 						},
 						this.aiRequestService,
-						"gemini-pro"
+						DEFAULT_MODEL
 					);
 
 				if (incrementalChanges.length > 0) {
@@ -229,7 +230,7 @@ export class EnhancedWorkflowService {
 			task.prompt,
 			currentContent,
 			context,
-			"gemini-pro"
+			DEFAULT_MODEL
 		);
 
 		const duration = Date.now() - startTime;
@@ -274,7 +275,7 @@ Provide your analysis in a structured format:`;
 
 		const analysis = await this.aiRequestService.generateWithRetry(
 			analysisPrompt,
-			"gemini-pro",
+			DEFAULT_MODEL,
 			undefined,
 			`analysis-${task.id}`,
 			undefined,
@@ -332,7 +333,7 @@ Provide the refactored code:`;
 
 		const refactoredContent = await this.aiRequestService.generateWithRetry(
 			refactorPrompt,
-			"gemini-pro",
+			DEFAULT_MODEL,
 			undefined,
 			`refactor-${task.id}`,
 			undefined,
