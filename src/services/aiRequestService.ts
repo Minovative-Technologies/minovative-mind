@@ -6,7 +6,7 @@ import { HistoryEntry } from "../sidebar/common/sidebarTypes";
 import {
 	ERROR_OPERATION_CANCELLED,
 	ERROR_QUOTA_EXCEEDED,
-	ERROR_SERVICE_UNAVAILABLE, // MODIFICATION 1: Import new error constant
+	ERROR_SERVICE_UNAVAILABLE,
 	generateContentStream,
 } from "../ai/gemini";
 import {
@@ -56,9 +56,10 @@ export class AIRequestService {
 		let currentApiKey = this.apiKeyManager.getActiveApiKey();
 		const triedKeys = new Set<string>();
 		const apiKeyList = this.apiKeyManager.getApiKeyList();
-		const maxRetries = apiKeyList.length > 0 ? apiKeyList.length : 1; // maxRetries refers to number of distinct keys to attempt for quota errors
 
-		let attempts = 0; // Total attempts made, including retries on same key
+		let consecutiveTransientErrorCount = 0;
+		const baseDelayMs = 120000;
+		const maxDelayMs = 10 * 60 * 1000;
 
 		if (!currentApiKey) {
 			if (apiKeyList.length > 0) {
@@ -76,7 +77,7 @@ export class AIRequestService {
 
 		let result = ""; // Stores the last error type or the successful generation result
 
-		while (attempts < maxRetries) {
+		while (true) {
 			if (token?.isCancellationRequested) {
 				console.log(
 					"[AIRequestService] Cancellation requested at start of retry loop."
@@ -87,11 +88,10 @@ export class AIRequestService {
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 
-			attempts++;
 			console.log(
-				`[AIRequestService] Attempt ${attempts}/${maxRetries} for ${requestType} with key ...${currentApiKey.slice(
+				`[AIRequestService] Attempt with key ...${currentApiKey.slice(
 					-4
-				)}`
+				)} for ${requestType}.`
 			);
 
 			let accumulatedResult = "";
@@ -172,6 +172,7 @@ export class AIRequestService {
 				if (streamCallbacks?.onComplete) {
 					streamCallbacks.onComplete();
 				}
+				consecutiveTransientErrorCount = 0; // Reset counter on success
 				return result; // Success: return immediately
 			} catch (error: unknown) {
 				const err = error as Error;
@@ -189,91 +190,94 @@ export class AIRequestService {
 
 				if (errorMessage === ERROR_QUOTA_EXCEEDED) {
 					result = ERROR_QUOTA_EXCEEDED; // Mark result for outer handling (key switch)
+					const currentDelay = Math.min(
+						maxDelayMs,
+						baseDelayMs * 2 ** consecutiveTransientErrorCount
+					);
 					console.warn(
 						`[AIRequestService] Quota/Rate limit hit for key ...${currentApiKey?.slice(
 							-4
-						)}.`
+						)}. Pausing for ${(currentDelay / 60000).toFixed(0)} minutes.`
 					);
-					// Insert new lines here as per instructions
 					this.postMessageToWebview({
 						type: "statusUpdate",
-						value: `API quota limit hit. Pausing for 1 minute before retrying.`,
+						value: `API quota limit hit. Pausing for ${(
+							currentDelay / 60000
+						).toFixed(0)} minutes before retrying.`,
 						isError: true,
 					});
-					await new Promise((resolve) => setTimeout(resolve, 120000));
+					await new Promise((resolve) => setTimeout(resolve, currentDelay));
 					if (token?.isCancellationRequested) {
 						throw new Error(ERROR_OPERATION_CANCELLED);
 					}
-					// Existing logic continues after the delay and cancellation check
+					consecutiveTransientErrorCount++;
+					triedKeys.add(currentApiKey);
+					const availableKeys = this.apiKeyManager.getApiKeyList();
+
+					if (triedKeys.size < availableKeys.length) {
+						const nextKey = await this.apiKeyManager.switchToNextApiKey(
+							triedKeys
+						);
+						if (nextKey) {
+							currentApiKey = nextKey;
+							this.postMessageToWebview({
+								type: "statusUpdate",
+								value: `Quota limit hit. Retrying with next key...`,
+							});
+							this.postMessageToWebview({
+								type: "apiKeyStatus",
+								value: `Switched to key ...${currentApiKey.slice(
+									-4
+								)} for retry.`,
+							});
+						} else {
+							// Should not happen if triedKeys.size < availableKeys.length is true
+							this.postMessageToWebview({
+								type: "statusUpdate",
+								value: `No new API keys available. Retrying with the last key after pause.`,
+								isError: true,
+							});
+						}
+					} else {
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: `All available API keys exhausted for quota. Retrying with the last key after pause.`,
+							isError: true,
+						});
+					}
+					continue;
 				} else if (errorMessage === ERROR_SERVICE_UNAVAILABLE) {
-					// MODIFICATION 3: New service unavailable condition
-					result = ERROR_SERVICE_UNAVAILABLE; // Mark result to retry with same key
+					const currentDelay = Math.min(
+						maxDelayMs,
+						baseDelayMs * 2 ** consecutiveTransientErrorCount
+					);
 					console.warn(
-						`[AIRequestService] Service unavailable for model ${modelName}. Retrying attempt ${attempts} of ${maxRetries}.`
+						`[AIRequestService] Service unavailable for model ${modelName}. Retrying after ${(
+							currentDelay / 60000
+						).toFixed(0)} minutes.`
 					);
 					this.postMessageToWebview({
 						type: "statusUpdate",
-						value: `AI service temporarily unavailable. Waiting 1 minute before retrying...`,
+						value: `AI service temporarily unavailable. Waiting ${(
+							currentDelay / 60000
+						).toFixed(0)} minutes before retrying...`,
 					});
-					await new Promise((resolve) => setTimeout(resolve, 120000)); // 120-second delay (1 minute)
-					continue; // MODIFICATION 4: Stay in the loop with the same key
+					await new Promise((resolve) => setTimeout(resolve, currentDelay));
+					if (token?.isCancellationRequested) {
+						throw new Error(ERROR_OPERATION_CANCELLED);
+					}
+					consecutiveTransientErrorCount++;
+					continue;
 				} else {
 					// For any other non-retryable error, set result and exit the loop / return immediately
+					consecutiveTransientErrorCount = 0; // Reset counter for non-transient errors
 					result = `Error: ${errorMessage}`;
-					console.error(
-						`[AIRequestService] Error during generation on attempt ${attempts}:`,
-						err
-					);
+					console.error(`[AIRequestService] Error during generation:`, err);
 					return result; // Return other errors immediately (they are not retryable)
 				}
 			}
-
-			// This block is reached ONLY if `result` was `ERROR_QUOTA_EXCEEDED`.
-			// If `ERROR_SERVICE_UNAVAILABLE` occurred, the `continue` statement above skips this block.
-			// If a non-retryable error occurred, the `return result;` above skips this block.
-			if (result === ERROR_QUOTA_EXCEEDED) {
-				triedKeys.add(currentApiKey);
-				const availableKeysCount = apiKeyList.length;
-
-				if (availableKeysCount <= 1 || triedKeys.size >= availableKeysCount) {
-					// No more keys to try or all keys have been tried for quota.
-					return `API quota or rate limit exceeded for model ${modelName}. All ${availableKeysCount} API key(s) failed.`;
-				}
-
-				const nextKey = await this.apiKeyManager.switchToNextApiKey(triedKeys);
-				if (nextKey) {
-					currentApiKey = nextKey;
-					this.postMessageToWebview({
-						type: "statusUpdate",
-						value: `Quota limit hit. Retrying with next key...`,
-					});
-					this.postMessageToWebview({
-						type: "apiKeyStatus",
-						value: `Switched to key ...${currentApiKey.slice(-4)} for retry.`,
-					});
-					// Loop will continue with the new key in the next iteration.
-				} else {
-					// No more untried keys, even if maxRetries isn't technically exhausted.
-					return `API quota or rate limit exceeded for model ${modelName}. All available API keys have been tried.`;
-				}
-			}
-			// If `result` was anything else, it would have been returned or continued from the catch block.
-			// The loop will naturally continue if a new key was assigned for quota errors.
 		}
-
-		// MODIFICATION 5: After the while loop, modify final return statements
-		// This point is reached if the `while` loop condition `attempts < maxRetries` became false,
-		// meaning all allowed attempts (related to key switching or direct retries on same key) have been exhausted.
-		// `result` holds the error message from the *last* failed attempt.
-		if (result === ERROR_QUOTA_EXCEEDED) {
-			return `API quota or rate limit exceeded for model ${modelName}. Failed after trying ${attempts} keys.`;
-		} else if (result === ERROR_SERVICE_UNAVAILABLE) {
-			return `AI service for model ${modelName} remains unavailable after ${attempts} retries. Please try again later.`;
-		} else {
-			// This case should ideally not be reached if non-retryable errors are returned immediately within the loop.
-			// It serves as a robust fallback for unexpected loop termination conditions.
-			return `An unexpected error occurred after all retries for model ${modelName}. Last error: ${result}`;
-		}
+		// Removed final `if (result === ERROR_QUOTA_EXCEEDED) { ... } else if ...` block as it's now unreachable.
 	}
 
 	/**

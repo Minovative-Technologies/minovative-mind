@@ -999,6 +999,7 @@ The 'File Path' itself conveys important structural information; ensure the cont
 								undefined,
 								combinedToken
 							);
+							this._validateAIContentResponse(content, step.path); // Added validation call
 						}
 						await typeContentIntoEditor(editor, content ?? "", combinedToken);
 
@@ -1102,6 +1103,7 @@ Complete Modified File Content:`;
 								combinedToken,
 								context.isMergeOperation // Pass isMergeOperation
 							);
+						this._validateAIContentResponse(modifiedContent, step.path); // Added validation call
 						modifiedContent = modifiedContent
 							.replace(/^```[a-z]*\n?/, "")
 							.replace(/\n?```$/, "")
@@ -1853,5 +1855,27 @@ Complete Modified File Content:`;
 			},
 		});
 		return false; // All attempts exhausted, still errors
+	}
+
+	private _validateAIContentResponse(
+		generatedContent: string,
+		filePath: string
+	): void {
+		const lowerCaseContent = generatedContent.toLowerCase();
+
+		if (
+			lowerCaseContent.startsWith("error:") ||
+			lowerCaseContent.includes("failed to generate")
+		) {
+			const displayContent =
+				generatedContent.length > 200
+					? generatedContent.substring(0, 200) + "..."
+					: generatedContent;
+
+			throw new Error(
+				`AI failed to generate valid content/modifications for file '${filePath}'. ` +
+					`AI response indicates an error: '${displayContent}'`
+			);
+		}
 	}
 }
