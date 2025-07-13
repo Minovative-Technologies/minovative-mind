@@ -230,22 +230,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.settingsManager.updateWebviewModelList();
 		this.chatHistoryManager.restoreChatHistoryToWebview();
 
-		// 1. Prioritize active AI streaming progress (e.g., for long chat responses)
-		if (
-			this.currentAiStreamingState &&
-			!this.currentAiStreamingState.isComplete
-		) {
-			console.log(
-				"[SidebarProvider] Restoring active AI streaming progress to webview."
-			);
-			this.postMessageToWebview({
-				type: "restoreStreamingProgress",
-				value: this.currentAiStreamingState,
-			});
-			this.postMessageToWebview({ type: "updateLoadingState", value: true }); // Ensure inputs are disabled
-		}
-		// 2. Then, check for pending plan confirmation (generation *complete*, awaiting review) from PERSISTED DATA
-		else if (this._persistedPendingPlanData) {
+		// 1. Prioritize pending plan confirmation (generation *complete*, awaiting review) from PERSISTED DATA
+		if (this._persistedPendingPlanData) {
 			console.log(
 				"[SidebarProvider] Restoring pending plan confirmation to webview from persisted data."
 			);
@@ -271,6 +257,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				false
 			);
 		}
+		// 2. Then, check for active AI streaming progress (e.g., for long chat responses)
+		else if (
+			this.currentAiStreamingState &&
+			!this.currentAiStreamingState.isComplete
+		) {
+			console.log(
+				"[SidebarProvider] Restoring active AI streaming progress to webview."
+			);
+			this.postMessageToWebview({
+				type: "restoreStreamingProgress",
+				value: this.currentAiStreamingState,
+			});
+			this.postMessageToWebview({ type: "updateLoadingState", value: true }); // Ensure inputs are disabled
+		}
 		// 3. Then, check for pending commit review (generation *complete*, awaiting review)
 		else if (this.pendingCommitReviewData) {
 			console.log(
@@ -295,10 +295,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			// If isGeneratingUserRequest is true but no streaming, pending plan, or pending commit
 			// review state is found, it indicates an interrupted or lost operation.
 			// Reset the flag and re-enable inputs, providing a status update.
-			await this.endUserOperation(
-				"cancelled",
-				"Previous operation interrupted or completed. Inputs re-enabled."
-			);
+			await this.endUserOperation("cancelled", "Inputs re-enabled.");
 			// The call to endUserOperation already posts 'reenableInput' and 'statusUpdate'.
 			// No need to send 'showGenericLoadingMessage' here.
 		}

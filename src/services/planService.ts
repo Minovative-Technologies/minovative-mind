@@ -370,11 +370,18 @@ export class PlanService {
 				);
 			const { contextString, relevantFiles } = buildContextResult;
 
-			// Add new aiResponseStart message here with relevantFiles
-			this.provider.postMessageToWebview({
-				type: "aiResponseStart",
-				value: { modelName, relevantFiles: relevantFiles },
-			});
+			// Initialize currentAiStreamingState if not already set (aiResponseStart was sent from extension.ts)
+			if (!this.provider.currentAiStreamingState) {
+				this.provider.currentAiStreamingState = {
+					content: "",
+					relevantFiles: relevantFiles,
+					isComplete: false,
+					isError: false,
+				};
+			} else {
+				// Update the relevantFiles in the existing streaming state
+				this.provider.currentAiStreamingState.relevantFiles = relevantFiles;
+			}
 
 			if (contextString.startsWith("[Error")) {
 				throw new Error(contextString);
@@ -458,6 +465,13 @@ export class PlanService {
 				textualPlanExplanation: textualPlanResponse, // crucial for re-display
 			};
 			await this.provider.updatePersistedPendingPlanData(dataToPersist);
+
+			// Set isGeneratingUserRequest to true for persistence like /plan
+			this.provider.isGeneratingUserRequest = true;
+			await this.provider.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				true
+			);
 			// END ADDED
 
 			// Removed UI handling block as per instructions
@@ -481,6 +495,11 @@ export class PlanService {
 					  ),
 			};
 		} finally {
+			// Mark streaming state as complete
+			if (this.provider.currentAiStreamingState) {
+				this.provider.currentAiStreamingState.isComplete = true;
+			}
+
 			// Determine if the generated response is a confirmable plan
 			const isConfirmablePlanResponse =
 				finalResult.success &&
@@ -1458,21 +1477,12 @@ Complete Modified File Content:`;
 				value: "Textual plan generated. Review and confirm to proceed.",
 			});
 		} else {
-			const notificationResult = await vscode.window.showInformationMessage(
-				"Minovative Mind: A new plan is ready for review.",
-				{ modal: false },
-				"Open Sidebar & Review"
-			);
-			if (notificationResult === "Open Sidebar & Review") {
-				await vscode.commands.executeCommand(
-					"minovative-mind.activitybar.focus"
-				);
-			} else {
-				this.provider.postMessageToWebview({
-					type: "statusUpdate",
-					value: "Plan generated, waiting for review in sidebar.",
-				});
-			}
+			// Automatically open the sidebar when a plan is completed
+			await vscode.commands.executeCommand("minovative-mind.activitybar.focus");
+			this.provider.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Plan generated and sidebar opened for review.",
+			});
 		}
 	}
 

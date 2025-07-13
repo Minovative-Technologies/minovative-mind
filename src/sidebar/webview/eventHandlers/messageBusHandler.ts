@@ -417,6 +417,11 @@ export function initializeMessageBusHandler(
 					if (elements.cancelGenerationButton) {
 						elements.cancelGenerationButton.style.display = "none";
 					}
+
+					// Automatically open the sidebar when a plan is completed
+					postMessageToExtension({
+						type: "openSidebar",
+					});
 				} else if (message.success) {
 					console.log("aiResponseEnd indicates successful chat response.");
 					// No special UI logic here, main UI state handled at the end

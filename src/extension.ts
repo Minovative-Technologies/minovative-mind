@@ -628,6 +628,27 @@ export async function activate(context: vscode.ExtensionContext) {
 				error: "Textual plan generation was cancelled or did not complete.",
 			}; // Declare and initialize result before withProgress
 
+			// Immediately disable sidebar and ensure persistence for editor commands
+			// Set isGeneratingUserRequest to true for persistence like /plan
+			sidebarProvider.isGeneratingUserRequest = true;
+			await sidebarProvider.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				true
+			);
+
+			// Immediately disable the chat UI to prevent new inputs during processing
+			sidebarProvider.postMessageToWebview({
+				type: "updateLoadingState",
+				value: true,
+			});
+
+			// Send aiResponseStart immediately to show streaming state
+			const modelName = sidebarProvider.settingsManager.getSelectedModelName();
+			sidebarProvider.postMessageToWebview({
+				type: "aiResponseStart",
+				value: { modelName, relevantFiles: [] }, // Empty relevantFiles initially, will be updated later
+			});
+
 			// Call the gated method on sidebarProvider
 			// Progress and CancellationToken are handled by withProgress
 			await vscode.window.withProgress(

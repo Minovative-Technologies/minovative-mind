@@ -36,6 +36,7 @@ export async function handleWebviewMessage(
 		"editChatMessage", // 1. Added "editChatMessage" to the allowedDuringBackground array
 		"getTokenStatistics", // Allow token statistics requests during background operations
 		"getCurrentTokenEstimates", // Allow current token estimates during background operations
+		"openSidebar", // Allow opening sidebar during background operations
 	];
 
 	if (
@@ -221,6 +222,20 @@ export async function handleWebviewMessage(
 				type: "updateCurrentTokenEstimates",
 				value: currentEstimates,
 			});
+			break;
+
+		case "openSidebar":
+			// Open the Minovative Mind sidebar when a plan is completed
+			try {
+				await vscode.commands.executeCommand(
+					"minovative-mind.activitybar.focus"
+				);
+				console.log(
+					"[MessageHandler] Sidebar opened automatically after plan completion."
+				);
+			} catch (error) {
+				console.error("[MessageHandler] Failed to open sidebar:", error);
+			}
 			break;
 
 		case "addApiKey":
