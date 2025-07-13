@@ -186,10 +186,23 @@ export class ChatService {
 			// 2. Get the current _chatHistory from chatHistoryManager.
 			currentHistory = chatHistoryManager.getChatHistory();
 
-			// 3. Validate that the last message is a user message and extract its content (userMessageText).
-			// The history should already be truncated by chatHistoryManager.editMessageAndTruncate,
-			// making the edited user message the last entry.
-			const editedUserMessageEntry = currentHistory[userMessageIndex];
+			// 3. After editMessageAndTruncate, the edited message becomes the last message in the history.
+			// Find the last user message in the truncated history.
+			let lastUserMessageIndex = -1;
+			for (let i = currentHistory.length - 1; i >= 0; i--) {
+				if (currentHistory[i].role === "user") {
+					lastUserMessageIndex = i;
+					break;
+				}
+			}
+
+			if (lastUserMessageIndex === -1) {
+				throw new Error(
+					"Validation Error: No user message found in chat history after editing."
+				);
+			}
+
+			const editedUserMessageEntry = currentHistory[lastUserMessageIndex];
 
 			if (
 				!editedUserMessageEntry ||
@@ -199,7 +212,7 @@ export class ChatService {
 				!editedUserMessageEntry.parts[0].text
 			) {
 				throw new Error(
-					"Validation Error: Edited user message not found or is not a user message with valid content at the specified index."
+					"Validation Error: Edited user message not found or is not a user message with valid content."
 				);
 			}
 

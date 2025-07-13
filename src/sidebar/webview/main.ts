@@ -9,7 +9,10 @@ import {
 	updateStatus,
 } from "./ui/statusManager";
 import { createPlanConfirmationUI } from "./ui/confirmationAndReviewUIs";
-import { reenableAllMessageActionButtons } from "./ui/chatMessageRenderer";
+import {
+	reenableAllMessageActionButtons,
+	setGlobalSetLoadingState,
+} from "./ui/chatMessageRenderer";
 import { RequiredDomElements } from "./types/webviewTypes";
 import { setIconForButton } from "./utils/iconHelpers";
 import { faChartLine } from "./utils/iconHelpers";
@@ -271,6 +274,9 @@ function initializeWebview(): void {
 	// This will correctly enable/disable buttons based on initial appState values
 	// (e.g., isApiKeySet is likely false initially).
 	setLoadingState(false, elements);
+
+	// Set up global reference to setLoadingState for use in chatMessageRenderer
+	setGlobalSetLoadingState(setLoadingState);
 }
 
 // Ensure the webview is initialized once the DOM is fully loaded.

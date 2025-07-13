@@ -16,6 +16,18 @@ import {
 import { RequiredDomElements } from "../types/webviewTypes";
 import { initializeDomElements } from "../state/domElements";
 
+// Global reference to setLoadingState function
+let globalSetLoadingState:
+	| ((loading: boolean, elements: RequiredDomElements) => void)
+	| null = null;
+
+// Function to set the global setLoadingState reference
+export function setGlobalSetLoadingState(
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
+): void {
+	globalSetLoadingState = setLoadingState;
+}
+
 export function appendMessage(
 	elements: RequiredDomElements,
 	sender: string,
@@ -612,6 +624,11 @@ function sendEditedMessageToExtension(
 	messageIndex: number,
 	newContent: string
 ): void {
+	// Set loading state to true to disable buttons, similar to sendMessage function
+	if (globalSetLoadingState) {
+		globalSetLoadingState(true, elements);
+	}
+
 	postMessageToExtension({
 		type: "editChatMessage",
 		messageIndex: messageIndex,
