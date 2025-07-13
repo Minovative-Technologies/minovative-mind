@@ -23,6 +23,7 @@ import {
 import { md } from "../utils/markdownRenderer";
 import { postMessageToExtension } from "../utils/vscodeApi";
 import { RequiredDomElements } from "../types/webviewTypes";
+import { resetUIStateAfterCancellation } from "../ui/statusManager";
 
 export function initializeMessageBusHandler(
 	elements: RequiredDomElements,
@@ -284,6 +285,16 @@ export function initializeMessageBusHandler(
 					typeof message.error === "string" &&
 					message.error.includes("cancelled");
 
+				// Prevent duplicate cancellation messages by checking if we already processed a cancellation
+				if (isCancellation && appState.isCancellationInProgress) {
+					console.log("Skipping duplicate cancellation message");
+					// Reset cancellation flag but don't process the message again
+					appState.isCancellationInProgress = false;
+					resetStreamingAnimationState();
+					setLoadingState(false, elements);
+					return;
+				}
+
 				if (appState.currentAiMessageContentElement) {
 					appState.currentAccumulatedText += appState.typingBuffer;
 					let finalContentHtml: string;
@@ -309,9 +320,6 @@ export function initializeMessageBusHandler(
 					}
 					// Ensure rendering happens BEFORE plan confirmation logic
 					appState.currentAiMessageContentElement.innerHTML = finalContentHtml;
-					// Store the original markdown text for copy functionality
-					appState.currentAiMessageContentElement.dataset.originalMarkdown =
-						appState.currentAccumulatedText;
 
 					const messageElement =
 						appState.currentAiMessageContentElement.parentElement;
@@ -739,6 +747,11 @@ export function initializeMessageBusHandler(
 				setLoadingState(message.value as boolean, elements);
 				break;
 			}
+			case "reenableInput": {
+				console.log("Received reenableInput message. Resetting UI state.");
+				resetUIStateAfterCancellation(elements);
+				break;
+			}
 			case "planExecutionStarted": {
 				appState.isPlanExecutionInProgress = true;
 				setLoadingState(appState.isLoading, elements);
@@ -850,89 +863,6 @@ export function initializeMessageBusHandler(
 				}
 				break;
 			}
-			case "reenableInput": {
-				console.log(
-					"[reenableInput] Received reenableInput request from provider."
-				);
-				appState.isCancellationInProgress = false; // MOVED TO HERE
-
-				resetStreamingAnimationState();
-
-				if (appState.currentAiMessageContentElement) {
-					console.warn(
-						"reenableInput received mid-stream. Resetting stream state."
-					);
-					appState.currentAccumulatedText += appState.typingBuffer;
-					const renderedHtml = md.render(appState.currentAccumulatedText);
-					appState.currentAiMessageContentElement.innerHTML = renderedHtml;
-					// Store the original markdown text for copy functionality
-					appState.currentAiMessageContentElement.dataset.originalMarkdown =
-						appState.currentAccumulatedText;
-					const messageElement =
-						appState.currentAiMessageContentElement.parentElement;
-					if (messageElement) {
-						const copyButton = messageElement.querySelector(
-							".copy-button"
-						) as HTMLButtonElement | null;
-						if (copyButton) {
-							copyButton.disabled = false;
-						}
-						const deleteButton = messageElement.querySelector(
-							".delete-button"
-						) as HTMLButtonElement | null;
-						if (deleteButton) {
-							deleteButton.disabled = false;
-						}
-						const editButton = messageElement.querySelector(
-							".edit-button"
-						) as HTMLButtonElement | null;
-						if (editButton) {
-							editButton.disabled = false;
-						}
-					}
-				}
-
-				// Re-enable all message action buttons to ensure they're interactive
-				reenableAllMessageActionButtons(elements);
-
-				hideAllConfirmationAndReviewUIs(elements);
-
-				appState.isCommitActionInProgress = false; // Added as per instructions
-				appState.isPlanExecutionInProgress = false; // Reset plan execution state
-
-				console.log(
-					"[reenableInput] Calling setLoadingState(false); Confirming appState.isLoading is now false."
-				);
-				setLoadingState(false, elements);
-
-				const planConfirmationActive =
-					elements.planConfirmationContainer &&
-					elements.planConfirmationContainer.style.display !== "none";
-
-				if (!appState.isCancellationInProgress) {
-					// Only update status if not in a cancellation flow
-					if (!planConfirmationActive && appState.pendingPlanData) {
-						appState.pendingPlanData = null;
-						updateStatus(
-							elements,
-							"Inputs re-enabled; any non-visible pending plan confirmation has been cleared."
-						);
-					} else if (!planConfirmationActive) {
-						updateStatus(elements, "Inputs re-enabled.");
-					}
-				} else {
-					// If cancellation is in progress, pendingPlanData should still be cleared
-					// if relevant, but no new status message from reenableInput itself.
-					if (!planConfirmationActive && appState.pendingPlanData) {
-						appState.pendingPlanData = null;
-					}
-					console.log(
-						"[Webview] reenableInput skipped status update due to ongoing cancellation."
-					);
-				}
-				break;
-			}
-
 			default:
 				console.warn(
 					"[Webview] Received unknown message type from extension:",

@@ -158,6 +158,14 @@ export function initializeButtonEventListeners(
 	// Cancel Parse Error Button
 	cancelParseErrorButton.addEventListener("click", () => {
 		console.log("Cancel Parse Error button clicked.");
+		// Prevent duplicate cancellation requests
+		if (appState.isCancellationInProgress) {
+			console.warn(
+				"Cancellation already in progress, ignoring duplicate request"
+			);
+			return;
+		}
+
 		// The hidePlanParseErrorUI function already handles setting display: none and clearing content
 		hidePlanParseErrorUI(elements);
 		appState.isCancellationInProgress = true; // Set cancellation flag
@@ -180,6 +188,14 @@ export function initializeButtonEventListeners(
 	// Cancel Generation Button
 	cancelGenerationButton.addEventListener("click", () => {
 		console.log("Cancel Generation button clicked.");
+		// Prevent duplicate cancellation requests
+		if (appState.isCancellationInProgress) {
+			console.warn(
+				"Cancellation already in progress, ignoring duplicate request"
+			);
+			return;
+		}
+
 		elements.planConfirmationContainer.style.display = "none";
 		elements.planParseErrorContainer.style.display = "none";
 		elements.commitReviewContainer.style.display = "none";

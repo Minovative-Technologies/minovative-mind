@@ -408,7 +408,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	public async triggerUniversalCancellation(): Promise<void> {
 		console.log("[SidebarProvider] Triggering universal cancellation...");
-		this.activeOperationCancellationTokenSource?.cancel();
+
+		// Immediately cancel the active operation
+		if (this.activeOperationCancellationTokenSource) {
+			this.activeOperationCancellationTokenSource.cancel();
+		}
+
+		// Kill all child processes immediately
 		this.activeChildProcesses.forEach((cp) => {
 			console.log(
 				`[SidebarProvider] Killing child process with PID: ${cp.pid}`
@@ -416,11 +422,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			cp.kill();
 		});
 		this.activeChildProcesses = [];
+
+		// Clear all pending state immediately
 		this.pendingPlanGenerationContext = null;
 		await this.updatePersistedPendingPlanData(null); // Clear persisted context as well
 		this.lastPlanGenerationContext = null;
 		this.pendingCommitReviewData = null;
 		this.currentAiStreamingState = null;
+
+		// Immediately re-enable UI inputs
+		this.postMessageToWebview({ type: "reenableInput" });
+
+		// End the user operation with cancelled status
 		await this.endUserOperation("cancelled");
 		console.log("[SidebarProvider] Universal cancellation complete.");
 	}

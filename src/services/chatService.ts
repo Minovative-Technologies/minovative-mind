@@ -136,15 +136,24 @@ export class ChatService {
 				this.provider.currentAiStreamingState.isComplete = true;
 			}
 			const isCancellation = finalAiResponseText === ERROR_OPERATION_CANCELLED;
-			this.provider.postMessageToWebview({
-				type: "aiResponseEnd",
-				success: success,
-				error: isCancellation
-					? "Chat generation cancelled."
-					: success
-					? null
-					: finalAiResponseText,
-			});
+
+			// Only send aiResponseEnd if we haven't already cancelled
+			if (
+				!this.provider.activeOperationCancellationTokenSource?.token
+					.isCancellationRequested ||
+				!isCancellation
+			) {
+				this.provider.postMessageToWebview({
+					type: "aiResponseEnd",
+					success: success,
+					error: isCancellation
+						? "Chat generation cancelled."
+						: success
+						? null
+						: finalAiResponseText,
+				});
+			}
+
 			this.provider.activeOperationCancellationTokenSource?.dispose();
 			this.provider.activeOperationCancellationTokenSource = undefined;
 		}
@@ -294,16 +303,23 @@ export class ChatService {
 			}
 			const isCancellation = finalAiResponseText === ERROR_OPERATION_CANCELLED;
 
-			// b. Send aiResponseEnd message to the webview.
-			this.provider.postMessageToWebview({
-				type: "aiResponseEnd",
-				success: success,
-				error: isCancellation
-					? "Chat generation cancelled."
-					: success
-					? null
-					: finalAiResponseText,
-			});
+			// Only send aiResponseEnd if we haven't already cancelled
+			if (
+				!this.provider.activeOperationCancellationTokenSource?.token
+					.isCancellationRequested ||
+				!isCancellation
+			) {
+				// b. Send aiResponseEnd message to the webview.
+				this.provider.postMessageToWebview({
+					type: "aiResponseEnd",
+					success: success,
+					error: isCancellation
+						? "Chat generation cancelled."
+						: success
+						? null
+						: finalAiResponseText,
+				});
+			}
 
 			// c. Dispose of the activeOperationCancellationTokenSource.
 			this.provider.activeOperationCancellationTokenSource?.dispose();

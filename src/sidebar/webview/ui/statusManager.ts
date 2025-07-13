@@ -1,5 +1,6 @@
 import { RequiredDomElements } from "../types/webviewTypes";
 import { appState } from "../state/appState";
+import { reenableAllMessageActionButtons } from "./chatMessageRenderer";
 
 export function updateApiKeyStatus(
 	elements: RequiredDomElements,
@@ -79,4 +80,51 @@ export function updateEmptyChatPlaceholderVisibility(
 	console.log(
 		`[DEBUG] actualMessages.length: ${actualMessages.length}, emptyChatPlaceholder.style.display: ${elements.emptyChatPlaceholder.style.display}`
 	);
+}
+
+/**
+ * Resets the UI state after cancellation to ensure all controls are properly re-enabled
+ * and all pending states are cleared.
+ * @param elements The DOM elements to reset
+ */
+export function resetUIStateAfterCancellation(
+	elements: RequiredDomElements
+): void {
+	console.log("Resetting UI state after cancellation");
+
+	// Re-enable all input controls
+	elements.chatInput.disabled = false;
+	elements.sendButton.disabled = false;
+	elements.modelSelect.disabled = false;
+
+	// Re-enable chat history buttons
+	elements.clearChatButton.disabled = false;
+	elements.saveChatButton.disabled = false;
+	elements.loadChatButton.disabled = false;
+
+	// Re-enable API key controls
+	elements.prevKeyButton.disabled = false;
+	elements.nextKeyButton.disabled = false;
+	elements.deleteKeyButton.disabled = false;
+	elements.addKeyInput.disabled = false;
+	elements.addKeyButton.disabled = false;
+
+	// Hide all confirmation and review UIs
+	if (elements.planConfirmationContainer) {
+		elements.planConfirmationContainer.style.display = "none";
+	}
+	if (elements.planParseErrorContainer) {
+		elements.planParseErrorContainer.style.display = "none";
+	}
+	if (elements.commitReviewContainer) {
+		elements.commitReviewContainer.style.display = "none";
+	}
+
+	// Re-enable all message action buttons
+	reenableAllMessageActionButtons(elements);
+
+	// Update empty chat placeholder visibility
+	updateEmptyChatPlaceholderVisibility(elements);
+
+	console.log("UI state reset complete");
 }

@@ -428,6 +428,14 @@ export function handleCancelPlanExecution(
 	setLoadingState: Function
 ): void {
 	console.log("Cancel Plan button clicked.");
+	// Prevent duplicate cancellation requests
+	if (appState.isCancellationInProgress) {
+		console.warn(
+			"Cancellation already in progress, ignoring duplicate request"
+		);
+		return;
+	}
+
 	appState.isCancellationInProgress = true; // Set cancellation flag for immediate effect
 	postMessageToExtension({ type: "universalCancel" }); // Use universal cancel for immediate cancellation
 	updateStatus(elements, "Cancelling operations...", false);
@@ -535,6 +543,14 @@ export function handleCancelCommit(
 	if (appState.isCommitActionInProgress) {
 		console.warn(
 			"[handleCancelCommit] Commit action already in progress. Ignoring duplicate cancel click."
+		);
+		return;
+	}
+
+	// Prevent duplicate cancellation requests
+	if (appState.isCancellationInProgress) {
+		console.warn(
+			"Cancellation already in progress, ignoring duplicate request"
 		);
 		return;
 	}
