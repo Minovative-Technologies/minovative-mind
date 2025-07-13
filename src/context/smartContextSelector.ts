@@ -11,7 +11,7 @@ import * as SymbolService from "../services/symbolService";
 const MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION = 350;
 export { MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION };
 
-// NEW: Cache interface for AI selection results
+// Cache interface for AI selection results
 interface AISelectionCache {
 	timestamp: number;
 	selectedFiles: vscode.Uri[];
@@ -21,10 +21,10 @@ interface AISelectionCache {
 	heuristicFilesCount: number;
 }
 
-// NEW: Cache storage
+// Cache storage
 const aiSelectionCache = new Map<string, AISelectionCache>();
 
-// NEW: Configuration for AI selection
+// Configuration for AI selection
 interface AISelectionOptions {
 	useCache?: boolean;
 	cacheTimeout?: number;
@@ -60,11 +60,11 @@ export interface SelectRelevantFilesAIOptions {
 	) => Promise<string>;
 	modelName: string;
 	cancellationToken?: vscode.CancellationToken;
-	selectionOptions?: AISelectionOptions; // NEW: Selection options
+	selectionOptions?: AISelectionOptions; // Selection options
 }
 
 /**
- * NEW: Generate cache key for AI selection
+ * Generate cache key for AI selection
  */
 function generateAISelectionCacheKey(
 	userRequest: string,
@@ -92,7 +92,7 @@ function generateAISelectionCacheKey(
 }
 
 /**
- * NEW: Truncate and optimize prompt for better performance
+ * Truncate and optimize prompt for better performance
  */
 function optimizePrompt(
 	contextPrompt: string,
@@ -107,7 +107,7 @@ function optimizePrompt(
 		return contextPrompt + dependencyInfo + fileListString;
 	}
 
-	// NEW: Smart truncation strategy
+	// Smart truncation strategy
 	const targetLength = maxLength - 2000; // Leave room for instructions
 
 	// Prioritize context prompt (most important)
@@ -176,7 +176,7 @@ export async function selectRelevantFilesAI(
 		return [];
 	}
 
-	// NEW: Check cache first
+	// Check cache first
 	const useCache = selectionOptions?.useCache ?? true;
 	const cacheTimeout = selectionOptions?.cacheTimeout ?? 5 * 60 * 1000; // 5 minutes default
 
@@ -350,7 +350,7 @@ export async function selectRelevantFilesAI(
 		})
 		.join("\n");
 
-	// NEW: Optimize prompt length
+	// Optimize prompt length
 	const maxPromptLength = selectionOptions?.maxPromptLength ?? 50000;
 	const optimizedPrompt = optimizePrompt(
 		contextPrompt,
@@ -433,7 +433,7 @@ export async function selectRelevantFilesAI(
 			// Fallback to just heuristic files if AI response is invalid
 			const result = Array.from(finalSelectedUris);
 
-			// NEW: Cache the fallback result
+			// Cache the fallback result
 			if (useCache) {
 				const cacheKey = generateAISelectionCacheKey(
 					userRequest,
@@ -473,7 +473,7 @@ export async function selectRelevantFilesAI(
 			}
 		}
 
-		// NEW: Cache the successful result
+		// Cache the successful result
 		const result = Array.from(finalSelectedUris);
 		if (useCache) {
 			const cacheKey = generateAISelectionCacheKey(
@@ -503,7 +503,7 @@ export async function selectRelevantFilesAI(
 		// fall back to the heuristically pre-selected files.
 		const result = Array.from(finalSelectedUris);
 
-		// NEW: Cache the error fallback result
+		// Cache the error fallback result
 		if (useCache) {
 			const cacheKey = generateAISelectionCacheKey(
 				userRequest,
@@ -526,7 +526,7 @@ export async function selectRelevantFilesAI(
 }
 
 /**
- * NEW: Clear AI selection cache for a specific workspace or all workspaces
+ * Clear AI selection cache for a specific workspace or all workspaces
  */
 export function clearAISelectionCache(workspacePath?: string): void {
 	if (workspacePath) {
@@ -544,7 +544,7 @@ export function clearAISelectionCache(workspacePath?: string): void {
 }
 
 /**
- * NEW: Get AI selection cache statistics
+ * Get AI selection cache statistics
  */
 export function getAISelectionCacheStats(): {
 	size: number;

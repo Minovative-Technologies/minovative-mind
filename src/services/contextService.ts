@@ -12,11 +12,11 @@ import {
 	buildDependencyGraph,
 	buildReverseDependencyGraph,
 } from "../context/dependencyGraphBuilder";
-import { getHeuristicRelevantFiles } from "../context/heuristicContextSelector"; // NEW: Import heuristic selector
+import { getHeuristicRelevantFiles } from "../context/heuristicContextSelector"; // Import heuristic selector
 import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
-	MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION, // NEW: Import for summary length
+	MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION, // Import for summary length
 } from "../context/smartContextSelector";
 import {
 	buildContextString,
@@ -24,15 +24,15 @@ import {
 } from "../context/contextBuilder";
 import * as SymbolService from "./symbolService";
 import { DiagnosticService } from "../utils/diagnosticUtils";
-import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor"; // NEW: Import for file content summarization
-import { SequentialContextService } from "./sequentialContextService"; // NEW: Import sequential context service
+import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor"; // Import for file content summarization
+import { SequentialContextService } from "./sequentialContextService"; // Import sequential context service
 import { DEFAULT_MODEL } from "../sidebar/common/sidebarConstants";
 
 // Constants for symbol processing
 const MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT = 6; // Example depth for symbol hierarchy serialization
 const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 5000;
 
-// NEW: Performance monitoring constants
+// Performance monitoring constants
 const PERFORMANCE_THRESHOLDS = {
 	SCAN_TIME_WARNING: 15000, // 5 seconds
 	DEPENDENCY_BUILD_TIME_WARNING: 10000, // 10 seconds
@@ -41,7 +41,7 @@ const PERFORMANCE_THRESHOLDS = {
 	MAX_FILES_FOR_SYMBOL_PROCESSING: 500,
 };
 
-// NEW: Configuration interface for context building
+// Configuration interface for context building
 interface ContextBuildOptions {
 	useScanCache?: boolean;
 	useDependencyCache?: boolean;
@@ -126,14 +126,14 @@ export class ContextService {
 		userRequest?: string,
 		editorContext?: PlanGenerationContext["editorContext"],
 		initialDiagnosticsString?: string, // Renamed parameter for clarity
-		options?: ContextBuildOptions // NEW: Options parameter
+		options?: ContextBuildOptions // Options parameter
 	): Promise<BuildProjectContextResult> {
 		const startTime = Date.now();
 		const enablePerformanceMonitoring =
 			options?.enablePerformanceMonitoring ?? true;
 
 		try {
-			// NEW: Get workspace root with better error handling
+			// Get workspace root with better error handling
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders || workspaceFolders.length === 0) {
 				return {
@@ -143,7 +143,7 @@ export class ContextService {
 			}
 			const rootFolder = workspaceFolders[0];
 
-			// NEW: Optimized workspace scanning with performance monitoring
+			// Optimized workspace scanning with performance monitoring
 			const scanStartTime = Date.now();
 			this.postMessageToWebview({
 				type: "statusUpdate",
@@ -187,7 +187,7 @@ export class ContextService {
 				};
 			}
 
-			// NEW: Optimized dependency graph building
+			// Optimized dependency graph building
 			const dependencyStartTime = Date.now();
 			this.postMessageToWebview({
 				type: "statusUpdate",
@@ -228,14 +228,14 @@ export class ContextService {
 				value: `Analyzed ${fileDependencies.size} file dependencies in ${dependencyBuildTime}ms.`,
 			});
 
-			// NEW: Optimized symbol processing with limits
+			// Optimized symbol processing with limits
 			const documentSymbolsMap = new Map<string, vscode.DocumentSymbol[]>();
 			const maxFilesForSymbolProcessing = Math.min(
 				allScannedFiles.length,
 				PERFORMANCE_THRESHOLDS.MAX_FILES_FOR_SYMBOL_PROCESSING
 			);
 
-			// NEW: Process symbols only for files that are likely to be relevant
+			// Process symbols only for files that are likely to be relevant
 			const filesForSymbolProcessing = allScannedFiles.slice(
 				0,
 				maxFilesForSymbolProcessing
@@ -463,17 +463,17 @@ export class ContextService {
 			}
 
 			let filesForContextBuilding = allScannedFiles;
-			let heuristicSelectedFiles: vscode.Uri[] = []; // NEW: Declare heuristicSelectedFiles
+			let heuristicSelectedFiles: vscode.Uri[] = []; // Declare heuristicSelectedFiles
 
-			// NEW: Populate heuristicSelectedFiles by awaiting a call to getHeuristicRelevantFiles
+			// Populate heuristicSelectedFiles by awaiting a call to getHeuristicRelevantFiles
 			try {
 				heuristicSelectedFiles = await getHeuristicRelevantFiles(
 					allScannedFiles,
 					rootFolder.uri,
 					editorContext,
 					fileDependencies,
-					reverseFileDependencies, // NEW: Pass reverseFileDependencies
-					activeSymbolDetailedInfo, // NEW: Pass activeSymbolDetailedInfo
+					reverseFileDependencies, // Pass reverseFileDependencies
+					activeSymbolDetailedInfo, // Pass activeSymbolDetailedInfo
 					cancellationToken
 				);
 				if (heuristicSelectedFiles.length > 0) {
@@ -495,7 +495,7 @@ export class ContextService {
 				heuristicSelectedFiles = [];
 			}
 
-			// NEW: Summary generation logic with optimization
+			// Summary generation logic with optimization
 			const MAX_FILES_TO_SUMMARIZE_ALL_FOR_SELECTION_PROMPT = 100; // User-defined threshold
 
 			let filesToSummarizeForSelectionPrompt: vscode.Uri[];
@@ -576,8 +576,8 @@ export class ContextService {
 						modelName: this.settingsManager.getSelectedModelName(),
 						cancellationToken,
 						fileDependencies,
-						preSelectedHeuristicFiles: heuristicSelectedFiles, // NEW: Pass heuristicSelectedFiles
-						fileSummaries: fileSummariesForAI, // NEW: Pass the generated file summaries
+						preSelectedHeuristicFiles: heuristicSelectedFiles, // Pass heuristicSelectedFiles
+						fileSummaries: fileSummariesForAI, // Pass the generated file summaries
 						selectionOptions: {
 							useCache: options?.useAISelectionCache ?? true,
 							cacheTimeout: 5 * 60 * 1000, // 5 minutes
@@ -658,7 +658,7 @@ export class ContextService {
 					path.relative(rootFolder.uri.fsPath, uri.fsPath).replace(/\\/g, "/")
 				);
 
-			// NEW: Context building with performance monitoring
+			// Context building with performance monitoring
 			const contextBuildStartTime = Date.now();
 
 			// 3. Update the final call to buildContextString to pass activeSymbolDetailedInfo

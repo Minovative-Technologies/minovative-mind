@@ -316,6 +316,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					placeHolder: "e.g., refactor this function to be more concise",
 					title: "Minovative Mind: Custom Prompt",
 				});
+
 				if (!customPromptInput) {
 					vscode.window.showInformationMessage("Modification cancelled.");
 					return; // User cancelled custom prompt input
@@ -376,146 +377,61 @@ export async function activate(context: vscode.ExtensionContext) {
 				);
 				let selectionSuccessfullyDetermined = false;
 				const cursorPosition = editor.selection.active;
-				let currentSelection = editor.selection; // Start with cursor position (potentially empty)
-				let expandedSelection: vscode.Selection | undefined;
-				const maxSmartSelectExpansions = 2; // Try expanding twice
-				let lastSelectionTextContent =
-					editor.document.getText(currentSelection);
-				let hasMeaningfulExpansion = false; // Flag to track if smartSelect actually did something useful
 
-				for (let i = 0; i < maxSmartSelectExpansions; i++) {
-					const beforeExpandSelection = currentSelection;
-					await vscode.commands.executeCommand(
-						"editor.action.smartSelect.expand"
-					);
-					await sleep(50); // Allow editor to update
-
-					currentSelection = editor.selection; // Get the new selection
-					const newSelectionTextContent =
-						editor.document.getText(currentSelection);
-
-					// Check if the selection actually changed and if its content meaningfully grew
-					if (
-						!currentSelection.isEqual(beforeExpandSelection) &&
-						newSelectionTextContent !== lastSelectionTextContent
-					) {
-						expandedSelection = currentSelection;
-						lastSelectionTextContent = newSelectionTextContent;
-						hasMeaningfulExpansion = true;
-					} else {
-						// Selection did not expand meaningfully (or not at all), stop trying
-						break;
-					}
-				}
-
-				// Layer 1 (Smart Select Expansion):
-				if (expandedSelection && hasMeaningfulExpansion) {
-					selectedText = editor.document.getText(expandedSelection);
-					effectiveRange = expandedSelection;
-					selectionMethodUsed = "smart-select-expansion";
-					selectionSuccessfullyDetermined = true;
-					vscode.window.showInformationMessage(
-						"Minovative Mind: Automatically selected code block using semantic expansion."
-					);
+				// Intelligent selection for /fix
+				if (instruction === "/fix") {
 					console.log(
-						"[Minovative Mind] Auto-selected using smartSelect.expand."
+						"[Minovative Mind] Attempting intelligent selection for /fix."
 					);
-					// diagnosticsString calculation REMOVED from here per centralization instructions
-				} else {
-					console.log(
-						"[Minovative Mind] smartSelect.expand did not yield a useful selection."
-					);
-				}
-
-				// Layer 2 (Document Symbol Fallback):
-				if (
-					!selectionSuccessfullyDetermined &&
-					(instruction === "/fix" || instruction === "custom prompt")
-				) {
-					let symbolRange: vscode.Range | undefined;
-					if (instruction === "/fix") {
-						const symbolWithDiagnostics =
-							await CodeSelectionService.findSymbolWithDiagnostics(
-								editor.document,
-								allDiagnostics,
-								symbols
-							);
-						if (symbolWithDiagnostics) {
-							symbolRange = symbolWithDiagnostics.range;
-							selectionMethodUsed = "symbol-with-diagnostics";
-						}
-					} else if (instruction === "custom prompt") {
-						const enclosingSymbol =
-							await CodeSelectionService.findEnclosingSymbol(
-								editor.document,
-								cursorPosition,
-								symbols
-							);
-						if (enclosingSymbol) {
-							symbolRange = enclosingSymbol.range;
-							selectionMethodUsed = "enclosing-symbol";
-						}
-					}
-
-					if (symbolRange) {
-						selectedText = editor.document.getText(symbolRange);
-						effectiveRange = symbolRange;
+					const relevantSymbol =
+						await CodeSelectionService.findRelevantSymbolForFix(
+							editor.document,
+							cursorPosition,
+							allDiagnostics,
+							symbols
+						);
+					if (relevantSymbol) {
+						selectedText = editor.document.getText(relevantSymbol.range);
+						effectiveRange = relevantSymbol.range;
+						selectionMethodUsed = "intelligent-fix-selection";
 						selectionSuccessfullyDetermined = true;
 						vscode.window.showInformationMessage(
-							`Minovative Mind: Selected code block via symbol-based fallback (${selectionMethodUsed.replace(
-								/-/g,
-								" "
-							)}).`
+							"Minovative Mind: Automatically selected relevant code block for /fix."
 						);
 						console.log(
-							`[Minovative Mind] Auto-selected using ${selectionMethodUsed}.`
+							"[Minovative Mind] Auto-selected using intelligent-fix-selection."
 						);
-						// diagnosticsString calculation REMOVED from here per centralization instructions
+					} else {
+						console.log(
+							"[Minovative Mind] intelligent-fix-selection did not find a relevant symbol."
+						);
 					}
-					// Previous full-file fallbacks if symbol lookup failed are removed, handled by Layer 4
 				}
-
-				// NEW Layer 3 (Tree-sitter Fallback via Code Blocks):
-				if (
-					!selectionSuccessfullyDetermined &&
-					(instruction === "/fix" || instruction === "custom prompt")
-				) {
+				// Intelligent selection for custom prompt
+				else if (instruction === "custom prompt") {
 					console.log(
-						"[Minovative Mind] Attempting Tree-sitter (Code Blocks) fallback."
+						"[Minovative Mind] Attempting intelligent selection for custom prompt."
 					);
-					const currentSelectionBeforeTreeSitter = editor.selection;
-
-					try {
-						await vscode.commands.executeCommand("codeBlocks.selectParent");
-						await sleep(50); // Give VS Code a moment to update the selection
-						const treeSitterSelection = editor.selection;
-
-						if (
-							!treeSitterSelection.isEmpty &&
-							!treeSitterSelection.isEqual(currentSelectionBeforeTreeSitter)
-						) {
-							selectedText = editor.document.getText(treeSitterSelection);
-							effectiveRange = treeSitterSelection;
-							selectionSuccessfullyDetermined = true;
-							selectionMethodUsed = "tree-sitter-code-blocks";
-							vscode.window.showInformationMessage(
-								"Minovative Mind: Selected code block via Tree-sitter (Code Blocks) fallback."
-							);
-							console.log(
-								"[Minovative Mind] Auto-selected using Code Blocks (Tree-sitter)."
-							);
-						} else {
-							console.log(
-								"[Minovative Mind] Code Blocks (Tree-sitter) did not yield a useful selection."
-							);
-						}
-					} catch (e) {
-						console.warn(
-							"[Minovative Mind] Error executing 'codeBlocks.selectParent' command:",
-							e
+					const logicalUnitSymbol =
+						await CodeSelectionService.findLogicalCodeUnitForPrompt(
+							editor.document,
+							cursorPosition,
+							symbols
 						);
-						vscode.window.showWarningMessage(
-							"Minovative Mind: Could not use Tree-sitter for selection. Please ensure the 'Code Blocks' extension (id: 'tom-selfin.codeblocks') is installed and enabled."
+					if (logicalUnitSymbol) {
+						selectedText = editor.document.getText(logicalUnitSymbol.range);
+						effectiveRange = logicalUnitSymbol.range;
+						selectionMethodUsed = "intelligent-custom-prompt-selection";
+						selectionSuccessfullyDetermined = true;
+						vscode.window.showInformationMessage(
+							"Minovative Mind: Automatically selected logical code unit for custom prompt."
+						);
+						console.log(
+							"[Minovative Mind] Auto-selected using intelligent-custom-prompt-selection."
+						);
+					} else {
+						console.log(
+							"[Minovative Mind] intelligent-custom-prompt-selection did not find a logical unit."
 						);
 					}
 				}
@@ -539,9 +455,27 @@ export async function activate(context: vscode.ExtensionContext) {
 							"Minovative Mind: Selected full file for merge operation."
 						);
 						diagnosticsString = undefined;
-					} else {
+					}
+					// If intelligent selection failed for /fix or custom prompt, fall back to full file.
+					else if (instruction === "/fix" || instruction === "custom prompt") {
 						console.log(
-							"[Minovative Mind] All automatic selection methods failed or were not applicable. Falling back to full file selection."
+							`[Minovative Mind] Intelligent selection for '${instruction}' failed. Falling back to full file selection.`
+						);
+						selectedText = fullText;
+						effectiveRange = new vscode.Range(
+							editor.document.positionAt(0),
+							editor.document.positionAt(fullText.length)
+						);
+						selectionMethodUsed = "full-file-fallback";
+						vscode.window.showInformationMessage(
+							"Minovative Mind: Falling back to full file selection as no specific code unit was found."
+						);
+						// diagnosticsString calculation REMOVED from here per centralization instructions
+					}
+					// Generic fallback for any other unhandled case (should not be hit if /docs, /fix, /custom, /merge are exhaustive)
+					else {
+						console.log(
+							"[Minovative Mind] No specific selection logic applied. Falling back to full file selection."
 						);
 						selectedText = fullText;
 						effectiveRange = new vscode.Range(
@@ -553,6 +487,23 @@ export async function activate(context: vscode.ExtensionContext) {
 							"Minovative Mind: Falling back to full file selection."
 						);
 						// diagnosticsString calculation REMOVED from here per centralization instructions
+					}
+				}
+				// Visual update of the active editor's selection for auto-determined ranges
+				if (effectiveRange && editor) {
+					// Ensure an effectiveRange was actually determined and editor is active
+					// Only visually update if the command is /fix or custom prompt
+					if (instruction === "/fix" || instruction === "custom prompt") {
+						const newSelection = new vscode.Selection(
+							effectiveRange.start,
+							effectiveRange.end
+						);
+						editor.selection = newSelection;
+						// Reveal the selected range to the user, ensuring it's visible in the viewport
+						editor.revealRange(
+							effectiveRange,
+							vscode.TextEditorRevealType.InCenterIfOutsideViewport
+						);
 					}
 				}
 			} // End of else (no explicit user selection)

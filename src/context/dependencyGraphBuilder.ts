@@ -8,7 +8,7 @@ import {
 	createProjectCompilerHost,
 } from "../utils/tsConfigLoader";
 
-// NEW: Cache interface for dependency graphs
+// Cache interface for dependency graphs
 interface DependencyCache {
 	timestamp: number;
 	dependencyGraph: Map<string, string[]>;
@@ -17,10 +17,10 @@ interface DependencyCache {
 	fileCount: number;
 }
 
-// NEW: Cache storage
+// Cache storage
 const dependencyCache = new Map<string, DependencyCache>();
 
-// NEW: Configuration for dependency building
+// Configuration for dependency building
 interface DependencyBuildOptions {
 	useCache?: boolean;
 	cacheTimeout?: number;
@@ -40,7 +40,7 @@ export async function buildDependencyGraph(
 	const useCache = options?.useCache ?? true;
 	const cacheTimeout = options?.cacheTimeout ?? 10 * 60 * 1000; // 10 minutes default
 
-	// NEW: Check cache first
+	// Check cache first
 	if (useCache) {
 		const cached = dependencyCache.get(workspacePath);
 		if (
@@ -60,7 +60,7 @@ export async function buildDependencyGraph(
 	const retryFailedFiles = options?.retryFailedFiles ?? true;
 	const maxRetries = options?.maxRetries ?? 2;
 
-	// NEW: Pre-filter files by size and type
+	// Pre-filter files by size and type
 	const filesToProcess = allScannedFiles.filter((fileUri) => {
 		if (!skipLargeFiles) {
 			return true;
@@ -87,10 +87,10 @@ export async function buildDependencyGraph(
 		compilerOptions
 	);
 
-	// NEW: Track failed files for retry
+	// Track failed files for retry
 	const failedFiles: Array<{ uri: vscode.Uri; retries: number }> = [];
 
-	// NEW: Process files with better error handling and retry logic
+	// Process files with better error handling and retry logic
 	async function processFile(
 		fileUri: vscode.Uri,
 		retryCount = 0
@@ -98,7 +98,7 @@ export async function buildDependencyGraph(
 		try {
 			const relativePath = path.relative(projectRoot.fsPath, fileUri.fsPath);
 
-			// NEW: Skip non-parsable files early
+			// Skip non-parsable files early
 			const ext = path.extname(fileUri.fsPath).toLowerCase();
 			const skipExtensions = [
 				".png",
@@ -138,7 +138,7 @@ export async function buildDependencyGraph(
 		}
 	}
 
-	// NEW: Process files in batches with progress tracking
+	// Process files in batches with progress tracking
 	const batchSize = Math.ceil(filesToProcess.length / 10); // Process in 10 batches
 	const startTime = Date.now();
 
@@ -153,7 +153,7 @@ export async function buildDependencyGraph(
 			{ concurrency: concurrencyLimit }
 		);
 
-		// NEW: Progress logging
+		// Progress logging
 		const progress = Math.min(
 			100,
 			((i + batchSize) / filesToProcess.length) * 100
@@ -161,7 +161,7 @@ export async function buildDependencyGraph(
 		console.log(`Dependency parsing progress: ${progress.toFixed(1)}%`);
 	}
 
-	// NEW: Retry failed files
+	// Retry failed files
 	if (failedFiles.length > 0 && retryFailedFiles) {
 		console.log(`Retrying ${failedFiles.length} failed files...`);
 
@@ -177,7 +177,7 @@ export async function buildDependencyGraph(
 		`Dependency graph built in ${buildTime}ms. Processed ${dependencyGraph.size} files.`
 	);
 
-	// NEW: Cache the results
+	// Cache the results
 	if (useCache) {
 		const reverseGraph = buildReverseDependencyGraph(dependencyGraph);
 		dependencyCache.set(workspacePath, {
@@ -204,7 +204,7 @@ export function buildReverseDependencyGraph(
 	fileDependencies: Map<string, string[]>,
 	projectRoot?: vscode.Uri
 ): Map<string, string[]> {
-	// NEW: Check cache first if projectRoot is provided
+	// Check cache first if projectRoot is provided
 	if (projectRoot) {
 		const workspacePath = projectRoot.fsPath;
 		const cached = dependencyCache.get(workspacePath);
@@ -218,7 +218,7 @@ export function buildReverseDependencyGraph(
 
 	const reverseDependencyGraph = new Map<string, string[]>();
 
-	// NEW: More efficient reverse graph building
+	// More efficient reverse graph building
 	for (const [importerPath, importedPaths] of fileDependencies.entries()) {
 		for (const importedPath of importedPaths) {
 			// Ensure the importedPath exists as a key in the reverse map
@@ -230,7 +230,7 @@ export function buildReverseDependencyGraph(
 		}
 	}
 
-	// NEW: Update cache if projectRoot is provided
+	// Update cache if projectRoot is provided
 	if (projectRoot) {
 		const workspacePath = projectRoot.fsPath;
 		const cached = dependencyCache.get(workspacePath);
@@ -243,7 +243,7 @@ export function buildReverseDependencyGraph(
 }
 
 /**
- * NEW: Clear dependency cache for a specific workspace or all workspaces
+ * Clear dependency cache for a specific workspace or all workspaces
  */
 export function clearDependencyCache(workspacePath?: string): void {
 	if (workspacePath) {
@@ -256,7 +256,7 @@ export function clearDependencyCache(workspacePath?: string): void {
 }
 
 /**
- * NEW: Get dependency cache statistics
+ * Get dependency cache statistics
  */
 export function getDependencyCacheStats(): {
 	size: number;
@@ -283,7 +283,7 @@ export function getDependencyCacheStats(): {
 }
 
 /**
- * NEW: Get dependency statistics for a specific file
+ * Get dependency statistics for a specific file
  */
 export function getFileDependencyStats(
 	filePath: string,

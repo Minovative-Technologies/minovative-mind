@@ -10,20 +10,20 @@ interface ScanOptions {
 	additionalIgnorePatterns?: string[];
 	maxConcurrentReads?: number; // Optional concurrency limit
 	maxConcurrency?: number; // Alternative name for maxConcurrentReads
-	fileTypeFilter?: string[]; // NEW: Filter by file extensions
-	maxFileSize?: number; // NEW: Skip files larger than this (in bytes)
-	useCache?: boolean; // NEW: Enable caching of scan results
-	cacheTimeout?: number; // NEW: Cache timeout in milliseconds
+	fileTypeFilter?: string[]; // Filter by file extensions
+	maxFileSize?: number; // Skip files larger than this (in bytes)
+	useCache?: boolean; // Enable caching of scan results
+	cacheTimeout?: number; // Cache timeout in milliseconds
 }
 
-// NEW: Cache interface for scan results
+// Cache interface for scan results
 interface ScanCache {
 	timestamp: number;
 	files: vscode.Uri[];
 	workspacePath: string;
 }
 
-// NEW: File type patterns for better filtering
+// File type patterns for better filtering
 const RELEVANT_FILE_EXTENSIONS = [
 	// Source code files
 	".ts",
@@ -100,7 +100,7 @@ const RELEVANT_FILE_EXTENSIONS = [
 	"CONTRIBUTING.md",
 ];
 
-// NEW: Cache storage
+// Cache storage
 const scanCache = new Map<string, ScanCache>();
 
 /**
@@ -124,7 +124,7 @@ export async function scanWorkspace(
 	const rootFolder = workspaceFolders[0];
 	const workspacePath = rootFolder.uri.fsPath;
 
-	// NEW: Check cache first
+	// Check cache first
 	const useCache = options?.useCache ?? true;
 	const cacheTimeout = options?.cacheTimeout ?? 5 * 60 * 1000; // 5 minutes default
 
@@ -152,7 +152,7 @@ export async function scanWorkspace(
 	const fileTypeFilter = options?.fileTypeFilter ?? RELEVANT_FILE_EXTENSIONS;
 
 	/**
-	 * NEW: Check if a file should be included based on size and type
+	 * Check if a file should be included based on size and type
 	 */
 	function shouldIncludeFile(filePath: string, fileSize?: number): boolean {
 		// Check file size
@@ -182,7 +182,7 @@ export async function scanWorkspace(
 		try {
 			const entries = await vscode.workspace.fs.readDirectory(dirUri);
 
-			// NEW: Pre-filter entries to reduce processing
+			// Pre-filter entries to reduce processing
 			const relevantEntries = entries.filter(([name, type]) => {
 				const fullPath = path.join(dirUri.fsPath, name);
 				const relativePath = path.relative(workspacePath, fullPath);
@@ -211,7 +211,7 @@ export async function scanWorkspace(
 					const relativePath = path.relative(workspacePath, fullUri.fsPath);
 
 					if (type === vscode.FileType.File) {
-						// NEW: Check file size before adding
+						// Check file size before adding
 						try {
 							const stat = await vscode.workspace.fs.stat(fullUri);
 							if (shouldIncludeFile(relativePath, stat.size)) {
@@ -244,7 +244,7 @@ export async function scanWorkspace(
 		`Workspace scan finished in ${scanTime}ms. Found ${relevantFiles.length} relevant files.`
 	);
 
-	// NEW: Cache the results
+	// Cache the results
 	if (useCache) {
 		scanCache.set(workspacePath, {
 			timestamp: Date.now(),
@@ -257,7 +257,7 @@ export async function scanWorkspace(
 }
 
 /**
- * NEW: Clear scan cache for a specific workspace or all workspaces
+ * Clear scan cache for a specific workspace or all workspaces
  */
 export function clearScanCache(workspacePath?: string): void {
 	if (workspacePath) {
@@ -270,7 +270,7 @@ export function clearScanCache(workspacePath?: string): void {
 }
 
 /**
- * NEW: Get cache statistics
+ * Get cache statistics
  */
 export function getScanCacheStats(): {
 	size: number;

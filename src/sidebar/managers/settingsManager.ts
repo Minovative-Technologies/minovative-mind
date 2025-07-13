@@ -7,7 +7,7 @@ import {
 } from "../common/sidebarConstants";
 import { resetClient } from "../../ai/gemini"; // Adjusted path
 
-// NEW: Optimization settings keys
+// Optimization settings keys
 const OPTIMIZATION_SETTINGS_KEYS = {
 	USE_SCAN_CACHE: "optimization.useScanCache",
 	USE_DEPENDENCY_CACHE: "optimization.useDependencyCache",
@@ -28,7 +28,7 @@ const OPTIMIZATION_SETTINGS_KEYS = {
 	FALLBACK_TO_HEURISTICS: "optimization.fallbackToHeuristics",
 };
 
-// NEW: Default optimization settings
+// Default optimization settings
 const DEFAULT_OPTIMIZATION_SETTINGS = {
 	useScanCache: true,
 	useDependencyCache: true,
@@ -68,7 +68,7 @@ export class SettingsManager {
 		return this.workspaceState.get<T>(key, defaultValue);
 	}
 
-	// NEW: Get optimization settings
+	// Get optimization settings
 	public getOptimizationSettings() {
 		return {
 			useScanCache: this.getSetting(
@@ -138,7 +138,7 @@ export class SettingsManager {
 		};
 	}
 
-	// NEW: Update optimization settings
+	// Update optimization settings
 	public async updateOptimizationSettings(
 		settings: Partial<typeof DEFAULT_OPTIMIZATION_SETTINGS>
 	): Promise<void> {
@@ -167,7 +167,7 @@ export class SettingsManager {
 		}
 	}
 
-	// NEW: Reset optimization settings to defaults
+	// Reset optimization settings to defaults
 	public async resetOptimizationSettings(): Promise<void> {
 		try {
 			for (const [key, defaultValue] of Object.entries(
@@ -196,7 +196,7 @@ export class SettingsManager {
 		}
 	}
 
-	// NEW: Get cache statistics
+	// Get cache statistics
 	public getCacheStatistics() {
 		// This would need to be implemented by importing the cache functions
 		// For now, return a placeholder
@@ -207,7 +207,7 @@ export class SettingsManager {
 		};
 	}
 
-	// NEW: Clear all caches
+	// Clear all caches
 	public async clearAllCaches(): Promise<void> {
 		try {
 			// This would need to be implemented by importing the cache functions
@@ -294,7 +294,7 @@ export class SettingsManager {
 		});
 	}
 
-	// NEW: Update webview with optimization settings
+	// Update webview with optimization settings
 	public updateWebviewOptimizationSettings(): void {
 		this.postMessageToWebview({
 			type: "updateOptimizationSettings",
