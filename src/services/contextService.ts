@@ -201,9 +201,9 @@ export class ContextService {
 					useCache: options?.useDependencyCache ?? true,
 					maxConcurrency: options?.maxConcurrency ?? 15,
 					skipLargeFiles: options?.skipLargeFiles ?? true,
-					maxFileSizeForParsing: options?.maxFileSize ?? 1024 * 1024, // 1MB
+					maxFileSizeForParsing: options?.maxFileSize ?? 1024 * 1024 * 5, // 5MB
 					retryFailedFiles: true,
-					maxRetries: 2,
+					maxRetries: 3,
 				}
 			);
 

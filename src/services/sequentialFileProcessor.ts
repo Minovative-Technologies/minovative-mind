@@ -246,7 +246,7 @@ export class SequentialFileProcessor {
 					`file-analysis-${relativePath}`,
 					{
 						temperature: TEMPERATURE,
-						maxOutputTokens: 3000,
+						maxOutputTokens: 5000,
 					}
 				);
 
