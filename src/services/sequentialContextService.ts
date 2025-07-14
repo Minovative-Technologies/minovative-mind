@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 import {
 	SequentialFileProcessor,
 	FileSummary,
-	SequentialProcessingOptions,
 } from "./sequentialFileProcessor";
 import { AIRequestService } from "./aiRequestService";
 import { scanWorkspace } from "../context/workspaceScanner";
@@ -98,7 +97,7 @@ export class SequentialContextService {
 		const allFiles = await scanWorkspace({
 			useCache: true,
 			maxConcurrency: 10,
-			maxFileSize: 1024 * 1024, // 1MB
+			maxFileSize: 1024 * 1024 * 5, // 5MB
 		});
 
 		if (allFiles.length === 0) {
@@ -551,7 +550,7 @@ export class SequentialContextService {
 		const allFiles = await scanWorkspace({
 			useCache: true,
 			maxConcurrency: 10,
-			maxFileSize: 1024 * 1024,
+			maxFileSize: 1024 * 1024 * 5, // 5MB
 		});
 
 		// Build dependency graph

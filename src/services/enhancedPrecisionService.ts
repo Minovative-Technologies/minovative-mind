@@ -12,7 +12,6 @@ import {
 	buildDependencyGraph,
 	buildReverseDependencyGraph,
 } from "../context/dependencyGraphBuilder";
-import { getHeuristicRelevantFiles } from "../context/heuristicContextSelector";
 import { ActiveSymbolDetailedInfo } from "./contextService";
 
 // Enhanced precision service configuration
@@ -161,7 +160,7 @@ export class EnhancedPrecisionService {
 			const allScannedFiles = await scanWorkspace({
 				useCache: true,
 				maxConcurrentReads: 20, // Increased for better performance
-				maxFileSize: 1024 * 1024, // 1MB
+				maxFileSize: 1024 * 1024 * 5, // 5MB
 				cacheTimeout: 5 * 60 * 1000, // 5 minutes
 			});
 

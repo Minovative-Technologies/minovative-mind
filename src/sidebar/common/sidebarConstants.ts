@@ -14,9 +14,6 @@ export const DEFAULT_MODEL =
 	(AVAILABLE_GEMINI_MODELS.length > 0 &&
 		AVAILABLE_GEMINI_MODELS.find((model) => model === "gemini-2.5-flash")) ||
 	AVAILABLE_GEMINI_MODELS[AVAILABLE_GEMINI_MODELS.length - 1];
-// Fallback if AVAILABLE_GEMINI_MODELS is empty.
-// Note: With the current constant definition of AVAILABLE_GEMINI_MODELS,
-// this fallback branch will not be hit as the array is not empty.
 
 export const TEMPERATURE = 2;
 
