@@ -2,11 +2,6 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { AIRequestService } from "../services/aiRequestService";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
-import {
-	IncrementalCodeUpdater,
-	CodeChange,
-} from "../utils/incrementalCodeUpdater";
-import { TEMPERATURE } from "../sidebar/common/sidebarConstants";
 
 /**
  * Real-time feedback interface for code generation
@@ -34,16 +29,11 @@ export class EnhancedCodeGenerator {
 		private aiRequestService: AIRequestService,
 		private workspaceRoot: vscode.Uri,
 		private config: {
-			enableInlineEdits?: boolean;
-			inlineEditFallbackThreshold?: number;
 			enableRealTimeFeedback?: boolean;
 			maxFeedbackIterations?: number;
 		} = {}
 	) {
 		// Set defaults
-		this.config.enableInlineEdits = this.config.enableInlineEdits ?? true;
-		this.config.inlineEditFallbackThreshold =
-			this.config.inlineEditFallbackThreshold ?? 0.3;
 		this.config.enableRealTimeFeedback =
 			this.config.enableRealTimeFeedback ?? true;
 		this.config.maxFeedbackIterations = this.config.maxFeedbackIterations ?? 5;
@@ -115,98 +105,6 @@ export class EnhancedCodeGenerator {
 		modelName: string,
 		token?: vscode.CancellationToken
 	): Promise<{ content: string; validation: CodeValidationResult }> {
-		// Try incremental updates first if enabled
-		if (this.config.enableInlineEdits) {
-			try {
-				const incrementalChanges =
-					await IncrementalCodeUpdater.generateMinimalChanges(
-						currentContent,
-						modificationPrompt,
-						{
-							projectContext: context.projectContext,
-							relevantSnippets: context.relevantSnippets,
-							filePath: filePath,
-						},
-						this.aiRequestService,
-						modelName,
-						token
-					);
-
-				if (incrementalChanges.length > 0) {
-					// Apply incremental changes to generate the final content
-					const modifiedContent = this._applyIncrementalChangesToContent(
-						currentContent,
-						incrementalChanges
-					);
-
-					// Validate the result
-					const validation = await this._validateCode(
-						filePath,
-						modifiedContent
-					);
-
-					return {
-						content: modifiedContent,
-						validation: {
-							...validation,
-							incrementalChanges: incrementalChanges,
-							usedIncrementalUpdates: true,
-						},
-					};
-				}
-			} catch (error) {
-				console.warn(
-					"Incremental update generation failed, falling back to inline edits:",
-					error
-				);
-			}
-		}
-
-		// Try inline edits as fallback
-		if (this.config.enableInlineEdits) {
-			try {
-				const inlineResult = await this.generateInlineEditInstructions(
-					filePath,
-					modificationPrompt,
-					currentContent,
-					context,
-					modelName,
-					token
-				);
-
-				if (
-					inlineResult.editInstructions.length > 0 &&
-					inlineResult.validation.isValid
-				) {
-					// Apply inline edits to generate the final content
-					const modifiedContent = this._applyInlineEditsToContent(
-						currentContent,
-						inlineResult.editInstructions
-					);
-
-					// Validate the result
-					const validation = await this._validateCode(
-						filePath,
-						modifiedContent
-					);
-
-					return {
-						content: modifiedContent,
-						validation: {
-							...validation,
-							editInstructions: inlineResult.editInstructions,
-							usedInlineEdits: true,
-						},
-					};
-				}
-			} catch (error) {
-				console.warn(
-					"Inline edit generation failed, falling back to full file modification:",
-					error
-				);
-			}
-		}
-
 		// Fallback to original full file modification
 		return this._modifyFileContentFull(
 			filePath,
@@ -1026,387 +924,11 @@ Provide ONLY the refined file content without any markdown formatting:`;
 	}
 
 	/**
-	 * Generate inline edit instructions for precise file modifications
-	 */
-	public async generateInlineEditInstructions(
-		filePath: string,
-		modificationPrompt: string,
-		currentContent: string,
-		context: {
-			projectContext: string;
-			relevantSnippets: string;
-			editorContext?: any;
-			activeSymbolInfo?: ActiveSymbolDetailedInfo;
-		},
-		modelName: string,
-		token?: vscode.CancellationToken
-	): Promise<{
-		editInstructions: InlineEditInstruction[];
-		validation: CodeValidationResult;
-	}> {
-		// Step 1: Analyze the current file structure
-		const fileAnalysis = await this._analyzeFileStructure(
-			filePath,
-			currentContent
-		);
-
-		// Step 2: Generate inline edit instructions
-		const editInstructions = await this._generateInlineEditInstructions(
-			filePath,
-			modificationPrompt,
-			currentContent,
-			fileAnalysis,
-			context,
-			modelName,
-			token
-		);
-
-		// Step 3: Validate the edit instructions
-		const validation = await this._validateInlineEditInstructions(
-			filePath,
-			currentContent,
-			editInstructions,
-			context,
-			modelName,
-			token
-		);
-
-		return {
-			editInstructions,
-			validation,
-		};
-	}
-
-	/**
-	 * Generate specific inline edit instructions
-	 */
-	private async _generateInlineEditInstructions(
-		filePath: string,
-		modificationPrompt: string,
-		currentContent: string,
-		fileAnalysis: FileStructureAnalysis,
-		context: any,
-		modelName: string,
-		token?: vscode.CancellationToken
-	): Promise<InlineEditInstruction[]> {
-		const languageId = this._getLanguageId(path.extname(filePath));
-
-		const prompt = `You are an expert software engineer. Your task is to generate PRECISE inline edit instructions for modifying an existing file.
-
-**CRITICAL REQUIREMENTS:**
-1. **Generate ONLY edit instructions** - do NOT rewrite the entire file
-2. **Be extremely specific** - provide exact line numbers and text changes
-3. **Minimal changes only** - make only the necessary modifications
-4. **Preserve existing structure** - keep all other code unchanged
-5. **Follow VS Code edit format** - use ranges and replacement text
-
-**File Path:** ${filePath}
-**Language:** ${languageId}
-
-**Current File Structure:**
-- Total Lines: ${currentContent.split("\n").length}
-- Imports: ${fileAnalysis.imports.length} lines
-- Functions: ${fileAnalysis.functions.length} functions
-- Classes: ${fileAnalysis.classes.length} classes
-- Variables: ${fileAnalysis.variables.length} variables
-
-**Modification Request:**
-${modificationPrompt}
-
-**Current File Content:**
-\`\`\`${languageId}
-${currentContent}
-\`\`\`
-
-**Project Context:**
-${context.projectContext}
-
-**Relevant Code Snippets:**
-${context.relevantSnippets}
-
-**TASK:** Generate a JSON array of precise edit instructions. Each instruction should specify:
-- startLine: The starting line number (1-based)
-- endLine: The ending line number (1-based)
-- newText: The exact text to replace the specified range
-- description: Brief description of what this edit does
-
-**IMPORTANT:**
-- Use exact line numbers from the current file
-- Provide complete replacement text for each range
-- Make minimal, surgical changes
-- Preserve indentation and formatting
-- Include only the changes needed
-
-**OUTPUT FORMAT:**
-Return ONLY a JSON array like this:
-[
-  {
-    "startLine": 15,
-    "endLine": 15,
-    "newText": "  const newVariable = 'value';",
-    "description": "Add new variable declaration"
-  },
-  {
-    "startLine": 25,
-    "endLine": 30,
-    "newText": "function updatedFunction() {\n  // new implementation\n}",
-    "description": "Update function implementation"
-  }
-]
-
-Generate ONLY the JSON array of edit instructions:`;
-
-		const response = await this.aiRequestService.generateWithRetry(
-			prompt,
-			modelName,
-			undefined,
-			"inline edit instructions generation",
-			{
-				responseMimeType: "application/json",
-				temperature: TEMPERATURE, // Low temperature for precise instructions
-			},
-			undefined,
-			token
-		);
-
-		try {
-			const editInstructions = JSON.parse(response) as InlineEditInstruction[];
-			return this._validateAndRefineEditInstructions(
-				editInstructions,
-				currentContent
-			);
-		} catch (error) {
-			console.error("Failed to parse edit instructions:", error);
-			// Fallback to generating a single edit instruction
-			return this._generateFallbackEditInstruction(
-				filePath,
-				modificationPrompt,
-				currentContent,
-				context,
-				modelName,
-				token
-			);
-		}
-	}
-
-	/**
-	 * Validate and refine edit instructions
-	 */
-	private _validateAndRefineEditInstructions(
-		instructions: InlineEditInstruction[],
-		currentContent: string
-	): InlineEditInstruction[] {
-		const lines = currentContent.split("\n");
-		const validatedInstructions: InlineEditInstruction[] = [];
-
-		for (const instruction of instructions) {
-			// Validate line numbers
-			if (instruction.startLine < 1 || instruction.endLine > lines.length) {
-				console.warn(
-					`Invalid line range: ${instruction.startLine}-${instruction.endLine}`
-				);
-				continue;
-			}
-
-			// Validate that startLine <= endLine
-			if (instruction.startLine > instruction.endLine) {
-				console.warn(`Invalid line range: start > end`);
-				continue;
-			}
-
-			// Validate newText is not empty for non-deletion edits
-			if (
-				!instruction.newText.trim() &&
-				instruction.startLine !== instruction.endLine
-			) {
-				console.warn(`Empty newText for non-deletion edit`);
-				continue;
-			}
-
-			validatedInstructions.push(instruction);
-		}
-
-		return validatedInstructions;
-	}
-
-	/**
-	 * Generate fallback edit instruction if JSON parsing fails
-	 */
-	private async _generateFallbackEditInstruction(
-		filePath: string,
-		modificationPrompt: string,
-		currentContent: string,
-		context: any,
-		modelName: string,
-		token?: vscode.CancellationToken
-	): Promise<InlineEditInstruction[]> {
-		const languageId = this._getLanguageId(path.extname(filePath));
-
-		const fallbackPrompt = `The previous attempt to generate precise edit instructions failed. Please provide a simple, single edit instruction.
-
-**File:** ${filePath}
-**Language:** ${languageId}
-**Request:** ${modificationPrompt}
-
-**Current Content:**
-\`\`\`${languageId}
-${currentContent}
-\`\`\`
-
-**Task:** Provide ONE edit instruction in this exact format:
-{
-  "startLine": [line number],
-  "endLine": [line number], 
-  "newText": "[exact replacement text]",
-  "description": "[brief description]"
-}
-
-Return ONLY the JSON object:`;
-
-		const response = await this.aiRequestService.generateWithRetry(
-			fallbackPrompt,
-			modelName,
-			undefined,
-			"fallback edit instruction",
-			{
-				responseMimeType: "application/json",
-				temperature: TEMPERATURE,
-			},
-			undefined,
-			token
-		);
-
-		try {
-			const instruction = JSON.parse(response) as InlineEditInstruction;
-			return this._validateAndRefineEditInstructions(
-				[instruction],
-				currentContent
-			);
-		} catch (error) {
-			console.error("Fallback edit instruction generation failed:", error);
-			return [];
-		}
-	}
-
-	/**
-	 * Validate inline edit instructions
-	 */
-	private async _validateInlineEditInstructions(
-		filePath: string,
-		currentContent: string,
-		editInstructions: InlineEditInstruction[],
-		context: any,
-		modelName: string,
-		token?: vscode.CancellationToken
-	): Promise<CodeValidationResult> {
-		const issues: CodeIssue[] = [];
-		const suggestions: string[] = [];
-
-		// Check if edit instructions are reasonable
-		if (editInstructions.length === 0) {
-			issues.push({
-				type: "other",
-				message: "No edit instructions generated",
-				line: 0,
-				severity: "error",
-			});
-			return {
-				isValid: false,
-				finalContent: currentContent,
-				issues,
-				suggestions: [
-					"Consider providing more specific modification instructions",
-				],
-			};
-		}
-
-		// Check for overlapping edits
-		const sortedEdits = [...editInstructions].sort(
-			(a, b) => a.startLine - b.startLine
-		);
-		for (let i = 0; i < sortedEdits.length - 1; i++) {
-			const current = sortedEdits[i];
-			const next = sortedEdits[i + 1];
-
-			if (current.endLine >= next.startLine) {
-				issues.push({
-					type: "other",
-					message: `Overlapping edits detected: lines ${current.startLine}-${current.endLine} and ${next.startLine}-${next.endLine}`,
-					line: current.startLine,
-					severity: "error",
-				});
-			}
-		}
-
-		// Check if edits are too extensive
-		const totalLines = currentContent.split("\n").length;
-		const totalEditLines = editInstructions.reduce(
-			(sum, edit) => sum + (edit.endLine - edit.startLine + 1),
-			0
-		);
-
-		if (totalEditLines > totalLines * 0.3) {
-			// More than 30% of file
-			issues.push({
-				type: "other",
-				message: `Edit instructions modify too much of the file (${Math.round(
-					(totalEditLines / totalLines) * 100
-				)}%)`,
-				line: 0,
-				severity: "warning",
-			});
-		}
-
-		if (issues.length === 0) {
-			suggestions.push(
-				"Edit instructions appear to be well-targeted and reasonable"
-			);
-		} else {
-			suggestions.push(
-				"Consider refining the edit instructions to address the identified issues"
-			);
-		}
-
-		return {
-			isValid: issues.length === 0,
-			finalContent: currentContent, // We don't apply edits here, just validate
-			issues,
-			suggestions,
-		};
-	}
-
-	/**
-	 * Apply inline edits to content string
-	 */
-	private _applyInlineEditsToContent(
-		content: string,
-		editInstructions: InlineEditInstruction[]
-	): string {
-		const lines = content.split("\n");
-		const sortedEdits = [...editInstructions].sort(
-			(a, b) => a.startLine - b.startLine
-		);
-
-		// Apply edits in reverse order to maintain line numbers
-		for (let i = sortedEdits.length - 1; i >= 0; i--) {
-			const edit = sortedEdits[i];
-			const startLine = Math.max(0, edit.startLine - 1);
-			const endLine = Math.max(0, edit.endLine - 1);
-
-			// Replace the specified lines
-			const newLines = edit.newText.split("\n");
-			lines.splice(startLine, endLine - startLine + 1, ...newLines);
-		}
-
-		return lines.join("\n");
-	}
-
-	/**
 	 * Apply incremental changes to content
 	 */
 	private _applyIncrementalChangesToContent(
 		content: string,
-		changes: CodeChange[]
+		changes: any[] // Changed from CodeChange[] as CodeChange is removed
 	): string {
 		const lines = content.split("\n");
 		const sortedChanges = [...changes].sort(
@@ -1538,7 +1060,6 @@ Return ONLY the JSON object:`;
 			content: validation.finalContent,
 			validation: {
 				...validation,
-				usedInlineEdits: false,
 			},
 		};
 	}
@@ -2161,10 +1682,6 @@ export interface CodeValidationResult {
 	finalContent: string;
 	issues: CodeIssue[];
 	suggestions: string[];
-	editInstructions?: InlineEditInstruction[];
-	usedInlineEdits?: boolean;
-	incrementalChanges?: CodeChange[];
-	usedIncrementalUpdates?: boolean;
 	iterations?: number;
 	totalIssues?: number;
 	resolvedIssues?: number;
@@ -2198,11 +1715,4 @@ export interface DiffAnalysis {
 	isReasonable: boolean;
 	issues: string[];
 	changeRatio: number;
-}
-
-export interface InlineEditInstruction {
-	startLine: number;
-	endLine: number;
-	newText: string;
-	description: string;
 }

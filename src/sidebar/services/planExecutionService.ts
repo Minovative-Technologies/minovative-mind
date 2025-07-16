@@ -2,19 +2,12 @@ import * as vscode from "vscode";
 import * as path from "path";
 
 // New imports for AI interaction and code utilities
-import {
-	_performModification,
-	_performInlineModification,
-} from "./aiInteractionService";
+import { _performModification } from "./aiInteractionService";
 import { AIRequestService } from "../../services/aiRequestService"; // Added import
-import {
-	applyAITextEdits,
-	applyInlineEditInstructions,
-} from "../../utils/codeUtils";
+import { applyAITextEdits } from "../../utils/codeUtils";
 import { ProjectChangeLogger } from "../../workflow/ProjectChangeLogger";
 import { generateFileChangeSummary } from "../../utils/diffingUtils";
 import { FileChangeEntry } from "../../types/workflow";
-import { InlineEditInstruction } from "../../ai/enhancedCodeGeneration";
 
 // Define enums and interfaces for plan execution
 export enum PlanStepAction {
@@ -210,90 +203,36 @@ export async function executePlanStep(
 				)} with AI...`,
 			});
 
-			// Try inline edits first, fallback to full file modification
-			let editInstructions: InlineEditInstruction[] = [];
-			let inlineEditSuccess = false;
-
+			let aiModifiedContent: string;
 			try {
-				// Attempt to generate inline edit instructions
-				const inlineResult = await _performInlineModification(
+				// Call the AI function to get modified content
+				aiModifiedContent = await _performModification(
 					originalContent,
 					step.modificationPrompt,
 					editor.document.languageId,
 					editor.document.uri.fsPath,
-					modelName,
-					aiRequestService,
+					modelName, // Pass correct modelName
+					aiRequestService, // Pass AIRequestService instance
 					token
 				);
-
-				if (
-					inlineResult.editInstructions.length > 0 &&
-					inlineResult.validation.isValid
-				) {
-					editInstructions = inlineResult.editInstructions;
-					inlineEditSuccess = true;
-
-					progress.report({
-						message: `Applying precise inline edits to ${path.basename(
-							targetFileUri.fsPath
-						)}...`,
-					});
-
-					// Apply inline edits
-					await applyInlineEditInstructions(editor, editInstructions, token);
-				}
-			} catch (inlineError: any) {
-				console.warn(
-					"Inline edit failed, falling back to full file modification:",
-					inlineError
-				);
-				inlineEditSuccess = false;
-			}
-
-			// Fallback to full file modification if inline edits failed
-			if (!inlineEditSuccess) {
-				progress.report({
-					message: `Falling back to full file modification for ${path.basename(
-						targetFileUri.fsPath
-					)}...`,
+			} catch (aiError: any) {
+				const errorMessage = `Failed to modify file ${path.basename(
+					targetFileUri.fsPath
+				)}: ${aiError.message}`;
+				console.error("[PlanExecutionService] " + errorMessage, aiError);
+				postChatUpdate({
+					type: "appendRealtimeModelMessage",
+					value: { text: errorMessage, isError: true },
 				});
-
-				let aiModifiedContent: string;
-				try {
-					// Call the AI function to get modified content
-					aiModifiedContent = await _performModification(
-						originalContent,
-						step.modificationPrompt,
-						editor.document.languageId,
-						editor.document.uri.fsPath,
-						modelName, // Pass correct modelName
-						aiRequestService, // Pass AIRequestService instance
-						token
-					);
-				} catch (aiError: any) {
-					const errorMessage = `Failed to modify file ${path.basename(
-						targetFileUri.fsPath
-					)}: ${aiError.message}`;
-					console.error("[PlanExecutionService] " + errorMessage, aiError);
-					postChatUpdate({
-						type: "appendRealtimeModelMessage",
-						value: { text: errorMessage, isError: true },
-					});
-					throw aiError; // Re-throw to stop plan execution
-				}
-
-				if (token.isCancellationRequested) {
-					throw new Error("Operation cancelled by user.");
-				}
-
-				// Apply the AI-generated changes to the editor
-				await applyAITextEdits(
-					editor,
-					originalContent,
-					aiModifiedContent,
-					token
-				);
+				throw aiError; // Re-throw to stop plan execution
 			}
+
+			if (token.isCancellationRequested) {
+				throw new Error("Operation cancelled by user.");
+			}
+
+			// Apply the AI-generated changes to the editor
+			await applyAITextEdits(editor, originalContent, aiModifiedContent, token);
 
 			const newContent = editor.document.getText();
 			const { summary, addedLines, removedLines, formattedDiff } =
@@ -319,14 +258,11 @@ export async function executePlanStep(
 				`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file!}:\n---\n${formattedDiff}\n---`
 			);
 
-			// Post appropriate message based on edit type
-			const editType = inlineEditSuccess
-				? "precise inline edits"
-				: "modifications";
+			// Post appropriate message
 			postChatUpdate({
 				type: "appendRealtimeModelMessage",
 				value: {
-					text: `Successfully applied ${editType} to \`${path.basename(
+					text: `Successfully applied modifications to \`${path.basename(
 						targetFileUri.fsPath
 					)}\`.`,
 					isError: false,
@@ -335,7 +271,7 @@ export async function executePlanStep(
 			});
 
 			progress.report({
-				message: `Successfully applied ${editType} to ${path.basename(
+				message: `Successfully applied modifications to ${path.basename(
 					targetFileUri.fsPath
 				)}.`,
 			});
