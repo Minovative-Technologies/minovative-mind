@@ -804,13 +804,11 @@ export function initializeMessageBusHandler(
 					const editedMessages = elements.chatContainer.querySelectorAll(
 						".user-message-edited-pending-ai"
 					);
-					// Iterate through these selected elements and remove the user-message-edited-pending-ai class from each.
 					editedMessages.forEach((msg) => {
 						msg.classList.remove("user-message-edited-pending-ai");
 					});
 
 					setLoadingState(appState.isLoading, elements);
-					resetUIStateAfterCancellation(elements, setLoadingState);
 
 					elements.chatContainer.scrollTop =
 						elements.chatContainer.scrollHeight;

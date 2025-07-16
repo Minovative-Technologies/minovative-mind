@@ -408,7 +408,13 @@ export function appendMessage(
 								const newTextSpan = document.createElement("span");
 								newTextSpan.classList.add("message-text-content");
 								newTextSpan.innerHTML = md.render(newContent);
-								textarea.replaceWith(newTextSpan);
+								if (textarea.parentNode) {
+									textarea.replaceWith(newTextSpan);
+								} else {
+									console.warn(
+										"[ChatMessageRenderer] Textarea not found in DOM during Enter key finalization. Aborting replaceWith."
+									);
+								}
 
 								// 2. Add the temporary CSS class `user-message-edited-pending-ai` to the parent `messageElement`
 								messageElement.classList.add("user-message-edited-pending-ai");
@@ -473,7 +479,13 @@ export function appendMessage(
 							const newTextSpan = document.createElement("span");
 							newTextSpan.classList.add("message-text-content");
 							newTextSpan.innerHTML = md.render(newContent);
-							textarea.replaceWith(newTextSpan);
+							if (textarea.parentNode) {
+								textarea.replaceWith(newTextSpan);
+							} else {
+								console.warn(
+									"[ChatMessageRenderer] Textarea not found in DOM during Blur event finalization. Aborting replaceWith."
+								);
+							}
 
 							messageElement.classList.add("user-message-edited-pending-ai");
 
@@ -647,7 +659,13 @@ function revertEdit(
 	const originalTextSpan = document.createElement("span");
 	originalTextSpan.classList.add("message-text-content");
 	originalTextSpan.innerHTML = md.render(originalText);
-	textarea.replaceWith(originalTextSpan);
+	if (textarea.parentNode) {
+		textarea.replaceWith(originalTextSpan);
+	} else {
+		console.warn(
+			"[ChatMessageRenderer] Textarea not found in DOM during revert operation. Aborting replaceWith."
+		);
+	}
 
 	if (messageActions) {
 		messageActions.style.opacity = "1";

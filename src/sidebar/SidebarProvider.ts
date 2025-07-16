@@ -404,7 +404,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				isError: isError,
 			});
 		}
-		this.chatHistoryManager.restoreChatHistoryToWebview();
 	}
 
 	public async triggerUniversalCancellation(): Promise<void> {
@@ -525,7 +524,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"[SidebarProvider] Native notification 'Cancel Plan' clicked. Triggering universal cancellation."
 				);
 				await this.triggerUniversalCancellation();
-				// IMPORTANT: After universal cancellation, do not proceed with other UI updates here,
 				// as triggerUniversalCancellation already handles endUserOperation.
 				return; // Exit the function immediately
 			}
