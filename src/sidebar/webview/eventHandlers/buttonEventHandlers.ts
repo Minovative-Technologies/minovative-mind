@@ -181,8 +181,6 @@ export function initializeButtonEventListeners(
 			appState.typingBuffer = "";
 			appState.currentAccumulatedText = "";
 		}
-		// Re-enable inputs after cancellation cleanup
-		setLoadingState(false, elements);
 	});
 
 	// Cancel Generation Button
@@ -195,12 +193,6 @@ export function initializeButtonEventListeners(
 			);
 			return;
 		}
-
-		elements.planConfirmationContainer.style.display = "none";
-		elements.planParseErrorContainer.style.display = "none";
-		elements.commitReviewContainer.style.display = "none";
-		appState.pendingPlanData = null;
-		appState.pendingCommitReviewData = null;
 
 		appState.isCancellationInProgress = true; // Set cancellation flag
 
@@ -235,14 +227,10 @@ export function initializeButtonEventListeners(
 					editButton.disabled = true;
 				}
 			}
-			appState.currentAiMessageContentElement = null;
-			appState.typingBuffer = "";
-			appState.currentAccumulatedText = "";
 		}
 
 		postMessageToExtension({ type: "universalCancel" });
 		updateStatus(elements, "Cancelling operations...", false);
-		// Removed setLoadingState(false, elements); as per instructions, relying on reenableInput
 	});
 
 	// Chat Container (for message actions: copy, delete, open file)
@@ -374,17 +362,4 @@ export function initializeButtonEventListeners(
 			}
 		}
 	});
-
-	// `createPlanConfirmationUI` should be called once as part of the overall webview initialization
-	// (e.g., in `main.ts`'s `initializeWebview` function). It internally handles its own event listeners.
-	// Its inclusion in the imports list for `buttonEventHandlers` mainly signifies that this module
-	// is aware of its existence and its role in the UI, even if this module doesn't directly call it
-	// for initial setup of the element itself, only interacts with it (e.g. `hidePlanConfirmationUI`).
 }
-
-// Note: `updateEmptyChatPlaceholderVisibility` is also imported but not directly called here,
-// as its primary use is within message rendering and overall state updates.
-// `showCommitReviewUI` and `showPlanParseErrorUI` are also imported but not used directly here;
-// their counterparts `hideCommitReviewUI` and `hidePlanParseErrorUI` are used.
-// The `sendMessage` function is passed `elements` and `setLoadingState` because it needs
-// access to DOM elements and the loading state setter.

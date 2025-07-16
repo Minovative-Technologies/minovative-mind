@@ -296,7 +296,8 @@ export class AIRequestService {
 			maxConcurrency?: number;
 			timeout?: number;
 			retries?: number;
-		} = {}
+		} = {},
+		token?: vscode.CancellationToken // Added optional cancellation token
 	): Promise<Map<string, ParallelTaskResult<string>>> {
 		const tasks: ParallelTask<string>[] = requests.map((request) => ({
 			id: request.id,
@@ -308,7 +309,7 @@ export class AIRequestService {
 					`parallel-${request.id}`,
 					request.generationConfig,
 					undefined,
-					undefined,
+					token, // Pass the cancellation token to generateWithRetry
 					false
 				),
 			priority: request.priority ?? 0,
@@ -322,6 +323,7 @@ export class AIRequestService {
 			defaultRetries: config.retries ?? 1,
 			enableRetries: true,
 			enableTimeout: true,
+			cancellationToken: token, // Pass the cancellation token to ParallelProcessor
 		});
 	}
 
@@ -335,7 +337,8 @@ export class AIRequestService {
 			maxConcurrency?: number;
 			timeout?: number;
 			retries?: number;
-		} = {}
+		} = {},
+		token?: vscode.CancellationToken // Added optional cancellation token
 	): Promise<Map<string, ParallelTaskResult<T>>> {
 		return ParallelProcessor.processFilesInParallel(files, processor, {
 			maxConcurrency: config.maxConcurrency ?? 4,
@@ -343,6 +346,7 @@ export class AIRequestService {
 			defaultRetries: config.retries ?? 2,
 			enableRetries: true,
 			enableTimeout: true,
+			cancellationToken: token, // Pass the cancellation token to ParallelProcessor
 		});
 	}
 
@@ -363,7 +367,8 @@ export class AIRequestService {
 			maxConcurrency?: number;
 			timeout?: number;
 			retries?: number;
-		} = {}
+		} = {},
+		token?: vscode.CancellationToken // Added optional cancellation token
 	): Promise<Map<string, ParallelTaskResult<string>>> {
 		const tasks: ParallelTask<string>[] = requests.map((request) => ({
 			id: request.id,
@@ -375,7 +380,7 @@ export class AIRequestService {
 					`batch-${request.id}`,
 					request.generationConfig,
 					undefined,
-					undefined,
+					token, // Pass the cancellation token to generateWithRetry
 					false
 				),
 			priority: request.priority ?? 0,
@@ -389,6 +394,7 @@ export class AIRequestService {
 			defaultRetries: config.retries ?? 1,
 			enableRetries: true,
 			enableTimeout: true,
+			cancellationToken: token, // Pass the cancellation token to ParallelProcessor
 		});
 	}
 }

@@ -1,3 +1,4 @@
+import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import * as vscode from "vscode";
 
 export interface ParallelTask<T> {
@@ -7,6 +8,7 @@ export interface ParallelTask<T> {
 	dependencies?: string[];
 	timeout?: number;
 	retries?: number;
+	cancellationToken?: vscode.CancellationToken;
 }
 
 export interface ParallelTaskResult<T> {
@@ -24,6 +26,7 @@ export interface ParallelProcessorConfig {
 	defaultRetries: number;
 	enableRetries: boolean;
 	enableTimeout: boolean;
+	cancellationToken?: vscode.CancellationToken;
 }
 
 export class ParallelProcessor {
@@ -40,7 +43,8 @@ export class ParallelProcessor {
 	 */
 	public static async executeParallel<T>(
 		tasks: ParallelTask<T>[],
-		config: Partial<ParallelProcessorConfig> = {}
+		config: Partial<ParallelProcessorConfig> = {},
+		globalCancellationToken?: vscode.CancellationToken // Modified signature to accept global cancellation token
 	): Promise<Map<string, ParallelTaskResult<T>>> {
 		const finalConfig = { ...this.DEFAULT_CONFIG, ...config };
 		const results = new Map<string, ParallelTaskResult<T>>();
@@ -56,14 +60,28 @@ export class ParallelProcessor {
 			let retries = 0;
 			const maxRetries = task.retries ?? finalConfig.defaultRetries;
 
+			// Determine the effective cancellation token for this specific task execution.
+			// Prioritize task-specific token, then config-level, then global.
+			const currentTaskExecutionToken =
+				task.cancellationToken ||
+				finalConfig.cancellationToken ||
+				globalCancellationToken;
+
 			while (retries <= maxRetries) {
 				try {
+					// Check for cancellation before starting the task or a retry
+					if (currentTaskExecutionToken?.isCancellationRequested) {
+						throw new Error(ERROR_OPERATION_CANCELLED);
+					}
+
 					// Check dependencies
 					if (task.dependencies) {
 						const unmetDeps = task.dependencies.filter(
 							(dep) => !completed.has(dep)
 						);
 						if (unmetDeps.length > 0) {
+							// If dependencies are not met, throw an error. If the dependency itself
+							// was cancelled, it would have been marked in `results` with ERROR_OPERATION_CANCELLED.
 							throw new Error(`Dependencies not met: ${unmetDeps.join(", ")}`);
 						}
 					}
@@ -102,11 +120,29 @@ export class ParallelProcessor {
 					completed.add(task.id);
 					break; // Success, exit retry loop
 				} catch (error) {
+					// Check if the error is due to an explicit cancellation
+					if (
+						error instanceof Error &&
+						error.message === ERROR_OPERATION_CANCELLED
+					) {
+						results.set(task.id, {
+							id: task.id,
+							result: null as T,
+							duration: Date.now() - startTime,
+							success: false,
+							error: ERROR_OPERATION_CANCELLED,
+							retries,
+						});
+						failed.add(task.id);
+						// Re-throw the cancellation error to propagate it up and stop outer loops
+						throw error;
+					}
+
 					retries++;
 					const duration = Date.now() - startTime;
 
-					if (retries > maxRetries) {
-						// Final failure
+					if (retries > maxRetries || !finalConfig.enableRetries) {
+						// Final failure (retries exhausted or retries not enabled)
 						results.set(task.id, {
 							id: task.id,
 							result: null as T,
@@ -116,23 +152,23 @@ export class ParallelProcessor {
 							retries,
 						});
 						failed.add(task.id);
-					} else if (finalConfig.enableRetries) {
+						break; // Exit retry loop due to final failure
+					} else {
 						// Wait before retry (exponential backoff)
 						const delay = Math.min(1000 * Math.pow(2, retries - 1), 5000);
-						await new Promise((resolve) => setTimeout(resolve, delay));
-						continue; // Retry
-					} else {
-						// No retries enabled, fail immediately
-						results.set(task.id, {
-							id: task.id,
-							result: null as T,
-							duration,
-							success: false,
-							error: error instanceof Error ? error.message : String(error),
-							retries,
+						await new Promise((resolve) => {
+							const timer = setTimeout(resolve, delay);
+							// Immediately resolve the timeout promise if cancellation is requested during the delay
+							currentTaskExecutionToken?.onCancellationRequested(() => {
+								clearTimeout(timer);
+								resolve(null); // Resolve immediately
+							});
 						});
-						failed.add(task.id);
-						break;
+						// Check for cancellation immediately after the delay (or early resolve due to cancellation)
+						if (currentTaskExecutionToken?.isCancellationRequested) {
+							throw new Error(ERROR_OPERATION_CANCELLED);
+						}
+						continue; // Retry
 					}
 				} finally {
 					running.delete(task.id);
@@ -142,28 +178,61 @@ export class ParallelProcessor {
 
 		// Process tasks with concurrency control
 		while (queue.length > 0 || running.size > 0) {
+			// Check for global cancellation at the top of the main loop
+			if (globalCancellationToken?.isCancellationRequested) {
+				// Mark all remaining queued tasks as cancelled
+				while (queue.length > 0) {
+					const task = queue.shift()!;
+					results.set(task.id, {
+						id: task.id,
+						result: null as T,
+						duration: 0, // No execution time as it was cancelled before starting
+						success: false,
+						error: ERROR_OPERATION_CANCELLED,
+						retries: 0,
+					});
+					failed.add(task.id);
+				}
+				// If no running tasks, or all running tasks have already processed cancellation, break the loop
+				if (running.size === 0) {
+					break;
+				}
+			}
+
 			// Start new tasks if under concurrency limit
 			while (running.size < finalConfig.maxConcurrency && queue.length > 0) {
 				const task = queue.shift()!;
 
 				// Check if task can be executed (dependencies met)
+				// Note: if dependencies fail due to cancellation, `executeTask` will mark them
+				// as cancelled and re-throw, which will be caught below.
 				if (task.dependencies) {
 					const unmetDeps = task.dependencies.filter(
 						(dep) => !completed.has(dep)
 					);
 					if (unmetDeps.length > 0) {
-						// Put task back in queue for later execution
+						// If dependencies are not yet met, re-queue the task and try later
 						queue.push(task);
 						continue;
 					}
 				}
 
 				executeTask(task).catch((error) => {
-					console.error(`Failed to execute task ${task.id}:`, error);
+					// Catch errors from individual task executions.
+					// Cancellation errors are explicitly re-thrown from `executeTask` to break the main loop.
+					// Other errors are logged but don't stop the overall parallel execution.
+					if (
+						!(
+							error instanceof Error &&
+							error.message === ERROR_OPERATION_CANCELLED
+						)
+					) {
+						console.error(`Failed to execute task ${task.id}:`, error);
+					}
 				});
 			}
 
-			// Wait a bit before checking again
+			// Wait a bit before checking again to prevent busy-waiting
 			await new Promise((resolve) => setTimeout(resolve, 100));
 		}
 
@@ -185,9 +254,11 @@ export class ParallelProcessor {
 			dependencies: [],
 			timeout: config.defaultTimeout,
 			retries: config.defaultRetries,
+			cancellationToken: config.cancellationToken, // Propagate config's token to individual tasks
 		}));
 
-		return this.executeParallel(tasks, config);
+		// Pass config.cancellationToken as the globalCancellationToken to executeParallel
+		return this.executeParallel(tasks, config, config.cancellationToken);
 	}
 
 	/**
@@ -210,10 +281,12 @@ export class ParallelProcessor {
 				dependencies: dependencies.length > 0 ? dependencies : undefined,
 				timeout: config.defaultTimeout,
 				retries: config.defaultRetries,
+				cancellationToken: config.cancellationToken, // Propagate config's token to individual tasks
 			};
 		});
 
-		return this.executeParallel(tasks, config);
+		// Pass config.cancellationToken as the globalCancellationToken to executeParallel
+		return this.executeParallel(tasks, config, config.cancellationToken);
 	}
 
 	/**
@@ -227,8 +300,13 @@ export class ParallelProcessor {
 		const allResults = new Map<string, ParallelTaskResult<T>>();
 
 		for (let i = 0; i < tasks.length; i += batchSize) {
+			// Pass config.cancellationToken as the globalCancellationToken for the batch execution
 			const batch = tasks.slice(i, i + batchSize);
-			const batchResults = await this.executeParallel(batch, config);
+			const batchResults = await this.executeParallel(
+				batch,
+				config,
+				config.cancellationToken
+			);
 
 			// Merge batch results
 			for (const [id, result] of batchResults) {
@@ -237,7 +315,18 @@ export class ParallelProcessor {
 
 			// Optional: Add delay between batches to prevent overwhelming the system
 			if (i + batchSize < tasks.length) {
-				await new Promise((resolve) => setTimeout(resolve, 100));
+				// Add cancellation check to the delay between batches
+				await new Promise((resolve) => {
+					const timer = setTimeout(resolve, 100);
+					config.cancellationToken?.onCancellationRequested(() => {
+						clearTimeout(timer);
+						resolve(null); // Resolve immediately on cancellation
+					});
+				});
+				if (config.cancellationToken?.isCancellationRequested) {
+					// If cancelled during the delay, stop processing further batches
+					throw new Error(ERROR_OPERATION_CANCELLED);
+				}
 			}
 		}
 
@@ -291,6 +380,7 @@ export class ParallelProcessor {
 			dependencies?: string[];
 			timeout?: number;
 			retries?: number;
+			cancellationToken?: vscode.CancellationToken; // Added
 		} = {}
 	): ParallelTask<T> {
 		return {
@@ -300,6 +390,7 @@ export class ParallelProcessor {
 			dependencies: options.dependencies,
 			timeout: options.timeout,
 			retries: options.retries,
+			cancellationToken: options.cancellationToken, // Propagate option's token to task
 		};
 	}
 
@@ -314,6 +405,7 @@ export class ParallelProcessor {
 			priority?: number;
 			timeout?: number;
 			retries?: number;
+			cancellationToken?: vscode.CancellationToken; // Added
 		} = {}
 	): ParallelTask<T> {
 		return {
@@ -323,6 +415,7 @@ export class ParallelProcessor {
 			dependencies,
 			timeout: options.timeout,
 			retries: options.retries,
+			cancellationToken: options.cancellationToken, // Propagate option's token to task
 		};
 	}
 }

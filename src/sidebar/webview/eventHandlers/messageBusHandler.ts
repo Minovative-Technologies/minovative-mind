@@ -809,10 +809,9 @@ export function initializeMessageBusHandler(
 						msg.classList.remove("user-message-edited-pending-ai");
 					});
 
-					// Call setLoadingState(appState.isLoading, elements); to ensure all UI elements' enabled/disabled states are correctly updated based on the current appState.isLoading.
 					setLoadingState(appState.isLoading, elements);
+					resetUIStateAfterCancellation(elements);
 
-					// Ensure elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight; is called after all messages are appended to guarantee the chat scrolls to the bottom.
 					elements.chatContainer.scrollTop =
 						elements.chatContainer.scrollHeight;
 				} else {
@@ -822,11 +821,6 @@ export function initializeMessageBusHandler(
 						true
 					);
 				}
-				hideAllConfirmationAndReviewUIs(elements);
-				appState.pendingPlanData = null; // Ensure this is reset too
-				appState.pendingCommitReviewData = null; // Ensure this is reset too
-				appState.isPlanExecutionInProgress = false; // Reset plan execution state
-				updateEmptyChatPlaceholderVisibility(elements);
 				break;
 			}
 			case "authStateUpdate": {

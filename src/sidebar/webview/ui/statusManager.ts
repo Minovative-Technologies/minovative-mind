@@ -1,6 +1,7 @@
 import { RequiredDomElements } from "../types/webviewTypes";
 import { appState } from "../state/appState";
 import { reenableAllMessageActionButtons } from "./chatMessageRenderer";
+import { stopTypingAnimation } from "./typingAnimation";
 
 export function updateApiKeyStatus(
 	elements: RequiredDomElements,
@@ -98,8 +99,8 @@ export function resetUIStateAfterCancellation(
 	elements.modelSelect.disabled = false;
 
 	// Re-enable chat history buttons
-	elements.clearChatButton.disabled = false;
-	elements.saveChatButton.disabled = false;
+	// elements.clearChatButton.disabled = false;  // Deleted as per instructions
+	// elements.saveChatButton.disabled = false;   // Deleted as per instructions
 	elements.loadChatButton.disabled = false;
 
 	// Re-enable API key controls
@@ -115,10 +116,27 @@ export function resetUIStateAfterCancellation(
 	}
 	if (elements.planParseErrorContainer) {
 		elements.planParseErrorContainer.style.display = "none";
+		if (elements.planParseErrorDisplay) {
+			elements.planParseErrorDisplay.textContent = "";
+		}
+		if (elements.failedJsonDisplay) {
+			elements.failedJsonDisplay.textContent = "";
+		}
 	}
 	if (elements.commitReviewContainer) {
 		elements.commitReviewContainer.style.display = "none";
 	}
+
+	// Clear any active streaming related state and reset flags
+	stopTypingAnimation();
+	appState.currentAiMessageContentElement = null;
+	appState.currentAccumulatedText = "";
+	appState.typingBuffer = "";
+	appState.isCancellationInProgress = false; // Explicitly reset this crucial flag
+	appState.isCommitActionInProgress = false; // Reset commit flag
+	appState.isPlanExecutionInProgress = false; // Reset plan execution flag
+	appState.pendingPlanData = null; // Clear any pending plan data
+	appState.pendingCommitReviewData = null; // Clear any pending commit data
 
 	// Re-enable all message action buttons
 	reenableAllMessageActionButtons(elements);

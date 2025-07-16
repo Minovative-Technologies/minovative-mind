@@ -1,7 +1,7 @@
 import { setIconForButton } from "../utils/iconHelpers";
 import { faCheck, faTimes, faRedo } from "@fortawesome/free-solid-svg-icons";
 import { appState } from "../state/appState";
-import { updateStatus } from "./statusManager";
+import { updateStatus, resetUIStateAfterCancellation } from "./statusManager";
 import { PendingPlanData, RequiredDomElements } from "../types/webviewTypes";
 import { stopTypingAnimation } from "./typingAnimation";
 
@@ -439,32 +439,7 @@ export function handleCancelPlanExecution(
 	appState.isCancellationInProgress = true; // Set cancellation flag for immediate effect
 	postMessageToExtension({ type: "universalCancel" }); // Use universal cancel for immediate cancellation
 	updateStatus(elements, "Cancelling operations...", false);
-	if (elements.planConfirmationContainer) {
-		elements.planConfirmationContainer.style.display = "none";
-	}
-	// Also ensure plan parse error UI is hidden if user cancels from there
-	if (elements.planParseErrorContainer) {
-		elements.planParseErrorContainer.style.display = "none"; // Explicitly set to 'none'
-		if (elements.planParseErrorDisplay) {
-			elements.planParseErrorDisplay.textContent = "";
-		}
-		if (elements.failedJsonDisplay) {
-			elements.failedJsonDisplay.textContent = "";
-		}
-	}
-	appState.pendingPlanData = null; // Clear pending plan data regardless of which UI it came from
-	stopTypingAnimation(); // Ensure typing animation stops
-	// Clear any current streaming message content if it was interrupted
-	if (appState.currentAiMessageContentElement) {
-		appState.currentAccumulatedText += appState.typingBuffer;
-		appState.currentAiMessageContentElement.textContent =
-			appState.currentAccumulatedText;
-		appState.currentAiMessageContentElement = null;
-		appState.typingBuffer = "";
-		appState.currentAccumulatedText = "";
-	}
-	// Re-enable inputs after cancellation cleanup
-	setLoadingState(false, elements);
+	resetUIStateAfterCancellation(elements);
 }
 
 /**
@@ -566,16 +541,5 @@ export function handleCancelCommit(
 	appState.isCancellationInProgress = true; // Set cancellation flag for immediate effect
 	postMessageToExtension({ type: "universalCancel" }); // Use universal cancel for immediate cancellation
 	updateStatus(elements, "Cancelling operations...", false);
-	stopTypingAnimation(); // Ensure typing animation stops
-	// Clear any current streaming message content if it was interrupted
-	if (appState.currentAiMessageContentElement) {
-		appState.currentAccumulatedText += appState.typingBuffer;
-		appState.currentAiMessageContentElement.textContent =
-			appState.currentAccumulatedText;
-		appState.currentAiMessageContentElement = null;
-		appState.typingBuffer = "";
-		appState.currentAccumulatedText = "";
-	}
-	// Re-enable inputs after cancellation cleanup
-	setLoadingState(false, elements);
+	resetUIStateAfterCancellation(elements);
 }
