@@ -749,7 +749,7 @@ export function initializeMessageBusHandler(
 			}
 			case "reenableInput": {
 				console.log("Received reenableInput message. Resetting UI state.");
-				resetUIStateAfterCancellation(elements);
+				resetUIStateAfterCancellation(elements, setLoadingState);
 				break;
 			}
 			case "planExecutionStarted": {
@@ -810,7 +810,7 @@ export function initializeMessageBusHandler(
 					});
 
 					setLoadingState(appState.isLoading, elements);
-					resetUIStateAfterCancellation(elements);
+					resetUIStateAfterCancellation(elements, setLoadingState);
 
 					elements.chatContainer.scrollTop =
 						elements.chatContainer.scrollHeight;

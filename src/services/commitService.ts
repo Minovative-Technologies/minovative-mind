@@ -232,13 +232,13 @@ export class CommitService {
 	 */
 	public async cancelCommit(): Promise<void> {
 		// Modified signature
-		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
-		// 2. In the `cancelCommit` method, remove `this.provider.pendingCommitReviewData = null;`
-		// this.provider.pendingCommitReviewData = null; // Removed
 		this.provider.chatHistoryManager.addHistoryEntry(
 			"model",
 			"Commit review cancelled by user."
 		);
+		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
+		// 2. In the `cancelCommit` method, remove `this.provider.pendingCommitReviewData = null;`
+		// this.provider.pendingCommitReviewData = null; // Removed
 		await this.provider.endUserOperation("cancelled"); // New line added
 	}
 }

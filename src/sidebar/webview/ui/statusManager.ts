@@ -87,9 +87,11 @@ export function updateEmptyChatPlaceholderVisibility(
  * Resets the UI state after cancellation to ensure all controls are properly re-enabled
  * and all pending states are cleared.
  * @param elements The DOM elements to reset
+ * @param setLoadingState A callback function to update the global loading state.
  */
 export function resetUIStateAfterCancellation(
-	elements: RequiredDomElements
+	elements: RequiredDomElements,
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	console.log("Resetting UI state after cancellation");
 
@@ -99,8 +101,6 @@ export function resetUIStateAfterCancellation(
 	elements.modelSelect.disabled = false;
 
 	// Re-enable chat history buttons
-	// elements.clearChatButton.disabled = false;  // Deleted as per instructions
-	// elements.saveChatButton.disabled = false;   // Deleted as per instructions
 	elements.loadChatButton.disabled = false;
 
 	// Re-enable API key controls
@@ -135,6 +135,7 @@ export function resetUIStateAfterCancellation(
 	appState.isCancellationInProgress = false; // Explicitly reset this crucial flag
 	appState.isCommitActionInProgress = false; // Reset commit flag
 	appState.isPlanExecutionInProgress = false; // Reset plan execution flag
+	appState.isAwaitingUserReview = false; // CRITICAL: Reset review state
 	appState.pendingPlanData = null; // Clear any pending plan data
 	appState.pendingCommitReviewData = null; // Clear any pending commit data
 
@@ -144,5 +145,6 @@ export function resetUIStateAfterCancellation(
 	// Update empty chat placeholder visibility
 	updateEmptyChatPlaceholderVisibility(elements);
 
+	setLoadingState(false, elements);
 	console.log("UI state reset complete");
 }

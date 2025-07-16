@@ -83,6 +83,7 @@ export interface WebviewAppState {
 	pendingCommitReviewData: PendingCommitReviewData | null;
 	isApiKeySet: boolean;
 	isLoading: boolean;
+	isAwaitingUserReview: boolean;
 	isCommitActionInProgress: boolean;
 	isCancellationInProgress: boolean;
 	isPlanExecutionInProgress: boolean; // New property to track plan execution state

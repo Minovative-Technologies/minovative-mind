@@ -24,23 +24,17 @@ export function sendMessage(
 	// Replace direct DOM checks and global state with 'elements' and 'appState'
 	if (
 		appState.isLoading ||
-		elements.sendButton.disabled || // Added check for sendButton disabled state
-		elements.planConfirmationContainer.style.display !== "none" ||
-		elements.planParseErrorContainer.style.display !== "none" ||
-		elements.commitReviewContainer.style.display !== "none" ||
+		appState.isAwaitingUserReview ||
+		elements.sendButton.disabled ||
 		appState.isCommandSuggestionsVisible
 	) {
 		console.log(
 			"Send button disabled: isLoading",
 			appState.isLoading,
+			"isAwaitingUserReview",
+			appState.isAwaitingUserReview,
 			"sendButton.disabled",
 			elements.sendButton.disabled, // Log the new condition
-			"planConfirmationVisible",
-			elements.planConfirmationContainer.style.display !== "none",
-			"planParseErrorVisible",
-			elements.planParseErrorContainer.style.display !== "none",
-			"commitReviewVisible",
-			elements.commitReviewContainer.style.display !== "none",
 			"isCommandSuggestionsVisible:",
 			appState.isCommandSuggestionsVisible
 		);

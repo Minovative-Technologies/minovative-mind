@@ -404,6 +404,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				isError: isError,
 			});
 		}
+		this.chatHistoryManager.restoreChatHistoryToWebview();
 	}
 
 	public async triggerUniversalCancellation(): Promise<void> {
@@ -468,15 +469,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				break;
 		}
 
-		this.chatHistoryManager.addHistoryEntry("model", message);
+		// The chat history entry and status update for 'cancelled' will be handled by endUserOperation
+		// when it's called after this notification function completes, ensuring no duplication.
+		// For 'success' and 'failed', the message is still relevant to add to history here.
+		if (outcome !== "cancelled") {
+			this.chatHistoryManager.addHistoryEntry("model", message);
+		}
 		this.chatHistoryManager.restoreChatHistoryToWebview();
 
 		if (this.isSidebarVisible === true) {
-			this.postMessageToWebview({
-				type: "statusUpdate",
-				value: message,
-				isError: isError,
-			});
+			// For 'cancelled' outcome, these lines are removed as per instruction.
+			// For 'success' and 'failed', we still post the status update to webview.
+			if (outcome !== "cancelled") {
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: message,
+					isError: isError,
+				});
+			}
 		} else {
 			let notificationFunction: (
 				message: string,
@@ -501,10 +511,23 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					return;
 			}
 
-			const result = await notificationFunction(message, "Open Sidebar"); // Pass message and items
+			const result = await notificationFunction(
+				message,
+				"Open Sidebar",
+				"Cancel Plan"
+			); // Pass message and items
 
 			if (result === "Open Sidebar") {
 				vscode.commands.executeCommand("minovative-mind.activitybar.focus");
+			} else if (result === "Cancel Plan") {
+				// User clicked 'Cancel Plan' on the native notification
+				console.log(
+					"[SidebarProvider] Native notification 'Cancel Plan' clicked. Triggering universal cancellation."
+				);
+				await this.triggerUniversalCancellation();
+				// IMPORTANT: After universal cancellation, do not proceed with other UI updates here,
+				// as triggerUniversalCancellation already handles endUserOperation.
+				return; // Exit the function immediately
 			}
 		}
 	}

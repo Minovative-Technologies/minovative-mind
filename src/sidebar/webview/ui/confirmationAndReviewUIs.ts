@@ -18,7 +18,7 @@ export function createPlanConfirmationUI(
 	elements: RequiredDomElements,
 	postMessageToExtension: Function,
 	updateStatus: Function,
-	setLoadingState: Function
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	// Check if the container is already created and stored in the elements object
 	if (!elements.planConfirmationContainer) {
@@ -89,7 +89,7 @@ export function showPlanConfirmationUI(
 	pendingPlanData: PendingPlanData,
 	postMessageToExtension: Function,
 	updateStatus: Function,
-	setLoadingState: Function
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	// Ensure the UI elements are created first. This function is idempotent.
 	createPlanConfirmationUI(
@@ -102,6 +102,7 @@ export function showPlanConfirmationUI(
 	if (elements.planConfirmationContainer) {
 		appState.pendingPlanData = pendingPlanData; // Update appState with pending data
 		elements.planConfirmationContainer.style.display = "flex";
+		appState.isAwaitingUserReview = true; // Add this line
 		updateStatus(
 			elements,
 			"Textual plan generated. Review and confirm to proceed."
@@ -126,6 +127,7 @@ export function showPlanConfirmationUI(
 export function hidePlanConfirmationUI(elements: RequiredDomElements): void {
 	if (elements.planConfirmationContainer) {
 		elements.planConfirmationContainer.style.display = "none";
+		appState.isAwaitingUserReview = false; // Add this line
 		appState.pendingPlanData = null; // Clear the pending data
 		updateStatus(elements, "Plan confirmation UI hidden.");
 		console.log("Plan confirmation UI hidden.");
@@ -166,7 +168,7 @@ export function showPlanParseErrorUI(
 	failedJson: string,
 	postMessageToExtension: Function,
 	updateStatus: Function,
-	setLoadingState: Function
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	const {
 		planParseErrorContainer,
@@ -180,6 +182,7 @@ export function showPlanParseErrorUI(
 		planParseErrorDisplay.textContent = error;
 		failedJsonDisplay.textContent = failedJson;
 		planParseErrorContainer.style.display = "block";
+		appState.isAwaitingUserReview = true; // Add this line
 		updateStatus(
 			elements,
 			"Structured plan parsing failed. Review error and retry or cancel.",
@@ -245,6 +248,7 @@ export function hidePlanParseErrorUI(elements: RequiredDomElements): void {
 		elements;
 	if (planParseErrorContainer) {
 		planParseErrorContainer.style.display = "none";
+		appState.isAwaitingUserReview = false; // Add this line
 		if (planParseErrorDisplay) {
 			planParseErrorDisplay.textContent = "";
 		}
@@ -271,7 +275,7 @@ export function showCommitReviewUI(
 	stagedFiles: string[],
 	postMessageToExtension: Function,
 	updateStatus: Function,
-	setLoadingState: Function
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	const {
 		commitReviewContainer,
@@ -312,6 +316,7 @@ export function showCommitReviewUI(
 		}
 
 		commitReviewContainer.style.display = "flex";
+		appState.isAwaitingUserReview = true; // Add this line
 		// Scroll to the bottom of the document to ensure the commit review UI is visible
 		document.documentElement.scrollTop = document.documentElement.scrollHeight;
 		updateStatus(elements, "Review commit details and confirm.", false);
@@ -364,6 +369,7 @@ export function hideCommitReviewUI(elements: RequiredDomElements): void {
 	const { commitReviewContainer } = elements;
 	if (commitReviewContainer) {
 		commitReviewContainer.style.display = "none";
+		appState.isAwaitingUserReview = false; // Add this line
 		appState.pendingCommitReviewData = null; // Clear the pending data
 		console.log("Commit review UI hidden.");
 	}
@@ -395,7 +401,7 @@ export function handleConfirmPlanExecution(
 	elements: RequiredDomElements,
 	postMessageToExtension: Function,
 	updateStatus: Function,
-	setLoadingState: Function
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	console.log("Confirm Plan button clicked.");
 	if (appState.pendingPlanData && elements.planConfirmationContainer) {
@@ -406,6 +412,7 @@ export function handleConfirmPlanExecution(
 		updateStatus(elements, "Requesting plan execution...");
 		elements.planConfirmationContainer.style.display = "none";
 		appState.pendingPlanData = null;
+		appState.isPlanExecutionInProgress = true;
 		setLoadingState(true, elements);
 	} else {
 		updateStatus(elements, "Error: No pending plan data to confirm.", true);
@@ -425,7 +432,7 @@ export function handleCancelPlanExecution(
 	elements: RequiredDomElements,
 	postMessageToExtension: Function,
 	updateStatus: Function,
-	setLoadingState: Function
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	console.log("Cancel Plan button clicked.");
 	// Prevent duplicate cancellation requests
@@ -439,7 +446,7 @@ export function handleCancelPlanExecution(
 	appState.isCancellationInProgress = true; // Set cancellation flag for immediate effect
 	postMessageToExtension({ type: "universalCancel" }); // Use universal cancel for immediate cancellation
 	updateStatus(elements, "Cancelling operations...", false);
-	resetUIStateAfterCancellation(elements);
+	resetUIStateAfterCancellation(elements, setLoadingState);
 }
 
 /**
@@ -454,7 +461,7 @@ export function handleRetryStructuredPlanGeneration(
 	elements: RequiredDomElements,
 	postMessageToExtension: Function,
 	updateStatus: Function,
-	setLoadingState: Function
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	console.log("Retry Generation button clicked.");
 	hidePlanParseErrorUI(elements);
@@ -475,7 +482,7 @@ export function handleConfirmCommit(
 	elements: RequiredDomElements,
 	postMessageToExtension: Function,
 	updateStatus: Function,
-	setLoadingState: Function
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	// Add client-side safeguard to prevent duplicate requests
 	if (appState.isCommitActionInProgress) {
@@ -512,7 +519,7 @@ export function handleCancelCommit(
 	elements: RequiredDomElements,
 	postMessageToExtension: Function,
 	updateStatus: Function,
-	setLoadingState: Function
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	// Add client-side safeguard to prevent duplicate requests
 	if (appState.isCommitActionInProgress) {
@@ -541,5 +548,5 @@ export function handleCancelCommit(
 	appState.isCancellationInProgress = true; // Set cancellation flag for immediate effect
 	postMessageToExtension({ type: "universalCancel" }); // Use universal cancel for immediate cancellation
 	updateStatus(elements, "Cancelling operations...", false);
-	resetUIStateAfterCancellation(elements);
+	resetUIStateAfterCancellation(elements, setLoadingState);
 }

@@ -30,6 +30,7 @@ export const appState: WebviewAppState = {
 	pendingCommitReviewData: null,
 	isApiKeySet: false,
 	isLoading: false,
+	isAwaitingUserReview: false,
 	isCommitActionInProgress: false, // Added as per instruction
 	isCancellationInProgress: false, // Initialize the new flag
 	isPlanExecutionInProgress: false, // Initialize plan execution tracking

@@ -71,9 +71,7 @@ function setLoadingState(
 	const canInteractWithMainChatControls =
 		!loading &&
 		appState.isApiKeySet &&
-		!planConfirmationVisible &&
-		!planParseErrorVisible &&
-		!commitReviewVisible &&
+		!appState.isAwaitingUserReview && // Refactored
 		!appState.isCancellationInProgress;
 
 	const canSendCurrentInput =
@@ -86,9 +84,7 @@ function setLoadingState(
 	// Determine enablement for chat history management buttons
 	const canInteractWithChatHistoryButtons =
 		!loading &&
-		!planConfirmationVisible &&
-		!planParseErrorVisible &&
-		!commitReviewVisible &&
+		!appState.isAwaitingUserReview && // Refactored
 		!appState.isCommandSuggestionsVisible;
 
 	console.log(
@@ -103,9 +99,7 @@ function setLoadingState(
 	// Apply disabled states to API key management controls
 	const enableApiKeyControls =
 		!appState.isLoading &&
-		!planConfirmationVisible &&
-		!planParseErrorVisible &&
-		!commitReviewVisible &&
+		!appState.isAwaitingUserReview && // Refactored
 		!appState.isCommandSuggestionsVisible &&
 		appState.totalKeys > 0;
 	elements.prevKeyButton.disabled =
@@ -117,9 +111,7 @@ function setLoadingState(
 
 	const enableAddKeyInputControls =
 		!loading &&
-		!planConfirmationVisible &&
-		!planParseErrorVisible &&
-		!commitReviewVisible &&
+		!appState.isAwaitingUserReview && // Refactored
 		!appState.isCommandSuggestionsVisible;
 	elements.addKeyInput.disabled = !enableAddKeyInputControls;
 	elements.addKeyButton.disabled = !enableAddKeyInputControls;
@@ -155,9 +147,7 @@ function setLoadingState(
 	// Control visibility of the cancel generation button
 	if (
 		loading &&
-		!planConfirmationVisible &&
-		!planParseErrorVisible &&
-		!commitReviewVisible &&
+		!appState.isAwaitingUserReview && // Refactored
 		!appState.isCancellationInProgress &&
 		!appState.isPlanExecutionInProgress // Hide stop button during plan execution
 	) {
