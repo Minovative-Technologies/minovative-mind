@@ -26,6 +26,9 @@ export class CommitService {
 		const { settingsManager } = this.provider;
 		const modelName = settingsManager.getSelectedModelName();
 
+		let success = false; // Added variable
+		let errorMessage: string | null = null; // Added variable
+
 		try {
 			if (token.isCancellationRequested) {
 				throw new Error(ERROR_OPERATION_CANCELLED);
@@ -84,10 +87,9 @@ export class CommitService {
 			const stagedFiles = await getGitStagedFiles(rootPath);
 
 			if (!diff || diff.trim() === "") {
-				await this.provider.endUserOperation(
-					"success",
-					"No changes staged to commit."
-				);
+				// Replaced endUserOperation with variable assignment
+				success = true;
+				errorMessage = "No changes staged to commit.";
 				return;
 			}
 
@@ -168,24 +170,41 @@ export class CommitService {
 				commitMessage: displayMessage,
 				stagedFiles, // This uses the stagedFiles array obtained earlier
 			};
-
-			this.provider.postMessageToWebview({
-				type: "commitReview",
-				value: this.provider.pendingCommitReviewData,
-			});
+			success = true; // Set success to true as commit review data is ready.
 		} catch (error: any) {
-			const isCancellation = error.message === ERROR_OPERATION_CANCELLED;
+			errorMessage = error.message; // Capture the error message
+			success = false; // Set success to false
+		} finally {
+			// Added new finally block
+			const isCancellation = errorMessage === ERROR_OPERATION_CANCELLED;
+
+			// Determine if a commit review UI should be displayed
+			const isCommitReviewPending =
+				success && !!this.provider.pendingCommitReviewData;
+
+			// Unconditionally call postMessageToWebview with comprehensive status
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
-				success: false, // Indicate failure
+				success: isCommitReviewPending, // If commit review is pending, it's considered 'success' for the command's outcome.
 				error: isCancellation
 					? "Commit operation cancelled."
-					: `Commit failed: ${error.message}`,
+					: isCommitReviewPending // If review pending, no error message.
+					? null
+					: errorMessage, // Otherwise, propagate the captured error.
+				isCommitReviewPending: isCommitReviewPending,
+				commitReviewData: isCommitReviewPending
+					? this.provider.pendingCommitReviewData
+					: undefined,
+				statusMessageOverride:
+					success && errorMessage === "No changes staged to commit."
+						? errorMessage
+						: undefined,
 			});
-			// 3. In the `catch` block of the `handleCommitCommand` method, add a call to `this.provider.clearActiveOperationState();`
+
+			// Always clear the active operation state immediately after posting the status.
 			this.provider.clearActiveOperationState();
+			this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		}
-		// Comment has been removed as per instruction.
 	}
 
 	/**
@@ -230,6 +249,7 @@ export class CommitService {
 	 * Cancels the pending commit review and re-enables UI.
 	 */
 	public async cancelCommit(): Promise<void> {
-		await this.provider.endUserOperation("cancelled"); // New line added
+		// Changed implementation to call triggerUniversalCancellation
+		await this.provider.triggerUniversalCancellation();
 	}
 }

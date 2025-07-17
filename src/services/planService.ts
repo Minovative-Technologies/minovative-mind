@@ -223,16 +223,6 @@ export class PlanService {
 				success &&
 				!!this.provider.pendingPlanGenerationContext?.textualPlanExplanation;
 
-			// If it's not a confirmable plan response (i.e., it's a simple chat response, or an error/cancellation that definitively ends the top-level command)
-			if (!isConfirmablePlanResponse) {
-				await this.provider.endUserOperation(
-					isCancellation ? "cancelled" : success ? "success" : "failed"
-				);
-			}
-			// If isConfirmablePlanResponse is true, we explicitly do NOT call endUserOperation here.
-			// The operation transitions to a review state, and webviewMessageHandler.ts will handle
-			// the 'review' outcome based on the 'aiResponseEnd' message itself.
-
 			// Construct the aiResponseEnd message, ensuring plan-related data is included if applicable
 			const aiResponseEndValue: Record<string, any> = {
 				success: success,
@@ -275,6 +265,8 @@ export class PlanService {
 							: undefined,
 					relevantFiles:
 						this.provider.pendingPlanGenerationContext.relevantFiles,
+					textualPlanExplanation:
+						this.provider.pendingPlanGenerationContext.textualPlanExplanation,
 				};
 			}
 
@@ -286,6 +278,8 @@ export class PlanService {
 
 			this.provider.activeOperationCancellationTokenSource?.dispose();
 			this.provider.activeOperationCancellationTokenSource = undefined;
+			// CRITICAL CHANGE: Ensure chat history is restored to webview after completion/cancellation
+			this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		}
 	}
 
@@ -535,6 +529,8 @@ export class PlanService {
 							: undefined,
 					relevantFiles:
 						this.provider.pendingPlanGenerationContext.relevantFiles,
+					textualPlanExplanation:
+						this.provider.pendingPlanGenerationContext.textualPlanExplanation,
 				};
 			}
 
@@ -545,6 +541,7 @@ export class PlanService {
 			});
 			disposable?.dispose();
 			this.provider.activeOperationCancellationTokenSource?.dispose();
+			this.provider.chatHistoryManager.restoreChatHistoryToWebview(); // CRITICAL CHANGE: Ensure chat history is restored to webview after completion/cancellation
 			this.provider.activeOperationCancellationTokenSource = undefined;
 			return finalResult;
 		}
@@ -1226,7 +1223,7 @@ Complete Modified File Content:`;
 							});
 						}
 					}
-					currentStepCompletedSuccessfullyOrSkipped = true; // Step succeeded or was explicitly skipped (e.g., user skipped command)
+					currentStepCompletedSuccessfullyOrSkipped = true; // Step succeeded or was explicitly skipped (e.e.g., user skipped command)
 				} catch (error: any) {
 					let errorMsg = formatUserFacingErrorMessage(
 						error,
@@ -1461,11 +1458,13 @@ Complete Modified File Content:`;
 							type: "textualPlanPending",
 							originalRequest: planContext.originalUserRequest,
 							relevantFiles: planContext.relevantFiles,
+							textualPlanExplanation: planContext.textualPlanExplanation,
 					  }
 					: {
 							type: "textualPlanPending",
 							originalInstruction: planContext.editorContext!.instruction,
 							relevantFiles: planContext.relevantFiles,
+							textualPlanExplanation: planContext.textualPlanExplanation,
 					  };
 
 			this.provider.postMessageToWebview({

@@ -278,22 +278,15 @@ export function initializeMessageBusHandler(
 				break;
 			}
 			case "aiResponseEnd": {
-				stopTypingAnimation();
+				// 1. Ensure that resetStreamingAnimationState(); and appState.isCancellationInProgress = false; are called at the top.
+				resetStreamingAnimationState();
+				appState.isCancellationInProgress = false;
+
 				console.log("Received aiResponseEnd. Stream finished.");
 
 				const isCancellation =
 					typeof message.error === "string" &&
 					message.error.includes("cancelled");
-
-				// Prevent duplicate cancellation messages by checking if we already processed a cancellation
-				if (isCancellation && appState.isCancellationInProgress) {
-					console.log("Skipping duplicate cancellation message");
-					// Reset cancellation flag but don't process the message again
-					appState.isCancellationInProgress = false;
-					resetStreamingAnimationState();
-					setLoadingState(false, elements);
-					return;
-				}
 
 				if (appState.currentAiMessageContentElement) {
 					appState.currentAccumulatedText += appState.typingBuffer;
@@ -375,9 +368,6 @@ export function initializeMessageBusHandler(
 					msg.classList.remove("user-message-edited-pending-ai");
 				});
 
-				resetStreamingAnimationState(); // Clear animation state
-				appState.isCancellationInProgress = false; // Reset cancellation flag after processing content update
-
 				// Common cleanup for isCommitActionInProgress regardless of outcome
 				appState.isCommitActionInProgress = false;
 
@@ -389,6 +379,9 @@ export function initializeMessageBusHandler(
 						? `AI Operation Failed: ${message.error}`
 						: "AI operation failed or was cancelled.";
 					updateStatus(elements, statusMessage, true);
+				} else if (message.statusMessageOverride) {
+					// Handle custom success messages like "No changes staged"
+					updateStatus(elements, message.statusMessageOverride, false);
 				}
 
 				// This block is the SOLE place where showPlanConfirmationUI is called for newly generated plans.
@@ -423,17 +416,30 @@ export function initializeMessageBusHandler(
 					postMessageToExtension({
 						type: "openSidebar",
 					});
-				} else if (message.success) {
-					console.log("aiResponseEnd indicates successful chat response.");
-					// No special UI logic here, main UI state handled at the end
 				}
-
-				// Re-enable all message action buttons to ensure they're interactive after AI operations
-				reenableAllMessageActionButtons(elements);
-
-				// setLoadingState(false, elements) must occur at the very end of this aiResponseEnd block.
-				setLoadingState(false, elements);
-				updateEmptyChatPlaceholderVisibility(elements);
+				// 2. Add a new else if for commit review.
+				else if (
+					message.success &&
+					message.isCommitReviewPending &&
+					message.commitReviewData
+				) {
+					appState.pendingCommitReviewData = message.commitReviewData;
+					showCommitReviewUI(
+						elements,
+						message.commitReviewData.commitMessage,
+						message.commitReviewData.stagedFiles,
+						postMessageToExtension,
+						updateStatus,
+						setLoadingState
+					);
+					if (elements.cancelGenerationButton) {
+						elements.cancelGenerationButton.style.display = "none";
+					}
+				}
+				// 4. Ensure the final else if handles standard UI re-enablement.
+				else if (message.success || !message.success) {
+					setLoadingState(false, elements);
+				}
 				break;
 			}
 

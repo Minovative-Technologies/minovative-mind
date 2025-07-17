@@ -445,8 +445,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.pendingCommitReviewData = null;
 		this.currentAiStreamingState = null;
 
-		// End the user operation with cancelled status
-		await this.endUserOperation("cancelled");
+		// Reset the general generation flag and persist it.
+		// This is part of clearing the state on the backend.
+		this.isGeneratingUserRequest = false;
+		await this.workspaceState.update(
+			"minovativeMind.isGeneratingUserRequest",
+			false
+		);
+		this.isEditingMessageActive = false;
+
 		console.log("[SidebarProvider] Universal cancellation complete.");
 	}
 

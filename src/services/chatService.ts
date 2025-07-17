@@ -138,24 +138,20 @@ export class ChatService {
 			const isCancellation = finalAiResponseText === ERROR_OPERATION_CANCELLED;
 
 			// Only send aiResponseEnd if we haven't already cancelled
-			if (
-				!this.provider.activeOperationCancellationTokenSource?.token
-					.isCancellationRequested ||
-				!isCancellation
-			) {
-				this.provider.postMessageToWebview({
-					type: "aiResponseEnd",
-					success: success,
-					error: isCancellation
-						? "Chat generation cancelled."
-						: success
-						? null
-						: finalAiResponseText,
-				});
-			}
+			// CRITICAL CHANGE: Removed the 'if' condition. aiResponseEnd must always be sent.
+			this.provider.postMessageToWebview({
+				type: "aiResponseEnd",
+				success: success,
+				error: isCancellation
+					? "Chat generation cancelled."
+					: success
+					? null
+					: finalAiResponseText,
+			});
 
 			this.provider.activeOperationCancellationTokenSource?.dispose();
 			this.provider.activeOperationCancellationTokenSource = undefined;
+			this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		}
 	}
 
@@ -317,26 +313,21 @@ export class ChatService {
 			const isCancellation = finalAiResponseText === ERROR_OPERATION_CANCELLED;
 
 			// Only send aiResponseEnd if we haven't already cancelled
-			if (
-				!this.provider.activeOperationCancellationTokenSource?.token
-					.isCancellationRequested ||
-				!isCancellation
-			) {
-				// b. Send aiResponseEnd message to the webview.
-				this.provider.postMessageToWebview({
-					type: "aiResponseEnd",
-					success: success,
-					error: isCancellation
-						? "Chat generation cancelled."
-						: success
-						? null
-						: finalAiResponseText,
-				});
-			}
+			// CRITICAL CHANGE: Removed the 'if' condition. aiResponseEnd must always be sent.
+			this.provider.postMessageToWebview({
+				type: "aiResponseEnd",
+				success: success,
+				error: isCancellation
+					? "Chat generation cancelled."
+					: success
+					? null
+					: finalAiResponseText,
+			});
 
 			// c. Dispose of the activeOperationCancellationTokenSource.
 			this.provider.activeOperationCancellationTokenSource?.dispose();
 			this.provider.activeOperationCancellationTokenSource = undefined;
+			this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 
 			// Set the flag to false before restoring history
 			this.provider.isEditingMessageActive = false;
