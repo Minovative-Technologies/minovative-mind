@@ -338,6 +338,8 @@ export class ChatService {
 			this.provider.activeOperationCancellationTokenSource?.dispose();
 			this.provider.activeOperationCancellationTokenSource = undefined;
 
+			// Set the flag to false before restoring history
+			this.provider.isEditingMessageActive = false;
 			// d. Call chatHistoryManager.restoreChatHistoryToWebview() to re-render the UI based on the new, full history.
 			chatHistoryManager.restoreChatHistoryToWebview();
 		}

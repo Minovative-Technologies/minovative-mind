@@ -56,6 +56,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		stagedFiles: string[];
 	} | null = null;
 	public isGeneratingUserRequest: boolean = false; // Added property
+	public isEditingMessageActive: boolean = false;
 	private _persistedPendingPlanData: sidebarTypes.PersistedPlanData | null =
 		null; // New private property
 
@@ -361,7 +362,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		// pendingCommitReviewData is cleared by clearActiveOperationState
 
 		// Critical for UI synchronization: ensures the chat history and overall UI state are up-to-date after any operation concludes.
-		this.chatHistoryManager.restoreChatHistoryToWebview();
+		// During an edit operation, the webview handles the initial visual update,
+		// so we skip restoring the entire chat history from the backend at this early stage.
+		if (!this.isEditingMessageActive) {
+			this.chatHistoryManager.restoreChatHistoryToWebview();
+		} else {
+			console.log(
+				"[SidebarProvider] Skipping restoreChatHistoryToWebview during active message edit."
+			);
+		}
 
 		// 4. Re-enable input in the webview
 		this.postMessageToWebview({ type: "reenableInput" });

@@ -520,6 +520,7 @@ export async function handleWebviewMessage(
 			);
 
 			// 3.c. Call provider.triggerUniversalCancellation()
+			provider.isEditingMessageActive = true;
 			await provider.triggerUniversalCancellation();
 			provider.isGeneratingUserRequest = true;
 			await provider.workspaceState.update(
