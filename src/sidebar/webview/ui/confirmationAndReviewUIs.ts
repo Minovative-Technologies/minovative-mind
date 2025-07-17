@@ -317,6 +317,13 @@ export function showCommitReviewUI(
 		}
 
 		commitReviewContainer.style.display = "flex";
+		// Re-enable buttons when the commit review UI is shown
+		if (elements.confirmCommitButton) {
+			elements.confirmCommitButton.disabled = false;
+		}
+		if (elements.cancelCommitButton) {
+			elements.cancelCommitButton.disabled = false;
+		}
 		appState.isAwaitingUserReview = true; // Add this line
 		// Scroll to the bottom of the document to ensure the commit review UI is visible
 		document.documentElement.scrollTop = document.documentElement.scrollHeight;
@@ -543,14 +550,6 @@ export function handleCancelCommit(
 	updateStatus: Function,
 	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
-	// Add client-side safeguard to prevent duplicate requests
-	if (appState.isCommitActionInProgress) {
-		console.warn(
-			"[handleCancelCommit] Commit action already in progress. Ignoring duplicate cancel click."
-		);
-		return;
-	}
-
 	// Prevent duplicate cancellation requests
 	if (appState.isCancellationInProgress) {
 		console.warn(
