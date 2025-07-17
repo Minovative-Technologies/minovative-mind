@@ -67,7 +67,7 @@ export class ChatService {
 				value: { modelName, relevantFiles: projectContext.relevantFiles },
 			});
 
-			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown. If the user wants you to implement code changes, guide them to use the "/plan [user prompt]" for requests they want you to code. Give them a "/plan [prompt]" use case according to the user query for them to use. Make sure the "/plan [prompt]" is without Markdown.\n\nProject Context:\n${
+			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown.\n\nProject Context:\n${
 				projectContext.contextString
 			}${
 				urlContextString ? `\n\n${urlContextString}` : ""
@@ -246,7 +246,7 @@ export class ChatService {
 			// 7. Construct the finalPrompt including existing 'You are Minovative Mind...' prefix,
 			// the projectContext.contextString, and the userMessageText from the edited message,
 			// and an 'Assistant Response:'.
-			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown. If the user wants you to implement code changes, guide them to use the "/plan [user prompt]" for requests they want you to code. Give them a "/plan [prompt]" use case according to the user query for them to use. Make sure the "/plan [prompt]" is without Markdown.\n\nProject Context:\n${projectContext.contextString}\n\nUser Query:\n${userMessageText}\n\nAssistant Response:`;
+			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown.\n\nProject Context:\n${projectContext.contextString}\n\nUser Query:\n${userMessageText}\n\nAssistant Response:`;
 
 			let accumulatedResponse = "";
 			finalAiResponseText = await aiRequestService.generateWithRetry(

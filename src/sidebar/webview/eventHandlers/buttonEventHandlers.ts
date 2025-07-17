@@ -48,7 +48,6 @@ export function initializeButtonEventListeners(
 		loadChatButton,
 		retryGenerationButton,
 		cancelParseErrorButton,
-		commitMessageTextarea,
 		confirmCommitButton,
 		cancelCommitButton,
 

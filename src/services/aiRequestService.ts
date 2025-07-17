@@ -58,7 +58,7 @@ export class AIRequestService {
 		const apiKeyList = this.apiKeyManager.getApiKeyList();
 
 		let consecutiveTransientErrorCount = 0;
-		const baseDelayMs = 120000;
+		const baseDelayMs = 60000;
 		const maxDelayMs = 10 * 60 * 1000;
 
 		if (!currentApiKey) {
@@ -319,7 +319,7 @@ export class AIRequestService {
 
 		return ParallelProcessor.executeParallel(tasks, {
 			maxConcurrency: config.maxConcurrency ?? 3, // Limit concurrent AI requests
-			defaultTimeout: config.timeout ?? 120000, // 120 seconds default
+			defaultTimeout: config.timeout ?? 60000,
 			defaultRetries: config.retries ?? 1,
 			enableRetries: true,
 			enableTimeout: true,
@@ -390,7 +390,7 @@ export class AIRequestService {
 
 		return ParallelProcessor.executeInBatches(tasks, batchSize, {
 			maxConcurrency: config.maxConcurrency ?? 3,
-			defaultTimeout: config.timeout ?? 120000,
+			defaultTimeout: config.timeout ?? 60000,
 			defaultRetries: config.retries ?? 1,
 			enableRetries: true,
 			enableTimeout: true,
