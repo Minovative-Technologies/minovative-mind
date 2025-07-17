@@ -1,3 +1,4 @@
+import { EnhancedCodeGenerator } from "../../ai/enhancedCodeGeneration";
 import * as sidebarTypes from "../common/sidebarTypes";
 import * as vscode from "vscode";
 import { TEMPERATURE } from "../common/sidebarConstants";
@@ -543,7 +544,7 @@ export function createPlanningPrompt(
         *   Backslash (\`\\\`) must be escaped as \`\\\`.
         *   Double quote (\`"\`) must be escaped as \`"\`.
     9. JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
-    10. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for developers.
+    10. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for the developers.
     11. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
 
     **IMPORTANT:** For modification steps, ensure the modification_prompt is specific and actionable, focusing on substantial changes rather than cosmetic formatting. The AI will be instructed to preserve existing formatting and only make the requested functional changes.
@@ -765,7 +766,8 @@ export async function _performModification(
 	languageId: string,
 	filePath: string,
 	modelName: string,
-	aiRequestService: AIRequestService, // ApiKey: string, ADDED aiRequestService
+	aiRequestService: AIRequestService,
+	enhancedCodeGenerator: EnhancedCodeGenerator,
 	token: vscode.CancellationToken,
 	isMergeOperation: boolean = false // isMergeOperation parameter
 ): Promise<string> {
@@ -830,21 +832,20 @@ export async function _performModification(
 
 	let modifiedContent = "";
 	try {
-		modifiedContent = await aiRequestService.generateWithRetry(
-			prompt,
+		const generationContext = {
+			projectContext: "",
+			relevantSnippets: "",
+			editorContext: undefined,
+			activeSymbolInfo: undefined,
+		};
+		const genResult = await enhancedCodeGenerator.generateFileContent(
+			filePath,
+			modificationPrompt,
+			generationContext,
 			modelName,
-			undefined, // history: pass undefined
-			"file_modification", // requestType: optional, can be 'file_modification'
-			generationConfig,
-			{
-				onChunk: (chunk) => {
-					modifiedContent += chunk;
-				}, // onChunk callback to accumulate content
-				// onComplete: omit if awaiting the result, as generateWithRetry returns the full string
-			},
-			token,
-			isMergeOperation
+			token
 		);
+		modifiedContent = genResult.content;
 	} catch (error) {
 		console.error("Error during AI file", error); // Log any caught errors
 		throw error; // Re-throw them to ensure proper upstream handling by planExecutionService

@@ -24,6 +24,7 @@ import {
 	showWarningNotification,
 	showErrorNotification,
 } from "../utils/notificationUtils"; // Add this import
+import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration"; // Add this import
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -74,6 +75,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public commitService: CommitService;
 	public gitConflictResolutionService: GitConflictResolutionService; // Service instance
 	public tokenTrackingService: TokenTrackingService;
+	private enhancedCodeGenerator: EnhancedCodeGenerator; // NEW: Declare property
 
 	constructor(
 		extensionUri: vscode.Uri,
@@ -143,12 +145,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			context
 		); // Instantiate before PlanService
 
+		// NEW: Instantiate EnhancedCodeGenerator
+		this.enhancedCodeGenerator = new EnhancedCodeGenerator(
+			this.aiRequestService,
+			this.workspaceRootUri || vscode.Uri.file("/"),
+			{ enableRealTimeFeedback: true, maxFeedbackIterations: 5 }
+		);
+
 		// These services need access to the provider's state and other services.
 		// You would create these files following the same pattern.
 		this.planService = new PlanService(
 			this,
 			this.workspaceRootUri, // Pass workspaceRootUri
-			this.gitConflictResolutionService // Pass the GitConflictResolutionService
+			this.gitConflictResolutionService, // Pass the GitConflictResolutionService
+			this.enhancedCodeGenerator // NEW: Pass the instance here
 		);
 		this.chatService = new ChatService(this);
 		this.commitService = new CommitService(this);

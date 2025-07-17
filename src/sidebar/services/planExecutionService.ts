@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
+import { EnhancedCodeGenerator } from "../../ai/enhancedCodeGeneration";
 
 // New imports for AI interaction and code utilities
 import { _performModification } from "./aiInteractionService";
@@ -85,7 +86,8 @@ export async function executePlanStep(
 		value: { text: string; isError?: boolean };
 		diffContent?: string;
 	}) => void,
-	aiRequestService: AIRequestService // Added new parameter
+	aiRequestService: AIRequestService,
+	enhancedCodeGenerator: EnhancedCodeGenerator
 ): Promise<void> {
 	progress.report({ message: step.description });
 
@@ -154,6 +156,7 @@ export async function executePlanStep(
 							targetFileUri.fsPath,
 							modelName,
 							aiRequestService,
+							enhancedCodeGenerator,
 							token
 						);
 					} catch (aiError: any) {
@@ -184,7 +187,8 @@ export async function executePlanStep(
 						progress,
 						changeLogger,
 						postChatUpdate,
-						aiRequestService // Pass the AIRequestService instance
+						aiRequestService, // Pass the AIRequestService instance
+						enhancedCodeGenerator
 					);
 					return; // Exit to prevent further execution of modify logic that expects an existing file
 				} else {
@@ -213,6 +217,7 @@ export async function executePlanStep(
 					editor.document.uri.fsPath,
 					modelName, // Pass correct modelName
 					aiRequestService, // Pass AIRequestService instance
+					enhancedCodeGenerator, // Pass enhancedCodeGenerator instance
 					token
 				);
 			} catch (aiError: any) {

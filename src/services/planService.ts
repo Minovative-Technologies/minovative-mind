@@ -29,19 +29,23 @@ import { DiagnosticService } from "../utils/diagnosticUtils"; // Import Diagnost
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter"; // Import formatUserFacingErrorMessage
 import { showErrorNotification } from "../utils/notificationUtils"; // Add this import
 import { UrlContextService } from "./urlContextService";
+import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
 	private readonly MAX_TRANSIENT_STEP_RETRIES = 3;
 	private readonly MAX_CORRECTION_PLAN_ATTEMPTS = 3; // Max attempts for AI to generate a valid correction *plan*
 	private urlContextService: UrlContextService;
+	private enhancedCodeGenerator: EnhancedCodeGenerator;
 
 	constructor(
 		private provider: SidebarProvider,
 		private workspaceRootUri: vscode.Uri | undefined, // Add workspaceRootUri
-		private gitConflictResolutionService: GitConflictResolutionService // Add GitConflictResolutionService
+		private gitConflictResolutionService: GitConflictResolutionService, // Add GitConflictResolutionService
+		enhancedCodeGenerator: EnhancedCodeGenerator
 	) {
 		this.urlContextService = new UrlContextService();
+		this.enhancedCodeGenerator = enhancedCodeGenerator;
 	}
 
 	/**
@@ -686,7 +690,7 @@ export class PlanService {
 					// If more retries are available, prepare for the next attempt
 					if (retryAttempt <= this.MAX_PLAN_PARSE_RETRIES) {
 						// Create feedback string for the AI
-						const retryFeedbackString = `CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${lastParsingError}". The problematic JSON was: \`\`\`${lastFailedJson}\`\`\`. You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. Do not include markdown fences. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct JSON)`;
+						const retryFeedbackString = `CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${lastParsingError}". You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. Do not include markdown fences. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct JSON)`;
 
 						// Update the prompt for the next iteration
 						currentJsonPlanningPrompt = createPlanningPrompt(
@@ -922,6 +926,13 @@ export class PlanService {
 		const totalSteps = steps.length;
 		const { settingsManager, changeLogger } = this.provider;
 
+		// Pre-compute relevant snippets once before the step execution loop.
+		const relevantSnippets = await this._formatRelevantFilesForPrompt(
+			context.relevantFiles ?? [],
+			rootUri,
+			combinedToken
+		);
+
 		let index = 0; // Initialize index for while loop
 		while (index < totalSteps) {
 			// Outer while loop
@@ -968,54 +979,22 @@ export class PlanService {
 
 						let content = step.content;
 						if (step.generate_prompt) {
-							// Format relevant files for the prompt
-							const relevantSnippets = await this._formatRelevantFilesForPrompt(
-								context.relevantFiles ?? [], // Add nullish coalescing
-								rootUri,
-								combinedToken
-							);
+							const generationContext = {
+								projectContext: context.projectContext,
+								relevantSnippets: relevantSnippets,
+								editorContext: context.editorContext,
+								activeSymbolInfo: undefined, // Or populate if available
+							};
 
-							const generationPrompt = `You are an expert software engineer. Your ONLY task is to generate the full file content. Do NOT include markdown code block formatting. Provide only the file content.
-Ensure the generated code is self-contained and immediately functional within the existing project context.
-Pay close attention to necessary imports based on the file's purpose and its location. If it's a TypeScript file, ensure all types are correctly defined or imported.
-Adhere to the detected coding style, naming conventions (e.g., camelCase for variables, PascalCase for classes), and file organization patterns consistent with the Broader Project Context and Relevant Project Snippets.
-The 'File Path' itself conveys important structural information; ensure the content generated is appropriate for its intended location and adheres to any framework-specific conventions.
-
-							File Path:
-							${step.path}
-
-							Instructions:
-							${step.generate_prompt}
-
-							--- Broader Project Context ---
-							${context.projectContext}
-							--- End Broader Project Context ---
-
-							${
-								context.editorContext
-									? `--- Editor Context ---\n${JSON.stringify(
-											context.editorContext,
-											null,
-											2
-									  )}\n--- End Editor Context ---\n\n`
-									: ""
-							}${this._formatChatHistoryForPrompt(context.chatHistory)}
-
-							--- Relevant Project Snippets (for context) ---
-							${relevantSnippets}
-
-							Complete File Content:`;
-
-							content = await this.provider.aiRequestService.generateWithRetry(
-								generationPrompt,
-								settingsManager.getSelectedModelName(),
-								undefined,
-								`plan step ${index + 1}`,
-								undefined,
-								undefined,
-								combinedToken
-							);
-							this._validateAIContentResponse(content, step.path); // Added validation call
+							content = (
+								await this.enhancedCodeGenerator.generateFileContent(
+									step.path,
+									step.generate_prompt,
+									generationContext,
+									settingsManager.getSelectedModelName(),
+									combinedToken
+								)
+							).content;
 						}
 						await typeContentIntoEditor(editor, content ?? "", combinedToken);
 
@@ -1048,78 +1027,23 @@ The 'File Path' itself conveys important structural information; ensure the cont
 							await vscode.workspace.fs.readFile(fileUri)
 						).toString("utf-8");
 
-						// Format relevant files for the prompt
-						const relevantSnippets = await this._formatRelevantFilesForPrompt(
-							context.relevantFiles ?? [], // Add nullish coalescing
-							rootUri,
-							combinedToken
-						);
+						const modificationContext = {
+							projectContext: context.projectContext,
+							relevantSnippets: relevantSnippets,
+							editorContext: context.editorContext,
+							activeSymbolInfo: undefined, // Or populate if available
+						};
 
-						const modificationPrompt = `You are an expert software engineer. Your ONLY task is to generate the *entire* modified content for the file. Do NOT include markdown code block formatting. Provide only the full, modified file content.
-
-**CRITICAL REQUIREMENTS TO AVOID COSMETIC CHANGES:**
-1. **Preserve Exact Formatting**: Maintain the existing indentation, spacing, and line breaks exactly as they are
-2. **No Whitespace-Only Changes**: Do not modify spaces, tabs, or line endings unless explicitly requested
-3. **Preserve Comments**: Keep all existing comments in their exact positions and formatting
-4. **Maintain Import Order**: Keep imports in their current order unless new imports are specifically needed
-5. **Preserve Code Style**: Do not reformat code or change coding style unless explicitly requested
-6. **Minimal Changes**: Make only the specific changes requested, nothing more
-7. **Preserve Empty Lines**: Keep existing empty lines and paragraph breaks exactly as they are
-
-**SUBSTANTIAL CHANGES ONLY:**
-- Only modify code that directly addresses the modification instructions
-- Do not rewrite or reformat existing code that doesn't need changes
-- Preserve all existing functionality unless explicitly asked to change it
-- Maintain the exact same structure and organization
-
-Crucially, return the ENTIRE content of the file. Do not omit existing code that is not being modified. The response must be a full, complete, and syntactically valid version of the file after the specified changes are applied.
-Integrate all changes seamlessly with the existing code structure. This includes maintaining existing function/class definitions, preserving unused imports (unless explicitly instructed to remove them), and ensuring that new or modified code integrates without breaking existing logic or introducing new errors.
-Review the 'Existing File Content' and all provided context to ensure no regressions are introduced and that the file remains fully functional and robust.
-When modifying specific parts, leverage detailed symbol information (if available in 'Broader Project Context') to understand their full implications and interconnectedness with other parts of the codebase.
-
-The modified code must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles. Correctly integrate new code with existing structures and maintain functionality without introducing new bugs. Consider the existing project structure, dependencies, and conventions inferred from the broader project context.
-
-File Path:
-${step.path}
-
-Modification Instructions:
-${step.modification_prompt}
-
---- Broader Project Context ---
-${context.projectContext}
---- End Broader Project Context ---
-
-${
-	context.editorContext
-		? `--- Editor Context ---\n${JSON.stringify(
-				context.editorContext,
-				null,
-				2
-		  )}\n--- End Editor Context ---\n\n`
-		: ""
-}${this._formatChatHistoryForPrompt(context.chatHistory)}
-
---- Relevant Project Snippets (for context) ---
-${relevantSnippets}
-
---- Existing File Content ---
-${existingContent}
---- End Existing File Content ---
-
-Complete Modified File Content:`;
-
-						let modifiedContent =
-							await this.provider.aiRequestService.generateWithRetry(
-								modificationPrompt,
+						let modifiedContent = (
+							await this.enhancedCodeGenerator.modifyFileContent(
+								step.path,
+								step.modification_prompt,
+								existingContent,
+								modificationContext,
 								settingsManager.getSelectedModelName(),
-								undefined,
-								`plan step ${index + 1}`,
-								undefined,
-								undefined,
-								combinedToken,
-								context.isMergeOperation // Pass isMergeOperation
-							);
-						this._validateAIContentResponse(modifiedContent, step.path); // Added validation call
+								combinedToken
+							)
+						).content;
 						modifiedContent = modifiedContent
 							.replace(/^```[a-z]*\n?/, "")
 							.replace(/\n?```$/, "")
@@ -1865,30 +1789,5 @@ Complete Modified File Content:`;
 			},
 		});
 		return false; // All attempts exhausted, still errors
-	}
-
-	private _validateAIContentResponse(
-		generatedContent: string,
-		filePath: string
-	): void {
-		const lowerCaseContent = generatedContent.trim().toLowerCase();
-
-		// Only throw if the entire content is a single error message, not if it merely contains error-related phrases
-		if (
-			lowerCaseContent === "error:" ||
-			lowerCaseContent.startsWith("error: ") ||
-			lowerCaseContent === "failed to generate" ||
-			lowerCaseContent.startsWith("failed to generate")
-		) {
-			const displayContent =
-				generatedContent.length > 200
-					? generatedContent.substring(0, 200) + "..."
-					: generatedContent;
-
-			throw new Error(
-				`AI failed to generate valid content/modifications for file '${filePath}'. ` +
-					`AI response indicates an error: '${displayContent}'`
-			);
-		}
 	}
 }
