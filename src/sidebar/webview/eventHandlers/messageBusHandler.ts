@@ -770,8 +770,10 @@ export function initializeMessageBusHandler(
 			}
 			case "restoreHistory": {
 				if (elements.chatContainer && Array.isArray(message.value)) {
+					// Clear existing messages to ensure a complete re-render.
 					elements.chatContainer.innerHTML = "";
 					appState.nextMessageIndex = message.value.length; // Synchronize the next message index
+					// Re-populate the chat display with each historical entry.
 					message.value.forEach((msg: any, index: number) => {
 						if (
 							msg &&
@@ -803,6 +805,7 @@ export function initializeMessageBusHandler(
 
 					setLoadingState(appState.isLoading, elements);
 
+					// Scroll to the bottom to show the most recent messages, maintaining UX.
 					elements.chatContainer.scrollTop =
 						elements.chatContainer.scrollHeight;
 				} else {

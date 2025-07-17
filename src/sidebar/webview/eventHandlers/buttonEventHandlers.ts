@@ -169,6 +169,7 @@ export function initializeButtonEventListeners(
 		// The hidePlanParseErrorUI function already handles setting display: none and clearing content
 		hidePlanParseErrorUI(elements);
 		appState.isCancellationInProgress = true; // Set cancellation flag
+		setLoadingState(true, elements); // Add this line
 		postMessageToExtension({ type: "universalCancel" }); // Use universal cancel for immediate cancellation
 		updateStatus(elements, "Cancelling operations...", false); // Pass elements
 		stopTypingAnimation(); // Ensure typing animation stops
@@ -195,6 +196,7 @@ export function initializeButtonEventListeners(
 		}
 
 		appState.isCancellationInProgress = true; // Set cancellation flag
+		setLoadingState(true, elements); // Add this line
 
 		if (appState.currentAiMessageContentElement) {
 			stopTypingAnimation();

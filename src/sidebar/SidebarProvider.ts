@@ -360,7 +360,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.lastPlanGenerationContext = null;
 		// pendingCommitReviewData is cleared by clearActiveOperationState
 
-		// Ensure chat history is fully restored to the webview after operation concludes
+		// Critical for UI synchronization: ensures the chat history and overall UI state are up-to-date after any operation concludes.
 		this.chatHistoryManager.restoreChatHistoryToWebview();
 
 		// 4. Re-enable input in the webview
@@ -436,9 +436,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.pendingCommitReviewData = null;
 		this.currentAiStreamingState = null;
 
-		// Immediately re-enable UI inputs
-		this.postMessageToWebview({ type: "reenableInput" });
-
 		// End the user operation with cancelled status
 		await this.endUserOperation("cancelled");
 		console.log("[SidebarProvider] Universal cancellation complete.");
@@ -480,6 +477,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		if (outcome !== "cancelled") {
 			this.chatHistoryManager.addHistoryEntry("model", message);
 		}
+		// Ensures the final notification and overall chat history state are immediately reflected in the UI.
 		this.chatHistoryManager.restoreChatHistoryToWebview();
 
 		if (this.isSidebarVisible === true) {

@@ -85,7 +85,8 @@ function setLoadingState(
 	const canInteractWithChatHistoryButtons =
 		!loading &&
 		!appState.isAwaitingUserReview && // Refactored
-		!appState.isCommandSuggestionsVisible;
+		!appState.isCommandSuggestionsVisible &&
+		!appState.isCancellationInProgress;
 
 	console.log(
 		`[setLoadingState] Final computed canInteractWithMainChatControls=${canInteractWithMainChatControls}, canSendCurrentInput=${canSendCurrentInput}, canInteractWithChatHistoryButtons=${canInteractWithChatHistoryButtons}`

@@ -386,6 +386,7 @@ export class ChatHistoryManager {
 	}
 
 	public restoreChatHistoryToWebview(): void {
+		// Ensures the entire chat history is rendered in the webview to maintain UI consistency.
 		const historyForWebview: ChatMessage[] = this._chatHistory.map((entry) => ({
 			sender: entry.role === "user" ? "User" : "Model",
 			text: entry.parts.map((p) => p.text).join(""),
