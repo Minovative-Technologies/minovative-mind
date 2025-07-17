@@ -360,6 +360,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.lastPlanGenerationContext = null;
 		// pendingCommitReviewData is cleared by clearActiveOperationState
 
+		// Ensure chat history is fully restored to the webview after operation concludes
+		this.chatHistoryManager.restoreChatHistoryToWebview();
+
 		// 4. Re-enable input in the webview
 		this.postMessageToWebview({ type: "reenableInput" });
 
@@ -397,7 +400,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 
 		if (statusMessage) {
-			this.chatHistoryManager.addHistoryEntry("model", statusMessage);
+			// CONDITIONALLY ADD to chat history: ONLY if the operation was NOT cancelled
+			if (outcome !== "cancelled") {
+				this.chatHistoryManager.addHistoryEntry("model", statusMessage);
+			}
 			this.postMessageToWebview({
 				type: "statusUpdate",
 				value: statusMessage,

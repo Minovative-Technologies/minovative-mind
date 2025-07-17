@@ -222,7 +222,6 @@ export class CommitService {
 			"model",
 			`Commit confirmed and executed:\n---\n${commitMessage}\n---\nCheck TERMINAL for result.`
 		);
-		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		// Replace previous state cleanup and UI signaling with central endUserOperation
 		await this.provider.endUserOperation("success"); // Mark operation as successful and re-enable UI
 	}
@@ -231,14 +230,6 @@ export class CommitService {
 	 * Cancels the pending commit review and re-enables UI.
 	 */
 	public async cancelCommit(): Promise<void> {
-		// Modified signature
-		this.provider.chatHistoryManager.addHistoryEntry(
-			"model",
-			"Commit review cancelled by user."
-		);
-		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
-		// 2. In the `cancelCommit` method, remove `this.provider.pendingCommitReviewData = null;`
-		// this.provider.pendingCommitReviewData = null; // Removed
 		await this.provider.endUserOperation("cancelled"); // New line added
 	}
 }

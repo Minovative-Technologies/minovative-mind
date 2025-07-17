@@ -4,6 +4,7 @@ import { appState } from "../state/appState";
 import { updateStatus, resetUIStateAfterCancellation } from "./statusManager";
 import { PendingPlanData, RequiredDomElements } from "../types/webviewTypes";
 import { stopTypingAnimation } from "./typingAnimation";
+import { md } from "../utils/markdownRenderer";
 
 /**
  * Dynamically creates and initializes the plan confirmation UI elements if they don't already exist.
@@ -371,6 +372,27 @@ export function hideCommitReviewUI(elements: RequiredDomElements): void {
 		commitReviewContainer.style.display = "none";
 		appState.isAwaitingUserReview = false; // Add this line
 		appState.pendingCommitReviewData = null; // Clear the pending data
+
+		// Ensure loading animation stops and message content is cleared
+		stopTypingAnimation(); // Explicitly stop any active typing animation
+
+		// If there's a current AI message element (e.g., from a prior streaming response),
+		// ensure its content is finalized and any lingering loading dots are removed.
+		// This overwrites its innerHTML with the accumulated text, which should be the final AI response.
+		if (appState.currentAiMessageContentElement) {
+			// Render the final accumulated text as Markdown into the element
+			appState.currentAiMessageContentElement.innerHTML = md.render(
+				appState.currentAccumulatedText
+			);
+			// Store the original markdown text for consistency with other messages and copy functionality
+			appState.currentAiMessageContentElement.dataset.originalMarkdown =
+				appState.currentAccumulatedText;
+		}
+
+		// Clear all appState references related to the streaming AI message
+		appState.currentAiMessageContentElement = null; // Clear the DOM element reference
+		appState.currentAccumulatedText = ""; // Clear the buffer for accumulated text
+		appState.typingBuffer = ""; // Clear the typing animation's buffer
 		console.log("Commit review UI hidden.");
 	}
 }

@@ -300,10 +300,10 @@ export function initializeMessageBusHandler(
 					let finalContentHtml: string;
 
 					if (!message.success && isCancellation) {
-						const cancellationText = "*Operation cancelled.*";
-						finalContentHtml = md.render(cancellationText);
+						finalContentHtml = "";
 						appState.currentAiMessageContentElement.dataset.originalMarkdown =
-							cancellationText;
+							"";
+						appState.currentAccumulatedText = "";
 					} else if (!message.success && message.error) {
 						const errorMessageContent =
 							typeof message.error === "string"
@@ -342,13 +342,6 @@ export function initializeMessageBusHandler(
 					// Fallback: If for some reason the element wasn't tracked, append a new message.
 					// This should generally only happen if a previous streaming message was somehow malformed or lost.
 					if (!message.success && isCancellation) {
-						appendMessage(
-							elements,
-							"Model",
-							md.render("*Operation cancelled.*"),
-							"ai-message error-message",
-							true
-						);
 					} else if (!message.success && message.error) {
 						const errorMessageContent =
 							typeof message.error === "string"
