@@ -327,7 +327,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.activeOperationCancellationTokenSource.dispose();
 			this.activeOperationCancellationTokenSource = undefined;
 		}
-		this.pendingCommitReviewData = null; // Clear any pending commit data
+		// this.pendingCommitReviewData = null; // Clear any pending commit data
 		this.currentAiStreamingState = null; // Clear streaming state when operation ends
 	}
 

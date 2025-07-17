@@ -231,6 +231,7 @@ export class CommitService {
 		});
 		terminal.show();
 		terminal.sendText(command);
+		this.provider.pendingCommitReviewData = null;
 		// Add the staging success message here, after git command sent and before final confirmation message.
 		this.provider.chatHistoryManager.addHistoryEntry(
 			"model",
