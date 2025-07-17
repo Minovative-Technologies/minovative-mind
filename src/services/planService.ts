@@ -179,7 +179,8 @@ export class PlanService {
 				textualPlanResponse,
 				undefined,
 				relevantFiles,
-				relevantFiles && relevantFiles.length <= 3
+				relevantFiles && relevantFiles.length <= 3,
+				true // Added: Mark as plan explanation
 			);
 			success = true;
 
@@ -430,7 +431,8 @@ export class PlanService {
 				textualPlanResponse,
 				undefined,
 				relevantFiles,
-				relevantFiles && relevantFiles.length <= 3
+				relevantFiles && relevantFiles.length <= 3,
+				true // Added: Mark as plan explanation
 			);
 			initialProgress?.report({
 				message: "Textual plan generated.",

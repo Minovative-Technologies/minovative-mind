@@ -6,6 +6,7 @@ import {
 	EditChatMessage,
 } from "../sidebar/common/sidebarTypes";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
+import { generateLightweightPlanPrompt } from "../sidebar/services/aiInteractionService";
 
 export async function handleWebviewMessage(
 	data: any,
@@ -36,6 +37,7 @@ export async function handleWebviewMessage(
 		"getTokenStatistics", // Allow token statistics requests during background operations
 		"getCurrentTokenEstimates", // Allow current token estimates during background operations
 		"openSidebar", // Allow opening sidebar during background operations
+		"generatePlanPromptFromAIMessage", // CRITICAL CHANGE: Allow this new message type during background operations
 	];
 
 	if (
@@ -576,6 +578,79 @@ export async function handleWebviewMessage(
 				);
 			}
 			break; // 3.g. Include break;
+		}
+
+		case "generatePlanPromptFromAIMessage": {
+			const messageIndex = data.payload.messageIndex;
+
+			const historyEntry =
+				provider.chatHistoryManager.getChatHistory()[messageIndex];
+
+			if (!historyEntry || historyEntry.role !== "model") {
+				console.error(
+					`[MessageHandler] Invalid history entry for index ${messageIndex} or not an AI message.`
+				);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value:
+						"Error: Could not generate plan prompt. Invalid AI message context.",
+					isError: true,
+				});
+				break;
+			}
+
+			// Concatenate all parts to get the full AI message content
+			const aiMessageContent = historyEntry.parts
+				.map((part) => part.text)
+				.join("\n");
+
+			if (!aiMessageContent || aiMessageContent.trim() === "") {
+				console.error(
+					`[MessageHandler] AI message content is empty for index ${messageIndex}.`
+				);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value:
+						"Error: AI message content is empty, cannot generate plan prompt.",
+					isError: true,
+				});
+				break;
+			}
+
+			try {
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Generating plan prompt from AI message...",
+				});
+
+				const generatedPlanText = await generateLightweightPlanPrompt(
+					aiMessageContent,
+					provider.settingsManager.getSelectedModelName(),
+					provider.aiRequestService
+				);
+
+				provider.postMessageToWebview({
+					type: "PrefillChatInput",
+					payload: { text: generatedPlanText },
+				});
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Plan prompt generated and pre-filled into chat input.",
+				});
+			} catch (error: any) {
+				console.error(
+					`[MessageHandler] Error generating lightweight plan prompt:`,
+					error
+				);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Error generating plan prompt: ${
+						error.message || String(error)
+					}`,
+					isError: true,
+				});
+			}
+			break;
 		}
 
 		case "aiResponseEnd": {

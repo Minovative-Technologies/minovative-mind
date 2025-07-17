@@ -54,7 +54,10 @@ export function initializeMessageBusHandler(
 					`ai-message ${message.isError ? "error-message" : ""}`.trim(),
 					true,
 					undefined,
-					message.relevantFiles
+					message.relevantFiles,
+					undefined, // messageIndexForHistory
+					undefined, // isRelevantFilesExpandedForHistory
+					false // isPlanExplanationForRender
 				);
 
 				// REMOVED: This block was prematurely showing the plan confirmation UI.
@@ -87,7 +90,10 @@ export function initializeMessageBusHandler(
 					`ai-message ${isError ? "error-message" : ""}`.trim(),
 					true, // Treat as a history-backed message for consistent styling and buttons
 					undefined, // No diffContent for streaming progress
-					relevantFiles
+					relevantFiles,
+					undefined, // messageIndexForHistory
+					undefined, // isRelevantFilesExpandedForHistory
+					false // isPlanExplanationForRender
 				);
 
 				// Get a reference to the message element that was just created.
@@ -169,7 +175,10 @@ export function initializeMessageBusHandler(
 							`ai-message ${isError ? "error-message" : ""}`.trim(),
 							true,
 							undefined,
-							relevantFiles
+							relevantFiles,
+							undefined, // messageIndexForHistory
+							undefined, // isRelevantFilesExpandedForHistory
+							false // isPlanExplanationForRender
 						);
 					}
 				} else {
@@ -184,44 +193,15 @@ export function initializeMessageBusHandler(
 						`ai-message ${isError ? "error-message" : ""}`.trim(),
 						true,
 						undefined,
-						relevantFiles
+						relevantFiles,
+						undefined, // messageIndexForHistory
+						undefined, // isRelevantFilesExpandedForHistory
+						false // isPlanExplanationForRender
 					);
 				}
 
 				// Update the overall loading state of the UI (disables/enables inputs, shows/hides cancel button)
 				setLoadingState(!isComplete, elements);
-				break;
-			}
-
-			case "showGenericLoadingMessage": {
-				console.log(
-					"[Webview] Received showGenericLoadingMessage. Displaying generic loading."
-				);
-				// Remove any existing loading message to ensure a clean state
-				const existingLoadingMsg =
-					elements.chatContainer.querySelector(".loading-message");
-				if (existingLoadingMsg) {
-					existingLoadingMsg.remove();
-				}
-				break;
-			}
-
-			case "aiResponse": {
-				appendMessage(
-					elements,
-					"Model",
-					message.value,
-					`ai-message ${message.isError ? "error-message" : ""}`.trim(),
-					true,
-					undefined,
-					message.relevantFiles
-				);
-
-				// REMOVED: This block was prematurely showing the plan confirmation UI.
-				// The plan confirmation UI should only be shown after aiResponseEnd for streaming plans.
-				if (message.isLoading === false) {
-					setLoadingState(false, elements);
-				}
 				break;
 			}
 
@@ -243,7 +223,12 @@ export function initializeMessageBusHandler(
 					"Model",
 					"", // Empty string to signify starting stream/generation
 					"ai-message",
-					true // Treat as a history-backed message for consistent styling and buttons (even if not yet in history)
+					true, // Treat as a history-backed message for consistent styling and buttons (even if not yet in history)
+					undefined, // diffContent
+					undefined, // relevantFiles
+					undefined, // messageIndexForHistory
+					undefined, // isRelevantFilesExpandedForHistory
+					false // isPlanExplanationForRender
 				);
 				// Ensure UI controls are disabled while loading
 				setLoadingState(true, elements);
@@ -264,7 +249,10 @@ export function initializeMessageBusHandler(
 					"ai-message",
 					true,
 					undefined,
-					message.value.relevantFiles
+					message.value.relevantFiles,
+					undefined, // messageIndexForHistory
+					undefined, // isRelevantFilesExpandedForHistory
+					false // isPlanExplanationForRender
 				);
 				break;
 			}
@@ -327,6 +315,22 @@ export function initializeMessageBusHandler(
 						messageElement
 							.querySelector(".edit-button")
 							?.removeAttribute("disabled");
+
+						// CRITICAL CHANGE: Handle generate-plan-button visibility
+						const generatePlanButton = messageElement.querySelector(
+							".generate-plan-button"
+						) as HTMLButtonElement | null;
+
+						if (message.success && message.isPlanResponse && message.planData) {
+							if (generatePlanButton) {
+								generatePlanButton.style.display = "none";
+							}
+						} else {
+							// Otherwise, ensure it's visible (for regular AI responses)
+							if (generatePlanButton) {
+								generatePlanButton.style.display = ""; // Reset to default display
+							}
+						}
 					}
 				} else {
 					console.warn(
@@ -345,7 +349,12 @@ export function initializeMessageBusHandler(
 							"Model",
 							md.render(`Error: ${errorMessageContent}`),
 							"ai-message error-message",
-							true
+							true,
+							undefined, // diffContent
+							undefined, // relevantFiles
+							undefined, // messageIndexForHistory
+							undefined, // isRelevantFilesExpandedForHistory
+							false // isPlanExplanationForRender (fallback, so it's not a plan)
 						);
 					} else {
 						// If successful but currentAiMessageContentElement was null, append the accumulated text.
@@ -354,7 +363,12 @@ export function initializeMessageBusHandler(
 							"Model",
 							md.render(appState.currentAccumulatedText),
 							"ai-message",
-							true
+							true,
+							undefined, // diffContent
+							undefined, // relevantFiles
+							undefined, // messageIndexForHistory
+							undefined, // isRelevantFilesExpandedForHistory
+							false // isPlanExplanationForRender (fallback, so it's not a plan)
 						);
 					}
 				}
@@ -604,7 +618,10 @@ export function initializeMessageBusHandler(
 						"ai-message",
 						true, // Treat as history-backed
 						undefined,
-						restoredPlanData.relevantFiles
+						restoredPlanData.relevantFiles,
+						undefined, // messageIndexForHistory
+						undefined, // isRelevantFilesExpandedForHistory
+						true // isPlanExplanationForRender
 					);
 
 					createPlanConfirmationUI(
@@ -654,7 +671,10 @@ export function initializeMessageBusHandler(
 						`ai-message ${message.value.isError ? "error-message" : ""}`.trim(),
 						true,
 						message.value.diffContent,
-						message.value.relevantFiles
+						message.value.relevantFiles,
+						undefined, // messageIndexForHistory
+						undefined, // isRelevantFilesExpandedForHistory
+						false // isPlanExplanationForRender
 					);
 					setLoadingState(appState.isLoading, elements);
 				} else {
@@ -795,7 +815,8 @@ export function initializeMessageBusHandler(
 								msg.diffContent,
 								msg.relevantFiles,
 								index,
-								msg.isRelevantFilesExpanded
+								msg.isRelevantFilesExpanded,
+								msg.isPlanExplanation // isPlanExplanationForRender
 							);
 						}
 					});
@@ -855,6 +876,19 @@ export function initializeMessageBusHandler(
 						);
 					}
 				}
+				break;
+			}
+			case "PrefillChatInput": {
+				console.log(
+					"[Webview] Received PrefillChatInput. Prefilling chat input."
+				);
+				const { text } = message.payload;
+				elements.chatInput.value = text;
+				elements.chatInput.focus();
+				elements.chatInput.placeholder = "Ask Minovative Mind...";
+				elements.chatInput.disabled = false;
+				elements.sendButton.disabled = false;
+				setLoadingState(false, elements);
 				break;
 			}
 			default:

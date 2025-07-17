@@ -5,6 +5,7 @@ import {
 	faCopy,
 	faTrashCan,
 	faPenToSquare,
+	faLightbulb,
 } from "../utils/iconHelpers";
 import { postMessageToExtension } from "../utils/vscodeApi";
 import { appState } from "../state/appState";
@@ -37,7 +38,8 @@ export function appendMessage(
 	diffContent?: string,
 	relevantFiles?: string[],
 	messageIndexForHistory?: number,
-	isRelevantFilesExpandedForHistory?: boolean
+	isRelevantFilesExpandedForHistory?: boolean,
+	isPlanExplanationForRender: boolean = false
 ): void {
 	// elements.chatContainer is guaranteed to be present by the RequiredDomElements type,
 	// so no null check is needed for chatContainer itself.
@@ -289,6 +291,9 @@ export function appendMessage(
 	let copyButton: HTMLButtonElement | null = null;
 	let deleteButton: HTMLButtonElement | null = null;
 	let editButton: HTMLButtonElement | null = null;
+	// NEW: Declare planButton and its container
+	let generatePlanButton: HTMLButtonElement | null = null;
+	let planButtonContainer: HTMLDivElement | null = null;
 
 	if (isHistoryMessage) {
 		if (
@@ -314,6 +319,32 @@ export function appendMessage(
 				setIconForButton(editButton, faPenToSquare);
 			}
 
+			// NEW: "Generate Plan" button creation (for ai-message only)
+			if (
+				className.includes("ai-message") &&
+				!isPlanExplanationForRender &&
+				!appState.isPlanExecutionInProgress
+			) {
+				planButtonContainer = document.createElement("div");
+				planButtonContainer.classList.add("plan-button-container");
+
+				generatePlanButton = document.createElement("button");
+				generatePlanButton.classList.add(
+					"action-button",
+					"generate-plan-button"
+				);
+				setIconForButton(generatePlanButton, faLightbulb);
+				generatePlanButton.title = "Generate a /plan prompt from this message";
+
+				// Crucially, embed the AI message's messageIndex
+				if (messageIndexForHistory !== undefined) {
+					generatePlanButton.dataset.messageIndex =
+						messageIndexForHistory.toString();
+				}
+
+				planButtonContainer.appendChild(generatePlanButton);
+			}
+
 			// NEW LOGIC for initial button disabled state
 			if (className.includes("user-message")) {
 				if (copyButton) {
@@ -336,6 +367,10 @@ export function appendMessage(
 				if (deleteButton) {
 					deleteButton.disabled = shouldDisableAiStreamingButtons;
 				}
+				// Disable new button during streaming
+				if (generatePlanButton) {
+					generatePlanButton.disabled = shouldDisableAiStreamingButtons;
+				}
 			}
 
 			const messageActions = document.createElement("div");
@@ -345,6 +380,10 @@ export function appendMessage(
 			// --- Append Edit Button (Instruction 3) ---
 			if (editButton) {
 				messageActions.appendChild(editButton);
+			}
+			// NEW: Append "Generate Plan" button container
+			if (planButtonContainer) {
+				messageActions.appendChild(planButtonContainer);
 			}
 
 			messageElement.appendChild(messageActions);
@@ -551,6 +590,10 @@ export function appendMessage(
 				if (editButton) {
 					editButton.disabled = true;
 				}
+				// Disable new button during streaming
+				if (generatePlanButton) {
+					generatePlanButton.disabled = true;
+				}
 			} else {
 				// Complete message or history message (not streaming)
 				stopTypingAnimation();
@@ -571,6 +614,17 @@ export function appendMessage(
 				}
 				if (editButton) {
 					editButton.disabled = false;
+				}
+				// Enable new button for completed messages
+				if (
+					generatePlanButton &&
+					!isPlanExplanationForRender &&
+					!appState.isPlanExecutionInProgress
+				) {
+					generatePlanButton.disabled = false;
+					generatePlanButton.style.display = ""; // Ensure it's visible if condition met
+				} else if (generatePlanButton) {
+					generatePlanButton.style.display = "none"; // Ensure it's hidden otherwise
 				}
 			}
 		} else {
@@ -616,6 +670,9 @@ export function reenableAllMessageActionButtons(
 		const editButton = messageElement.querySelector(
 			".edit-button"
 		) as HTMLButtonElement | null;
+		const generatePlanButton = messageElement.querySelector(
+			".generate-plan-button"
+		) as HTMLButtonElement | null; // NEW: Select the new button
 
 		if (copyButton) {
 			copyButton.disabled = false;
@@ -625,6 +682,15 @@ export function reenableAllMessageActionButtons(
 		}
 		if (editButton) {
 			editButton.disabled = false;
+		}
+		if (generatePlanButton) {
+			// NEW: Enable the new button only if not in plan execution
+			if (!appState.isPlanExecutionInProgress) {
+				generatePlanButton.disabled = false;
+				generatePlanButton.style.display = ""; // Ensure visible
+			} else {
+				generatePlanButton.style.display = "none"; // Ensure hidden
+			}
 		}
 	});
 

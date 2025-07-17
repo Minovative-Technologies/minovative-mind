@@ -15,6 +15,7 @@ export interface HistoryEntry extends Omit<Content, "parts"> {
 	diffContent?: string;
 	relevantFiles?: string[];
 	isRelevantFilesExpanded?: boolean;
+	isPlanExplanation?: boolean;
 }
 
 export interface ToggleRelevantFilesDisplayMessage {
@@ -62,6 +63,7 @@ export interface ChatMessage {
 	className: string;
 	diffContent?: string;
 	relevantFiles?: string[];
+	isPlanExplanation?: boolean;
 }
 
 export interface EditChatMessage {
@@ -69,6 +71,120 @@ export interface EditChatMessage {
 	messageIndex: number; // The index of the message in the chat history array
 	newContent: string; // The new, edited content of the message
 }
+
+// New message type: Webview to Extension for generating plan prompt from AI message
+export interface GeneratePlanPromptFromAIMessage {
+	type: "generatePlanPromptFromAIMessage";
+	payload: { messageIndex: number };
+}
+
+/**
+ * Union type for all messages sent from the Webview to the Extension.
+ * Each member should have a distinct 'type' literal property.
+ */
+export type WebviewToExtensionMessages =
+	| ToggleRelevantFilesDisplayMessage
+	| UpdateRelevantFilesDisplayMessage
+	| EditChatMessage
+	| GeneratePlanPromptFromAIMessage;
+
+// New message type: Extension to Webview for pre-filling chat input
+export interface PrefillChatInput {
+	type: "PrefillChatInput";
+	payload: { text: string };
+}
+
+// Placeholder interfaces for other ExtensionToWebviewMessages inferred from usage
+// These are not exhaustive but represent common message types.
+interface StatusUpdateMessage {
+	type: "statusUpdate";
+	value: string;
+	isError?: boolean;
+}
+
+interface AiResponseStartMessage {
+	type: "aiResponseStart";
+	value: { modelName: string; relevantFiles: string[] };
+}
+
+interface AiResponseChunkMessage {
+	type: "aiResponseChunk";
+	value: string;
+}
+
+interface AiResponseEndMessage {
+	type: "aiResponseEnd";
+	value?: {
+		success: boolean;
+		error?: string;
+		isPlanResponse?: boolean;
+		requiresConfirmation?: boolean;
+		planData?: any;
+	};
+	error?: string;
+}
+
+interface UpdateLoadingStateMessage {
+	type: "updateLoadingState";
+	value: boolean;
+}
+
+interface ReenableInputMessage {
+	type: "reenableInput";
+}
+
+interface ApiKeyStatusMessage {
+	type: "apiKeyStatus";
+	value: string;
+}
+
+interface UpdateModelListMessage {
+	type: "updateModelList";
+	value: { availableModels: string[]; selectedModel: string };
+}
+
+interface UpdateOptimizationSettingsMessage {
+	type: "updateOptimizationSettings";
+	value: any;
+}
+
+interface RestorePendingPlanConfirmationMessage {
+	type: "restorePendingPlanConfirmation";
+	value: PersistedPlanData;
+}
+
+interface StructuredPlanParseFailedMessage {
+	type: "structuredPlanParseFailed";
+	value: { error: string; failedJson: string };
+}
+
+interface PlanExecutionStartedMessage {
+	type: "planExecutionStarted";
+}
+
+interface PlanExecutionEndedMessage {
+	type: "planExecutionEnded";
+}
+
+/**
+ * Union type for all messages sent from the Extension to the Webview.
+ * Each member should have a distinct 'type' literal property.
+ */
+export type ExtensionToWebviewMessages =
+	| StatusUpdateMessage
+	| AiResponseStartMessage
+	| AiResponseChunkMessage
+	| AiResponseEndMessage
+	| UpdateLoadingStateMessage
+	| ReenableInputMessage
+	| ApiKeyStatusMessage
+	| UpdateModelListMessage
+	| UpdateOptimizationSettingsMessage
+	| RestorePendingPlanConfirmationMessage
+	| StructuredPlanParseFailedMessage
+	| PlanExecutionStartedMessage
+	| PlanExecutionEndedMessage
+	| PrefillChatInput;
 
 export interface PlanGenerationContext {
 	type: "chat" | "editor";

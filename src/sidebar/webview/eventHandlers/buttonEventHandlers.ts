@@ -246,6 +246,43 @@ export function initializeButtonEventListeners(
 		const fileItem = target.closest(
 			".context-file-item[data-filepath]"
 		) as HTMLLIElement | null;
+		const generatePlanButton = target.closest(
+			".generate-plan-button"
+		) as HTMLButtonElement | null;
+
+		if (generatePlanButton && !generatePlanButton.disabled) {
+			const messageIndexStr = generatePlanButton.dataset.messageIndex;
+			if (messageIndexStr) {
+				const parsedIndex = parseInt(messageIndexStr, 10);
+				if (!isNaN(parsedIndex)) {
+					// Temporarily disable chat input and update placeholder
+					elements.chatInput.disabled = true;
+					elements.chatInput.placeholder = "Generating plan prompt...";
+					elements.sendButton.disabled = true; // Also disable send button
+
+					postMessageToExtension({
+						type: "generatePlanPromptFromAIMessage",
+						payload: { messageIndex: parsedIndex },
+					});
+					updateStatus(elements, "Generating /plan prompt...");
+				} else {
+					console.error("Invalid data-message-index:", messageIndexStr);
+					updateStatus(
+						elements,
+						"Error: Invalid message index for plan generation.",
+						true
+					);
+				}
+			} else {
+				console.error("data-message-index not found on generate-plan-button.");
+				updateStatus(
+					elements,
+					"Error: Missing message index for plan generation.",
+					true
+				);
+			}
+			return; // Crucially return to prevent falling through to other button handlers
+		}
 
 		if (fileItem) {
 			event.preventDefault();

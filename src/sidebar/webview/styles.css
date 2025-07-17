@@ -513,9 +513,49 @@ h2 {
 	border-color: var(--vscode-focusBorder);
 }
 
+/* --- Generate Plan Button --- */
+.generate-plan-button {
+	padding: var(--copy-button-padding); /* MODIFIED */
+	width: var(--copy-button-size); /* ADDED */
+	min-width: var(--copy-button-size); /* MODIFIED */
+	height: var(--copy-button-size); /* ADDED */
+	min-height: var(--copy-button-size); /* MODIFIED */
+	background-color: var(--vscode-button-secondaryBackground);
+	border: 1px solid var(--vscode-button-border);
+	color: var(--copy-button-color); /* MODIFIED */
+	border-radius: var(--border-radius);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	/* font-size: 0.85em; REMOVED */
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+	user-select: none;
+}
+
+.generate-plan-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+
+.generate-plan-button:active {
+	background-color: rgba(128, 128, 128, 0.3);
+	border-color: var(--vscode-focusBorder);
+}
+
+.generate-plan-button:disabled {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
 /* Style for the icon inside the copy and delete buttons */
 .copy-button .fa-icon,
-.delete-button .fa-icon {
+.delete-button .fa-icon,
+.generate-plan-button .fa-icon {
+	/* ADDED .generate-plan-button .fa-icon */
 	font-size: 1em; /* Icon size relative to button font size */
 }
 

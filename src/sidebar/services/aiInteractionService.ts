@@ -3,6 +3,7 @@ import * as sidebarTypes from "../common/sidebarTypes";
 import * as vscode from "vscode";
 import { TEMPERATURE } from "../common/sidebarConstants";
 import { AIRequestService } from "../../services/aiRequestService";
+import { ERROR_OPERATION_CANCELLED } from "../../ai/gemini";
 
 export function createInitialPlanningExplanationPrompt(
 	projectContext: string,
@@ -616,7 +617,7 @@ export function createPlanningPrompt(
     ${fewShotExamples}
     --- End Few Examples ---
 
-    **IMPORTANT:** For modification steps, ensure the modification_prompt is specific and actionable, focusing on substantial changes rather than cosmetic formatting. The AI will be instructed to preserve existing formatting and only make the requested functional changes.
+    **IMPORTANT:** For modification steps, ensure the modification_prompt is specific and actionable, focusing on substantial changes rather warmer cosmetic formatting. The AI will be instructed to preserve existing formatting and only make the requested functional changes.
 
     Generate the execution plan:`;
 }
@@ -753,7 +754,7 @@ export function createCorrectionPlanPrompt(
         1.  **Resolve ALL Reported Diagnostics:** Every error and warning listed in the 'Diagnostics to Address' section MUST be resolved by your plan.
         2.  **No Reversion of Changes:** DO NOT revert any changes previously made during the current workflow unless the diagnostic explicitly indicates a regression that needs fixing. The 'Recent Project Changes (During Current Workflow)' section details these changes. **Consult the 'Recent Project Changes (During Current Workflow)' section to avoid redundant correction steps. Focus solely on resolving diagnostics that *persist* after prior modifications, and do not re-modify files if their desired state is already reflected by previous changes.**
         3.  **Output ONLY JSON:** Your response MUST be a single, valid JSON object for the ExecutionPlan, and nothing else.
-        4.  **Production-Ready Code:** All modifications and new code generated must be production-ready, robust, maintainable, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles.
+        4.  **Production-Ready Code:** All modifications and new code generated must be production-ready, robust, maintainability, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles.
         5.  **Adhere to Project Structure:** Consider the existing project structure, dependencies, and conventions inferred from the 'Broader Project Context' and 'Relevant Project Snippets'.
         
         ExecutionPlan (ONLY JSON):
@@ -852,4 +853,48 @@ export async function _performModification(
 	}
 
 	return modifiedContent;
+}
+
+export async function generateLightweightPlanPrompt(
+	aiMessageContent: string,
+	modelName: string,
+	aiRequestService: AIRequestService,
+	token?: vscode.CancellationToken
+): Promise<string> {
+	const prompt = `Given the following AI response, generate a concise '/plan' command request for the user to review. Focus on the core actionable intent or summary. Do not include any extraneous text or markdown formatting.
+Example:
+If the message is 'I will modify \`foo.ts\` to add feature X and then run \`npm install\`', output:
+/plan modify \`foo.ts\` to add feature X and run \`npm install\`
+
+AI Response: ${aiMessageContent}`;
+
+	try {
+		const result = await aiRequestService.generateWithRetry(
+			prompt,
+			modelName,
+			undefined, // No history needed for this type of request
+			"lightweight plan prompt",
+			undefined, // No specific generation config needed
+			undefined, // No streaming callbacks needed
+			token
+		);
+
+		if (token?.isCancellationRequested) {
+			throw new Error(ERROR_OPERATION_CANCELLED);
+		}
+
+		if (!result || result.toLowerCase().startsWith("error:")) {
+			throw new Error(
+				result ||
+					"Empty or erroneous response from lightweight AI for plan prompt."
+			);
+		}
+		return result.trim(); // Trim any leading/trailing whitespace
+	} catch (error: any) {
+		console.error("Error generating lightweight plan prompt:", error);
+		if (error.message === ERROR_OPERATION_CANCELLED) {
+			throw error; // Re-throw cancellation error directly
+		}
+		throw new Error(`Failed to generate /plan prompt: ${error.message}`);
+	}
 }
