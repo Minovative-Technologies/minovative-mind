@@ -275,6 +275,7 @@ export function initializeButtonEventListeners(
 					elements.chatInput.disabled = true;
 					elements.chatInput.placeholder = "Generating plan prompt...";
 					elements.sendButton.disabled = true; // Also disable send button
+					setLoadingState(true, elements); // Add this line
 
 					postMessageToExtension({
 						type: "generatePlanPromptFromAIMessage",

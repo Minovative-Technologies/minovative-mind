@@ -7,6 +7,7 @@ import {
 } from "../sidebar/common/sidebarTypes";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { generateLightweightPlanPrompt } from "../sidebar/services/aiInteractionService";
+import { ERROR_OPERATION_CANCELLED } from "../ai/gemini"; // CRITICAL: Added import for ERROR_OPERATION_CANCELLED
 
 export async function handleWebviewMessage(
 	data: any,
@@ -602,6 +603,7 @@ export async function handleWebviewMessage(
 						"Error: Could not generate plan prompt. Invalid AI message context.",
 					isError: true,
 				});
+				await provider.endUserOperation("failed");
 				break;
 			}
 
@@ -620,8 +622,14 @@ export async function handleWebviewMessage(
 						"Error: AI message content is empty, cannot generate plan prompt.",
 					isError: true,
 				});
+				await provider.endUserOperation("failed");
 				break;
 			}
+
+			// 1. Before the `try` block, add:
+			provider.activeOperationCancellationTokenSource =
+				new vscode.CancellationTokenSource();
+			const token = provider.activeOperationCancellationTokenSource.token;
 
 			try {
 				provider.postMessageToWebview({
@@ -629,11 +637,22 @@ export async function handleWebviewMessage(
 					value: "Generating plan prompt from AI message...",
 				});
 
+				// 2. Modify the call to `generateLightweightPlanPrompt` inside the `try` block to pass the `token` as the fourth argument
 				const generatedPlanText = await generateLightweightPlanPrompt(
 					aiMessageContent,
 					provider.settingsManager.getSelectedModelName(),
-					provider.aiRequestService
+					provider.aiRequestService,
+					token // Pass the cancellation token
 				);
+
+				// 3. Immediately after the `await generateLightweightPlanPrompt(...)` call, add an `if` condition to check for cancellation:
+				if (token.isCancellationRequested) {
+					console.log(
+						"[MessageHandler] generatePlanPromptFromAIMessage: Operation cancelled after generation but before pre-fill."
+					);
+					await provider.endUserOperation("cancelled");
+					return; // Crucially, exit the handler early.
+				}
 
 				provider.postMessageToWebview({
 					type: "PrefillChatInput",
@@ -643,20 +662,42 @@ export async function handleWebviewMessage(
 					type: "statusUpdate",
 					value: "Plan prompt generated and pre-filled into chat input.",
 				});
-			} catch (error: any) {
-				console.error(
-					`[MessageHandler] Error generating lightweight plan prompt:`,
-					error
-				);
+				await provider.endUserOperation("success");
 				provider.postMessageToWebview({
-					type: "statusUpdate",
-					value: `Error generating plan prompt: ${
-						error.message || String(error)
-					}`,
-					isError: true,
-				});
+					type: "updateLoadingState",
+					value: false,
+				}); // Added
+				// 4. Refine the `catch (error: any)` block:
+			} catch (error: any) {
+				const isCancellation = error.message === ERROR_OPERATION_CANCELLED;
+				if (isCancellation) {
+					console.log(
+						"[MessageHandler] generatePlanPromptFromAIMessage: Operation cancelled during generation."
+					);
+					await provider.endUserOperation("cancelled");
+					// If it's a cancellation, `universalCancel` will handle UI reset, so suppress further status updates here.
+				} else {
+					console.error(
+						`[MessageHandler] Error generating lightweight plan prompt:`,
+						error
+					);
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: `Error generating plan prompt: ${
+							error.message || String(error)
+						}`,
+						isError: true,
+					});
+					await provider.endUserOperation("failed");
+				}
+				// 5. Add a `finally` block after the `try...catch` block (before `break;`)
+			} finally {
+				if (provider.activeOperationCancellationTokenSource) {
+					provider.activeOperationCancellationTokenSource.dispose();
+					provider.activeOperationCancellationTokenSource = undefined;
+				}
 			}
-			break;
+			break; // break from the switch case
 		}
 
 		case "aiResponseEnd": {
