@@ -681,6 +681,58 @@ export function appendMessage(
 	updateEmptyChatPlaceholderVisibility(elements);
 }
 
+export function disableAllMessageActionButtons(
+	elements: RequiredDomElements
+): void {
+	const allHistoryMessages = elements.chatContainer.querySelectorAll(
+		".message[data-is-history='true']"
+	);
+
+	allHistoryMessages.forEach((messageElement) => {
+		if (messageElement.classList.contains("plan-step-message")) {
+			return; // Skip plan-step messages
+		}
+
+		const copyButton = messageElement.querySelector(
+			".copy-button"
+		) as HTMLButtonElement | null;
+		const deleteButton = messageElement.querySelector(
+			".delete-button"
+		) as HTMLButtonElement | null;
+		const editButton = messageElement.querySelector(
+			".edit-button"
+		) as HTMLButtonElement | null;
+		const generatePlanButton = messageElement.querySelector(
+			".generate-plan-button"
+		) as HTMLButtonElement | null;
+		const messageActions = messageElement.querySelector(
+			".message-actions"
+		) as HTMLDivElement | null;
+
+		const buttonsToDisable = [
+			copyButton,
+			deleteButton,
+			editButton,
+			generatePlanButton,
+		];
+
+		buttonsToDisable.forEach((button) => {
+			if (button) {
+				button.disabled = true;
+				button.style.opacity = "0.5";
+				button.style.pointerEvents = "none";
+			}
+		});
+
+		if (messageActions) {
+			messageActions.style.opacity = "0.5";
+			messageActions.style.pointerEvents = "none";
+		}
+	});
+
+	console.log("[ChatMessageRenderer] Disabled all message action buttons.");
+}
+
 export function reenableAllMessageActionButtons(
 	elements: RequiredDomElements
 ): void {
@@ -693,6 +745,19 @@ export function reenableAllMessageActionButtons(
 			// Do not re-enable buttons or change display for plan step update messages
 			return;
 		}
+
+		// CRITICAL CHECK: Prevent re-enabling buttons on the currently streaming AI message
+		const messageTextContentElement = messageElement.querySelector(
+			".message-text-content"
+		) as HTMLSpanElement | null;
+		if (
+			appState.currentAiMessageContentElement &&
+			messageTextContentElement &&
+			appState.currentAiMessageContentElement === messageTextContentElement
+		) {
+			return;
+		}
+
 		const copyButton = messageElement.querySelector(
 			".copy-button"
 		) as HTMLButtonElement | null;
@@ -704,25 +769,51 @@ export function reenableAllMessageActionButtons(
 		) as HTMLButtonElement | null;
 		const generatePlanButton = messageElement.querySelector(
 			".generate-plan-button"
-		) as HTMLButtonElement | null; // NEW: Select the new button
+		) as HTMLButtonElement | null;
+		const messageActions = messageElement.querySelector(
+			".message-actions"
+		) as HTMLDivElement | null; // Get the message actions container
 
+		// Re-enable copy, delete, and edit buttons
 		if (copyButton) {
 			copyButton.disabled = false;
+			copyButton.style.opacity = ""; // Reset opacity
+			copyButton.style.pointerEvents = ""; // Reset pointer events
 		}
 		if (deleteButton) {
 			deleteButton.disabled = false;
+			deleteButton.style.opacity = "";
+			deleteButton.style.pointerEvents = "";
 		}
 		if (editButton) {
 			editButton.disabled = false;
+			editButton.style.opacity = "";
+			editButton.style.pointerEvents = "";
 		}
+
+		// Logic for the .generate-plan-button
 		if (generatePlanButton) {
-			// NEW: Enable the new button only if not in plan execution
-			if (!appState.isPlanExecutionInProgress) {
+			if (
+				!appState.isPlanExecutionInProgress &&
+				messageElement.classList.contains("ai-message")
+			) {
 				generatePlanButton.disabled = false;
 				generatePlanButton.style.display = ""; // Ensure visible
+				generatePlanButton.style.opacity = ""; // Reset opacity
+				generatePlanButton.style.pointerEvents = ""; // Reset pointer events
 			} else {
-				generatePlanButton.style.display = "none"; // Ensure hidden
+				// Hide and disable if plan execution is in progress or not an AI message (though it should only be created for AI messages)
+				generatePlanButton.style.display = "none";
+				generatePlanButton.disabled = true;
+				generatePlanButton.style.opacity = "0";
+				generatePlanButton.style.pointerEvents = "none";
 			}
+		}
+
+		// Reset opacity and pointer events for the message-actions container
+		if (messageActions) {
+			messageActions.style.opacity = "";
+			messageActions.style.pointerEvents = "";
 		}
 	});
 

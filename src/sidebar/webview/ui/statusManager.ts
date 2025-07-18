@@ -49,7 +49,7 @@ export function updateStatus(
 			if (elements.statusArea.textContent === sanitizedText) {
 				elements.statusArea.textContent = "";
 			}
-		}, 15000); // 15 seconds for non-error messages
+		}, 10000); // 10 seconds for non-error messages
 	} else {
 		setTimeout(() => {
 			// Only clear if the current content is still the one set by this timeout

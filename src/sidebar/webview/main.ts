@@ -15,6 +15,7 @@ import {
 import {
 	reenableAllMessageActionButtons,
 	setGlobalSetLoadingState,
+	disableAllMessageActionButtons, // Added this import
 } from "./ui/chatMessageRenderer";
 import { RequiredDomElements } from "./types/webviewTypes";
 import { setIconForButton } from "./utils/iconHelpers";
@@ -150,6 +151,11 @@ function setLoadingState(
 	console.log(
 		`[setLoadingState] Buttons: saveDisabled=${elements.saveChatButton.disabled}, clearDisabled=${elements.clearChatButton.disabled}`
 	);
+
+	// Disable message action buttons if loading
+	if (loading) {
+		disableAllMessageActionButtons(elements);
+	}
 
 	// Control visibility of the cancel generation button
 	if (
