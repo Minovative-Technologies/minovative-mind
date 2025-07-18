@@ -157,9 +157,6 @@ export class ChatHistoryManager {
 
 	public async clearChat(): Promise<void> {
 		this._chatHistory = [];
-		this.postMessageToWebview({ type: "chatCleared" });
-		this.postMessageToWebview({ type: "statusUpdate", value: "Chat cleared." });
-		this.postMessageToWebview({ type: "reenableInput" });
 		this.saveHistoryToStorage();
 	}
 

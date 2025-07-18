@@ -1,7 +1,11 @@
 import { setIconForButton } from "../utils/iconHelpers";
 import { faCheck, faTimes, faRedo } from "@fortawesome/free-solid-svg-icons";
 import { appState } from "../state/appState";
-import { updateStatus, resetUIStateAfterCancellation } from "./statusManager";
+import {
+	updateStatus,
+	resetUIStateAfterCancellation,
+	updateEmptyChatPlaceholderVisibility,
+} from "./statusManager"; // Added updateEmptyChatPlaceholderVisibility
 import { PendingPlanData, RequiredDomElements } from "../types/webviewTypes";
 import { stopTypingAnimation } from "./typingAnimation";
 import { md } from "../utils/markdownRenderer";
@@ -76,6 +80,73 @@ export function createPlanConfirmationUI(
 }
 
 /**
+ * Dynamically creates and initializes the clear chat confirmation UI elements.
+ * This function should only be called once during initialization or when needed to create the UI.
+ * @param elements An object containing references to all required static DOM elements, which will be updated with dynamically created ones.
+ * @param postMessageToExtension A function to post messages back to the VS Code extension.
+ */
+export function createClearChatConfirmationUI(
+	elements: RequiredDomElements,
+	postMessageToExtension: Function
+): void {
+	if (!elements.chatClearConfirmationContainer) {
+		elements.chatClearConfirmationContainer = document.createElement("div");
+		elements.chatClearConfirmationContainer.id =
+			"chat-clear-confirmation-container";
+		elements.chatClearConfirmationContainer.style.display = "none"; // Initially hidden
+
+		const textElement = document.createElement("p");
+		textElement.textContent = "Clear chat history and revert pending changes?";
+
+		elements.confirmClearChatButton = document.createElement("button");
+		elements.confirmClearChatButton.id = "confirm-clear-chat-button";
+		elements.confirmClearChatButton.title = "Confirm Clear Chat and Revert";
+		elements.confirmClearChatButton.textContent = "Confirm";
+
+		elements.cancelClearChatButton = document.createElement("button");
+		elements.cancelClearChatButton.id = "cancel-clear-chat-button";
+		elements.cancelClearChatButton.title = "Cancel Clear Chat";
+		elements.cancelClearChatButton.textContent = "Cancel";
+
+		elements.chatClearConfirmationContainer.appendChild(textElement);
+		elements.chatClearConfirmationContainer.appendChild(
+			elements.confirmClearChatButton
+		);
+		elements.chatClearConfirmationContainer.appendChild(
+			elements.cancelClearChatButton
+		);
+
+		// Insert the new container after the chat container, similar to plan confirmation
+		elements.chatContainer.insertAdjacentElement(
+			"afterend",
+			elements.chatClearConfirmationContainer
+		);
+
+		setIconForButton(elements.confirmClearChatButton, faCheck);
+		setIconForButton(elements.cancelClearChatButton, faTimes);
+
+		// Attach event listeners
+		elements.confirmClearChatButton.addEventListener("click", () => {
+			hideClearChatConfirmationUI(elements);
+			postMessageToExtension({ type: "confirmClearChatAndRevert" });
+			console.log(
+				"Confirm Clear Chat button clicked. Sending confirmClearChatAndRevert."
+			);
+		});
+
+		elements.cancelClearChatButton.addEventListener("click", () => {
+			hideClearChatConfirmationUI(elements);
+			postMessageToExtension({ type: "cancelClearChat" });
+			console.log("Cancel Clear Chat button clicked. Sending cancelClearChat.");
+		});
+
+		console.log(
+			"Clear chat confirmation UI created and event listeners attached."
+		);
+	}
+}
+
+/**
  * Displays the plan confirmation UI with the provided pending plan data.
  * It ensures the UI elements are created (if not already), updates appState,
  * and sets the correct visibility and loading states.
@@ -122,6 +193,47 @@ export function showPlanConfirmationUI(
 }
 
 /**
+ * Displays the clear chat confirmation UI.
+ * It ensures the UI elements are created (if not already), updates appState,
+ * and sets the correct visibility and loading states.
+ * @param elements An object containing references to all required DOM elements.
+ * @param postMessageToExtension A function to post messages back to the VS Code extension.
+ * @param updateStatus A function to update the webview's status display.
+ * @param setLoadingState A function to control the overall loading state of the UI.
+ */
+export function showClearChatConfirmationUI(
+	elements: RequiredDomElements,
+	postMessageToExtension: Function,
+	updateStatus: Function,
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
+): void {
+	createClearChatConfirmationUI(elements, postMessageToExtension);
+
+	if (elements.chatClearConfirmationContainer) {
+		elements.chatClearConfirmationContainer.style.display = "flex";
+		appState.isAwaitingUserReview = true;
+		updateStatus(
+			elements,
+			"Confirm clearing chat history and reverting changes?",
+			false
+		);
+		setLoadingState(false, elements);
+		hidePlanConfirmationUI(elements);
+		hidePlanParseErrorUI(elements);
+		hideCommitReviewUI(elements);
+		console.log("Clear chat confirmation UI shown.");
+	} else {
+		console.error("Clear chat confirmation container not found for showing.");
+		updateStatus(
+			elements,
+			"Error: UI for clear chat confirmation is missing.",
+			true
+		);
+		setLoadingState(false, elements);
+	}
+}
+
+/**
  * Hides the plan confirmation UI and clears any pending plan data from appState.
  * @param elements An object containing references to all required DOM elements.
  */
@@ -132,6 +244,20 @@ export function hidePlanConfirmationUI(elements: RequiredDomElements): void {
 		appState.pendingPlanData = null; // Clear the pending data
 		updateStatus(elements, "Plan confirmation UI hidden.");
 		console.log("Plan confirmation UI hidden.");
+	}
+}
+
+/**
+ * Hides the clear chat confirmation UI.
+ * @param elements An object containing references to all required DOM elements.
+ */
+export function hideClearChatConfirmationUI(
+	elements: RequiredDomElements
+): void {
+	if (elements.chatClearConfirmationContainer) {
+		elements.chatClearConfirmationContainer.style.display = "none";
+		appState.isAwaitingUserReview = false;
+		console.log("Clear chat confirmation UI hidden.");
 	}
 }
 
@@ -405,7 +531,7 @@ export function hideCommitReviewUI(elements: RequiredDomElements): void {
 }
 
 /**
- * Hides all confirmation and review UIs (plan confirmation, plan parse error, and commit review).
+ * Hides all confirmation and review UIs (plan confirmation, plan parse error, commit review, and clear chat confirmation).
  * This is useful for resetting the UI state, e.g., when a new chat interaction begins.
  * @param elements An object containing references to all required DOM elements.
  */
@@ -415,6 +541,7 @@ export function hideAllConfirmationAndReviewUIs(
 	hidePlanConfirmationUI(elements);
 	hidePlanParseErrorUI(elements);
 	hideCommitReviewUI(elements);
+	hideClearChatConfirmationUI(elements); // Added
 	console.log("All confirmation and review UIs hidden.");
 }
 

@@ -8,7 +8,10 @@ import {
 	updateEmptyChatPlaceholderVisibility,
 	updateStatus,
 } from "./ui/statusManager";
-import { createPlanConfirmationUI } from "./ui/confirmationAndReviewUIs";
+import {
+	createPlanConfirmationUI,
+	createClearChatConfirmationUI, // Add this import
+} from "./ui/confirmationAndReviewUIs";
 import {
 	reenableAllMessageActionButtons,
 	setGlobalSetLoadingState,
@@ -66,6 +69,9 @@ function setLoadingState(
 		elements.planParseErrorContainer.style.display !== "none";
 	const commitReviewVisible =
 		elements.commitReviewContainer.style.display !== "none";
+	// Introduce new variable for clear chat confirmation visibility
+	const chatClearConfirmationVisible =
+		elements.chatClearConfirmationContainer.style.display !== "none";
 
 	// Introduce new constants for granular control
 	const canInteractWithMainChatControls =
@@ -78,7 +84,7 @@ function setLoadingState(
 		canInteractWithMainChatControls && !appState.isCommandSuggestionsVisible;
 
 	console.log(
-		`[setLoadingState] UI Display States: planConfirmationContainer=${elements.planConfirmationContainer.style.display}, planParseErrorContainer=${elements.planParseErrorContainer.style.display}, commitReviewContainer=${elements.commitReviewContainer.style.display}, isCommandSuggestionsVisible=${appState.isCommandSuggestionsVisible}`
+		`[setLoadingState] UI Display States: planConfirmationContainer=${elements.planConfirmationContainer.style.display}, planParseErrorContainer=${elements.planParseErrorContainer.style.display}, commitReviewContainer=${elements.commitReviewContainer.style.display}, chatClearConfirmationContainer=${elements.chatClearConfirmationContainer.style.display}, isCommandSuggestionsVisible=${appState.isCommandSuggestionsVisible}`
 	);
 
 	// Determine enablement for chat history management buttons
@@ -197,6 +203,15 @@ function setLoadingState(
 			false
 		);
 	}
+	// Add conditional block to hide clear chat confirmation UI
+	if (loading && chatClearConfirmationVisible) {
+		elements.chatClearConfirmationContainer.style.display = "none";
+		updateStatus(
+			elements,
+			"New request initiated, clear chat confirmation UI hidden.",
+			false
+		);
+	}
 
 	// Update empty chat placeholder visibility only when not loading
 	if (!loading) {
@@ -267,6 +282,8 @@ function initializeWebview(): void {
 		updateStatus,
 		setLoadingState
 	);
+	// Add call to createClearChatConfirmationUI
+	createClearChatConfirmationUI(elements, postMessageToExtension);
 	updateEmptyChatPlaceholderVisibility(elements);
 
 	// Apply the initial loading state (which is typically false on startup)

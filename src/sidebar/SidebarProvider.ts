@@ -8,8 +8,8 @@ import { ChatHistoryManager } from "./managers/chatHistoryManager";
 
 // Other Imports
 import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
-import { RevertService } from "../services/RevertService"; // Add this import
-import { FileChangeEntry, RevertibleChangeSet } from "../types/workflow"; // Ensure FileChangeEntry and RevertibleChangeSet are imported
+import { RevertService } from "../services/RevertService";
+import { FileChangeEntry, RevertibleChangeSet } from "../types/workflow";
 import { getHtmlForWebview } from "./ui/webviewHelper";
 import * as sidebarConstants from "./common/sidebarConstants";
 import * as sidebarTypes from "./common/sidebarTypes";
@@ -25,8 +25,8 @@ import {
 	showInfoNotification,
 	showWarningNotification,
 	showErrorNotification,
-} from "../utils/notificationUtils"; // Add this import
-import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration"; // Add this import
+} from "../utils/notificationUtils";
+import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -62,7 +62,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public isEditingMessageActive: boolean = false;
 	private _persistedPendingPlanData: sidebarTypes.PersistedPlanData | null =
 		null; // New private property
-	// MODIFICATION: Change lastCompletedPlanChanges to completedPlanChangeSets
 	public completedPlanChangeSets: RevertibleChangeSet[] = []; // New public property
 
 	// --- MANAGERS & SERVICES ---
@@ -100,7 +99,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				null
 			);
 
-		// MODIFICATION: Load completedPlanChangeSets from workspace state
 		this.completedPlanChangeSets = context.workspaceState.get<
 			RevertibleChangeSet[]
 		>("minovativeMind.completedPlanChangeSets", []);
@@ -252,7 +250,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 	}
 
-	// MODIFICATION: Rename and refactor updatePersistedLastPlanChanges
 	public async updatePersistedCompletedPlanChangeSets(
 		data: RevertibleChangeSet[] | null
 	): Promise<void> {
@@ -348,7 +345,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.clearActiveOperationState();
 		}
 
-		// MODIFICATION: After restoring other states, send initial revertible changes status
 		const hasRevertibleChanges = this.completedPlanChangeSets.length > 0;
 		this.postMessageToWebview({
 			type: "planExecutionFinished",
@@ -515,7 +511,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	public async revertLastPlanChanges(): Promise<void> {
-		// MODIFICATION: Update initial check
 		if (this.completedPlanChangeSets.length === 0) {
 			vscode.window.showWarningMessage(
 				"No completed workflow changes to revert."
@@ -523,7 +518,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
-		// MODIFICATION: Retrieve the most recent plan's changes by popping from the stack
 		const mostRecentChangeSet = this.completedPlanChangeSets.pop();
 		if (!mostRecentChangeSet) {
 			// This case should ideally not be reached due to the initial length check.
@@ -533,7 +527,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
-		// MODIFICATION: Clarify confirmation message
 		const confirmation = await vscode.window.showWarningMessage(
 			"Are you sure you want to revert the changes from the most recent workflow?",
 			{ modal: true },
@@ -552,16 +545,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"[SidebarProvider] Starting revert of most recent workflow changes..."
 				);
 
-				// MODIFICATION: Revert changes from the popped RevertibleChangeSet
 				await this.revertService.revertChanges(mostRecentChangeSet.changes);
 
-				// MODIFICATION: Persist the updated stack (after pop)
 				await this.updatePersistedCompletedPlanChangeSets(
 					this.completedPlanChangeSets
 				);
-
-				// MODIFICATION: Remove redundant revertCompleted message
-				// this.postMessageToWebview({ type: "revertCompleted", value: true });
 
 				this.postMessageToWebview({
 					type: "statusUpdate",
@@ -574,7 +562,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"[SidebarProvider] Most recent workflow changes reverted successfully."
 				);
 
-				// MODIFICATION: Send planExecutionFinished to update frontend button visibility
 				const stillHasRevertibleChanges =
 					this.completedPlanChangeSets.length > 0;
 				this.postMessageToWebview({
@@ -625,7 +612,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			});
 		}
 
-		// ADDED at the very end of the function
 		this.postMessageToWebview({ type: "updateLoadingState", value: false });
 		this.postMessageToWebview({ type: "reenableInput" });
 	}

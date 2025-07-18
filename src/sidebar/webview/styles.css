@@ -2182,6 +2182,108 @@ ul#staged-files-list li.empty-state {
 	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
 }
 
+/* Clear Chat Confirmation Dialog Styling */
+#chat-clear-confirmation-container {
+	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
+	background-color: var(--vscode-editorWidget-background);
+	padding: var(--container-padding);
+	margin: var(--element-spacing) 0;
+	text-align: center;
+	border-radius: var(--border-radius);
+	flex-shrink: 0;
+	display: flex; /* Ensure it uses flex for inner alignment */
+	flex-direction: row; /* Stack children vertically */
+	align-items: center; /* Center children horizontally */
+	gap: 5px; /* Space between header, text, and buttons */
+}
+
+#chat-clear-confirmation-container h3 {
+	color: var(
+		--vscode-sideBar-titleForeground
+	); /* Consistent with other headers */
+	font-size: 1.1em;
+	margin-top: 0;
+	margin-bottom: var(--element-spacing);
+	border-bottom: none; /* No border for H3 in this context */
+}
+
+#chat-clear-confirmation-container p {
+	margin-top: 0;
+	margin-bottom: var(--element-spacing);
+	color: var(
+		--vscode-descriptionForeground
+	); /* A softer text color for description */
+	font-weight: 400; /* Regular weight */
+	text-align: start;
+}
+
+#chat-clear-confirmation-container strong {
+	color: var(
+		--vscode-errorForeground
+	); /* Highlight the "permanently clear" warning */
+}
+
+/* The .confirmation-buttons-wrapper class (already existing in styles.css) will handle
+   display: flex, gap, and justify-content for the button group. */
+
+#confirm-clear-chat-button {
+	padding: 8px 15px; /* Consistent padding with other primary buttons */
+	background-color: var(
+		--vscode-button-background
+	); /* Primary action background */
+	color: var(--vscode-button-foreground); /* Primary action text color */
+	border: 1px solid transparent; /* No visible border for primary buttons */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: inherit;
+	outline: none;
+	min-width: fit-content; /* Ensure a minimum width for better usability */
+}
+
+#confirm-clear-chat-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+#confirm-clear-chat-button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+#cancel-clear-chat-button {
+	padding: 8px 15px; /* Consistent padding with other secondary buttons */
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Secondary action background */
+	color: var(
+		--vscode-button-secondaryForeground
+	); /* Secondary action text color */
+	border: 1px solid var(--vscode-button-border, var(--border-color)); /* Subtle border for secondary buttons */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: inherit;
+	outline: none;
+	min-width: fit-content; /* Ensure a minimum width for better usability */
+}
+
+#cancel-clear-chat-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+#cancel-clear-chat-button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
 /* --- AI Context Files Section --- */
 .ai-context-files {
 	display: flex;

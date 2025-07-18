@@ -20,6 +20,7 @@ import {
 	showPlanParseErrorUI,
 	showCommitReviewUI,
 	hideAllConfirmationAndReviewUIs,
+	showClearChatConfirmationUI, // Added import for showClearChatConfirmationUI
 } from "../ui/confirmationAndReviewUIs";
 import { md } from "../utils/markdownRenderer";
 import { postMessageToExtension } from "../utils/vscodeApi";
@@ -458,6 +459,17 @@ export function initializeMessageBusHandler(
 				break;
 			}
 
+			case "requestClearChatConfirmation": {
+				console.log("[Webview] Received requestClearChatConfirmation.");
+				showClearChatConfirmationUI(
+					elements,
+					postMessageToExtension,
+					updateStatus,
+					setLoadingState
+				);
+				break;
+			}
+
 			case "updateTokenStatistics": {
 				console.log(
 					"[Webview] Received token statistics update:",
@@ -814,7 +826,7 @@ export function initializeMessageBusHandler(
 				appState.pendingPlanData = null; // Ensure this is reset too
 				appState.pendingCommitReviewData = null; // Ensure this is reset too
 				appState.isPlanExecutionInProgress = false; // Reset plan execution state
-				appState.hasRevertibleChanges = false; // Reset revert changes state
+				// REMOVED: appState.hasRevertibleChanges = false; // Reset revert changes state
 				updateEmptyChatPlaceholderVisibility(elements);
 				break;
 			}

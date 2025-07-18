@@ -43,6 +43,11 @@ export interface RequiredDomElements {
 	tokenUsageDisplay: HTMLDivElement;
 	tokenUsageToggle: HTMLButtonElement;
 	revertChangesButton: HTMLButtonElement;
+
+	// New properties for clear chat confirmation
+	chatClearConfirmationContainer: HTMLDivElement;
+	confirmClearChatButton: HTMLButtonElement;
+	cancelClearChatButton: HTMLButtonElement;
 }
 
 export interface PendingPlanData {

@@ -130,7 +130,7 @@ export function initializeButtonEventListeners(
 	// Clear Chat Button
 	clearChatButton.addEventListener("click", () => {
 		console.log("Clear Chat button clicked.");
-		postMessageToExtension({ type: "clearChatRequest" });
+		postMessageToExtension({ type: "requestClearChatConfirmation" });
 	});
 
 	// Save Chat Button

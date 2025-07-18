@@ -19,7 +19,6 @@ export async function handleWebviewMessage(
 	const allowedDuringBackground = [
 		"webviewReady",
 		"requestDeleteConfirmation",
-		"clearChatRequest",
 		"saveChatRequest",
 		"loadChatRequest",
 		"selectModel",
@@ -40,6 +39,9 @@ export async function handleWebviewMessage(
 		"openSidebar", // Allow opening sidebar during background operations
 		"generatePlanPromptFromAIMessage", // CRITICAL CHANGE: Allow this new message type during background operations
 		"revertRequest",
+		"requestClearChatConfirmation", // New: Allowed for user confirmation flow
+		"confirmClearChatAndRevert", // New: Allowed as a direct user interaction during clear chat flow
+		"cancelClearChat", // New: Allowed as a direct user interaction during clear chat flow
 	];
 
 	if (
@@ -279,9 +281,74 @@ export async function handleWebviewMessage(
 			await provider.apiKeyManager.switchToPreviousApiKey();
 			break;
 
-		case "clearChatRequest":
-			await provider.chatHistoryManager.clearChat();
+		// New cases for clear chat confirmation flow
+		case "requestClearChatConfirmation":
+			console.log("[MessageHandler] Received requestClearChatConfirmation.");
+			provider.postMessageToWebview({ type: "requestClearChatConfirmation" });
 			break;
+
+		case "confirmClearChatAndRevert":
+			console.log("[MessageHandler] Received confirmClearChatAndRevert.");
+			try {
+				// Clear chat history
+				await provider.chatHistoryManager.clearChat();
+				// Clear project change logger history (all completed plans)
+				provider.changeLogger.clearAllCompletedPlanChanges();
+				// Clear persisted completed change sets from workspace state
+				await provider.updatePersistedCompletedPlanChangeSets(null);
+
+				// Send success messages to webview
+				provider.postMessageToWebview({ type: "chatCleared" }); // Triggers UI clear
+				provider.postMessageToWebview({
+					type: "planExecutionFinished",
+					hasRevertibleChanges: false,
+				}); // Updates revert button state
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value:
+						"Chat history cleared and all past changes reverted successfully.",
+				});
+				provider.postMessageToWebview({ type: "reenableInput" });
+
+				// Show VS Code notification
+				vscode.window.showInformationMessage(
+					"Chat history cleared and all past changes reverted!"
+				);
+				console.log(
+					"[MessageHandler] Chat history cleared and all past changes reverted successfully."
+				);
+			} catch (error: any) {
+				console.error(
+					"[MessageHandler] Error clearing chat or reverting changes:",
+					error
+				);
+				const errorMessage = `Failed to clear chat and revert changes: ${
+					error.message || String(error)
+				}`;
+
+				// Send error messages to webview
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: errorMessage,
+					isError: true,
+				});
+				provider.postMessageToWebview({ type: "reenableInput" });
+
+				// Show VS Code error notification
+				vscode.window.showErrorMessage(errorMessage);
+			}
+			break;
+
+		case "cancelClearChat":
+			console.log("[MessageHandler] Received cancelClearChat.");
+			provider.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Chat clear operation cancelled.",
+			});
+			provider.postMessageToWebview({ type: "reenableInput" });
+			break;
+
+		// Old "clearChatRequest" case removed from here
 
 		case "saveChatRequest":
 			await provider.chatHistoryManager.saveChat();
