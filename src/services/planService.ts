@@ -117,6 +117,10 @@ export class PlanService {
 				type: "aiResponseStart",
 				value: { modelName, relevantFiles: relevantFiles },
 			});
+			this.provider.postMessageToWebview({
+				type: "updateStreamingRelevantFiles",
+				value: relevantFiles,
+			});
 
 			if (contextString.startsWith("[Error")) {
 				throw new Error(contextString);
@@ -381,6 +385,10 @@ export class PlanService {
 				// Update the relevantFiles in the existing streaming state
 				this.provider.currentAiStreamingState.relevantFiles = relevantFiles;
 			}
+			this.provider.postMessageToWebview({
+				type: "updateStreamingRelevantFiles",
+				value: relevantFiles,
+			});
 
 			if (contextString.startsWith("[Error")) {
 				throw new Error(contextString);
@@ -483,6 +491,9 @@ export class PlanService {
 			};
 		} catch (genError: any) {
 			const isCancellation = genError.message === ERROR_OPERATION_CANCELLED;
+			if (this.provider.currentAiStreamingState) {
+				this.provider.currentAiStreamingState.isError = true;
+			}
 			finalResult = {
 				success: false,
 				error: isCancellation
