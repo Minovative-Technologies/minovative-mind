@@ -253,6 +253,31 @@ export async function* generateContentStream(
 }
 
 /**
+ * Counts the number of tokens in a given text using the Gemini model's `countTokens` method.
+ *
+ * @param text The text string for which to count tokens.
+ * @returns A Promise that resolves to the number of tokens, or 0 if the model is not initialized or an error occurs.
+ */
+export async function countGeminiTokens(text: string): Promise<number> {
+	if (!model) {
+		console.warn(
+			"Gemini: Model not initialized. Cannot count tokens. Returning 0."
+		);
+		return 0;
+	}
+
+	try {
+		const result = await model.countTokens({
+			contents: [{ parts: [{ text: text }], role: "user" }],
+		});
+		return result.totalTokens;
+	} catch (error) {
+		console.error("Gemini: Error counting tokens:", error);
+		return 0;
+	}
+}
+
+/**
  * Resets the client state.
  */
 export function resetClient() {

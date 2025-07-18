@@ -8,6 +8,7 @@ import {
 	ERROR_QUOTA_EXCEEDED,
 	ERROR_SERVICE_UNAVAILABLE,
 	generateContentStream,
+	countGeminiTokens, // Added countGeminiTokens import
 } from "../ai/gemini";
 import {
 	ParallelProcessor,
@@ -153,10 +154,9 @@ export class AIRequestService {
 						totalInputText = historyText + " " + prompt;
 					}
 
-					const inputTokens =
-						this.tokenTrackingService.estimateTokens(totalInputText);
-					const outputTokens =
-						this.tokenTrackingService.estimateTokens(accumulatedResult);
+					// Replace estimateTokens with actual Gemini token count
+					const inputTokens = await countGeminiTokens(totalInputText);
+					const outputTokens = await countGeminiTokens(accumulatedResult);
 
 					this.tokenTrackingService.trackTokenUsage(
 						inputTokens,
