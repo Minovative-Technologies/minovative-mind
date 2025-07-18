@@ -855,7 +855,6 @@ export class PlanService {
 							plan.steps!,
 							rootUri,
 							planContext,
-							progress,
 							combinedToken
 						);
 
@@ -975,8 +974,7 @@ export class PlanService {
 		steps: PlanStep[],
 		rootUri: vscode.Uri,
 		context: sidebarTypes.PlanGenerationContext, // Renamed to context for clarity
-		progress: vscode.Progress<{ message?: string; increment?: number }>,
-		combinedToken: vscode.CancellationToken
+		combinedToken: vscode.CancellationToken // Removed `progress` from this function signature as it's not used directly here
 	): Promise<Set<vscode.Uri>> {
 		const affectedFileUris = new Set<vscode.Uri>();
 		const totalSteps = steps.length;
@@ -1005,8 +1003,9 @@ export class PlanService {
 				const stepMessageTitle = `Step ${index + 1}/${totalSteps}: ${
 					step.description || step.action.replace(/_/g, " ")
 				}`;
-				progress.report({
-					message: `${stepMessageTitle}${
+				this.provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: `${stepMessageTitle}${
 						currentTransientAttempt > 0
 							? ` (Auto-retry ${currentTransientAttempt}/${this.MAX_TRANSIENT_STEP_RETRIES})`
 							: ""
@@ -1103,10 +1102,6 @@ export class PlanService {
 								combinedToken
 							)
 						).content;
-						modifiedContent = modifiedContent
-							.replace(/^```[a-z]*\n?/, "")
-							.replace(/\n?```$/, "")
-							.trim();
 
 						// Enhanced change detection to avoid cosmetic-only modifications
 						const hasSubstantialChanges = this._hasSubstantialChanges(
@@ -1793,7 +1788,6 @@ export class PlanService {
 							parsedPlanResult.plan.steps!,
 							rootUri,
 							planContext,
-							progress,
 							token
 						);
 						// Add any new files or modifications from the sub-plan to the overall set for re-validation

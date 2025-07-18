@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { AIRequestService } from "../services/aiRequestService";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
+import { cleanCodeOutput } from "../utils/codeUtils"; // Added as per instructions
 
 /**
  * Real-time feedback interface for code generation
@@ -137,7 +138,7 @@ export class EnhancedCodeGenerator {
 			languageId
 		);
 
-		const content = await this.aiRequestService.generateWithRetry(
+		const rawContent = await this.aiRequestService.generateWithRetry(
 			enhancedPrompt,
 			modelName,
 			undefined,
@@ -147,7 +148,7 @@ export class EnhancedCodeGenerator {
 			token
 		);
 
-		return content;
+		return cleanCodeOutput(rawContent); // Modified as per instructions
 	}
 
 	/**
@@ -334,7 +335,7 @@ ${context.projectContext}
 
 Provide ONLY the corrected file content without any markdown formatting:`;
 
-		return await this.aiRequestService.generateWithRetry(
+		const rawContent = await this.aiRequestService.generateWithRetry(
 			refinementPrompt,
 			modelName,
 			undefined,
@@ -343,6 +344,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 			undefined,
 			token
 		);
+		return cleanCodeOutput(rawContent); // Modified as per instructions
 	}
 
 	/**
@@ -719,7 +721,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 			context
 		);
 
-		return await this.aiRequestService.generateWithRetry(
+		const rawContent = await this.aiRequestService.generateWithRetry(
 			enhancedPrompt,
 			modelName,
 			undefined,
@@ -728,6 +730,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 			undefined,
 			token
 		);
+		return cleanCodeOutput(rawContent); // Modified as per instructions
 	}
 
 	/**
@@ -912,7 +915,7 @@ ${context.projectContext}
 
 Provide ONLY the refined file content without any markdown formatting:`;
 
-		return await this.aiRequestService.generateWithRetry(
+		const rawContent = await this.aiRequestService.generateWithRetry(
 			refinementPrompt,
 			modelName,
 			undefined,
@@ -921,6 +924,7 @@ Provide ONLY the refined file content without any markdown formatting:`;
 			undefined,
 			token
 		);
+		return cleanCodeOutput(rawContent); // Modified as per instructions
 	}
 
 	/**
@@ -1472,7 +1476,7 @@ ${context.projectContext}
 
 Provide ONLY the corrected file content without any markdown formatting:`;
 
-		return await this.aiRequestService.generateWithRetry(
+		const rawContent = await this.aiRequestService.generateWithRetry(
 			alternativePrompt,
 			modelName,
 			undefined,
@@ -1481,6 +1485,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 			undefined,
 			token
 		);
+		return cleanCodeOutput(rawContent); // Modified as per instructions
 	}
 
 	/**
@@ -1515,7 +1520,7 @@ ${context.projectContext}
 
 Provide ONLY the corrected file content without any markdown formatting:`;
 
-		return await this.aiRequestService.generateWithRetry(
+		const rawContent = await this.aiRequestService.generateWithRetry(
 			syntaxPrompt,
 			modelName,
 			undefined,
@@ -1524,6 +1529,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 			undefined,
 			token
 		);
+		return cleanCodeOutput(rawContent); // Modified as per instructions
 	}
 
 	/**
@@ -1558,7 +1564,7 @@ ${context.projectContext}
 
 Provide ONLY the corrected file content without any markdown formatting:`;
 
-		return await this.aiRequestService.generateWithRetry(
+		const rawContent = await this.aiRequestService.generateWithRetry(
 			importPrompt,
 			modelName,
 			undefined,
@@ -1567,6 +1573,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 			undefined,
 			token
 		);
+		return cleanCodeOutput(rawContent); // Modified as per instructions
 	}
 
 	/**
@@ -1602,7 +1609,7 @@ ${context.projectContext}
 
 Provide ONLY the corrected file content without any markdown formatting:`;
 
-		return await this.aiRequestService.generateWithRetry(
+		const rawContent = await this.aiRequestService.generateWithRetry(
 			practicePrompt,
 			modelName,
 			undefined,
@@ -1611,6 +1618,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 			undefined,
 			token
 		);
+		return cleanCodeOutput(rawContent); // Modified as per instructions
 	}
 
 	/**
@@ -1646,7 +1654,7 @@ ${context.projectContext}
 
 Provide ONLY the corrected file content without any markdown formatting:`;
 
-		return await this.aiRequestService.generateWithRetry(
+		const rawContent = await this.aiRequestService.generateWithRetry(
 			securityPrompt,
 			modelName,
 			undefined,
@@ -1655,6 +1663,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 			undefined,
 			token
 		);
+		return cleanCodeOutput(rawContent); // Modified as per instructions
 	}
 
 	/**
