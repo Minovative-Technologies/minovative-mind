@@ -558,13 +558,6 @@ export class PlanService {
 			value: { text: `Generating detailed execution plan (JSON)...` },
 			isPlanStepUpdate: true,
 		});
-		this._postChatUpdateForPlanExecution({
-			type: "appendRealtimeModelMessage",
-			value: {
-				text: `User confirmed. Generating detailed execution plan (JSON)...`,
-			},
-			isPlanStepUpdate: true,
-		});
 
 		// Notify webview that structured plan generation is starting - this will hide the stop button
 		this.provider.postMessageToWebview({
