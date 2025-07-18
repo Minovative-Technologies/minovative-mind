@@ -1,14 +1,15 @@
-import {
-	appendMessage,
-	reenableAllMessageActionButtons,
-} from "../ui/chatMessageRenderer";
+import { appendMessage } from "../ui/chatMessageRenderer";
 import {
 	updateApiKeyStatus,
 	updateStatus,
 	updateEmptyChatPlaceholderVisibility,
 } from "../ui/statusManager";
 import { appState } from "../state/appState";
-import { AiStreamingState, PersistedPlanData } from "../../common/sidebarTypes";
+import {
+	AiStreamingState,
+	PersistedPlanData,
+	PlanExecutionFinishedMessage,
+} from "../../common/sidebarTypes";
 import {
 	stopTypingAnimation,
 	startTypingAnimation,
@@ -781,6 +782,28 @@ export function initializeMessageBusHandler(
 				setLoadingState(appState.isLoading, elements);
 				break;
 			}
+			case "planExecutionFinished": {
+				console.log(
+					"[Webview] Received planExecutionFinished message.",
+					message
+				);
+				const planFinishedMessage = message as PlanExecutionFinishedMessage;
+				appState.hasRevertibleChanges =
+					planFinishedMessage.hasRevertibleChanges;
+				setLoadingState(false, elements); // Refresh UI to update revert button visibility
+				break;
+			}
+			case "revertCompleted": {
+				console.log("[Webview] Received revertCompleted message.");
+				appState.hasRevertibleChanges = false; // Hide the revert button
+				// REMOVED: setLoadingState(false, elements); // Re-enable inputs
+				postMessageToExtension({
+					type: "statusUpdate",
+					value: "Revert completed.",
+					isError: false,
+				});
+				break;
+			}
 			case "chatCleared": {
 				if (elements.chatContainer) {
 					elements.chatContainer.innerHTML = "";
@@ -791,6 +814,7 @@ export function initializeMessageBusHandler(
 				appState.pendingPlanData = null; // Ensure this is reset too
 				appState.pendingCommitReviewData = null; // Ensure this is reset too
 				appState.isPlanExecutionInProgress = false; // Reset plan execution state
+				appState.hasRevertibleChanges = false; // Reset revert changes state
 				updateEmptyChatPlaceholderVisibility(elements);
 				break;
 			}

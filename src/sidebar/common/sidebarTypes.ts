@@ -78,6 +78,10 @@ export interface GeneratePlanPromptFromAIMessage {
 	payload: { messageIndex: number };
 }
 
+export interface RevertRequestMessage {
+	type: "revertRequest";
+}
+
 /**
  * Union type for all messages sent from the Webview to the Extension.
  * Each member should have a distinct 'type' literal property.
@@ -86,7 +90,8 @@ export type WebviewToExtensionMessages =
 	| ToggleRelevantFilesDisplayMessage
 	| UpdateRelevantFilesDisplayMessage
 	| EditChatMessage
-	| GeneratePlanPromptFromAIMessage;
+	| GeneratePlanPromptFromAIMessage
+	| RevertRequestMessage; // Added RevertRequestMessage
 
 // New message type: Extension to Webview for pre-filling chat input
 export interface PrefillChatInput {
@@ -166,6 +171,15 @@ interface PlanExecutionEndedMessage {
 	type: "planExecutionEnded";
 }
 
+export interface PlanExecutionFinishedMessage {
+	type: "planExecutionFinished";
+	hasRevertibleChanges: boolean;
+}
+
+export interface RevertCompletedMessage {
+	type: "revertCompleted";
+}
+
 /**
  * Message type for dynamically updating the relevant files list
  * for a currently streaming AI response in the webview.
@@ -194,7 +208,9 @@ export type ExtensionToWebviewMessages =
 	| PlanExecutionStartedMessage
 	| PlanExecutionEndedMessage
 	| PrefillChatInput
-	| UpdateStreamingRelevantFilesMessage;
+	| UpdateStreamingRelevantFilesMessage
+	| PlanExecutionFinishedMessage // Added PlanExecutionFinishedMessage
+	| RevertCompletedMessage; // Added RevertCompletedMessage
 
 export interface PlanGenerationContext {
 	type: "chat" | "editor";

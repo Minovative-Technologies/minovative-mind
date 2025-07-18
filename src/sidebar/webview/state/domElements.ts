@@ -93,6 +93,9 @@ export function initializeDomElements(): RequiredDomElements | null {
 	const emptyChatPlaceholder = document.getElementById(
 		"empty-chat-placeholder"
 	) as HTMLDivElement;
+	const revertChangesButton = document.getElementById(
+		"revert-changes-button"
+	) as HTMLButtonElement;
 
 	const chatInputControlsWrapper = document.getElementById(
 		"chat-input-controls-wrapper"
@@ -148,6 +151,7 @@ export function initializeDomElements(): RequiredDomElements | null {
 		confirmCommitButton,
 		cancelCommitButton,
 		emptyChatPlaceholder,
+		revertChangesButton,
 
 		chatInputControlsWrapper,
 		commandSuggestionsContainer,

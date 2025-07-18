@@ -157,6 +157,13 @@ function setLoadingState(
 		elements.cancelGenerationButton.style.display = "none";
 	}
 
+	// Control visibility of the revert changes button
+	if (!loading && appState.hasRevertibleChanges) {
+		elements.revertChangesButton.style.display = "inline-flex";
+	} else {
+		elements.revertChangesButton.style.display = "none";
+	}
+
 	// Hide confirmation/error/review UIs if a new loading operation starts
 	if (loading && planConfirmationVisible) {
 		elements.planConfirmationContainer.style.display = "none";
@@ -238,6 +245,7 @@ function initializeWebview(): void {
 	elements.commitReviewContainer.style.display = "none";
 	elements.confirmCommitButton.disabled = true;
 	elements.commandSuggestionsContainer.style.display = "none";
+	elements.revertChangesButton.style.display = "none"; // Set initial display for revertChangesButton
 
 	// Initialize all event listeners for buttons, inputs, and the message bus
 	initializeInputEventListeners(elements, setLoadingState);

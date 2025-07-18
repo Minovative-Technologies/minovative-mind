@@ -11,6 +11,7 @@ import {
 	faChevronLeft,
 	faChevronRight,
 	faPlus,
+	faUndo,
 } from "@fortawesome/free-solid-svg-icons";
 import { setIconForButton } from "../utils/iconHelpers";
 import { postMessageToExtension } from "../utils/vscodeApi";
@@ -53,6 +54,7 @@ export function initializeButtonEventListeners(
 
 		cancelGenerationButton,
 		chatContainer,
+		revertChangesButton,
 	} = elements;
 
 	// Initial icon setup for buttons
@@ -69,6 +71,7 @@ export function initializeButtonEventListeners(
 	setIconForButton(cancelGenerationButton, faStop);
 	setIconForButton(confirmCommitButton, faCheck);
 	setIconForButton(cancelCommitButton, faTimes);
+	setIconForButton(revertChangesButton, faUndo);
 	// `createPlanConfirmationUI` is called during webview initialization (e.g., in main.ts)
 	// and it handles its own button icon setup internally.
 
@@ -142,6 +145,14 @@ export function initializeButtonEventListeners(
 		console.log("Load Chat button clicked.");
 		postMessageToExtension({ type: "loadChatRequest" });
 		updateStatus(elements, "Requesting chat load..."); // Pass elements
+	});
+
+	// Revert Changes Button
+	revertChangesButton.addEventListener("click", () => {
+		console.log("Revert Changes button clicked.");
+		postMessageToExtension({ type: "revertRequest" });
+		setLoadingState(true, elements);
+		updateStatus(elements, "Requesting revert of last changes...");
 	});
 
 	// Retry Generation Button (for plan parse error)

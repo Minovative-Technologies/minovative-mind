@@ -1,8 +1,17 @@
 // src/workflow/ProjectChangeLogger.ts
 import { FileChangeEntry } from "../types/workflow";
+import { v4 as uuidv4 } from "uuid";
+
+export interface RevertibleChangeSet {
+	id: string;
+	timestamp: number;
+	changes: FileChangeEntry[];
+	summary?: string; // Optional plan summary
+}
 
 export class ProjectChangeLogger {
 	private changes: FileChangeEntry[] = [];
+	private _completedPlanChangeSets: RevertibleChangeSet[] = [];
 
 	/**
 	 * Logs a new file change entry.
@@ -31,5 +40,81 @@ export class ProjectChangeLogger {
 	clear(): void {
 		this.changes = [];
 		console.log("[ProjectChangeLogger] Change log cleared.");
+	}
+
+	/**
+	 * Creates a new RevertibleChangeSet from the current `this.changes` array,
+	 * archives it in `_completedPlanChangeSets`, and then clears `this.changes`.
+	 * This is typically called after a plan has been successfully completed
+	 * and its changes need to be archived.
+	 * @param planSummary An optional summary/description of the plan that was completed.
+	 */
+	saveChangesAsLastCompletedPlan(planSummary?: string): void {
+		if (this.changes.length > 0) {
+			const changeSet: RevertibleChangeSet = {
+				id: uuidv4(),
+				timestamp: Date.now(),
+				changes: [...this.changes], // Shallow copy of changes
+				summary: planSummary,
+			};
+			this._completedPlanChangeSets.push(changeSet);
+			console.log(
+				`[ProjectChangeLogger] Saved ${this.changes.length} changes as completed plan set with ID: ${changeSet.id}`
+			);
+		} else {
+			console.log(
+				"[ProjectChangeLogger] No changes to save as completed plan."
+			);
+		}
+		this.changes = []; // Clear current changes regardless of whether anything was saved
+	}
+
+	/**
+	 * Returns a shallow copy of the changes from the last completed plan set.
+	 * @returns An array of FileChangeEntry objects from the last completed plan, or null if none.
+	 */
+	getLastCompletedPlanChanges(): FileChangeEntry[] | null {
+		if (this._completedPlanChangeSets.length === 0) {
+			return null;
+		}
+		// Return a shallow copy of the changes from the last set
+		return [
+			...this._completedPlanChangeSets[this._completedPlanChangeSets.length - 1]
+				.changes,
+		];
+	}
+
+	/**
+	 * Returns a shallow copy of the entire stack of completed plan change sets.
+	 * @returns An array of RevertibleChangeSet objects.
+	 */
+	public getCompletedPlanChangeSets(): RevertibleChangeSet[] {
+		return [...this._completedPlanChangeSets]; // Return a shallow copy of the stack
+	}
+
+	/**
+	 * Removes and returns the last completed plan change set from the stack.
+	 * @returns The last RevertibleChangeSet object, or undefined if the stack is empty.
+	 */
+	public popLastCompletedPlanChanges(): RevertibleChangeSet | undefined {
+		const poppedSet = this._completedPlanChangeSets.pop();
+		if (poppedSet) {
+			console.log(
+				`[ProjectChangeLogger] Popped completed plan set with ID: ${poppedSet.id}`
+			);
+		} else {
+			console.log("[ProjectChangeLogger] No completed plan sets to pop.");
+		}
+		return poppedSet;
+	}
+
+	/**
+	 * Clears all completed plan change sets from the stack.
+	 */
+	public clearAllCompletedPlanChanges(): void {
+		this._completedPlanChangeSets = [];
+		console.log(
+			"[ProjectChangeLogger] All completed plan change sets cleared."
+		);
 	}
 }

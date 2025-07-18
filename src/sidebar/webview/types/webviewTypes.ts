@@ -42,6 +42,7 @@ export interface RequiredDomElements {
 	tokenUsageContainer: HTMLDivElement;
 	tokenUsageDisplay: HTMLDivElement;
 	tokenUsageToggle: HTMLButtonElement;
+	revertChangesButton: HTMLButtonElement;
 }
 
 export interface PendingPlanData {
@@ -87,6 +88,7 @@ export interface WebviewAppState {
 	isCommitActionInProgress: boolean;
 	isCancellationInProgress: boolean;
 	isPlanExecutionInProgress: boolean; // New property to track plan execution state
+	hasRevertibleChanges: boolean;
 	totalKeys: number;
 	isTokenUsageVisible: boolean; // New property to track token usage visibility
 	nextMessageIndex: number;

@@ -255,6 +255,8 @@ export async function executePlanStep(
 				removedLines: removedLines,
 				timestamp: Date.now(),
 				diffContent: formattedDiff,
+				originalContent: originalContent, // Added
+				newContent: newContent, // Added
 			};
 			changeLogger.logChange(newChangeEntry);
 
@@ -369,6 +371,8 @@ export async function executePlanStep(
 						removedLines: removedLines,
 						timestamp: Date.now(),
 						diffContent: formattedDiff, // Added diffContent
+						originalContent: existingContent, // Added
+						newContent: newContent, // Added
 					};
 					changeLogger.logChange(updateChangeEntry);
 
@@ -427,6 +431,8 @@ export async function executePlanStep(
 						removedLines: [], // Explicitly set to [] for creation
 						timestamp: Date.now(),
 						diffContent: createFormattedDiff, // Added diffContent
+						originalContent: "", // Added
+						newContent: newFileContent, // Added
 					};
 
 					changeLogger.logChange(createChangeEntry);

@@ -25,7 +25,7 @@ import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
 import { GitConflictResolutionService } from "./gitConflictResolutionService";
 import { applyAITextEdits } from "../utils/codeUtils"; // For applying precise text edits
-import { DiagnosticService } from "../utils/diagnosticUtils"; // Import DiagnosticService
+import { DiagnosticService } from "../utils/diagnosticUtils"; // Correct DiagnosticService import
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter"; // Import formatUserFacingErrorMessage
 import { showErrorNotification } from "../utils/notificationUtils"; // Add this import
 import { UrlContextService } from "./urlContextService";
@@ -905,7 +905,13 @@ export class PlanService {
 			this.provider.activeChildProcesses.forEach((cp) => cp.kill());
 			this.provider.activeChildProcesses = [];
 
-			const outcome = this.provider.currentExecutionOutcome ?? "failed";
+			let outcome: sidebarTypes.ExecutionOutcome;
+			if (this.provider.currentExecutionOutcome === undefined) {
+				outcome = "failed";
+			} else {
+				outcome = this.provider
+					.currentExecutionOutcome as sidebarTypes.ExecutionOutcome;
+			}
 			// Use the provider's notification method to avoid duplicate notifications
 			await this.provider.showPlanCompletionNotification(
 				plan.planDescription || "Unnamed Plan",
@@ -923,8 +929,45 @@ export class PlanService {
 				type: "planExecutionEnded",
 			});
 
-			// this.provider.postMessageToWebview({ type: "reenableInput" }); //
-			await this.provider.endUserOperation(outcome); // REPLACED with centralized call
+			// Centralized call to end user operation and re-enable inputs
+			await this.provider.endUserOperation(outcome);
+
+			if (outcome === "success") {
+				// Modify the call to this.provider.changeLogger.saveChangesAsLastCompletedPlan() to pass a plan summary
+				// This assumes the method's signature will be updated in ProjectChangeLogger.ts to accept a string argument.
+				this.provider.changeLogger.saveChangesAsLastCompletedPlan(
+					plan.planDescription || "AI Plan Execution"
+				);
+
+				// Then, modify the persistence call
+				// The following line replaces `await this.provider.updatePersistedLastPlanChanges(...)`
+				// This assumes updatePersistedCompletedPlanChangeSets exists on SidebarProvider
+				// and getCompletedPlanChangeSets exists on ProjectChangeLogger.
+				await this.provider.updatePersistedCompletedPlanChangeSets(
+					this.provider.changeLogger.getCompletedPlanChangeSets()
+				);
+
+				// Modify hasRevertibleChanges property within the planExecutionFinished message
+				// This assumes completedPlanChangeSets exists as a public property on SidebarProvider.
+				this.provider.postMessageToWebview({
+					type: "planExecutionFinished",
+					hasRevertibleChanges:
+						this.provider.completedPlanChangeSets.length > 0,
+				});
+			} else {
+				// outcome is "cancelled" or "failed"
+				// Ensure this.provider.changeLogger.clear(); remains
+				this.provider.changeLogger.clear();
+				await this.provider.updatePersistedCompletedPlanChangeSets(null);
+
+				// Modify hasRevertibleChanges property within the planExecutionFinished message
+				// This assumes completedPlanChangeSets exists as a public property on SidebarProvider.
+				this.provider.postMessageToWebview({
+					type: "planExecutionFinished",
+					hasRevertibleChanges:
+						this.provider.completedPlanChangeSets.length > 0,
+				});
+			}
 		}
 	}
 
@@ -1027,12 +1070,15 @@ export class PlanService {
 							},
 							diffContent: formattedDiff,
 						});
+						// MODIFICATION: Pass originalContent (empty) and newContent to logChange
 						changeLogger.logChange({
 							filePath: step.path,
 							changeType: "created",
 							summary,
 							diffContent: formattedDiff,
 							timestamp: Date.now(),
+							originalContent: "", // Added as per instructions 1.b
+							newContent: content ?? "", // Added as per instructions 1.b
 						});
 					} else if (isModifyFileStep(step)) {
 						const fileUri = vscode.Uri.joinPath(rootUri, step.path);
@@ -1119,12 +1165,15 @@ export class PlanService {
 								},
 								diffContent: formattedDiff,
 							});
+							// MODIFICATION: Pass existingContent and modifiedContent to logChange
 							changeLogger.logChange({
 								filePath: step.path,
 								changeType: "modified",
 								summary,
 								diffContent: formattedDiff,
 								timestamp: Date.now(),
+								originalContent: existingContent, // Added as per instructions 1.a
+								newContent: modifiedContent, // Added as per instructions 1.a
 							});
 						} else {
 							// If content is identical or only cosmetic changes, still count as success, but no diff/change log
@@ -1621,7 +1670,8 @@ export class PlanService {
 				const diagnosticsForFile =
 					DiagnosticService.getDiagnosticsForUri(fileUri);
 				const errorsForFile = diagnosticsForFile.filter(
-					(d) => d.severity === vscode.DiagnosticSeverity.Error
+					(d: vscode.Diagnostic) =>
+						d.severity === vscode.DiagnosticSeverity.Error
 				);
 
 				if (errorsForFile.length > 0) {

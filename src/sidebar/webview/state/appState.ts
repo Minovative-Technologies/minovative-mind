@@ -34,6 +34,7 @@ export const appState: WebviewAppState = {
 	isCommitActionInProgress: false, // Added as per instruction
 	isCancellationInProgress: false, // Initialize the new flag
 	isPlanExecutionInProgress: false, // Initialize plan execution tracking
+	hasRevertibleChanges: false,
 	totalKeys: 0,
 	isTokenUsageVisible: false, // Initialize token usage visibility
 	nextMessageIndex: 0,

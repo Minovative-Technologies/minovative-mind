@@ -8,6 +8,8 @@ import { ChatHistoryManager } from "./managers/chatHistoryManager";
 
 // Other Imports
 import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
+import { RevertService } from "../services/RevertService"; // Add this import
+import { FileChangeEntry, RevertibleChangeSet } from "../types/workflow"; // Ensure FileChangeEntry and RevertibleChangeSet are imported
 import { getHtmlForWebview } from "./ui/webviewHelper";
 import * as sidebarConstants from "./common/sidebarConstants";
 import * as sidebarTypes from "./common/sidebarTypes";
@@ -60,6 +62,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public isEditingMessageActive: boolean = false;
 	private _persistedPendingPlanData: sidebarTypes.PersistedPlanData | null =
 		null; // New private property
+	// MODIFICATION: Change lastCompletedPlanChanges to completedPlanChangeSets
+	public completedPlanChangeSets: RevertibleChangeSet[] = []; // New public property
 
 	// --- MANAGERS & SERVICES ---
 	public apiKeyManager: ApiKeyManager;
@@ -76,6 +80,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public gitConflictResolutionService: GitConflictResolutionService; // Service instance
 	public tokenTrackingService: TokenTrackingService;
 	private enhancedCodeGenerator: EnhancedCodeGenerator; // NEW: Declare property
+	public revertService: RevertService; // New public property
 
 	constructor(
 		extensionUri: vscode.Uri,
@@ -94,6 +99,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"minovativeMind.persistedPendingPlanData",
 				null
 			);
+
+		// MODIFICATION: Load completedPlanChangeSets from workspace state
+		this.completedPlanChangeSets = context.workspaceState.get<
+			RevertibleChangeSet[]
+		>("minovativeMind.completedPlanChangeSets", []);
 
 		// Instantiate managers
 		this.apiKeyManager = new ApiKeyManager(
@@ -150,6 +160,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.aiRequestService,
 			this.workspaceRootUri || vscode.Uri.file("/"),
 			{ enableRealTimeFeedback: true, maxFeedbackIterations: 5 }
+		);
+
+		// Instantiate RevertService
+		this.revertService = new RevertService(
+			this.workspaceRootUri || vscode.Uri.file("/"),
+			this.changeLogger
 		);
 
 		// These services need access to the provider's state and other services.
@@ -236,6 +252,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 	}
 
+	// MODIFICATION: Rename and refactor updatePersistedLastPlanChanges
+	public async updatePersistedCompletedPlanChangeSets(
+		data: RevertibleChangeSet[] | null
+	): Promise<void> {
+		this.completedPlanChangeSets = data || [];
+		await this.workspaceState.update(
+			"minovativeMind.completedPlanChangeSets", // New key
+			this.completedPlanChangeSets // Persist the entire stack
+		);
+		console.log(
+			`[SidebarProvider] Persisted completed plan change sets updated to: ${
+				this.completedPlanChangeSets.length > 0 ? "present" : "null"
+			}`
+		);
+	}
+
 	public async handleWebviewReady(): Promise<void> {
 		this.apiKeyManager.loadKeysFromStorage();
 		this.settingsManager.updateWebviewModelList();
@@ -315,6 +347,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.postMessageToWebview({ type: "reenableInput" });
 			this.clearActiveOperationState();
 		}
+
+		// MODIFICATION: After restoring other states, send initial revertible changes status
+		const hasRevertibleChanges = this.completedPlanChangeSets.length > 0;
+		this.postMessageToWebview({
+			type: "planExecutionFinished",
+			hasRevertibleChanges: hasRevertibleChanges,
+		});
 	}
 
 	// --- OPERATION & STATE HELPERS ---
@@ -473,6 +512,122 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	public async cancelPendingPlan(): Promise<void> {
 		await this.triggerUniversalCancellation();
+	}
+
+	public async revertLastPlanChanges(): Promise<void> {
+		// MODIFICATION: Update initial check
+		if (this.completedPlanChangeSets.length === 0) {
+			vscode.window.showWarningMessage(
+				"No completed workflow changes to revert."
+			);
+			return;
+		}
+
+		// MODIFICATION: Retrieve the most recent plan's changes by popping from the stack
+		const mostRecentChangeSet = this.completedPlanChangeSets.pop();
+		if (!mostRecentChangeSet) {
+			// This case should ideally not be reached due to the initial length check.
+			vscode.window.showWarningMessage(
+				"No completed workflow changes to revert."
+			);
+			return;
+		}
+
+		// MODIFICATION: Clarify confirmation message
+		const confirmation = await vscode.window.showWarningMessage(
+			"Are you sure you want to revert the changes from the most recent workflow?",
+			{ modal: true },
+			"Yes, Revert Changes",
+			"No, Cancel"
+		);
+
+		if (confirmation === "Yes, Revert Changes") {
+			try {
+				this.postMessageToWebview({ type: "updateLoadingState", value: true });
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Reverting most recent workflow changes...",
+				});
+				console.log(
+					"[SidebarProvider] Starting revert of most recent workflow changes..."
+				);
+
+				// MODIFICATION: Revert changes from the popped RevertibleChangeSet
+				await this.revertService.revertChanges(mostRecentChangeSet.changes);
+
+				// MODIFICATION: Persist the updated stack (after pop)
+				await this.updatePersistedCompletedPlanChangeSets(
+					this.completedPlanChangeSets
+				);
+
+				// MODIFICATION: Remove redundant revertCompleted message
+				// this.postMessageToWebview({ type: "revertCompleted", value: true });
+
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Most recent workflow changes reverted successfully!",
+				});
+				showInfoNotification(
+					"Most recent workflow changes reverted successfully!"
+				);
+				console.log(
+					"[SidebarProvider] Most recent workflow changes reverted successfully."
+				);
+
+				// MODIFICATION: Send planExecutionFinished to update frontend button visibility
+				const stillHasRevertibleChanges =
+					this.completedPlanChangeSets.length > 0;
+				this.postMessageToWebview({
+					type: "planExecutionFinished",
+					hasRevertibleChanges: stillHasRevertibleChanges,
+				});
+			} catch (error: any) {
+				const errorMessage = `Failed to revert most recent workflow changes: ${
+					error.message || String(error)
+				}`;
+				showErrorNotification(
+					error,
+					"Failed to revert most recent workflow changes.",
+					"Revert Error: ",
+					this.workspaceRootUri
+				);
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: errorMessage,
+					isError: true,
+				});
+				console.error(
+					"[SidebarProvider] Error reverting most recent workflow changes:",
+					error
+				);
+				// If revert fails, push the change set back to the stack as it wasn't truly reverted
+				this.completedPlanChangeSets.push(mostRecentChangeSet);
+				await this.updatePersistedCompletedPlanChangeSets(
+					this.completedPlanChangeSets
+				);
+			} finally {
+				// The planExecutionFinished message in the try block updates visibility already.
+				// This finally block just ensures loading state is reset.
+			}
+		} else {
+			// If cancelled by user, push the change set back to the stack
+			this.completedPlanChangeSets.push(mostRecentChangeSet);
+			await this.updatePersistedCompletedPlanChangeSets(
+				this.completedPlanChangeSets
+			);
+
+			vscode.window.showInformationMessage(
+				"Revert operation cancelled by user."
+			);
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "Revert operation cancelled.",
+			});
+		}
+
+		// ADDED at the very end of the function
+		this.postMessageToWebview({ type: "updateLoadingState", value: false });
+		this.postMessageToWebview({ type: "reenableInput" });
 	}
 
 	public async showPlanCompletionNotification(

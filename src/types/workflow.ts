@@ -7,4 +7,13 @@ export interface FileChangeEntry {
 	addedLines?: string[];
 	removedLines?: string[];
 	diffContent?: string; // Formatted diff content string (lines prefixed with '+', '-', or ' ')
+	originalContent?: string; // Content before modification/deletion
+	newContent?: string; // Content after modification/creation
+}
+
+export interface RevertibleChangeSet {
+	id: string; // Unique ID for the change set (e.g., UUID or hash)
+	timestamp: number; // Unix timestamp when the changes were completed/archived
+	changes: FileChangeEntry[]; // Array of individual file changes within this set
+	planSummary?: string; // Optional summary of the plan that generated these changes
 }

@@ -38,6 +38,7 @@ export async function handleWebviewMessage(
 		"getCurrentTokenEstimates", // Allow current token estimates during background operations
 		"openSidebar", // Allow opening sidebar during background operations
 		"generatePlanPromptFromAIMessage", // CRITICAL CHANGE: Allow this new message type during background operations
+		"revertRequest",
 	];
 
 	if (
@@ -138,6 +139,11 @@ export async function handleWebviewMessage(
 				await provider.endUserOperation("failed"); // Signal failure and re-enable inputs
 				return; // Add return to prevent further execution in this branch
 			}
+			break;
+
+		case "revertRequest":
+			console.log("[MessageHandler] Received revertRequest.");
+			await provider.revertLastPlanChanges();
 			break;
 
 		case "chatMessage": {

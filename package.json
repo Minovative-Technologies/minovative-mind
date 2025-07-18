@@ -113,6 +113,7 @@
 		"@types/bluebird": "^3.5.42",
 		"@types/diff-match-patch": "*",
 		"@types/glob": "^8.1.0",
+		"@types/uuid": "^10.0.0",
 		"@types/vscode": "^1.80.0",
 		"@typescript-eslint/eslint-plugin": "^7.7.1",
 		"@typescript-eslint/parser": "^7.7.1",
@@ -137,6 +138,7 @@
 		"highlight.js": "^11.11.1",
 		"ignore": "^7.0.4",
 		"markdown-it": "^14.1.0",
+		"uuid": "^11.1.0",
 		"vscode-uri": "^3.1.0"
 	}
 }
