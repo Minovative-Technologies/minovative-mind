@@ -683,11 +683,12 @@ export function initializeMessageBusHandler(
 						message.value.text,
 						`ai-message ${message.value.isError ? "error-message" : ""}`.trim(),
 						true,
-						message.value.diffContent,
-						message.value.relevantFiles,
+						message.diffContent,
+						message.relevantFiles,
 						undefined, // messageIndexForHistory
 						undefined, // isRelevantFilesExpandedForHistory
-						false // isPlanExplanationForRender
+						false, // isPlanExplanationForRender
+						message.isPlanStepUpdate // Pass the new flag here
 					);
 					setLoadingState(appState.isLoading, elements);
 				} else {
@@ -852,7 +853,8 @@ export function initializeMessageBusHandler(
 								msg.relevantFiles,
 								index,
 								msg.isRelevantFilesExpanded,
-								msg.isPlanExplanation // isPlanExplanationForRender
+								msg.isPlanExplanation, // isPlanExplanationForRender
+								msg.isPlanStepUpdate // Pass the new flag here
 							);
 						}
 					});

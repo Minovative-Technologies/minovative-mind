@@ -52,7 +52,9 @@ export class ChatHistoryManager {
 							(item.isRelevantFilesExpanded === undefined ||
 								typeof item.isRelevantFilesExpanded === "boolean") &&
 							(item.isPlanExplanation === undefined ||
-								typeof item.isPlanExplanation === "boolean")
+								typeof item.isPlanExplanation === "boolean") &&
+							(item.isPlanStepUpdate === undefined ||
+								typeof item.isPlanStepUpdate === "boolean")
 					)
 				) {
 					// Map loaded history to apply defensive defaults where needed
@@ -61,6 +63,7 @@ export class ChatHistoryManager {
 						relevantFiles: entry.relevantFiles || [], // Defensive default for relevantFiles as per instruction
 						// isRelevantFilesExpanded does not need a defensive default per instruction and type
 						isPlanExplanation: entry.isPlanExplanation,
+						isPlanStepUpdate: entry.isPlanStepUpdate,
 					}));
 					this.restoreChatHistoryToWebview();
 					console.log("Chat history loaded from workspace state.");
@@ -101,7 +104,8 @@ export class ChatHistoryManager {
 		diffContent?: string,
 		relevantFiles?: string[],
 		isRelevantFilesExpanded?: boolean,
-		isPlanExplanation: boolean = false
+		isPlanExplanation: boolean = false,
+		isPlanStepUpdate: boolean = false
 	): void {
 		// Existing logic for managing chat history and preventing duplicates
 		if (this._chatHistory.length > 0) {
@@ -146,6 +150,7 @@ export class ChatHistoryManager {
 						: false,
 			}),
 			isPlanExplanation: isPlanExplanation,
+			isPlanStepUpdate: isPlanStepUpdate,
 		};
 
 		this._chatHistory.push(newEntry);
@@ -290,6 +295,9 @@ export class ChatHistoryManager {
 						...(entry.isPlanExplanation && {
 							isPlanExplanation: entry.isPlanExplanation,
 						}),
+						...(entry.isPlanStepUpdate && {
+							isPlanStepUpdate: entry.isPlanStepUpdate,
+						}),
 					})
 				);
 				const contentString = JSON.stringify(saveableHistory, null, 2);
@@ -349,7 +357,9 @@ export class ChatHistoryManager {
 								(Array.isArray(item.relevantFiles) &&
 									item.relevantFiles.every((f) => typeof f === "string"))) &&
 							(item.isPlanExplanation === undefined ||
-								typeof item.isPlanExplanation === "boolean")
+								typeof item.isPlanExplanation === "boolean") &&
+							(item.isPlanStepUpdate === undefined ||
+								typeof item.isPlanStepUpdate === "boolean")
 					)
 				) {
 					this._chatHistory = loadedData.map(
@@ -364,6 +374,7 @@ export class ChatHistoryManager {
 									: false
 								: undefined,
 							isPlanExplanation: item.isPlanExplanation,
+							isPlanStepUpdate: item.isPlanStepUpdate,
 						})
 					);
 					this.restoreChatHistoryToWebview();
@@ -406,6 +417,7 @@ export class ChatHistoryManager {
 					isRelevantFilesExpanded: entry.isRelevantFilesExpanded,
 				}),
 			isPlanExplanation: entry.isPlanExplanation,
+			isPlanStepUpdate: entry.isPlanStepUpdate,
 		}));
 		this.postMessageToWebview({
 			type: "restoreHistory",

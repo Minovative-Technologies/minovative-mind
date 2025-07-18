@@ -227,9 +227,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		});
 	}
 
-	public postMessageToWebview(message: Record<string, unknown>): void {
+	public postMessageToWebview(
+		message: sidebarTypes.ExtensionToWebviewMessages
+	): void {
 		if (this._view && this._view.visible) {
 			this._view.webview.postMessage(message).then(undefined, (err) => {
+				// Accessing 'type' property directly from 'message' is safe now because of the explicit type.
 				console.warn("Failed to post message to webview:", message.type, err);
 			});
 		}
@@ -279,7 +282,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			const planDataForRestore = {
 				originalRequest: planCtx.originalUserRequest,
 				originalInstruction: planCtx.originalInstruction,
-				type: "textualPlanPending",
+				type: planCtx.type, // Changed from "textualPlanPending" to planCtx.type
 				relevantFiles: planCtx.relevantFiles,
 				textualPlanExplanation: planCtx.textualPlanExplanation, // Crucially, pass the actual plan text
 			};

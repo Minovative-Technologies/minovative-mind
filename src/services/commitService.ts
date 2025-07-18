@@ -36,7 +36,7 @@ export class CommitService {
 
 			this.provider.postMessageToWebview({
 				type: "aiResponseStart",
-				value: { modelName },
+				value: { modelName, relevantFiles: [] },
 			});
 			this.provider.chatHistoryManager.addHistoryEntry("user", "/commit");
 

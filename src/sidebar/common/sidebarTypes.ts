@@ -16,6 +16,7 @@ export interface HistoryEntry extends Omit<Content, "parts"> {
 	relevantFiles?: string[];
 	isRelevantFilesExpanded?: boolean;
 	isPlanExplanation?: boolean;
+	isPlanStepUpdate?: boolean;
 }
 
 export interface ToggleRelevantFilesDisplayMessage {
@@ -64,6 +65,7 @@ export interface ChatMessage {
 	diffContent?: string;
 	relevantFiles?: string[];
 	isPlanExplanation?: boolean;
+	isPlanStepUpdate?: boolean;
 }
 
 export interface EditChatMessage {
@@ -119,14 +121,14 @@ interface AiResponseChunkMessage {
 
 interface AiResponseEndMessage {
 	type: "aiResponseEnd";
-	value?: {
-		success: boolean;
-		error?: string;
-		isPlanResponse?: boolean;
-		requiresConfirmation?: boolean;
-		planData?: any;
-	};
-	error?: string;
+	success: boolean;
+	error?: string | null;
+	isPlanResponse?: boolean;
+	requiresConfirmation?: boolean;
+	planData?: any;
+	isCommitReviewPending?: boolean;
+	commitReviewData?: { commitMessage: string; stagedFiles: string[] } | null;
+	statusMessageOverride?: string;
 }
 
 interface UpdateLoadingStateMessage {
@@ -151,6 +153,14 @@ interface UpdateModelListMessage {
 interface UpdateOptimizationSettingsMessage {
 	type: "updateOptimizationSettings";
 	value: any;
+}
+
+export interface AppendRealtimeModelMessage {
+	type: "appendRealtimeModelMessage";
+	value: { text: string; isError?: boolean };
+	diffContent?: string;
+	relevantFiles?: string[];
+	isPlanStepUpdate?: boolean; // New property
 }
 
 interface RestorePendingPlanConfirmationMessage {
@@ -181,12 +191,69 @@ export interface RevertCompletedMessage {
 }
 
 /**
+ * Message type for updating token statistics.
+ */
+export interface UpdateTokenStatisticsMessage {
+	type: "updateTokenStatistics";
+	value: {
+		totalInput: string;
+		totalOutput: string;
+		total: string;
+		requestCount: string;
+		averageInput: string;
+		averageOutput: string;
+	};
+}
+
+/**
  * Message type for dynamically updating the relevant files list
  * for a currently streaming AI response in the webview.
  */
 export interface UpdateStreamingRelevantFilesMessage {
 	type: "updateStreamingRelevantFiles";
 	value: string[]; // Array of relative file paths (e.g., "src/foo/bar.ts")
+}
+
+// NEW: Add RestoreStreamingProgressMessage
+export interface RestoreStreamingProgressMessage {
+	type: "restoreStreamingProgress";
+	value: AiStreamingState | null;
+}
+
+// NEW: Add RestorePendingCommitReviewMessage
+export interface RestorePendingCommitReviewMessage {
+	type: "restorePendingCommitReview";
+	value: { commitMessage: string; stagedFiles: string[] } | null;
+}
+
+// NEW: Define GitProcessUpdateMessage
+export interface GitProcessUpdateMessage {
+	type: "gitProcessUpdate";
+	value: {
+		type: "stdout" | "stderr" | "status";
+		data: string;
+		isError?: boolean;
+	};
+}
+
+// NEW: Define UpdateCurrentTokenEstimatesMessage
+export interface UpdateCurrentTokenEstimatesMessage {
+	type: "updateCurrentTokenEstimates";
+	value: {
+		inputTokens: string;
+		outputTokens: string;
+		totalTokens: string;
+	};
+}
+
+// NEW: Define RequestClearChatConfirmationMessage
+export interface RequestClearChatConfirmationMessage {
+	type: "requestClearChatConfirmation";
+}
+
+// NEW: Define ChatClearedMessage
+export interface ChatClearedMessage {
+	type: "chatCleared";
 }
 
 /**
@@ -198,6 +265,9 @@ export type ExtensionToWebviewMessages =
 	| AiResponseStartMessage
 	| AiResponseChunkMessage
 	| AiResponseEndMessage
+	| ChatClearedMessage // NEW
+	| GitProcessUpdateMessage // NEW
+	| RequestClearChatConfirmationMessage // NEW
 	| UpdateLoadingStateMessage
 	| ReenableInputMessage
 	| ApiKeyStatusMessage
@@ -210,7 +280,12 @@ export type ExtensionToWebviewMessages =
 	| PrefillChatInput
 	| UpdateStreamingRelevantFilesMessage
 	| PlanExecutionFinishedMessage // Added PlanExecutionFinishedMessage
-	| RevertCompletedMessage; // Added RevertCompletedMessage
+	| RevertCompletedMessage
+	| AppendRealtimeModelMessage
+	| UpdateTokenStatisticsMessage // Added UpdateTokenStatisticsMessage
+	| UpdateCurrentTokenEstimatesMessage // NEW
+	| RestoreStreamingProgressMessage // NEW: Added RestoreStreamingProgressMessage
+	| RestorePendingCommitReviewMessage; // NEW: Added RestorePendingCommitReviewMessage
 
 export interface PlanGenerationContext {
 	type: "chat" | "editor";

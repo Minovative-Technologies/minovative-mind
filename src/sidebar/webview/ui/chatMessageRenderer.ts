@@ -39,7 +39,8 @@ export function appendMessage(
 	relevantFiles?: string[],
 	messageIndexForHistory?: number,
 	isRelevantFilesExpandedForHistory?: boolean,
-	isPlanExplanationForRender: boolean = false
+	isPlanExplanationForRender: boolean = false,
+	isPlanStepUpdateForRender: boolean = false // New parameter
 ): void {
 	// elements.chatContainer is guaranteed to be present by the RequiredDomElements type,
 	// so no null check is needed for chatContainer itself.
@@ -67,6 +68,9 @@ export function appendMessage(
 	messageElement.classList.add("message");
 	if (className) {
 		className.split(" ").forEach((cls) => messageElement.classList.add(cls));
+	}
+	if (isPlanStepUpdateForRender) {
+		messageElement.classList.add("plan-step-message");
 	}
 	if (isHistoryMessage) {
 		messageElement.dataset.isHistory = "true";
@@ -358,18 +362,26 @@ export function appendMessage(
 				}
 			} else if (className.includes("ai-message")) {
 				const shouldDisableAiStreamingButtons =
-					sender === "Model" &&
-					text === "" &&
-					!className.includes("error-message");
+					(sender === "Model" &&
+						text === "" &&
+						!className.includes("error-message")) ||
+					isPlanStepUpdateForRender; // ADDED: Also disable if it's a plan step update
+
 				if (copyButton) {
 					copyButton.disabled = shouldDisableAiStreamingButtons;
 				}
 				if (deleteButton) {
 					deleteButton.disabled = shouldDisableAiStreamingButtons;
 				}
-				// Disable new button during streaming
+				if (editButton) {
+					editButton.disabled = shouldDisableAiStreamingButtons;
+				}
 				if (generatePlanButton) {
 					generatePlanButton.disabled = shouldDisableAiStreamingButtons;
+					// Additionally, hide it if it's a plan step update
+					if (isPlanStepUpdateForRender) {
+						generatePlanButton.style.display = "none";
+					}
 				}
 			}
 
@@ -605,26 +617,42 @@ export function appendMessage(
 				textElement.innerHTML = renderedHtml;
 				// Store the original markdown text for copy functionality
 				textElement.dataset.originalMarkdown = text;
-				// Ensure buttons are enabled for completed messages
-				if (copyButton) {
-					copyButton.disabled = false;
-				}
-				if (deleteButton) {
-					deleteButton.disabled = false;
-				}
-				if (editButton) {
-					editButton.disabled = false;
-				}
-				// Enable new button for completed messages
-				if (
-					generatePlanButton &&
-					!isPlanExplanationForRender &&
-					!appState.isPlanExecutionInProgress
-				) {
-					generatePlanButton.disabled = false;
-					generatePlanButton.style.display = ""; // Ensure it's visible if condition met
-				} else if (generatePlanButton) {
-					generatePlanButton.style.display = "none"; // Ensure it's hidden otherwise
+				// Enable buttons for completed messages IF NOT a plan step update
+				if (!isPlanStepUpdateForRender) {
+					if (copyButton) {
+						copyButton.disabled = false;
+					}
+					if (deleteButton) {
+						deleteButton.disabled = false;
+					}
+					if (editButton) {
+						editButton.disabled = false;
+					}
+					if (
+						generatePlanButton &&
+						!isPlanExplanationForRender &&
+						!appState.isPlanExecutionInProgress
+					) {
+						generatePlanButton.disabled = false;
+						generatePlanButton.style.display = "";
+					} else if (generatePlanButton) {
+						generatePlanButton.style.display = "none";
+					}
+				} else {
+					// For plan step update messages, explicitly hide/disable buttons if they were somehow created.
+					// The CSS will also handle this, but defensive JS is good.
+					if (copyButton) {
+						copyButton.style.display = "none";
+					}
+					if (deleteButton) {
+						deleteButton.style.display = "none";
+					}
+					if (editButton) {
+						editButton.style.display = "none";
+					}
+					if (generatePlanButton) {
+						generatePlanButton.style.display = "none";
+					}
 				}
 			}
 		} else {
@@ -661,6 +689,10 @@ export function reenableAllMessageActionButtons(
 	);
 
 	allHistoryMessages.forEach((messageElement) => {
+		if (messageElement.classList.contains("plan-step-message")) {
+			// Do not re-enable buttons or change display for plan step update messages
+			return;
+		}
 		const copyButton = messageElement.querySelector(
 			".copy-button"
 		) as HTMLButtonElement | null;

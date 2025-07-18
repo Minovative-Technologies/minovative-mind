@@ -2464,3 +2464,29 @@ ul#staged-files-list li.empty-state {
 .diff-hunk-container:hover {
 	border-color: var(--vscode-focusBorder, #007acc);
 }
+
+.plan-step-message {
+	background-color: var(
+		--vscode-editorGroup-emptyBackground
+	); /* A subtle background */
+	color: var(--vscode-descriptionForeground); /* Soft text color */
+	font-style: italic;
+	text-align: center;
+	align-self: center; /* Center horizontally in flex container */
+	max-width: 80%; /* Make it narrower */
+	margin-left: auto; /* For centering with auto margins */
+	margin-right: auto; /* For centering with auto margins */
+	padding: 8px 15px; /* Adjust padding */
+	border: none;
+	box-shadow: none;
+	word-wrap: normal; /* Prevent aggressive word wrapping if not needed */
+}
+
+/* Hide action buttons for plan step messages */
+.plan-step-message .message-actions,
+.plan-step-message .copy-button,
+.plan-step-message .delete-button,
+.plan-step-message .edit-button,
+.plan-step-message .generate-plan-button {
+	display: none !important; /* Use !important to ensure override */
+}

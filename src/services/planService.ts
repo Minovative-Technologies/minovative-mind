@@ -85,6 +85,7 @@ export class PlanService {
 		if (!rootFolder) {
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
+				success: false, // Explicitly added as per instruction
 				error:
 					"Action blocked: No VS Code workspace folder is currently open. Please open a project folder to proceed.",
 			});
@@ -232,57 +233,47 @@ export class PlanService {
 				success &&
 				!!this.provider.pendingPlanGenerationContext?.textualPlanExplanation;
 
-			// Construct the aiResponseEnd message, ensuring plan-related data is included if applicable
-			const aiResponseEndValue: Record<string, any> = {
-				success: success,
-				// Only provide error if 'success' is false or it's a cancellation
-				error: success
-					? undefined // No error if successful
-					: isCancellation
-					? "Plan generation cancelled."
-					: formatUserFacingErrorMessage(
-							finalErrorForDisplay
-								? new Error(finalErrorForDisplay)
-								: new Error("Unknown error"), // Pass an actual Error instance
-							"An unexpected error occurred during initial plan generation.",
-							"Error: ",
-							rootFolder.uri
-					  ),
-			};
-
-			if (
-				isConfirmablePlanResponse &&
-				this.provider.pendingPlanGenerationContext
-			) {
-				// Ensure plan-specific flags and data are sent for the webview to pick up
-				aiResponseEndValue.isPlanResponse = true;
-				aiResponseEndValue.requiresConfirmation = true;
-				// Structure planData for webview, similar to how restorePendingPlanConfirmation uses it
-				aiResponseEndValue.planData = {
-					type:
-						this.provider.pendingPlanGenerationContext.type === "chat"
-							? "textualPlanPending"
-							: "textualPlanPending", // Use "textualPlanPending" for webview message
-					originalRequest:
-						this.provider.pendingPlanGenerationContext.type === "chat"
-							? this.provider.pendingPlanGenerationContext.originalUserRequest
-							: undefined,
-					originalInstruction:
-						this.provider.pendingPlanGenerationContext.type === "editor"
-							? this.provider.pendingPlanGenerationContext.editorContext
-									?.instruction
-							: undefined,
-					relevantFiles:
-						this.provider.pendingPlanGenerationContext.relevantFiles,
-					textualPlanExplanation:
-						this.provider.pendingPlanGenerationContext.textualPlanExplanation,
-				};
-			}
-
-			// Post the message to webview
+			// Construct and post the aiResponseEnd message directly
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
-				...aiResponseEndValue,
+				success: success,
+				// Conditionally include error
+				...((!success || isCancellation) && {
+					error: isCancellation
+						? "Plan generation cancelled."
+						: formatUserFacingErrorMessage(
+								finalErrorForDisplay
+									? new Error(finalErrorForDisplay)
+									: new Error("Unknown error"), // Pass an actual Error instance
+								"An unexpected error occurred during initial plan generation.",
+								"Error: ",
+								rootFolder.uri
+						  ),
+				}),
+				// Conditionally include plan-related data if it's a confirmable plan response
+				...(isConfirmablePlanResponse &&
+					this.provider.pendingPlanGenerationContext && {
+						isPlanResponse: true,
+						requiresConfirmation: true,
+						planData: {
+							type: "textualPlanPending", // Use "textualPlanPending" for webview message
+							originalRequest:
+								this.provider.pendingPlanGenerationContext.type === "chat"
+									? this.provider.pendingPlanGenerationContext
+											.originalUserRequest
+									: undefined,
+							originalInstruction:
+								this.provider.pendingPlanGenerationContext.type === "editor"
+									? this.provider.pendingPlanGenerationContext.editorContext
+											?.instruction
+									: undefined,
+							relevantFiles:
+								this.provider.pendingPlanGenerationContext.relevantFiles,
+							textualPlanExplanation:
+								this.provider.pendingPlanGenerationContext
+									.textualPlanExplanation,
+						},
+					}),
 			});
 
 			this.provider.activeOperationCancellationTokenSource?.dispose();
@@ -516,45 +507,39 @@ export class PlanService {
 				finalResult.success &&
 				!!this.provider.pendingPlanGenerationContext?.textualPlanExplanation;
 
-			// Construct the aiResponseEnd message, ensuring plan-related data is included if applicable
-			const aiResponseEndValue: Record<string, any> = {
-				success: finalResult.success,
-				// Only provide error if 'success' is false or it's a cancellation
-				error: finalResult.success
-					? undefined // No error if successful
-					: finalResult.error,
-			};
-
-			if (
-				isConfirmablePlanResponse &&
-				this.provider.pendingPlanGenerationContext
-			) {
-				// Ensure plan-specific flags and data are sent for the webview to pick up
-				aiResponseEndValue.isPlanResponse = true;
-				aiResponseEndValue.requiresConfirmation = true;
-				// Structure planData for webview, similar to how restorePendingPlanConfirmation uses it
-				aiResponseEndValue.planData = {
-					type: "textualPlanPending", // Use "textualPlanPending" for webview message
-					originalRequest:
-						this.provider.pendingPlanGenerationContext.type === "chat"
-							? this.provider.pendingPlanGenerationContext.originalUserRequest
-							: undefined,
-					originalInstruction:
-						this.provider.pendingPlanGenerationContext.type === "editor"
-							? this.provider.pendingPlanGenerationContext.editorContext
-									?.instruction
-							: undefined,
-					relevantFiles:
-						this.provider.pendingPlanGenerationContext.relevantFiles,
-					textualPlanExplanation:
-						this.provider.pendingPlanGenerationContext.textualPlanExplanation,
-				};
-			}
-
-			// Post the message to webview
+			// Construct and post the aiResponseEnd message directly
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
-				...aiResponseEndValue,
+				success: finalResult.success,
+				// Conditionally include error
+				...(!finalResult.success &&
+					finalResult.error && {
+						error: finalResult.error,
+					}),
+				// Conditionally include plan-related data if it's a confirmable plan response
+				...(isConfirmablePlanResponse &&
+					this.provider.pendingPlanGenerationContext && {
+						isPlanResponse: true,
+						requiresConfirmation: true,
+						planData: {
+							type: "textualPlanPending", // Use "textualPlanPending" for webview message
+							originalRequest:
+								this.provider.pendingPlanGenerationContext.type === "chat"
+									? this.provider.pendingPlanGenerationContext
+											.originalUserRequest
+									: undefined,
+							originalInstruction:
+								this.provider.pendingPlanGenerationContext.type === "editor"
+									? this.provider.pendingPlanGenerationContext.editorContext
+											?.instruction
+									: undefined,
+							relevantFiles:
+								this.provider.pendingPlanGenerationContext.relevantFiles,
+							textualPlanExplanation:
+								this.provider.pendingPlanGenerationContext
+									.textualPlanExplanation,
+						},
+					}),
 			});
 			disposable?.dispose();
 			this.provider.activeOperationCancellationTokenSource?.dispose();
@@ -568,13 +553,18 @@ export class PlanService {
 	public async generateStructuredPlanAndExecute(
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {
-		this.provider.postMessageToWebview({
-			type: "statusUpdate",
-			value: `Generating detailed execution plan (JSON)...`,
+		this._postChatUpdateForPlanExecution({
+			type: "appendRealtimeModelMessage",
+			value: { text: `Generating detailed execution plan (JSON)...` },
+			isPlanStepUpdate: true,
 		});
 		this.provider.chatHistoryManager.addHistoryEntry(
 			"model",
-			"User confirmed. Generating detailed execution plan (JSON)..."
+			"User confirmed. Generating detailed execution plan (JSON)...",
+			undefined, // diffContent
+			undefined, // relevantFiles
+			undefined, // isRelevantFilesExpanded
+			true // isPlanExplanation (this is a special case of a model message)
 		);
 
 		// Notify webview that structured plan generation is starting - this will hide the stop button
@@ -638,10 +628,13 @@ export class PlanService {
 
 				// Inform the user about the attempt
 				if (retryAttempt > 0) {
-					this.provider.postMessageToWebview({
-						type: "statusUpdate",
-						value: `JSON plan parsing failed. Retrying (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES})...`,
-						isError: true,
+					this._postChatUpdateForPlanExecution({
+						type: "appendRealtimeModelMessage",
+						value: {
+							text: `JSON plan parsing failed. Retrying (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES})...`,
+							isError: true,
+						},
+						isPlanStepUpdate: true,
 					});
 					console.log(
 						`JSON plan parsing failed. Retrying (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES})...`
@@ -1003,13 +996,16 @@ export class PlanService {
 				const stepMessageTitle = `Step ${index + 1}/${totalSteps}: ${
 					step.description || step.action.replace(/_/g, " ")
 				}`;
-				this.provider.postMessageToWebview({
-					type: "statusUpdate",
-					value: `${stepMessageTitle}${
-						currentTransientAttempt > 0
-							? ` (Auto-retry ${currentTransientAttempt}/${this.MAX_TRANSIENT_STEP_RETRIES})`
-							: ""
-					}...`,
+				this._postChatUpdateForPlanExecution({
+					type: "appendRealtimeModelMessage",
+					value: {
+						text: `${stepMessageTitle}${
+							currentTransientAttempt > 0
+								? ` (Auto-retry ${currentTransientAttempt}/${this.MAX_TRANSIENT_STEP_RETRIES})`
+								: ""
+						}`,
+					},
+					isPlanStepUpdate: true,
 				});
 
 				try {
@@ -1068,6 +1064,7 @@ export class PlanService {
 								}\` (See diff below)`,
 							},
 							diffContent: formattedDiff,
+							isPlanStepUpdate: true,
 						});
 						// MODIFICATION: Pass originalContent (empty) and newContent to logChange
 						changeLogger.logChange({
@@ -1159,6 +1156,7 @@ export class PlanService {
 									}\` (See diff below)`,
 								},
 								diffContent: formattedDiff,
+								isPlanStepUpdate: true,
 							});
 							// MODIFICATION: Pass existingContent and modifiedContent to logChange
 							changeLogger.logChange({
@@ -1172,13 +1170,14 @@ export class PlanService {
 							});
 						} else {
 							// If content is identical or only cosmetic changes, still count as success, but no diff/change log
-							this.provider.postMessageToWebview({
+							this._postChatUpdateForPlanExecution({
 								type: "appendRealtimeModelMessage",
 								value: {
 									text: `Step ${index + 1} OK: File \`${
 										step.path
 									}\` content is already as desired, no substantial modifications needed.`,
 								},
+								isPlanStepUpdate: true,
 							});
 						}
 					} else if (isRunCommandStep(step)) {
@@ -1201,6 +1200,7 @@ export class PlanService {
 							this._postChatUpdateForPlanExecution({
 								type: "appendRealtimeModelMessage",
 								value: { text: `Step ${index + 1} SKIPPED by user.` },
+								isPlanStepUpdate: true,
 							});
 						}
 					}
@@ -1243,6 +1243,7 @@ export class PlanService {
 								} FAILED (transient, auto-retrying): ${errorMsg}`,
 								isError: true,
 							},
+							isPlanStepUpdate: true,
 						});
 						console.warn(
 							`Minovative Mind: Step ${
@@ -1266,6 +1267,7 @@ export class PlanService {
 								} FAILED: ${errorMsg}. Requires user intervention.`,
 								isError: true,
 							},
+							isPlanStepUpdate: true,
 						});
 						const userChoice = await showErrorNotification(
 							error, // Pass the original error for better formatting context
@@ -1290,6 +1292,7 @@ export class PlanService {
 							this._postChatUpdateForPlanExecution({
 								type: "appendRealtimeModelMessage",
 								value: { text: `Step ${index + 1} SKIPPED by user.` },
+								isPlanStepUpdate: true,
 							});
 							console.log(
 								`Minovative Mind: User chose to skip Step ${index + 1}.`
@@ -1436,13 +1439,13 @@ export class PlanService {
 			const planDataForRestore =
 				planContext.type === "chat"
 					? {
-							type: "textualPlanPending",
+							type: planContext.type,
 							originalRequest: planContext.originalUserRequest,
 							relevantFiles: planContext.relevantFiles,
 							textualPlanExplanation: planContext.textualPlanExplanation,
 					  }
 					: {
-							type: "textualPlanPending",
+							type: planContext.type,
 							originalInstruction: planContext.editorContext!.instruction,
 							relevantFiles: planContext.relevantFiles,
 							textualPlanExplanation: planContext.textualPlanExplanation,
@@ -1466,17 +1469,19 @@ export class PlanService {
 		}
 	}
 
-	private _postChatUpdateForPlanExecution(message: {
-		type: string;
-		value: { text: string; isError?: boolean };
-		diffContent?: string;
-	}) {
+	private _postChatUpdateForPlanExecution(
+		message: sidebarTypes.AppendRealtimeModelMessage
+	): void {
 		this.provider.chatHistoryManager.addHistoryEntry(
 			"model",
 			message.value.text,
-			message.diffContent
+			message.diffContent,
+			undefined, // relevantFiles
+			undefined, // isRelevantFilesExpanded
+			message.isPlanStepUpdate // isPlanExplanation
 		);
 		// This call is intentional to ensure the UI is fully consistent with the updated chat history after each step/status update during plan execution.
+		this.provider.postMessageToWebview(message);
 		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 	}
 
@@ -1636,6 +1641,7 @@ export class PlanService {
 				value: {
 					text: `No files were modified or created by the plan. Skipping final validation.`,
 				},
+				isPlanStepUpdate: true,
 			});
 			return true;
 		}
@@ -1649,6 +1655,7 @@ export class PlanService {
 				this._postChatUpdateForPlanExecution({
 					type: "appendRealtimeModelMessage",
 					value: { text: `Final code validation cancelled.` },
+					isPlanStepUpdate: true,
 				});
 				return false;
 			}
@@ -1700,6 +1707,7 @@ export class PlanService {
 					value: {
 						text: `All modifications validated successfully for: \`${fileNames}\`. No errors found.`,
 					},
+					isPlanStepUpdate: true,
 				});
 				return true; // Success! All diagnostics resolved.
 			} else {
@@ -1712,6 +1720,7 @@ export class PlanService {
 						text: `Final validation failed for files: \`${fileNames}\` (found ${allErrors.length} errors). Attempting AI self-correction (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
 						isError: true,
 					},
+					isPlanStepUpdate: true,
 				});
 
 				try {
@@ -1779,6 +1788,7 @@ export class PlanService {
 							value: {
 								text: `Applying final correction plan for diagnostics.`,
 							},
+							isPlanStepUpdate: true,
 						});
 
 						// Execute the generated correction plan.
@@ -1817,6 +1827,7 @@ export class PlanService {
 								),
 								isError: true,
 							},
+							isPlanStepUpdate: true,
 						});
 					}
 				} catch (correctionError: any) {
@@ -1831,6 +1842,7 @@ export class PlanService {
 							),
 							isError: true,
 						},
+						isPlanStepUpdate: true,
 					});
 				}
 			}
@@ -1844,6 +1856,7 @@ export class PlanService {
 				text: `Overall validation failed after ${this.MAX_CORRECTION_PLAN_ATTEMPTS} attempts to auto-correct errors. Please review the affected files manually.`,
 				isError: true,
 			},
+			isPlanStepUpdate: true,
 		});
 		return false; // All attempts exhausted, still errors
 	}
