@@ -558,14 +558,13 @@ export class PlanService {
 			value: { text: `Generating detailed execution plan (JSON)...` },
 			isPlanStepUpdate: true,
 		});
-		this.provider.chatHistoryManager.addHistoryEntry(
-			"model",
-			"User confirmed. Generating detailed execution plan (JSON)...",
-			undefined, // diffContent
-			undefined, // relevantFiles
-			undefined, // isRelevantFilesExpanded
-			true // isPlanExplanation (this is a special case of a model message)
-		);
+		this._postChatUpdateForPlanExecution({
+			type: "appendRealtimeModelMessage",
+			value: {
+				text: `User confirmed. Generating detailed execution plan (JSON)...`,
+			},
+			isPlanStepUpdate: true,
+		});
 
 		// Notify webview that structured plan generation is starting - this will hide the stop button
 		this.provider.postMessageToWebview({
