@@ -250,6 +250,11 @@ export function initializeButtonEventListeners(
 			".generate-plan-button"
 		) as HTMLButtonElement | null;
 
+		// New: Check for code copy button
+		const codeCopyButton = target.closest(
+			".code-copy-button"
+		) as HTMLButtonElement | null;
+
 		if (generatePlanButton && !generatePlanButton.disabled) {
 			const messageIndexStr = generatePlanButton.dataset.messageIndex;
 			if (messageIndexStr) {
@@ -292,6 +297,66 @@ export function initializeButtonEventListeners(
 				updateStatus(elements, `Opening file: ${filePath}`); // Pass elements
 			}
 			return;
+		}
+
+		// New: Handle .code-copy-button clicks before the general .copy-button
+		if (codeCopyButton && !codeCopyButton.disabled) {
+			event.preventDefault(); // Prevent default button action
+			codeCopyButton.disabled = true; // Add: Disable button immediately
+
+			const faCheckSvg = `<svg class="fa-icon" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="check" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L192 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"></path></svg>`;
+
+			const originalInnerHTML = codeCopyButton.innerHTML;
+			const originalTitle = codeCopyButton.title;
+
+			try {
+				const preElement = codeCopyButton.closest("pre.hljs");
+				if (preElement) {
+					const codeElement = preElement.querySelector("code");
+					if (codeElement) {
+						const codeToCopy = codeElement.textContent || "";
+						await navigator.clipboard.writeText(codeToCopy);
+						console.log("Code copied to clipboard.");
+
+						// Visual feedback
+						codeCopyButton.classList.add("copied");
+						codeCopyButton.innerHTML = `${faCheckSvg}Copied!`;
+						codeCopyButton.title = "Copied!";
+
+						setTimeout(() => {
+							codeCopyButton.innerHTML = originalInnerHTML;
+							codeCopyButton.title = originalTitle;
+							codeCopyButton.classList.remove("copied");
+							codeCopyButton.disabled = false; // Add: Re-enable button on success
+						}, 1500);
+					} else {
+						console.warn(
+							"Could not find code element within pre.hljs for copy button."
+						);
+						updateStatus(elements, "Error: Could not find code to copy.", true);
+						codeCopyButton.disabled = false; // Add: Re-enable button on error
+					}
+				} else {
+					console.warn(
+						"Could not find parent pre.hljs element for code copy button."
+					);
+					updateStatus(
+						elements,
+						"Error: Could not find code block for copy.",
+						true
+					);
+					codeCopyButton.disabled = false; // Add: Re-enable button on error
+				}
+			} catch (err) {
+				console.error("Failed to copy code: ", err);
+				let errorMessage = "Failed to copy code.";
+				if (err instanceof Error && err.message) {
+					errorMessage += ` Details: ${err.message}`;
+				}
+				updateStatus(elements, errorMessage, true);
+				codeCopyButton.disabled = false; // Add: Re-enable button on error
+			}
+			return; // Crucially return to prevent further event propagation.
 		}
 
 		if (copyButton && !copyButton.disabled) {

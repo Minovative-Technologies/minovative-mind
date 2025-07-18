@@ -770,6 +770,92 @@ div#commit-message-display pre,
 	position: relative; /* For potential pseudo-elements */
 }
 
+.message-text-content pre.has-copy-button {
+	position: relative; /* Essential for positioning the copy button */
+	/* Calculate padding-top based on the copy-button-size variable + some buffer */
+}
+
+.code-copy-button {
+	position: absolute;
+	bottom: 5px; /* Position slightly from the top edge of the pre block */
+	right: 5px; /* Position slightly from the right edge of the pre block */
+
+	/* Use common variables for size and padding to ensure consistency with other action buttons */
+	width: var(--copy-button-size); /* Default width (e.g., 24px) */
+	height: var(--copy-button-size); /* Default height (e.g., 24px) */
+	padding: var(--copy-button-padding); /* Internal padding (e.g., 4px) */
+
+	/* Match VS Code button styles for background, border, and color */
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-icon-foreground); /* Icon color */
+	border: 1px solid var(--vscode-button-border);
+	border-radius: var(--border-radius); /* Use global border radius */
+	cursor: pointer;
+
+	/* Flexbox for centering the icon/text */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px; /* Space between icon and text when "Copied!" is shown */
+
+	/* Hide by default and transition smoothly */
+	opacity: 0;
+	transition: opacity 0.2s ease, background-color 0.2s ease,
+		border-color 0.2s ease, transform 0.15s ease-out;
+	z-index: 10; /* Ensure it's above code */
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); /* Subtle shadow for depth */
+}
+
+/* Show button on hover of the pre block */
+.message-text-content pre.has-copy-button:hover .code-copy-button {
+	opacity: 1;
+}
+
+/* Hover state for the button itself */
+.code-copy-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder); /* Highlight border on hover */
+	color: var(
+		--vscode-button-hoverForeground
+	); /* Change icon/text color on hover for better contrast */
+}
+
+/* Active/Click state for the button */
+.code-copy-button:active {
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Return to base color for press effect */
+	border-color: var(--vscode-focusBorder);
+	transform: translateY(1px); /* Slight press effect */
+}
+
+/* Style for "Copied!" feedback state */
+.code-copy-button.copied {
+	background-color: var(
+		--vscode-statusBarItem-remoteBackground
+	); /* Greenish background */
+	color: var(
+		--vscode-statusBarItem-remoteForeground
+	); /* White/light text for contrast */
+	border-color: var(
+		--vscode-statusBarItem-remoteBackground
+	); /* Border matches background */
+	opacity: 1; /* Keep visible */
+	width: auto; /* Allow button to expand to fit "Copied!" text */
+	/* More horizontal padding when text is present */
+	padding: var(--copy-button-padding) calc(var(--copy-button-padding) * 1.5);
+	transform: scale(1.02); /* Subtle "pop" effect */
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); /* More prominent shadow for feedback */
+	font-size: 10px;
+}
+
+/* Ensure the icon within this button scales correctly */
+.code-copy-button .fa-icon {
+	width: 0.9em;
+	height: 0.9em;
+	vertical-align: middle;
+}
+
 /* Enhanced code block styling with subtle gradient background */
 div#commit-message-display pre::before,
 .message pre::before {
