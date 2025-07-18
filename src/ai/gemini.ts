@@ -262,3 +262,69 @@ export function resetClient() {
 	currentModelName = null;
 	console.log("Gemini: AI client state has been reset.");
 }
+
+/**
+ * Accurately counts tokens using the Gemini API's countTokens method.
+ * It ensures the Gemini model client is initialized for the given API key and model.
+ *
+ * @param apiKey The API key to use.
+ * @param modelName The name of the model (e.g., 'gemini-pro').
+ * @param text The main text content to count.
+ * @param history Optional conversation history as Gemini Content objects.
+ * @returns The total token count.
+ */
+export async function countGeminiTokens(
+	apiKey: string,
+	modelName: string,
+	text: string,
+	history?: Content[]
+): Promise<number> {
+	// Ensure the generative AI client and model are initialized for the given key and model name.
+	// This function internally sets the global 'model' variable if needed.
+	if (!initializeGenerativeAI(apiKey, modelName)) {
+		throw new Error(
+			`Gemini AI client not initialized for token counting. Please check API key and selected model (${modelName}).`
+		);
+	}
+	if (!model) {
+		// This check is a safeguard, as initializeGenerativeAI should ensure 'model' is set upon success.
+		throw new Error(
+			`Gemini model (${modelName}) is not available after initialization attempt for token counting.`
+		);
+	}
+
+	const parts = [{ text: text }];
+	// Combine history and current text into contents array for token counting
+	const requestContents: Content[] = [
+		...(history || []),
+		{ role: "user", parts },
+	];
+
+	try {
+		console.log(
+			`[Gemini Token Counter] Requesting token count for model '${modelName}'...`
+		);
+		const { totalTokens } = await model.countTokens({
+			contents: requestContents,
+		});
+		console.log(
+			`[Gemini Token Counter] Successfully counted ${totalTokens} tokens for model '${modelName}'.`
+		);
+		return totalTokens;
+	} catch (error) {
+		console.error(
+			`[Gemini Token Counter] Failed to count tokens for model '${modelName}':`,
+			error
+		);
+		// Re-throw specific errors if they indicate cancellation or other critical issues
+		if (error instanceof Error && error.message === ERROR_OPERATION_CANCELLED) {
+			throw error;
+		}
+		// Wrap and re-throw other errors for consistent handling in calling services
+		throw new Error(
+			`Failed to count tokens via Gemini API for model '${modelName}': ${
+				error instanceof Error ? error.message : String(error)
+			}`
+		);
+	}
+}

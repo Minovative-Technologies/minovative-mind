@@ -8,6 +8,7 @@ import {
 	ERROR_QUOTA_EXCEEDED,
 	ERROR_SERVICE_UNAVAILABLE,
 	generateContentStream,
+	countGeminiTokens, // <-- ADD THIS IMPORT
 } from "../ai/gemini";
 import {
 	ParallelProcessor,
@@ -61,6 +62,11 @@ export class AIRequestService {
 		const baseDelayMs = 60000;
 		const maxDelayMs = 10 * 60 * 1000;
 
+		// Initialize these variables at the top of generateWithRetry
+		let finalInputTokens = 0;
+		let finalOutputTokens = 0; // Initialize here for broader scope
+		let totalInputTextForContext = prompt; // Default to prompt, will include history below
+
 		if (!currentApiKey) {
 			if (apiKeyList.length > 0) {
 				this.apiKeyManager.setActiveKeyIndex(0);
@@ -76,6 +82,46 @@ export class AIRequestService {
 		}
 
 		let result = ""; // Stores the last error type or the successful generation result
+
+		const historyForGemini =
+			history && history.length > 0
+				? this.transformHistoryForGemini(history as HistoryEntry[])
+				: undefined;
+
+		// Construct totalInputTextForContext including history for consistent heuristic fallback and tracking context
+		if (history && history.length > 0) {
+			const historyText = history
+				.map((entry) => entry.parts.map((part) => part.text).join(" "))
+				.join(" ");
+			totalInputTextForContext = historyText + " " + prompt;
+		}
+
+		// NEW: Calculate input tokens accurately using Gemini API before starting the request
+		if (this.tokenTrackingService && currentApiKey) {
+			try {
+				finalInputTokens = await countGeminiTokens(
+					currentApiKey,
+					modelName,
+					prompt,
+					historyForGemini
+				);
+				console.log(
+					`[AIRequestService] Accurately counted ${finalInputTokens} input tokens for model ${modelName}.`
+				);
+			} catch (e) {
+				console.warn(
+					`[AIRequestService] Failed to get accurate input token count from Gemini API (${modelName}), falling back to estimate. Error:`,
+					e
+				);
+				// Fallback to heuristic if API call for counting fails
+				finalInputTokens = this.tokenTrackingService.estimateTokens(
+					totalInputTextForContext
+				);
+				console.log(
+					`[AIRequestService] Estimated ${finalInputTokens} input tokens using heuristic for model ${modelName}.`
+				);
+			}
+		}
 
 		while (true) {
 			if (token?.isCancellationRequested) {
@@ -100,16 +146,11 @@ export class AIRequestService {
 					throw new Error("API Key became invalid during retry loop.");
 				}
 
-				const historyForGemini =
-					history && history.length > 0
-						? this.transformHistoryForGemini(history as HistoryEntry[])
-						: undefined;
-
 				const stream = generateContentStream(
 					currentApiKey,
 					modelName,
 					prompt,
-					historyForGemini,
+					historyForGemini, // Ensure historyForGemini is passed to generateContentStream
 					generationConfig,
 					token,
 					isMergeOperation
@@ -123,15 +164,15 @@ export class AIRequestService {
 					accumulatedResult += chunk;
 					chunkCount++;
 
-					// Update token tracking in real-time every 10 chunks
+					// Maintain Real-time Streaming Token Estimates:
+					// This block remains, as it uses the heuristic for performance during streaming.
+					// Update: Use totalInputTextForContext for more accurate real-time input estimation.
 					if (this.tokenTrackingService && chunkCount % 10 === 0) {
 						const estimates =
 							this.tokenTrackingService.getRealTimeTokenEstimates(
-								prompt,
+								totalInputTextForContext, // <-- Use the prepared full input context here
 								accumulatedResult
 							);
-
-						// Send real-time update with current estimates
 						this.tokenTrackingService.triggerRealTimeUpdate();
 					}
 
@@ -139,33 +180,40 @@ export class AIRequestService {
 						await streamCallbacks.onChunk(chunk);
 					}
 				}
-				result = accumulatedResult; // Store successful result
+				result = accumulatedResult; // Store successful final result
 
-				// Track token usage with improved accuracy
-				if (this.tokenTrackingService) {
-					// Calculate input tokens including history and context
-					let totalInputText = prompt;
-					if (history && history.length > 0) {
-						// Add history to input calculation
-						const historyText = history
-							.map((entry) => entry.parts.map((part) => part.text).join(" "))
-							.join(" ");
-						totalInputText = historyText + " " + prompt;
+				// NEW: Accurately count and track output tokens after the response is complete
+				if (this.tokenTrackingService && currentApiKey) {
+					try {
+						finalOutputTokens = await countGeminiTokens(
+							currentApiKey,
+							modelName,
+							accumulatedResult
+						);
+						console.log(
+							`[AIRequestService] Accurately counted ${finalOutputTokens} output tokens for model ${modelName}.`
+						);
+					} catch (e) {
+						console.warn(
+							`[AIRequestService] Failed to get accurate output token count from Gemini API (${modelName}), falling back to estimate. Error:`,
+							e
+						);
+						finalOutputTokens =
+							this.tokenTrackingService.estimateTokens(accumulatedResult);
+						console.log(
+							`[AIRequestService] Estimated ${finalOutputTokens} output tokens using heuristic for model ${modelName}.`
+						);
 					}
 
-					const inputTokens =
-						this.tokenTrackingService.estimateTokens(totalInputText);
-					const outputTokens =
-						this.tokenTrackingService.estimateTokens(accumulatedResult);
-
+					// Update the trackTokenUsage call with the accurately counted tokens
 					this.tokenTrackingService.trackTokenUsage(
-						inputTokens,
-						outputTokens,
+						finalInputTokens, // Use the accurately counted input tokens
+						finalOutputTokens, // Use the accurately counted output tokens
 						requestType,
 						modelName,
-						totalInputText.length > 1000
-							? totalInputText.substring(0, 1000) + "..."
-							: totalInputText
+						totalInputTextForContext.length > 1000 // Use the full input context for tracking
+							? totalInputTextForContext.substring(0, 1000) + "..."
+							: totalInputTextForContext
 					);
 				}
 
