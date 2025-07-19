@@ -73,7 +73,7 @@ async function executeExplainAction(
 	\`\`\`${languageId}
 	${selectedText}
 	\`\`\`
-	--- End Code Selection to Analyze ---
+	--- End Code Selection ---
 
 	--- User Instruction ---
 	${userInstruction}
@@ -290,6 +290,10 @@ export async function activate(context: vscode.ExtensionContext) {
 						"Use AI to help resolve merge conflicts in the current file",
 				},
 				{
+					label: "chat",
+					description: "Send selected code to chat for general conversation",
+				},
+				{
 					label: "custom prompt",
 					description: "Enter a custom instruction for Minovative Mind",
 				},
@@ -361,6 +365,107 @@ export async function activate(context: vscode.ExtensionContext) {
 				selectedText = editor.document.getText(originalSelection);
 				effectiveRange = originalSelection;
 				// diagnosticsString calculation REMOVED from here per centralization instructions
+			}
+			// NEW ELSE IF BLOCK FOR "chat" COMMAND
+			else if (instruction === "chat") {
+				// Selection Validation: If originalSelection is empty, show warning and return
+				if (originalSelection.isEmpty) {
+					vscode.window.showWarningMessage(
+						"Please select the code you want to chat about."
+					);
+					return;
+				}
+
+				// Retrieve Context: Get selectedText from editor.document.getText(originalSelection),
+				// and ensure languageId and fileName are up-to-date from editor.document.
+				selectedText = editor.document.getText(originalSelection); // Assign to the `let` variable.
+				// languageId and fileName are already in scope.
+
+				// Model Availability: Get selectedModel from sidebarProvider.settingsManager.getSelectedModelName().
+				const selectedModel =
+					sidebarProvider.settingsManager.getSelectedModelName();
+				if (!selectedModel) {
+					vscode.window.showErrorMessage(
+						"Minovative Mind: No AI model selected. Please check the sidebar."
+					);
+					return;
+				}
+
+				// Insert custom prompt input and related logic here
+				const customChatPromptInput = await vscode.window.showInputBox({
+					prompt:
+						"Enter your message for the AI (selected code will be included):",
+					placeHolder:
+						"e.g., Explain this function, or refactor it for performance",
+					title: "Minovative Mind: Chat with Code",
+				});
+
+				if (customChatPromptInput === undefined) {
+					vscode.window.showInformationMessage("Chat operation cancelled.");
+					return;
+				}
+
+				let finalUserMessageContent: string;
+				const trimmedInput = customChatPromptInput.trim();
+				if (trimmedInput.length > 0) {
+					finalUserMessageContent = trimmedInput;
+				} else {
+					finalUserMessageContent =
+						"Can you help me understand this code, or can we discuss it further?";
+				}
+
+				// Construct Prompt: Create userChatPrompt using a template string
+				const userChatPrompt =
+					`${finalUserMessageContent}\n\n` +
+					`I've selected the following code snippet from file \`${fileName}\` (Language: ${languageId}). Please consider this code when responding to my message:\n\n\`\`\`${languageId}\n${selectedText}\n\`\`\``;
+
+				// Show Progress: Wrap the core logic in vscode.window.withProgress
+				await vscode.window.withProgress(
+					{
+						location: vscode.ProgressLocation.Notification,
+						title: `Minovative Mind: Sending code to chat (${selectedModel})...`,
+						cancellable: true,
+					},
+					async (progress, token) => {
+						// Inside Progress Callback:
+						progress.report({
+							increment: 20,
+							message: "Minovative Mind: Preparing chat...",
+						});
+						await vscode.commands.executeCommand(
+							"minovative-mind.activitybar.focus"
+						);
+						sidebarProvider.postMessageToWebview({
+							type: "updateLoadingState",
+							value: true,
+						});
+
+						try {
+							await sidebarProvider.chatService.handleRegularChat(
+								userChatPrompt
+							);
+							vscode.window.showInformationMessage(
+								"Code sent to chat. Check Minovative Mind sidebar for response."
+							);
+						} catch (error: any) {
+							const errorMessage = error.message || String(error);
+							if (errorMessage.includes("Operation cancelled by user.")) {
+								vscode.window.showInformationMessage(
+									"Minovative Mind: Chat generation cancelled."
+								);
+							} else {
+								vscode.window.showErrorMessage(
+									`Minovative Mind: Failed to send code to chat: ${errorMessage}`
+								);
+							}
+						} finally {
+							progress.report({ increment: 100, message: "Done." });
+							// The chatService already handles `aiResponseEnd` and input re-enabling.
+						}
+					}
+				);
+				// Critical Return: Add return; after the vscode.window.withProgress block for the 'Chat' command
+				return;
 			}
 
 			// Re-structure General Selection Logic:
