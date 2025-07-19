@@ -18,11 +18,17 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
   - **Editing Mechanism**: Your message will transform into an editable text area. Modify your text as needed.
   - **Submission/Cancellation**: Press `Enter` (without `Shift`) or click outside the text area to apply your changes. Press `Escape` to discard changes and revert the message to its original state.
   - **Impact on Chat History and AI Interaction**: Upon submission, your message in the chat history will be updated, and all subsequent AI responses following that message will be cleared. The AI will then re-process the conversation using your edited message as the new context, allowing for real-time refinement of interactions.
+- **Enhanced Chat History Management**: Introduces a robust confirmation dialog for clearing chat history. This critical operation now explicitly requires user consent and irrevocably deletes all associated revertible change data, ensuring greater control over your conversational data.
+- **Generate Plans from AI Messages**: A new 'Generate Plan' button is now available on AI chat messages. Clicking it extracts the AI's response content, converts it into a concise `/plan` prompt, and pre-fills it directly into your chat input, streamlining the creation of follow-up actions and project plans.
 
 ### Enhanced AI Reasoning (Thinking Capabilities)
 
 - **Advanced AI Configuration**: Leverages advanced AI configuration to enable deeper internal reasoning and problem-solving before generating responses, leading to more robust and accurate outcomes.
 - **Thinking Budget**: Configurable thinking budget for complex reasoning tasks.
+
+### Efficient AI Resource Management
+
+- **Accurate Token Counting**: Integrates precise token counting using the Gemini API to optimize API usage and enhance cost efficiency for all AI interactions.
 
 ### Contextual Code Explanation
 
