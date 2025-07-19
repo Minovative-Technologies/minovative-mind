@@ -5,7 +5,7 @@ import { EnhancedCodeGenerator } from "../../ai/enhancedCodeGeneration";
 // New imports for AI interaction and code utilities
 import { _performModification } from "./aiInteractionService";
 import { AIRequestService } from "../../services/aiRequestService"; // Added import
-import { applyAITextEdits } from "../../utils/codeUtils";
+import { applyAITextEdits, cleanCodeOutput } from "../../utils/codeUtils";
 import { ProjectChangeLogger } from "../../workflow/ProjectChangeLogger";
 import { generateFileChangeSummary } from "../../utils/diffingUtils";
 import { FileChangeEntry } from "../../types/workflow";
@@ -302,6 +302,14 @@ export async function executePlanStep(
 			}
 			targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file!);
 
+			let contentToProcess = step.content; // Introduce local mutable variable for content
+
+			// As per instructions, if 'content' exists, clean it.
+			// In this 'CreateFile' action, 'step.content' is guaranteed to exist due to the check above.
+			if (contentToProcess) {
+				contentToProcess = cleanCodeOutput(contentToProcess);
+			}
+
 			try {
 				await vscode.workspace.fs.stat(targetFileUri); // Attempt to stat the file
 
@@ -311,7 +319,7 @@ export async function executePlanStep(
 				);
 				const existingContent = existingContentBuffer.toString();
 
-				if (existingContent === step.content) {
+				if (existingContent === contentToProcess) {
 					progress.report({
 						message: `File ${path.basename(
 							targetFileUri.fsPath
@@ -345,7 +353,7 @@ export async function executePlanStep(
 
 					await applyAITextEdits(
 						editorToUpdate,
-						step.content,
+						contentToProcess, // Use cleaned content
 						"Update existing file content",
 						token
 					);
@@ -412,10 +420,10 @@ export async function executePlanStep(
 					});
 					await vscode.workspace.fs.writeFile(
 						targetFileUri,
-						Buffer.from(step.content)
+						Buffer.from(contentToProcess) // Use cleaned content
 					);
 
-					const newFileContent = step.content;
+					const newFileContent = contentToProcess; // Use cleaned content
 
 					const {
 						summary: createSummary,
