@@ -1092,35 +1092,40 @@ export class PlanService {
 							)
 						).content;
 
-						// Enhanced change detection to avoid cosmetic-only modifications
-						const hasSubstantialChanges = this._hasSubstantialChanges(
-							existingContent,
-							modifiedContent
+						// Ensure the file is open in an editor to apply precise edits
+						let document: vscode.TextDocument;
+						let editor: vscode.TextEditor;
+						try {
+							document = await vscode.workspace.openTextDocument(fileUri);
+							editor = await vscode.window.showTextDocument(document);
+						} catch (docError: any) {
+							// If the document cannot be opened or shown, treat as an error and stop execution for this step
+							throw new Error(
+								`Failed to open document ${fileUri.fsPath} for modification: ${docError.message}`
+							);
+						}
+
+						// Apply precise text edits using the utility function
+						await applyAITextEdits(
+							editor,
+							editor.document.getText(), // CRITICAL CHANGE: Use current live content from editor for diffing
+							modifiedContent,
+							combinedToken
 						);
 
-						if (hasSubstantialChanges) {
-							// Ensure the file is open in an editor to apply precise edits
-							let document: vscode.TextDocument;
-							let editor: vscode.TextEditor;
-							try {
-								document = await vscode.workspace.openTextDocument(fileUri);
-								editor = await vscode.window.showTextDocument(document);
-							} catch (docError: any) {
-								// If the document cannot be opened or shown, treat as an error and stop execution for this step
-								throw new Error(
-									`Failed to open document ${fileUri.fsPath} for modification: ${docError.message}`
-								);
-							}
+						const newContentAfterApply = editor.document.getText(); // ADDED
 
-							// Apply precise text edits using the utility function
-							await applyAITextEdits(
-								editor,
-								editor.document.getText(), // CRITICAL CHANGE: Use current live content from editor for diffing
-								modifiedContent,
-								combinedToken
+						const { formattedDiff, summary, addedLines, removedLines } =
+							await generateFileChangeSummary(
+								// MODIFIED to use newContentAfterApply
+								existingContent,
+								newContentAfterApply,
+								step.path
 							);
 
-							affectedFileUris.add(fileUri); // ADDED: Track affected file
+						// New if condition: check for actual line changes reported by diffing utility
+						if (addedLines.length > 0 || removedLines.length > 0) {
+							affectedFileUris.add(fileUri); // Moved from old 'if (hasSubstantialChanges)' block
 
 							// Post-application logic, now unconditional after applyAITextEdits
 							if (
@@ -1134,12 +1139,6 @@ export class PlanService {
 								);
 							}
 
-							const { formattedDiff, summary } =
-								await generateFileChangeSummary(
-									existingContent,
-									modifiedContent,
-									step.path
-								);
 							this._postChatUpdateForPlanExecution({
 								type: "appendRealtimeModelMessage",
 								value: {
@@ -1150,15 +1149,15 @@ export class PlanService {
 								diffContent: formattedDiff,
 								isPlanStepUpdate: true,
 							});
-							// MODIFICATION: Pass existingContent and modifiedContent to logChange
+							// MODIFICATION: Pass existingContent and newContentAfterApply to logChange
 							changeLogger.logChange({
 								filePath: step.path,
 								changeType: "modified",
 								summary,
 								diffContent: formattedDiff,
 								timestamp: Date.now(),
-								originalContent: existingContent, // Added as per instructions 1.a
-								newContent: modifiedContent, // Added as per instructions 1.a
+								originalContent: existingContent, // Set to existingContent
+								newContent: newContentAfterApply, // Set to newContentAfterApply
 							});
 						} else {
 							// If content is identical or only cosmetic changes, still count as success, but no diff/change log
@@ -1510,112 +1509,6 @@ export class PlanService {
 						.join("\n")}`
 			)
 			.join("\n---\n")}\n--- End Recent Chat History ---`;
-	}
-
-	/**
-	 * Determines if the changes between original and modified content are substantial
-	 * rather than just cosmetic (whitespace, formatting, etc.)
-	 */
-	private _hasSubstantialChanges(
-		originalContent: string,
-		modifiedContent: string
-	): boolean {
-		// If content is identical, no changes
-		if (originalContent === modifiedContent) {
-			return false;
-		}
-
-		// Normalize whitespace for comparison
-		const normalizeWhitespace = (content: string): string => {
-			return content
-				.replace(/\r\n/g, "\n") // Normalize line endings
-				.replace(/\r/g, "\n") // Normalize carriage returns
-				.replace(/\t/g, "    ") // Convert tabs to spaces
-				.replace(/[ \t]+/g, " ") // Collapse multiple spaces/tabs
-				.replace(/\n\s*\n/g, "\n") // Remove empty lines
-				.trim(); // Remove leading/trailing whitespace
-		};
-
-		const normalizedOriginal = normalizeWhitespace(originalContent);
-		const normalizedModified = normalizeWhitespace(modifiedContent);
-
-		// If normalized content is identical, changes are only cosmetic
-		if (normalizedOriginal === normalizedModified) {
-			return false;
-		}
-
-		// Check for substantial changes by analyzing the differences
-		const originalLines = originalContent.split("\n");
-		const modifiedLines = modifiedContent.split("\n");
-
-		// Count non-whitespace-only changes
-		let substantialChangeCount = 0;
-		const maxLines = Math.max(originalLines.length, modifiedLines.length);
-
-		for (let i = 0; i < maxLines; i++) {
-			const originalLine = originalLines[i] || "";
-			const modifiedLine = modifiedLines[i] || "";
-
-			// Skip if both lines are empty or whitespace-only
-			if (originalLine.trim() === "" && modifiedLine.trim() === "") {
-				continue;
-			}
-
-			// Check if the lines are substantially different (not just whitespace)
-			const originalTrimmed = originalLine.trim();
-			const modifiedTrimmed = modifiedLine.trim();
-
-			if (originalTrimmed !== modifiedTrimmed) {
-				// This is a substantial change
-				substantialChangeCount++;
-			}
-		}
-
-		// Consider changes substantial if there are meaningful differences
-		// Require at least 1 substantial change or if the normalized content differs significantly
-		const normalizedDiffRatio = this._calculateNormalizedDiffRatio(
-			normalizedOriginal,
-			normalizedModified
-		);
-
-		return substantialChangeCount > 0 || normalizedDiffRatio > 0.05; // 5% threshold for normalized differences
-	}
-
-	/**
-	 * Calculates the ratio of differences between normalized content
-	 */
-	private _calculateNormalizedDiffRatio(
-		normalizedOriginal: string,
-		normalizedModified: string
-	): number {
-		const maxLength = Math.max(
-			normalizedOriginal.length,
-			normalizedModified.length
-		);
-
-		if (maxLength === 0) {
-			return 0;
-		}
-
-		// Simple character-by-character comparison
-		let differences = 0;
-		const minLength = Math.min(
-			normalizedOriginal.length,
-			normalizedModified.length
-		);
-
-		for (let i = 0; i < minLength; i++) {
-			if (normalizedOriginal[i] !== normalizedModified[i]) {
-				differences++;
-			}
-		}
-
-		// Add differences for the longer string's extra characters
-		differences += Math.abs(
-			normalizedOriginal.length - normalizedModified.length
-		);
-
-		return differences / maxLength;
 	}
 
 	// Add new _performFinalValidationAndCorrection method
