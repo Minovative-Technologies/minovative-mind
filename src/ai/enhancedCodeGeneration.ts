@@ -166,11 +166,11 @@ export class EnhancedCodeGenerator {
 		return `You are an expert software engineer specializing in ${languageId} development. Your task is to generate production-ready, accurate code.
 
 **CRITICAL REQUIREMENTS:**
-1. **Accuracy First**: Ensure all imports, types, and dependencies are correctly specified
-2. **Style Consistency**: Follow the project's existing coding patterns and conventions
-3. **Error Prevention**: Generate code that compiles and runs without errors
-4. **Best Practices**: Use modern language features and industry standards
-5. **Security**: Implement secure coding practices appropriate for the language
+1. **Accuracy First**: Ensure all imports, types, and dependencies are *absolutely* correct and precisely specified. Verify module paths, type definitions, and API usage.
+2. **Style Consistency**: Adhere *rigorously* to the project's existing coding patterns, conventions, and formatting. Maintain current indentation, naming, and structural choices.
+3. **Error Prevention**: Generate code that will compile and run *without any errors or warnings*. Proactively identify and mitigate potential runtime issues, logical flaws, and edge cases.
+4. **Best Practices**: Employ modern language features, established design patterns, and industry best practices to ensure high-quality, efficient, and robust code.
+5. **Security**: Implement secure coding practices meticulously, identifying and addressing potential vulnerabilities relevant to the language and context.
 
 **File Analysis:**
 - Path: ${filePath}
@@ -325,10 +325,15 @@ ${content}
 \`\`\`
 
 **Refinement Instructions:**
-- Fix all identified issues
-- Maintain the original functionality
-- Ensure code compiles and runs correctly
-- Follow the project's coding standards
+- **Comprehensive Issue Resolution:** Fix *all* identified issues meticulously. Do not leave any unaddressed.
+- **Import Correctness:** Verify and correct all imports. Ensure all necessary imports are present, and eliminate any unused or redundant ones.
+- **Variable and Type Usage:** Confirm correct variable declarations, scope, and accurate TypeScript types (e.g., explicit types where beneficial, correct interface/type usage).
+- **Functionality Preservation:** Ensure the original functionality (or the intended new functionality) is perfectly maintained and correctly implemented.
+- **Compile and Runtime Errors:** Guarantee the code compiles without warnings or errors. Proactively identify and resolve potential runtime errors, logical flaws, edge cases (e.g., empty arrays, zero values), null/undefined checks, and off-by-one errors.
+- **Code Style and Formatting:** Strictly adhere to the project's established coding style and formatting conventions, including indentation, spacing, line breaks, bracket placement, and naming conventions (e.g., camelCase for variables, PascalCase for classes).
+- **Efficiency and Performance:** Review for code efficiency, optimizing loops, eliminating redundant computations, and choosing appropriate data structures/algorithms where applicable.
+- **Modularity and Maintainability:** Ensure the code is modular, with clear separation of concerns. It should be easy to read, understand, and maintain by other developers.
+- **Production Readiness:** The final code must be production-ready, robust, and clean.
 
 **Project Context:**
 ${context.projectContext}
@@ -748,11 +753,12 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 		return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions.
 
 **CRITICAL REQUIREMENTS:**
-1. **Preserve Existing Structure**: Maintain the current file organization and patterns
-2. **Accurate Modifications**: Make only the requested changes
-3. **Maintain Imports**: Keep all necessary imports and add new ones as needed
-4. **Consistent Style**: Follow the existing code style and conventions
-5. **Error Prevention**: Ensure the modified code compiles and runs correctly
+1. **Preserve Existing Structure**: Maintain the current file organization, structural patterns, and architectural design. Do not refactor unrelated code.
+2. **Surgical Precision & Minimal Changes**: Make *only* the exact, most targeted changes required by the 'Modification Instructions'. Do not introduce extraneous refactoring, reformatting, or stylistic changes (e.g., whitespace-only changes, reordering unrelated code blocks) unless explicitly requested and essential for the modification.
+3. **No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*. Do not output content that differs from the original *only* by whitespace, comments, or minor formatting.
+4. **Maintain Imports**: Maintain all *necessary* existing imports and add *only* strictly required new ones. Ensure import order is preserved unless a new logical grouping is absolutely essential for the requested modification.
+5. **Consistent Style**: Strictly follow the existing code style, formatting, and conventions of the current file.
+6. **Error Prevention**: Ensure the modified code compiles and runs *without any errors or warnings*. Proactively address potential runtime issues, logical flaws, and edge cases.
 
 **File Path:** ${filePath}
 **Language:** ${languageId}
@@ -786,7 +792,7 @@ ${context.relevantSnippets}
 - Ensure the code remains functional and error-free
 - Follow the project's coding conventions
 
-Provide ONLY the complete modified file content without any markdown formatting or explanations:`;
+Provide ONLY the complete modified file content without any markdown formatting or explanations. The response must start directly with the modified file content:`;
 	}
 
 	/**
@@ -905,10 +911,11 @@ ${modifiedContent}
 \`\`\`
 
 **Refinement Instructions:**
-- Make a more targeted modification
-- Preserve the existing structure and imports
-- Make only the necessary changes
-- Ensure the modification is reasonable and functional
+- **Extreme Targeted Fixes:** Apply only the most precise and surgical fixes to address the reported issues. Do not introduce any unrelated changes or refactoring.
+- **Preserve Unchanged Code:** Absolutely preserve all surrounding code that is not directly affected by the reported issues. Avoid reformatting or touching lines that do not require modification.
+- **Minimize Diff Size:** Strive to make the diff (changes between 'Original Content' and 'Current Modification') as small and focused as possible. Avoid unnecessary line additions or deletions.
+- **Strict Style Adherence:** Strictly adhere to the original file's existing code style, formatting (indentation, spacing, line breaks, bracket placement), and naming conventions.
+- **Functionality and Correctness:** Ensure the modified code maintains all original functionality and is fully functional and error-free after correction.
 
 **Project Context:**
 ${context.projectContext}

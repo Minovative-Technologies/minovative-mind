@@ -676,20 +676,15 @@ export function createCorrectionPlanPrompt(
 
         The previous attempt to generate/modify code resulted in the following diagnostics across potentially multiple files. Your plan MUST resolve ALL reported diagnostics. DO NOT revert or change files that were already successfully modified or created during the current workflow execution, unless explicitly required to fix a new diagnostic reported below.
 
-        **CRITICAL REQUIREMENTS TO AVOID COSMETIC CHANGES:**
-        1. **Preserve Exact Formatting**: Maintain the existing indentation, spacing, and line breaks exactly as they are
-        2. **No Whitespace-Only Changes**: Do not modify spaces, tabs, or line endings unless explicitly requested
-        3. **Preserve Comments**: Keep all existing comments in their exact positions and formatting
-        4. **Maintain Import Order**: Keep imports in their current order unless new imports are specifically needed
-        5. **Preserve Code Style**: Do not reformat code or change coding style unless explicitly requested
-        6. **Minimal Changes**: Make only the specific changes needed to fix the diagnostics, nothing more
-        7. **Preserve Empty Lines**: Keep existing empty lines and paragraph breaks exactly as they are
-
-        **SUBSTANTIAL CHANGES ONLY:**
-        - Only modify code that directly addresses the reported diagnostics
-        - Do not rewrite or reformat existing code that doesn't need changes
-        - Preserve all existing functionality unless explicitly asked to change it
-        - Maintain the exact same structure and organization
+        **CRITICAL DIRECTIVES:**
+        1.  **RESOLVE ALL DIAGNOSTICS**: Your plan MUST address and fix ALL "Error" diagnostics. Aim to resolve "Warning" and "Information" diagnostics where appropriate and without introducing new errors.
+        2.  **VERIFY RESOLUTION**: Each proposed change MUST directly resolve a specific diagnostic listed.
+        3.  **GENERATE A JSON PLAN ONLY**: Provide ONLY a valid JSON object strictly following the 'ExecutionPlan' schema. DO NOT include any markdown fences (e.g., \`\`\`json) or any additional explanatory text outside the JSON.
+        4.  **MINIMAL & PRECISE CHANGES**: Make only the absolute minimum and most targeted changes necessary to fix the diagnostics. Do NOT introduce new features, refactor existing correct code, or change existing correct functionality unless directly required to resolve an error.
+        5.  **MAINTAIN CONTEXT**: Preserve the original code style, structure, formatting (indentation, spacing, line breaks), comments, and project conventions (e.g., import order unless new logical grouping is strictly necessary).
+        6.  **PRODUCTION-READY CODE**: All generated or modified code within your plan steps MUST be robust, maintainable, efficient, and adhere to industry best practices, prioritizing modularity and readability.
+        7.  **VALID FILE OPERATIONS**: Only use 'modify_file', 'create_file', 'create_directory', or 'run_command' actions. Ensure 'path' for file operations is non-empty, a relative string to the workspace root, and safe (no '..' or absolute paths).
+        8.  **DETAIL IN DESCRIPTIONS**: Provide clear and concise 'description' for each plan step, explaining *why* that step is necessary and *how* it specifically addresses diagnostics.
 
         Your plan MUST resolve ALL reported diagnostics by generating a valid ExecutionPlan in JSON format. For create_file and modify_file steps, ensure the path field is **non-empty, a relative string** (e.g., 'src/utils/myFile.ts') to the workspace root, and accurately reflects the file being acted upon. This path is critical for successful execution.
 
