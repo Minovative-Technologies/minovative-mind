@@ -449,6 +449,19 @@ export function appendMessage(
 
 					// Inner event handlers to manage scope and allow removal
 					const handleKeydown = (e: KeyboardEvent) => {
+						// BEGIN Instruction 5
+						if (
+							!textarea.parentNode ||
+							!elements.chatContainer.contains(textarea)
+						) {
+							console.warn(
+								"[ChatMessageRenderer] Edit textarea no longer in DOM or not part of chat container during keydown. Aborting operation."
+							);
+							textarea.removeEventListener("keydown", handleKeydown);
+							textarea.removeEventListener("blur", handleBlur);
+							return;
+						}
+						// END Instruction 5
 						if (e.key === "Enter" && !e.shiftKey) {
 							// On Enter (without Shift)
 							e.preventDefault();
@@ -459,12 +472,16 @@ export function appendMessage(
 								const newTextSpan = document.createElement("span");
 								newTextSpan.classList.add("message-text-content");
 								newTextSpan.innerHTML = md.render(newContent);
-								if (textarea.parentNode) {
+								// BEGIN Instruction 6
+								if (elements.chatContainer.contains(textarea)) {
+									// END Instruction 6
 									textarea.replaceWith(newTextSpan);
 								} else {
+									// BEGIN Instruction 6
 									console.warn(
-										"[ChatMessageRenderer] Textarea not found in DOM during Enter key finalization. Aborting replaceWith."
+										"[ChatMessageRenderer] Textarea not found in DOM during Enter key finalization after initial check. Aborting replaceWith."
 									);
+									// END Instruction 6
 								}
 
 								// 2. Add the temporary CSS class `user-message-edited-pending-ai` to the parent `messageElement`
@@ -507,7 +524,9 @@ export function appendMessage(
 								);
 							} else {
 								// If content hasn't changed, just revert
-								revertEdit(textarea, originalText, messageActions);
+								// BEGIN Instruction 7
+								revertEdit(elements, textarea, originalText, messageActions);
+								// END Instruction 7
 							}
 							// Remove event listeners after handling Enter/revert
 							textarea.removeEventListener("keydown", handleKeydown);
@@ -515,7 +534,9 @@ export function appendMessage(
 						} else if (e.key === "Escape") {
 							// On Escape
 							e.preventDefault();
-							revertEdit(textarea, originalText, messageActions); // Call revertEdit()
+							// BEGIN Instruction 7
+							revertEdit(elements, textarea, originalText, messageActions); // Call revertEdit()
+							// END Instruction 7
 							// Remove event listeners
 							textarea.removeEventListener("keydown", handleKeydown);
 							textarea.removeEventListener("blur", handleBlur);
@@ -523,6 +544,19 @@ export function appendMessage(
 					};
 
 					const handleBlur = () => {
+						// BEGIN Instruction 8
+						if (
+							!textarea.parentNode ||
+							!elements.chatContainer.contains(textarea)
+						) {
+							console.warn(
+								"[ChatMessageRenderer] Edit textarea no longer in DOM or not part of chat container during blur. Aborting operation."
+							);
+							textarea.removeEventListener("keydown", handleKeydown);
+							textarea.removeEventListener("blur", handleBlur);
+							return;
+						}
+						// END Instruction 8
 						// On blur
 						const newContent = textarea.value.trim();
 						if (newContent !== originalText.trim()) {
@@ -530,12 +564,16 @@ export function appendMessage(
 							const newTextSpan = document.createElement("span");
 							newTextSpan.classList.add("message-text-content");
 							newTextSpan.innerHTML = md.render(newContent);
-							if (textarea.parentNode) {
+							// BEGIN Instruction 9
+							if (elements.chatContainer.contains(textarea)) {
+								// END Instruction 9
 								textarea.replaceWith(newTextSpan);
 							} else {
+								// BEGIN Instruction 9
 								console.warn(
-									"[ChatMessageRenderer] Textarea not found in DOM during Blur event finalization. Aborting replaceWith."
+									"[ChatMessageRenderer] Textarea not found in DOM during Blur event finalization after initial check. Aborting replaceWith."
 								);
+								// END Instruction 9
 							}
 
 							messageElement.classList.add("user-message-edited-pending-ai");
@@ -565,7 +603,9 @@ export function appendMessage(
 
 							sendEditedMessageToExtension(elements, messageIndex, newContent);
 						} else {
-							revertEdit(textarea, originalText, messageActions); // Call revertEdit()
+							// BEGIN Instruction 10
+							revertEdit(elements, textarea, originalText, messageActions); // Call revertEdit()
+							// END Instruction 10
 						}
 						// Remove event listeners
 						textarea.removeEventListener("keydown", handleKeydown);
@@ -840,20 +880,35 @@ function sendEditedMessageToExtension(
 	);
 }
 
+// BEGIN Instruction 2
 function revertEdit(
+	elements: RequiredDomElements,
 	textarea: HTMLTextAreaElement,
 	originalText: string,
 	messageActions: HTMLDivElement | null
 ) {
+	// END Instruction 2
+	// BEGIN Instruction 3
+	if (!textarea.parentNode || !elements.chatContainer.contains(textarea)) {
+		console.warn(
+			"[ChatMessageRenderer] Textarea not found in DOM or not part of chat container during revert operation. Aborting replaceWith."
+		);
+		return;
+	}
+	// END Instruction 3
 	const originalTextSpan = document.createElement("span");
 	originalTextSpan.classList.add("message-text-content");
 	originalTextSpan.innerHTML = md.render(originalText);
-	if (textarea.parentNode) {
+	// BEGIN Instruction 4
+	if (elements.chatContainer.contains(textarea)) {
+		// END Instruction 4
 		textarea.replaceWith(originalTextSpan);
 	} else {
+		// BEGIN Instruction 4
 		console.warn(
-			"[ChatMessageRenderer] Textarea not found in DOM during revert operation. Aborting replaceWith."
+			"[ChatMessageRenderer] Textarea parent not found during revert operation after initial check. Aborting replaceWith."
 		);
+		// END Instruction 4
 	}
 
 	if (messageActions) {
