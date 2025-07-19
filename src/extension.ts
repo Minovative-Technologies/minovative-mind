@@ -368,18 +368,20 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 			// NEW ELSE IF BLOCK FOR "chat" COMMAND
 			else if (instruction === "chat") {
-				// Selection Validation: If originalSelection is empty, show warning and return
-				if (originalSelection.isEmpty) {
-					vscode.window.showWarningMessage(
-						"Please select the code you want to chat about."
-					);
-					return;
-				}
+				let codeContentForAI: string;
+				let codeContextDescription: string;
+				const codeContextLanguageId = languageId; // Language ID is always from the document.
 
-				// Retrieve Context: Get selectedText from editor.document.getText(originalSelection),
-				// and ensure languageId and fileName are up-to-date from editor.document.
-				selectedText = editor.document.getText(originalSelection); // Assign to the `let` variable.
-				// languageId and fileName are already in scope.
+				if (originalSelection.isEmpty) {
+					codeContentForAI = fullText;
+					codeContextDescription = "the entire file";
+					vscode.window.showInformationMessage(
+						"Minovative Mind: No code selected. Sending the full file to chat."
+					);
+				} else {
+					codeContentForAI = editor.document.getText(originalSelection);
+					codeContextDescription = "the following code snippet";
+				}
 
 				// Model Availability: Get selectedModel from sidebarProvider.settingsManager.getSelectedModelName().
 				const selectedModel =
@@ -393,8 +395,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 				// Insert custom prompt input and related logic here
 				const customChatPromptInput = await vscode.window.showInputBox({
-					prompt:
-						"Enter your message for the AI (selected code will be included):",
+					prompt: `Enter your message for the AI (${codeContextDescription} will be included):`,
 					placeHolder:
 						"e.g., Explain this function, or refactor it for performance",
 					title: "Minovative Mind: Chat with Code",
@@ -417,7 +418,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				// Construct Prompt: Create userChatPrompt using a template string
 				const userChatPrompt =
 					`${finalUserMessageContent}\n\n` +
-					`I've selected the following code snippet from file \`${fileName}\` (Language: ${languageId}). Please consider this code when responding to my message:\n\n\`\`\`${languageId}\n${selectedText}\n\`\`\``;
+					`I've provided ${codeContextDescription} from file \`${fileName}\` (Language: ${codeContextLanguageId}). Please consider this code when responding to my message:\n\n\`\`\`${codeContextLanguageId}\n${codeContentForAI}\n\`\`\``;
 
 				// Show Progress: Wrap the core logic in vscode.window.withProgress
 				await vscode.window.withProgress(
