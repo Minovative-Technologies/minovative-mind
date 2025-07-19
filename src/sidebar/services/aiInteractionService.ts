@@ -805,7 +805,7 @@ export async function _performModification(
 
     **Crucially, ensure the generated code is modular, readable, adheres to common coding standards for ${languageId}, and is production-ready, efficient, and maintainable.**
 
-    You MUST ONLY return the complete modified file content. Do NOT include any conversational text, explanations, or markdown code blocks (e.g., \`\`\`typescript\\n...\\n\`\`\`):. Your response must start directly with the modified file content.
+    Your output MUST contain **ONLY** the complete, production-ready file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** Your response **MUST START DIRECTLY ON THE FIRST LINE** with the pure, modified file content and nothing else.
 
     File Path: ${filePath}
     Language: ${languageId}

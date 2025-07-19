@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { AIRequestService } from "../services/aiRequestService";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
-import { cleanCodeOutput } from "../utils/codeUtils"; // Added as per instructions
+import { cleanCodeOutput } from "../utils/codeUtils";
 
 /**
  * Real-time feedback interface for code generation
@@ -13,6 +13,46 @@ interface RealTimeFeedback {
 	issues: CodeIssue[];
 	suggestions: string[];
 	progress: number; // 0-100
+}
+
+export interface CodeValidationResult {
+	isValid: boolean;
+	finalContent: string;
+	issues: CodeIssue[];
+	suggestions: string[];
+	iterations?: number;
+	totalIssues?: number;
+	resolvedIssues?: number;
+}
+
+export interface CodeIssue {
+	type: "syntax" | "unused_import" | "best_practice" | "security" | "other";
+	message: string;
+	line: number;
+	severity: "error" | "warning" | "info";
+}
+
+export interface FileAnalysis {
+	framework: string;
+	projectStructure: string;
+	expectedPatterns: string;
+	fileName: string;
+	extension: string;
+}
+
+export interface FileStructureAnalysis {
+	imports: Array<{ line: number; content: string }>;
+	exports: Array<{ line: number; content: string }>;
+	functions: Array<{ line: number; content: string }>;
+	classes: Array<{ line: number; content: string }>;
+	variables: Array<{ line: number; content: string }>;
+	comments: Array<{ line: number; content: string }>;
+}
+
+export interface DiffAnalysis {
+	isReasonable: boolean;
+	issues: string[];
+	changeRatio: number;
 }
 
 /**
@@ -207,7 +247,7 @@ ${JSON.stringify(context.activeSymbolInfo, null, 2)}`
 - Consider performance implications
 - Add appropriate comments for complex logic
 
-Generate ONLY the file content without any markdown formatting or explanations:`;
+Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 	}
 
 	/**
@@ -338,7 +378,7 @@ ${content}
 **Project Context:**
 ${context.projectContext}
 
-Provide ONLY the corrected file content without any markdown formatting:`;
+Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			refinementPrompt,
@@ -740,8 +780,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 
 	/**
 	 * Create enhanced modification prompt
-	 */
-	private _createEnhancedModificationPrompt(
+	 */ private _createEnhancedModificationPrompt(
 		filePath: string,
 		modificationPrompt: string,
 		currentContent: string,
@@ -750,49 +789,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 	): string {
 		const languageId = this._getLanguageId(path.extname(filePath));
 
-		return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions.
-
-**CRITICAL REQUIREMENTS:**
-1. **Preserve Existing Structure**: Maintain the current file organization, structural patterns, and architectural design. Do not refactor unrelated code.
-2. **Surgical Precision & Minimal Changes**: Make *only* the exact, most targeted changes required by the 'Modification Instructions'. Do not introduce extraneous refactoring, reformatting, or stylistic changes (e.g., whitespace-only changes, reordering unrelated code blocks) unless explicitly requested and essential for the modification.
-3. **No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*. Do not output content that differs from the original *only* by whitespace, comments, or minor formatting.
-4. **Maintain Imports**: Maintain all *necessary* existing imports and add *only* strictly required new ones. Ensure import order is preserved unless a new logical grouping is absolutely essential for the requested modification.
-5. **Consistent Style**: Strictly follow the existing code style, formatting, and conventions of the current file.
-6. **Error Prevention**: Ensure the modified code compiles and runs *without any errors or warnings*. Proactively address potential runtime issues, logical flaws, and edge cases.
-
-**File Path:** ${filePath}
-**Language:** ${languageId}
-
-**Current File Structure:**
-- Imports: ${fileAnalysis.imports.length} lines
-- Exports: ${fileAnalysis.exports.length} lines  
-- Functions: ${fileAnalysis.functions.length} functions
-- Classes: ${fileAnalysis.classes.length} classes
-- Variables: ${fileAnalysis.variables.length} variables
-
-**Modification Instructions:**
-${modificationPrompt}
-
-**Current File Content:**
-\`\`\`${languageId}
-${currentContent}
-\`\`\`
-
-**Project Context:**
-${context.projectContext}
-
-**Relevant Code Snippets:**
-${context.relevantSnippets}
-
-**IMPORTANT:**
-- Make only the requested modifications
-- Preserve all existing functionality
-- Maintain the existing code structure and style
-- Add necessary imports if new dependencies are used
-- Ensure the code remains functional and error-free
-- Follow the project's coding conventions
-
-Provide ONLY the complete modified file content without any markdown formatting or explanations. The response must start directly with the modified file content:`;
+		return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions.\n\n**CRITICAL REQUIREMENTS:**\n1. **Preserve Existing Structure**: Maintain the current file organization, structural patterns, and architectural design. Do not refactor unrelated code.\n2. **Surgical Precision & Minimal Changes**: Make *only* the exact, most targeted changes required by the 'Modification Instructions'. Do not introduce extraneous refactoring, reformatting, or stylistic changes (e.g., whitespace-only changes, reordering unrelated code blocks) unless explicitly requested and essential for the modification.\n3. **No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*. Do not output content that differs from the original *only* by whitespace, comments, or minor formatting.\n4. **Maintain Imports**: Maintain all *necessary* existing imports and add *only* strictly required new ones. Ensure import order is preserved unless a new logical grouping is absolutely essential for the requested modification.\n5. **Consistent Style**: Strictly follow the existing code style, formatting, and conventions of the current file.\n6. **Error Prevention**: Ensure the modified code compiles and runs *without any errors or warnings*. Proactively address potential runtime issues, logical flaws, and edge cases.\n\n**File Path:** ${filePath}\n**Language:** ${languageId}\n\n**Current File Structure:**\n- Imports: ${fileAnalysis.imports.length} lines\n- Exports: ${fileAnalysis.exports.length} lines  \n- Functions: ${fileAnalysis.functions.length} functions\n- Classes: ${fileAnalysis.classes.length} classes\n- Variables: ${fileAnalysis.variables.length} variables\n\n**Modification Instructions:**\n${modificationPrompt}\n\n**Current File Content:**\n\`\`\`${languageId}\n${currentContent}\n\`\`\`\n\n**Project Context:**\n${context.projectContext}\n\n**Relevant Code Snippets:**\n${context.relevantSnippets}\n\n**IMPORTANT:**\n- Make only the requested modifications\n- Preserve all existing functionality\n- Maintain the existing code structure and style\n- Add necessary imports if new dependencies are used\n- Ensure the code remains functional and error-free\n- Follow the project's coding conventions\n\nYour response MUST contain **ONLY** the complete modified file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE MODIFIED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure, modified file content and nothing else.`;
 	}
 
 	/**
@@ -842,8 +839,7 @@ Provide ONLY the complete modified file content without any markdown formatting 
 
 	/**
 	 * Analyze the diff between original and modified content
-	 */
-	private _analyzeDiff(original: string, modified: string): DiffAnalysis {
+	 */ private _analyzeDiff(original: string, modified: string): DiffAnalysis {
 		const originalLines = original.split("\n");
 		const modifiedLines = modified.split("\n");
 
@@ -885,8 +881,7 @@ Provide ONLY the complete modified file content without any markdown formatting 
 
 	/**
 	 * Refine modification based on diff analysis
-	 */
-	private async _refineModification(
+	 */ private async _refineModification(
 		filePath: string,
 		originalContent: string,
 		modifiedContent: string,
@@ -895,32 +890,15 @@ Provide ONLY the complete modified file content without any markdown formatting 
 		modelName: string,
 		token?: vscode.CancellationToken
 	): Promise<string> {
-		const refinementPrompt = `The modification seems to have issues that need to be addressed:
-
-**Issues with the modification:**
-${issues.map((issue) => `- ${issue}`).join("\n")}
-
-**Original Content:**
-\`\`\`${this._getLanguageId(path.extname(filePath))}
-${originalContent}
-\`\`\`
-
-**Current Modification:**
-\`\`\`${this._getLanguageId(path.extname(filePath))}
-${modifiedContent}
-\`\`\`
-
-**Refinement Instructions:**
-- **Extreme Targeted Fixes:** Apply only the most precise and surgical fixes to address the reported issues. Do not introduce any unrelated changes or refactoring.
-- **Preserve Unchanged Code:** Absolutely preserve all surrounding code that is not directly affected by the reported issues. Avoid reformatting or touching lines that do not require modification.
-- **Minimize Diff Size:** Strive to make the diff (changes between 'Original Content' and 'Current Modification') as small and focused as possible. Avoid unnecessary line additions or deletions.
-- **Strict Style Adherence:** Strictly adhere to the original file's existing code style, formatting (indentation, spacing, line breaks, bracket placement), and naming conventions.
-- **Functionality and Correctness:** Ensure the modified code maintains all original functionality and is fully functional and error-free after correction.
-
-**Project Context:**
-${context.projectContext}
-
-Provide ONLY the refined file content without any markdown formatting:`;
+		const refinementPrompt = `The modification seems to have issues that need to be addressed:\n\n**Issues with the modification:**\n${issues
+			.map((issue) => `- ${issue}`)
+			.join("\n")}\n\n**Original Content:**\n\`\`\`${this._getLanguageId(
+			path.extname(filePath)
+		)}\n${originalContent}\n\`\`\`\n\n**Current Modification:**\n\`\`\`${this._getLanguageId(
+			path.extname(filePath)
+		)}\n${modifiedContent}\n\`\`\`\n\n**Refinement Instructions:**\n- **Extreme Targeted Fixes:** Apply only the most precise and surgical fixes to address the reported issues. Do not introduce any unrelated changes or refactoring.\n- **Preserve Unchanged Code:** Absolutely preserve all surrounding code that is not directly affected by the reported issues. Avoid reformatting or touching lines that do not require modification.\n- **Minimize Diff Size:** Strive to make the diff (changes between 'Original Content' and 'Current Modification') as small and focused as possible. Avoid unnecessary line additions or deletions.\n- **Strict Style Adherence:** Strictly adhere to the original file's existing code style, formatting (indentation, spacing, line breaks, bracket placement), and naming conventions.\n- **Functionality and Correctness:** Ensure the modified code maintains all original functionality and is fully functional and error-free after correction.\n\n**Project Context:**\n${
+			context.projectContext
+		}\n\nYour response MUST contain **ONLY** the refined file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			refinementPrompt,
@@ -1460,28 +1438,13 @@ Provide ONLY the refined file content without any markdown formatting:`;
 		modelName: string,
 		token?: vscode.CancellationToken
 	): Promise<string> {
-		const alternativePrompt = `The code has the following issues that need to be fixed using a different approach:
-
-**Issues to Address:**
-${issues
-	.map((issue) => `- ${issue.type}: ${issue.message} (Line ${issue.line})`)
-	.join("\n")}
-
-**Current Content:**
-\`\`\`${this._getLanguageId(path.extname(filePath))}
-${content}
-\`\`\`
-
-**Alternative Correction Strategy:**
-- Use a completely different approach to fix these issues
-- Consider architectural changes if needed
-- Focus on the root cause rather than symptoms
-- Ensure the solution is more robust and maintainable
-
-**Project Context:**
-${context.projectContext}
-
-Provide ONLY the corrected file content without any markdown formatting:`;
+		const alternativePrompt = `The code has the following issues that need to be fixed using a different approach:\n\n**Issues to Address:**\n${issues
+			.map((issue) => `- ${issue.type}: ${issue.message} (Line ${issue.line})`)
+			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
+			path.extname(filePath)
+		)}\n${content}\n\`\`\`\n\n**Alternative Correction Strategy:**\n- Use a completely different approach to fix these issues\n- Consider architectural changes if needed\n- Focus on the root cause rather than symptoms\n- Ensure the solution is more robust and maintainable\n\n**Project Context:**\n${
+			context.projectContext
+		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			alternativePrompt,
@@ -1506,26 +1469,13 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 		modelName: string,
 		token?: vscode.CancellationToken
 	): Promise<string> {
-		const syntaxPrompt = `Fix the following syntax issues in the code:
-
-**Syntax Issues:**
-${issues.map((issue) => `- Line ${issue.line}: ${issue.message}`).join("\n")}
-
-**Current Content:**
-\`\`\`${this._getLanguageId(path.extname(filePath))}
-${content}
-\`\`\`
-
-**Correction Instructions:**
-- Fix all syntax errors
-- Ensure proper language syntax
-- Maintain the original functionality
-- Keep the code structure intact
-
-**Project Context:**
-${context.projectContext}
-
-Provide ONLY the corrected file content without any markdown formatting:`;
+		const syntaxPrompt = `Fix the following syntax issues in the code:\n\n**Syntax Issues:**\n${issues
+			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
+			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
+			path.extname(filePath)
+		)}\n${content}\n\`\`\`\n\n**Correction Instructions:**\n- Fix all syntax errors\n- Ensure proper language syntax\n- Maintain the original functionality\n- Keep the code structure intact\n\n**Project Context:**\n${
+			context.projectContext
+		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			syntaxPrompt,
@@ -1550,26 +1500,13 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 		modelName: string,
 		token?: vscode.CancellationToken
 	): Promise<string> {
-		const importPrompt = `Fix the following import issues in the code:
-
-**Import Issues:**
-${issues.map((issue) => `- Line ${issue.line}: ${issue.message}`).join("\n")}
-
-**Current Content:**
-\`\`\`${this._getLanguageId(path.extname(filePath))}
-${content}
-\`\`\`
-
-**Correction Instructions:**
-- Remove unused imports
-- Add missing imports
-- Fix import paths
-- Ensure all imports are necessary and correct
-
-**Project Context:**
-${context.projectContext}
-
-Provide ONLY the corrected file content without any markdown formatting:`;
+		const importPrompt = `Fix the following import issues in the code:\n\n**Import Issues:**\n${issues
+			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
+			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
+			path.extname(filePath)
+		)}\n${content}\n\`\`\`\n\n**Correction Instructions:**\n- Remove unused imports\n- Add missing imports\n- Fix import paths\n- Ensure all imports are necessary and correct\n\n**Project Context:**\n${
+			context.projectContext
+		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			importPrompt,
@@ -1585,8 +1522,7 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 
 	/**
 	 * Correct best practice issues
-	 */
-	private async _correctPracticeIssues(
+	 */ private async _correctPracticeIssues(
 		filePath: string,
 		content: string,
 		issues: CodeIssue[],
@@ -1594,27 +1530,13 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 		modelName: string,
 		token?: vscode.CancellationToken
 	): Promise<string> {
-		const practicePrompt = `Fix the following best practice issues in the code:
-
-**Best Practice Issues:**
-${issues.map((issue) => `- Line ${issue.line}: ${issue.message}`).join("\n")}
-
-**Current Content:**
-\`\`\`${this._getLanguageId(path.extname(filePath))}
-${content}
-\`\`\`
-
-**Correction Instructions:**
-- Follow coding best practices
-- Improve code readability
-- Use proper naming conventions
-- Apply design patterns where appropriate
-- Ensure code is maintainable
-
-**Project Context:**
-${context.projectContext}
-
-Provide ONLY the corrected file content without any markdown formatting:`;
+		const practicePrompt = `Fix the following best practice issues in the code:\n\n**Best Practice Issues:**\n${issues
+			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
+			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
+			path.extname(filePath)
+		)}\n${content}\n\`\`\`\n\n**Correction Instructions:**\n- Follow coding best practices\n- Improve code readability\n- Use proper naming conventions\n- Apply design patterns where appropriate\n- Ensure code is maintainable\n\n**Project Context:**\n${
+			context.projectContext
+		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			practicePrompt,
@@ -1639,27 +1561,13 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 		modelName: string,
 		token?: vscode.CancellationToken
 	): Promise<string> {
-		const securityPrompt = `Fix the following security issues in the code:
-
-**Security Issues:**
-${issues.map((issue) => `- Line ${issue.line}: ${issue.message}`).join("\n")}
-
-**Current Content:**
-\`\`\`${this._getLanguageId(path.extname(filePath))}
-${content}
-\`\`\`
-
-**Correction Instructions:**
-- Fix all security vulnerabilities
-- Use secure coding practices
-- Validate inputs properly
-- Handle sensitive data correctly
-- Follow security best practices
-
-**Project Context:**
-${context.projectContext}
-
-Provide ONLY the corrected file content without any markdown formatting:`;
+		const securityPrompt = `Fix the following security issues in the code:\n\n**Security Issues:**\n${issues
+			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
+			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
+			path.extname(filePath)
+		)}\n${content}\n\`\`\`\n\n**Correction Instructions:**\n- Fix all security vulnerabilities\n- Use secure coding practices\n- Validate inputs properly\n- Handle sensitive data correctly\n- Follow security best practices\n\n**Project Context:**\n${
+			context.projectContext
+		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			securityPrompt,
@@ -1688,47 +1596,4 @@ Provide ONLY the corrected file content without any markdown formatting:`;
 			}
 		}
 	}
-}
-
-/**
- * Interfaces for enhanced code generation
- */
-export interface CodeValidationResult {
-	isValid: boolean;
-	finalContent: string;
-	issues: CodeIssue[];
-	suggestions: string[];
-	iterations?: number;
-	totalIssues?: number;
-	resolvedIssues?: number;
-}
-
-export interface CodeIssue {
-	type: "syntax" | "unused_import" | "best_practice" | "security" | "other";
-	message: string;
-	line: number;
-	severity: "error" | "warning" | "info";
-}
-
-export interface FileAnalysis {
-	framework: string;
-	projectStructure: string;
-	expectedPatterns: string;
-	fileName: string;
-	extension: string;
-}
-
-export interface FileStructureAnalysis {
-	imports: Array<{ line: number; content: string }>;
-	exports: Array<{ line: number; content: string }>;
-	functions: Array<{ line: number; content: string }>;
-	classes: Array<{ line: number; content: string }>;
-	variables: Array<{ line: number; content: string }>;
-	comments: Array<{ line: number; content: string }>;
-}
-
-export interface DiffAnalysis {
-	isReasonable: boolean;
-	issues: string[];
-	changeRatio: number;
 }
