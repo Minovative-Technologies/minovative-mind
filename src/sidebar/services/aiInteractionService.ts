@@ -4,6 +4,8 @@ import * as vscode from "vscode";
 import { TEMPERATURE } from "../common/sidebarConstants";
 import { AIRequestService } from "../../services/aiRequestService";
 import { ERROR_OPERATION_CANCELLED } from "../../ai/gemini";
+import * as path from "path"; // Required for path manipulation
+import { ActiveSymbolDetailedInfo } from "../../services/contextService"; // NEW IMPORT
 
 export function createInitialPlanningExplanationPrompt(
 	projectContext: string,
@@ -157,7 +159,7 @@ export function createInitialPlanningExplanationPrompt(
 
     *** Broader Project Context (Reference Only) ***
     ${projectContext}
-    *** End Broader Project Context ***
+    *** End Broader Project ***
 
     --- Plan Explanation (Text with Markdown) ---
 `;
@@ -570,7 +572,7 @@ export function createPlanningPrompt(
 			: ""
 	} Also carefully review the 'Recent Chat History' if provided. This history contains previous interactions, including any steps already taken or files created/modified. When planning \`modify_file\` actions, especially for refactoring, leverage the 'Symbol Information' and particularly the 'Active Symbol Detailed Information' sections to ensure all related definitions and references are accurately considered for modification. **For '/fix' requests, specifically ensure that the 'Active Symbol Detailed Information' is robustly used for precise targeting and impact analysis of changes within \`modification_prompt\` values.** Additionally, prioritize \`modify_file\` steps that account for global symbol impact when a symbol is refactored.
     
-    2.  **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
+    2.  **Ensure Completeness:** The generated steps **must collectively address the *entireity* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
     3.  **Consult Recent Project Changes:** Always consult the "Recent Project Changes (During Current Workflow Execution)" section. Your plan MUST build upon these prior changes. Avoid generating steps that redundantly re-create files already created, or redundantly modify files already changed in prior steps and whose desired state is reflected by that prior modification. Instead, if multiple logical changes are needed for one file, combine *all* those required modifications into a **single** \`modification_prompt\` for that file's \`modify_file\` step. This ensures efficiency and avoids unnecessary operations.
     4.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
     5.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
@@ -582,7 +584,7 @@ export function createPlanningPrompt(
         *   Backslash (\`\\\`) must be escaped as \`\\\`.
         *   Double quote (\`"\`) must be escaped as \`"\`.
     9.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
-    10. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for developers.
+    10. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for the developers.
     11. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
 
     --- Planning Instructions ---
@@ -634,7 +636,9 @@ export function createCorrectionPlanPrompt(
 	relevantSnippets: string,
 	aggregatedFormattedDiagnostics: string,
 	formattedRecentChanges: string,
-	retryReason?: string
+	retryReason?: string,
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo, // MODIFIED TYPE
+	jsonEscapingInstructions: string = "" // NEW OPTIONAL PARAMETER WITH DEFAULT
 ): string {
 	const chatHistoryForPrompt =
 		chatHistory && chatHistory.length > 0
@@ -756,6 +760,237 @@ export function createCorrectionPlanPrompt(
         --- End Valid Correction Plan Examples ---
     `;
 
+	// Helper for formatting location (single or array of vscode.Location objects).
+	// Attempts to make path relative using a heuristic based on editor context if available.
+	const formatLocation = (
+		location: vscode.Location | vscode.Location[] | undefined
+	): string => {
+		if (!location) {
+			return "N/A";
+		}
+		const actualLocation = Array.isArray(location)
+			? location.length > 0
+				? location[0]
+				: undefined
+			: location;
+		if (!actualLocation || !actualLocation.uri) {
+			return "N/A";
+		}
+
+		let formattedPath = actualLocation.uri.fsPath; // Default to absolute path
+
+		// Heuristically try to make path relative if within the assumed workspace
+		if (editorContext) {
+			// Find the common root by looking for common project structures (like 'src/', 'pages/', 'app/')
+			const editorPathSegments = editorContext.documentUri.fsPath.split(
+				path.sep
+			);
+			let commonRootIndex = -1;
+			// Find the deepest common ancestor that looks like a project root or a folder above src/
+			for (let i = editorPathSegments.length - 1; i >= 0; i--) {
+				const segment = editorPathSegments[i].toLowerCase();
+				if (["src", "pages", "app"].includes(segment) && i > 0) {
+					commonRootIndex = i - 1; // Take the directory above src/pages/app as root
+					break;
+				}
+			}
+			let inferredRootPath = "";
+			if (commonRootIndex !== -1) {
+				inferredRootPath = editorPathSegments
+					.slice(0, commonRootIndex + 1)
+					.join(path.sep);
+			} else {
+				// If no specific project structure is found, use the current workspace folder's root
+				// This is a best-effort guess without an explicit workspaceRootUri being passed in.
+				if (
+					vscode.workspace.workspaceFolders &&
+					vscode.workspace.workspaceFolders.length > 0
+				) {
+					inferredRootPath = vscode.workspace.workspaceFolders[0].uri.fsPath;
+				}
+			}
+
+			if (
+				inferredRootPath &&
+				actualLocation.uri.fsPath.startsWith(inferredRootPath)
+			) {
+				formattedPath = path
+					.relative(inferredRootPath, actualLocation.uri.fsPath)
+					.replace(/\\/g, "/");
+			} else {
+				// Fallback to absolute if the heuristic doesn't find a good relative path
+				formattedPath = actualLocation.uri.fsPath;
+			}
+		}
+
+		return `${formattedPath}:${actualLocation.range.start.line + 1}`;
+	};
+
+	// Helper for formatting arrays of vscode.Location objects.
+	const formatLocations = (
+		locations: vscode.Location[] | undefined,
+		limit: number = 5
+	): string => {
+		if (!locations || locations.length === 0) {
+			return "None";
+		}
+		const limited = locations.slice(0, limit);
+		const formatted = limited.map((loc) => formatLocation(loc)).join(", ");
+		return locations.length > limit
+			? `${formatted}, ... (${locations.length - limit} more)`
+			: formatted;
+	};
+
+	// Helper for formatting Call Hierarchy (Incoming/Outgoing) data.
+	const formatCallHierarchy = (
+		calls:
+			| vscode.CallHierarchyIncomingCall[]
+			| vscode.CallHierarchyOutgoingCall[]
+			| undefined,
+		limit: number = 5
+	): string => {
+		if (!calls || calls.length === 0) {
+			return `No Calls`;
+		}
+		const limitedCalls = calls.slice(0, limit);
+		const formatted = limitedCalls
+			.map((call) => {
+				let uri: vscode.Uri | undefined;
+				let name: string = "Unknown";
+				let detail: string | undefined;
+				let rangeStartLine: number | undefined;
+
+				if ("from" in call) {
+					// IncomingCall
+					uri = call.from.uri;
+					name = call.from.name;
+					detail = call.from.detail;
+					rangeStartLine =
+						call.fromRanges.length > 0
+							? call.fromRanges[0].start.line + 1
+							: undefined;
+				} else if ("to" in call) {
+					// OutgoingCall
+					uri = call.to.uri;
+					name = call.to.name;
+					detail = call.to.detail;
+					rangeStartLine = call.to.range.start.line + 1;
+				}
+
+				if (!uri) {
+					return `${name} (N/A:URI_Missing)`;
+				}
+
+				let formattedPath = uri.fsPath; // Default to absolute path
+
+				// Heuristically try to make path relative if within the assumed workspace
+				if (editorContext) {
+					const editorPathSegments = editorContext.documentUri.fsPath.split(
+						path.sep
+					);
+					let commonRootIndex = -1;
+					for (let i = editorPathSegments.length - 1; i >= 0; i--) {
+						const segment = editorPathSegments[i].toLowerCase();
+						if (["src", "pages", "app"].includes(segment) && i > 0) {
+							commonRootIndex = i - 1;
+							break;
+						}
+					}
+					let inferredRootPath = "";
+					if (commonRootIndex !== -1) {
+						inferredRootPath = editorPathSegments
+							.slice(0, commonRootIndex + 1)
+							.join(path.sep);
+					} else {
+						if (
+							vscode.workspace.workspaceFolders &&
+							vscode.workspace.workspaceFolders.length > 0
+						) {
+							inferredRootPath =
+								vscode.workspace.workspaceFolders[0].uri.fsPath;
+						}
+					}
+
+					if (inferredRootPath && uri.fsPath.startsWith(inferredRootPath)) {
+						formattedPath = path
+							.relative(inferredRootPath, uri.fsPath)
+							.replace(/\\/g, "/");
+					} else {
+						formattedPath = uri.fsPath;
+					}
+				}
+
+				const lineInfo = rangeStartLine ? `:${rangeStartLine}` : "";
+				const detailInfo = detail ? ` (Detail: ${detail})` : "";
+				return `${name} (${formattedPath}${lineInfo})${detailInfo}`;
+			})
+			.join("\n    - ");
+		const more =
+			calls.length > limit ? `\n    ... (${calls.length - limit} more)` : "";
+		return `    - ${formatted}${more}`;
+	};
+
+	const MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT = 1000;
+	const MAX_REFERENCED_TYPES_TO_INCLUDE_PROMPT = 3;
+
+	const activeSymbolInfoSection = activeSymbolDetailedInfo
+		? `
+--- Active Symbol Detailed Information ---
+Name: ${activeSymbolDetailedInfo.name || "N/A"}
+Kind: ${activeSymbolDetailedInfo.kind || "N/A"}
+Detail: ${activeSymbolDetailedInfo.detail || "N/A"}
+File Path: ${activeSymbolDetailedInfo.filePath || "N/A"}
+Full Range: ${
+				activeSymbolDetailedInfo.fullRange
+					? `Lines ${activeSymbolDetailedInfo.fullRange.start.line + 1}-${
+							activeSymbolDetailedInfo.fullRange.end.line + 1
+					  }`
+					: "N/A"
+		  }
+Children Hierarchy:
+\`\`\`
+${activeSymbolDetailedInfo.childrenHierarchy || "N/A"}
+\`\`\`
+Definition: ${formatLocation(activeSymbolDetailedInfo.definition)}
+Implementations: ${formatLocations(activeSymbolDetailedInfo.implementations)}
+Type Definition: ${formatLocation(activeSymbolDetailedInfo.typeDefinition)}
+Referenced Type Definitions:
+${
+	activeSymbolDetailedInfo.referencedTypeDefinitions &&
+	activeSymbolDetailedInfo.referencedTypeDefinitions.size > 0
+		? Array.from(activeSymbolDetailedInfo.referencedTypeDefinitions.entries())
+				.slice(0, MAX_REFERENCED_TYPES_TO_INCLUDE_PROMPT)
+				.map(([filePath, content]) => {
+					let contentPreview = content;
+					if (
+						contentPreview.length > MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT
+					) {
+						contentPreview =
+							contentPreview.substring(
+								0,
+								MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT
+							) + "\n// ... (content truncated)";
+					}
+					return `  - File: ${filePath}\n    Content:\n\`\`\`\n${contentPreview}\n\`\`\``;
+				})
+				.join("\n") +
+		  (activeSymbolDetailedInfo.referencedTypeDefinitions.size >
+		  MAX_REFERENCED_TYPES_TO_INCLUDE_PROMPT
+				? `\n  ... (${
+						activeSymbolDetailedInfo.referencedTypeDefinitions.size -
+						MAX_REFERENCED_TYPES_TO_INCLUDE_PROMPT
+				  } more)`
+				: "")
+		: "None"
+}
+Incoming Calls:
+${formatCallHierarchy(activeSymbolDetailedInfo.incomingCalls)}
+Outgoing Calls:
+${formatCallHierarchy(activeSymbolDetailedInfo.outgoingCalls)}
+--- End Active Symbol Detailed Information ---
+`
+		: "";
+
 	return `
         You are an expert software engineer. Your ONLY task is to generate a JSON ExecutionPlan to fix errors.
 
@@ -777,6 +1012,10 @@ export function createCorrectionPlanPrompt(
 
         Your output MUST be ONLY a JSON object, with no conversational text, explanations, or markdown formatting (e.g., \`\`\`json\`).
 
+        --- Json Escaping Instructions ---
+        ${jsonEscapingInstructions}
+        --- Json Escaping Instructions ---
+
         --- Original User Request ---
         ${originalUserInstruction}
         --- End Original User Request ---
@@ -786,6 +1025,10 @@ export function createCorrectionPlanPrompt(
         --- End Broader Project Context ---
         ${editorContextForPrompt}
         ${chatHistoryForPrompt}
+
+        --- Active Symbol Info Section ---
+        ${activeSymbolInfoSection}
+        --- Active Symbol Info Section ---
 
         --- Relevant Project Snippets (for additional context) ---
         ${relevantSnippets}
@@ -808,7 +1051,10 @@ export function createCorrectionPlanPrompt(
 
         ${jsonSchemaReference}
         --- End Required JSON Schema Reference ---
+
+        --- Few Shot Correction Examples ---
         ${fewShotCorrectionExamples}
+        --- Few Shot Correction Examples ---
 
         When generating steps to resolve diagnostics, you must use the exact file paths indicated in the 'Diagnostics to Address' section for the \`path\` field of \`create_file\` and \`modify_file\` steps.
 

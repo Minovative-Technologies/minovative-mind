@@ -78,6 +78,7 @@ export interface BuildProjectContextResult {
 		fileCount: number;
 		processedFileCount: number;
 	};
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo;
 }
 
 export class ContextService {
@@ -696,6 +697,7 @@ export class ContextService {
 					fileCount: allScannedFiles.length,
 					processedFileCount: filesForContextBuilding.length,
 				},
+				activeSymbolDetailedInfo: activeSymbolDetailedInfo,
 			};
 		} catch (error: any) {
 			console.error(`[ContextService] Error building project context:`, error);

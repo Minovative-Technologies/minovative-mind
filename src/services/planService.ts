@@ -206,6 +206,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 				originalUserRequest: userRequest,
 				projectContext: contextString,
 				relevantFiles,
+				activeSymbolDetailedInfo: buildContextResult.activeSymbolDetailedInfo, // MODIFIED
 				initialApiKey: apiKey,
 				modelName,
 				chatHistory: [...this.provider.chatHistoryManager.getChatHistory()],
@@ -455,6 +456,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 				editorContext: editorCtx,
 				projectContext: contextString,
 				relevantFiles,
+				activeSymbolDetailedInfo: buildContextResult.activeSymbolDetailedInfo, // MODIFIED
 				diagnosticsString,
 				initialApiKey: apiKey!,
 				modelName,
@@ -1630,21 +1632,51 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 						temperature: sidebarConstants.TEMPERATURE,
 					};
 
-					const relevantSnippets = await this._formatRelevantFilesForPrompt(
-						planContext.relevantFiles ?? [],
-						rootUri,
-						token
-					);
-					const formattedRecentChanges = this._formatRecentChangesForPrompt(
-						this.provider.changeLogger.getChangeLog()
+					// MODIFICATION START
+					// 1. Create a new array `filesForCorrectionSnippets` by mapping `filesWithErrors` to relative string paths.
+					const filesForCorrectionSnippets = Array.from(filesWithErrors).map(
+						(uri) =>
+							path.relative(rootUri.fsPath, uri.fsPath).replace(/\\/g, "/")
 					);
 
+					// 2. Call `this._formatRelevantFilesForPrompt` to generate `dynamicallyGeneratedRelevantSnippets`.
+					const dynamicallyGeneratedRelevantSnippets =
+						await this._formatRelevantFilesForPrompt(
+							filesForCorrectionSnippets,
+							rootUri,
+							token
+						);
+
+					const recentChanges = this.provider.changeLogger.getChangeLog();
+					const formattedRecentChanges =
+						this._formatRecentChangesForPrompt(recentChanges);
+
+					// 3. Retrieve the `activeSymbolInfoForCorrection` by accessing `planContext.activeSymbolDetailedInfo`.
+					//    This information is already embedded within planContext.projectContext if available,
+					//    so no explicit separate argument is passed to createCorrectionPlanPrompt for this.
+					const activeSymbolInfoForCorrection =
+						planContext.activeSymbolDetailedInfo;
+
+					// Create a modified project context that includes JSON escaping instructions.
+					// This is done to pass JSON_ESCAPING_INSTRUCTIONS to the AI through an existing argument,
+					// as modifying createCorrectionPlanPrompt's signature is outside the scope of this file.
+					let modifiedProjectContextForCorrection = planContext.projectContext;
+					if (activeSymbolInfoForCorrection) {
+						modifiedProjectContextForCorrection += `\n\n--- Active Symbol Detailed Information For Correction ---\n${JSON.stringify(
+							activeSymbolInfoForCorrection,
+							null,
+							2
+						)}\n--- End Active Symbol Detailed Information For Correction ---`;
+					}
+					modifiedProjectContextForCorrection += `\n\n--- JSON Escaping Instructions --- \n${this.JSON_ESCAPING_INSTRUCTIONS}\n--- End JSON Escaping Instructions ---`;
+
+					// 4. Modify the `createCorrectionPlanPrompt` function call.
 					const correctionPlanPrompt = createCorrectionPlanPrompt(
 						originalUserInstruction,
-						planContext.projectContext,
+						modifiedProjectContextForCorrection, // Pass the modified project context with JSON instructions and active symbol info
 						planContext.editorContext,
 						planContext.chatHistory ?? [],
-						relevantSnippets,
+						dynamicallyGeneratedRelevantSnippets, // Pass dynamically generated relevant snippets
 						aggregatedFormattedDiagnostics,
 						formattedRecentChanges,
 						currentCorrectionAttempt > 1
@@ -1653,6 +1685,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							  }) failed to resolve all diagnostics.`
 							: undefined
 					);
+					// MODIFICATION END
 
 					progress.report({
 						message: `AI generating overall correction plan (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,

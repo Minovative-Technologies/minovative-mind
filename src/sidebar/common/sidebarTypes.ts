@@ -1,6 +1,7 @@
 // src/sidebar/common/sidebarTypes.ts
 import * as vscode from "vscode";
 import { Content } from "@google/generative-ai"; // Assuming History might be needed if HistoryEntry evolves
+import { ActiveSymbolDetailedInfo } from "../../services/contextService"; // NEW: Required for PlanGenerationContext
 
 // Define the specific structure for parts within HistoryEntry
 export interface HistoryEntryPart {
@@ -308,6 +309,7 @@ export interface PlanGenerationContext {
 	workspaceRootUri: vscode.Uri;
 	relevantFiles?: string[];
 	isMergeOperation?: boolean; // New optional property for merge conflict resolution
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo; // NEW: Added optional property for detailed symbol information
 }
 
 export interface PlanGenerationResult {
