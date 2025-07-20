@@ -87,6 +87,10 @@ export async function generateFileChangeSummary(
 	// 3. Convert the character-level diffs back to line-level diffs using the original `line_array`.
 	// This transforms the diff objects to contain actual lines rather than characters.
 	dmp.diff_charsToLines_(diffs, line_array);
+	// 4. Apply semantic cleanup to filter out trivial differences (e.g., purely whitespace changes,
+	// or minor reordering that doesn't change meaning). This is crucial for avoiding
+	// reporting changes for cosmetic-only modifications.
+	dmp.diff_cleanupSemantic(diffs);
 
 	let formattedDiffLines: string[] = [];
 	let addedLines: string[] = [];
