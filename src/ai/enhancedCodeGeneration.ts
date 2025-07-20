@@ -352,31 +352,48 @@ Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN C
 		modelName: string,
 		token?: vscode.CancellationToken
 	): Promise<string> {
+		const languageId = this._getLanguageId(path.extname(filePath));
 		const refinementPrompt = `The generated code has the following issues that need to be fixed:
 
 **Issues to Address:**
 ${issues
-	.map((issue) => `- ${issue.type}: ${issue.message} (Line ${issue.line})`)
-	.join("\n")}
+	.map((issue) => {
+		const snippet = this._getCodeSnippet(content, issue.line);
+		return `**Severity:** ${issue.severity.toUpperCase()}\n**Type:** ${
+			issue.type
+		}\n**Message:** ${
+			issue.message
+		}\n**Code Snippet:**\n\`\`\`${languageId}\n${snippet}\n\`\`\``;
+	})
+	.join("\n\n")}
 
 **Original Content:**
-\`\`\`${this._getLanguageId(path.extname(filePath))}
+\`\`\`${languageId}
 ${content}
 \`\`\`
 
 **Refinement Instructions:**
-- **Comprehensive Issue Resolution:** Fix *all* identified issues meticulously. Do not leave any unaddressed.
+- **Absolute Comprehensive Issue Resolution:** Fix *every single identified issue* meticulously, ensuring perfectly valid, error-free code.
+- **Surgical Precision & Minimal Changes:** Stress focused, targeted changes to resolve specific issues, forbidding unrelated refactoring, reformatting, or cosmetic changes unless essential.
 - **Import Correctness:** Verify and correct all imports. Ensure all necessary imports are present, and eliminate any unused or redundant ones.
-- **Variable and Type Usage:** Confirm correct variable declarations, scope, and accurate TypeScript types (e.g., explicit types where beneficial, correct interface/type usage).
-- **Functionality Preservation:** Ensure the original functionality (or the intended new functionality) is perfectly maintained and correctly implemented.
-- **Compile and Runtime Errors:** Guarantee the code compiles without warnings or errors. Proactively identify and resolve potential runtime errors, logical flaws, edge cases (e.g., empty arrays, zero values), null/undefined checks, and off-by-one errors.
-- **Code Style and Formatting:** Strictly adhere to the project's established coding style and formatting conventions, including indentation, spacing, line breaks, bracket placement, and naming conventions (e.g., camelCase for variables, PascalCase for classes).
-- **Efficiency and Performance:** Review for code efficiency, optimizing loops, eliminating redundant computations, and choosing appropriate data structures/algorithms where applicable.
-- **Modularity and Maintainability:** Ensure the code is modular, with clear separation of concerns. It should be easy to read, understand, and maintain by other developers.
-- **Production Readiness:** The final code must be production-ready, robust, and clean.
+- **Variable and Type Usage:** Reinforce correct variable declarations, scope, and accurate TypeScript types.
+- **Functionality Preservation:** Ensure original or intended new functionality is perfectly maintained.
+- **Compile and Runtime Errors:** Demand code that compiles and runs *without any errors or warnings*, proactively identifying and mitigating potential runtime issues, logical flaws, edge cases (e.g., empty arrays, zero values), null/undefined checks, and off-by-one errors.
+- **Code Style and Formatting:** Stricter adherence to existing project coding style and formatting conventions (indentation, spacing, line breaks, bracket placement, naming conventions), ensuring seamless integration.
+- **Efficiency and Performance:** Instruct to review for code efficiency, optimizing loops, eliminating redundant computations, and choosing appropriate data structures/algorithms.
+- **Modularity and Maintainability:** Ensure code is modular with clear separation of concerns, easy to read, understand, and maintain.
+- **Production Readiness:** Demand the final code be production-ready, robust, and clean.
+- **No Extra Text**: Ensure NO additional text, commentary, or conversational elements are present outside the pure code.
 
 **Project Context:**
 ${context.projectContext}
+
+**Active Symbol Information (if available, for context on related code and impact analysis):**
+${
+	context.activeSymbolInfo
+		? JSON.stringify(context.activeSymbolInfo, null, 2)
+		: "N/A"
+}
 
 Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
@@ -1125,6 +1142,41 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		}
 
 		return false;
+	}
+
+	/**
+	 * Extracts a code snippet around a given line number.
+	 * @param fullContent The full string content of the file.
+	 * @param lineNumber The 1-indexed line number to center the snippet around.
+	 * @param linesBefore The number of lines to include before the target line.
+	 * @param linesAfter The number of lines to include after the target line.
+	 * @returns A string containing the formatted code snippet.
+	 */
+	private _getCodeSnippet(
+		fullContent: string,
+		lineNumber: number,
+		linesBefore: number = 2,
+		linesAfter: number = 2
+	): string {
+		const lines = fullContent.split("\n");
+		const zeroBasedLineNumber = lineNumber - 1; // Convert to 0-indexed
+
+		const start = Math.max(0, zeroBasedLineNumber - linesBefore);
+		const end = Math.min(lines.length - 1, zeroBasedLineNumber + linesAfter);
+
+		const snippetLines: string[] = [];
+		const maxLineNumLength = String(end + 1).length; // For padding
+
+		for (let i = start; i <= end; i++) {
+			const currentLineNum = i + 1; // Convert back to 1-indexed for display
+			const paddedLineNum = String(currentLineNum).padStart(
+				maxLineNumLength,
+				" "
+			);
+			snippetLines.push(`${paddedLineNum}: ${lines[i]}`);
+		}
+
+		return snippetLines.join("\n");
 	}
 
 	/**
