@@ -38,6 +38,18 @@ export class PlanService {
 	private urlContextService: UrlContextService;
 	private enhancedCodeGenerator: EnhancedCodeGenerator;
 
+	// CRITICAL ADDITION: JSON escaping instructions for the AI model
+	private readonly JSON_ESCAPING_INSTRUCTIONS = `When generating the JSON for the \`ExecutionPlan\`, it is **CRITICAL** to ensure that all string values are valid JSON strings, with particular attention to proper escaping:
+
+-   **Backslash (\`\\\`) Escaping**: Any literal backslash character (\`\\\`) that appears in the content you are embedding into a JSON string (e.g., in file paths like \`C:\\Users\\file.js\`, or regex patterns like \`\\d+\`, or even the literal \`\\n\` sequence) **MUST** be escaped by using *double backslashes* (\`\\\\\`) in the final JSON string. This means:
+    -   A file path like \`C:\\path\\to\\file.js\` must appear as \`C:\\\\path\\\\to\\\\file.js\` in the JSON string.
+    -   A regex part like \`\\w+\` must appear as \`\\\\w+\` in the JSON string.
+    -   If your code snippet content literally includes the two characters \`\\n\` (\`\\n\`), that sequence itself must be escaped for JSON as \`\\\\n\` (e.g., \`const newline = "\\n";\` becomes \`"const newline = \\"\\\\n\\";"\` in the JSON).
+
+-   **Newline (\`\\n\`) Characters**: To represent a standard newline *character* (line feed) in JSON, use the standard JSON escape sequence \`\\n\`. This applies to multiline strings or when you explicitly need a newline character in text.
+
+Adherence to these precise JSON escaping rules is paramount for the \`ExecutionPlan\` to be parsed successfully. Mis-escaped backslashes are a common cause of \`Bad escaped character in JSON\` errors. Review your generated strings carefully to ensure all backslashes that are part of the content are correctly doubled for the JSON format.`;
+
 	constructor(
 		private provider: SidebarProvider,
 		private workspaceRootUri: vscode.Uri | undefined, // Add workspaceRootUri
@@ -599,13 +611,14 @@ export class PlanService {
 				this.urlContextService.formatUrlContexts(urlContexts);
 
 			// Initial prompt creation outside the loop. This variable will be updated for retries.
+			// Pass JSON_ESCAPING_INSTRUCTIONS for the initial prompt generation.
 			let currentJsonPlanningPrompt = createPlanningPrompt(
 				planContext.type === "chat"
 					? planContext.originalUserRequest
 					: undefined,
 				planContext.projectContext,
 				planContext.type === "editor" ? planContext.editorContext : undefined,
-				undefined, // No initial diagnostics/retry string
+				this.JSON_ESCAPING_INSTRUCTIONS, // Inject the JSON escaping instructions here
 				planContext.chatHistory,
 				planContext.textualPlanExplanation,
 				formattedRecentChanges,
@@ -690,6 +703,9 @@ export class PlanService {
 						// Create feedback string for the AI
 						const retryFeedbackString = `CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${lastParsingError}". You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. Do not include markdown fences. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct JSON)`;
 
+						// Combine the fixed JSON escaping instructions with the dynamic retry feedback
+						const combinedFeedbackString = `${this.JSON_ESCAPING_INSTRUCTIONS}\n\n${retryFeedbackString}`;
+
 						// Update the prompt for the next iteration
 						currentJsonPlanningPrompt = createPlanningPrompt(
 							planContext.type === "chat"
@@ -699,7 +715,7 @@ export class PlanService {
 							planContext.type === "editor"
 								? planContext.editorContext
 								: undefined,
-							retryFeedbackString, // Pass the retry feedback here for next AI call
+							combinedFeedbackString, // Pass the combined string here for next AI call
 							planContext.chatHistory,
 							planContext.textualPlanExplanation,
 							formattedRecentChanges,
