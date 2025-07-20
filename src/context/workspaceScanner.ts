@@ -148,7 +148,7 @@ export async function scanWorkspace(
 
 	// Define concurrency (default to a reasonable number, e.g., 10)
 	const concurrency = options?.maxConcurrentReads ?? 10;
-	const maxFileSize = options?.maxFileSize ?? 1024 * 1024 * 5; // 5MB default
+	const maxFileSize = options?.maxFileSize ?? 1024 * 1024 * 1; // 1MB default
 	const fileTypeFilter = options?.fileTypeFilter ?? RELEVANT_FILE_EXTENSIONS;
 
 	/**

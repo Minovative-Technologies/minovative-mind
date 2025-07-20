@@ -97,7 +97,7 @@ export class SequentialContextService {
 		const allFiles = await scanWorkspace({
 			useCache: true,
 			maxConcurrency: 10,
-			maxFileSize: 1024 * 1024 * 5, // 5MB
+			maxFileSize: 1024 * 1024 * 1, // 1MB
 		});
 
 		if (allFiles.length === 0) {
@@ -550,7 +550,7 @@ export class SequentialContextService {
 		const allFiles = await scanWorkspace({
 			useCache: true,
 			maxConcurrency: 10,
-			maxFileSize: 1024 * 1024 * 5, // 5MB
+			maxFileSize: 1024 * 1024 * 1, // 1MB
 		});
 
 		// Build dependency graph

@@ -153,7 +153,7 @@ export class ContextService {
 			const allScannedFiles = await scanWorkspace({
 				useCache: options?.useScanCache ?? true,
 				maxConcurrentReads: options?.maxConcurrency ?? 15,
-				maxFileSize: options?.maxFileSize ?? 1024 * 1024 * 5, // 5MB
+				maxFileSize: options?.maxFileSize ?? 1024 * 1024 * 1, // 1MB
 				cacheTimeout: 5 * 60 * 1000, // 5 minutes
 			});
 
@@ -201,7 +201,7 @@ export class ContextService {
 					useCache: options?.useDependencyCache ?? true,
 					maxConcurrency: options?.maxConcurrency ?? 15,
 					skipLargeFiles: options?.skipLargeFiles ?? true,
-					maxFileSizeForParsing: options?.maxFileSize ?? 1024 * 1024 * 5, // 5MB
+					maxFileSizeForParsing: options?.maxFileSize ?? 1024 * 1024 * 1, // 1MB
 					retryFailedFiles: true,
 					maxRetries: 3,
 				}

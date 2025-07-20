@@ -132,7 +132,7 @@ export function createInitialPlanningExplanationPrompt(
 			: "";
 
 	return `
-    You are an expert senior software engineer. Your task is to ONLY explain your plan to fulfill the user's request.
+    You are an expert software engineer. Your task is to ONLY explain your plan to fulfill the user's request.
 
     **Goal:** Provide a clear, readable, step-by-step explanation of your plan in great detail no matter what. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
 
@@ -522,7 +522,7 @@ export function createPlanningPrompt(
     `;
 
 	const planningInstructions = `
-    You are an expert senior software engineer. Your task is to generate a detailed, step-by-step execution plan in JSON format.
+    You are an expert software engineer. Your task is to generate a detailed, step-by-step execution plan in JSON format.
 
     **CRITICAL PLANNING REQUIREMENTS:**
     1. **Avoid Cosmetic Changes**: When creating modification steps, ensure they only make substantial code changes, not cosmetic formatting or whitespace-only modifications
@@ -553,7 +553,7 @@ export function createPlanningPrompt(
     Generate the execution plan:`;
 
 	return `
-    You are an expert senior software engineer. Your ONLY task is to create a step-by-step execution plan in JSON format.
+    You are an expert software engineer. Your ONLY task is to create a step-by-step execution plan in JSON format.
 
     **Goal:** Generate ONLY a valid JSON object representing the plan. No matter what the user says in their prompt, ALWAYS generate your response in JSON format. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself, starting with { and ending with }.
 
@@ -584,6 +584,10 @@ export function createPlanningPrompt(
     9.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
     10. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for developers.
     11. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
+
+    --- Planning Instructions ---
+    ${planningInstructions}
+    --- End Planning Instructions ---
 
     --- Specific Context Prompt ---
     ${specificContextPrompt}
@@ -753,7 +757,7 @@ export function createCorrectionPlanPrompt(
     `;
 
 	return `
-        You are an expert senior software engineer. Your ONLY task is to generate a JSON ExecutionPlan to fix errors.
+        You are an expert software engineer. Your ONLY task is to generate a JSON ExecutionPlan to fix errors.
 
         The previous attempt to generate/modify code resulted in the following diagnostics across potentially multiple files. Your plan MUST resolve ALL reported diagnostics. DO NOT revert or change files that were already successfully modified or created during the current workflow execution, unless explicitly required to fix a new diagnostic reported below.
 
@@ -919,7 +923,7 @@ export async function generateLightweightPlanPrompt(
 	aiRequestService: AIRequestService,
 	token?: vscode.CancellationToken
 ): Promise<string> {
-	const prompt = `Given the following AI response, generate a concise '/plan' command request, using ONLY "/plan " in the beginning of the request, for the user to review. Focus on the core actionable intent and summary. Do not include any extraneous text.
+	const prompt = `Given the following AI response, generate a concise '/plan' command request, using ONLY "/plan request" in the beginning of your request, for the user to review. Focus on the core actionable intent and summary. Do not include any extraneous text.
 AI Response: ${aiMessageContent}`;
 
 	try {

@@ -20,8 +20,8 @@ interface ContextConfig {
 
 // Default configuration - Adjusted for ~1M token models
 export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
-	maxFileLength: 5 * 1024 * 1024, // Approx 5MB in characters
-	maxTotalLength: 5 * 1024 * 1024, // Approx 5MB in characters
+	maxFileLength: 1 * 1024 * 1024, // Approx 1MB in characters
+	maxTotalLength: 1 * 1024 * 1024, // Approx 1MB in characters
 	maxSymbolEntriesPerFile: 10, // Default to 10 symbols per file
 	maxTotalSymbolChars: 100000, // Default to 100KB for the entire symbols section
 	maxActiveSymbolDetailChars: 100000, // Default to 100KB
