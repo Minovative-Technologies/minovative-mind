@@ -1335,7 +1335,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		}
 
 		const formattedSnippets: string[] = [];
-		const maxFileSizeForSnippet = 1024 * 50; // 50KB limit per file to prevent prompt overflow
+		const maxFileSizeForSnippet = 1024 * 1024 * 1; // 1MB limit per file to prevent prompt overflow
 
 		for (const relativePath of relevantFiles) {
 			if (token.isCancellationRequested) {
