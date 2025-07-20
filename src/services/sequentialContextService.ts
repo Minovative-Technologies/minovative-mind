@@ -8,11 +8,15 @@ import { scanWorkspace } from "../context/workspaceScanner";
 import { buildDependencyGraph } from "../context/dependencyGraphBuilder";
 import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor";
 import { DEFAULT_MODEL } from "../sidebar/common/sidebarConstants";
-import { getHeuristicRelevantFiles } from "../context/heuristicContextSelector";
+import {
+	getHeuristicRelevantFiles,
+	HeuristicSelectionOptions,
+} from "../context/heuristicContextSelector";
 import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
 } from "../context/smartContextSelector";
+import { SettingsManager } from "../sidebar/managers/settingsManager";
 
 export interface SequentialContextOptions {
 	enableSequentialProcessing?: boolean;
@@ -48,15 +52,18 @@ export class SequentialContextService {
 	private aiRequestService: AIRequestService;
 	private workspaceRoot: vscode.Uri;
 	private postMessageToWebview: (message: any) => void;
+	private settingsManager: SettingsManager; // NEW
 
 	constructor(
 		aiRequestService: AIRequestService,
 		workspaceRoot: vscode.Uri,
-		postMessageToWebview: (message: any) => void
+		postMessageToWebview: (message: any) => void,
+		settingsManager: SettingsManager // NEW
 	) {
 		this.aiRequestService = aiRequestService;
 		this.workspaceRoot = workspaceRoot;
 		this.postMessageToWebview = postMessageToWebview;
+		this.settingsManager = settingsManager; // NEW
 		this.sequentialProcessor = new SequentialFileProcessor(
 			aiRequestService,
 			workspaceRoot,
@@ -328,6 +335,18 @@ export class SequentialContextService {
 			value: "Identifying relevant files for your request...",
 		});
 
+		// Retrieve optimization settings
+		const optimizationSettings = this.settingsManager.getOptimizationSettings();
+
+		// Create a heuristicOptions object
+		const heuristicOptions: HeuristicSelectionOptions = {
+			maxHeuristicFilesTotal: optimizationSettings.maxHeuristicFilesTotal,
+			maxSameDirectoryFiles: optimizationSettings.maxSameDirectoryFiles,
+			maxDirectDependencies: optimizationSettings.maxDirectDependencies,
+			maxReverseDependencies: optimizationSettings.maxReverseDependencies,
+			maxCallHierarchyFiles: optimizationSettings.maxCallHierarchyFiles,
+		};
+
 		// First, use heuristic selection to get initial relevant files
 		const heuristicFiles = await getHeuristicRelevantFiles(
 			allFiles,
@@ -336,7 +355,8 @@ export class SequentialContextService {
 			undefined, // No file dependencies for filtering
 			undefined, // No reverse dependencies for filtering
 			undefined, // No active symbol info for filtering
-			undefined // No cancellation token
+			undefined, // No cancellation token
+			heuristicOptions // Pass heuristicOptions as the last argument
 		);
 
 		// If we have a reasonable number of files, use AI to refine the selection

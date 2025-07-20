@@ -1,7 +1,15 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { PlanGenerationContext } from "../sidebar/common/sidebarTypes";
-import { ActiveSymbolDetailedInfo } from "../services/contextService"; // NEW IMPORT
+import { ActiveSymbolDetailedInfo } from "../services/contextService";
+
+export interface HeuristicSelectionOptions {
+	maxHeuristicFilesTotal: number;
+	maxSameDirectoryFiles: number;
+	maxDirectDependencies: number;
+	maxReverseDependencies: number;
+	maxCallHierarchyFiles: number;
+}
 
 export async function getHeuristicRelevantFiles(
 	allScannedFiles: ReadonlyArray<vscode.Uri>,
@@ -9,13 +17,19 @@ export async function getHeuristicRelevantFiles(
 	activeEditorContext?: PlanGenerationContext["editorContext"],
 	fileDependencies?: Map<string, string[]>,
 	reverseFileDependencies?: Map<string, string[]>,
-	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo, // NEW PARAMETER
-	cancellationToken?: vscode.CancellationToken
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo,
+	cancellationToken?: vscode.CancellationToken,
+	options?: Partial<HeuristicSelectionOptions>
 ): Promise<vscode.Uri[]> {
 	const relevantFilesSet = new Set<vscode.Uri>();
-	const MAX_REVERSE_DEPENDENCIES_TO_INCLUDE = 10; // Define the limit
-	const MAX_CALL_HIERARCHY_INCOMING_FILES_TO_INCLUDE = 8; // NEW CONSTANT
-	const MAX_CALL_HIERARCHY_OUTGOING_FILES_TO_INCLUDE = 8; // NEW CONSTANT
+
+	const effectiveOptions: HeuristicSelectionOptions = {
+		maxHeuristicFilesTotal: options?.maxHeuristicFilesTotal ?? 7,
+		maxSameDirectoryFiles: options?.maxSameDirectoryFiles ?? 3,
+		maxDirectDependencies: options?.maxDirectDependencies ?? 3,
+		maxReverseDependencies: options?.maxReverseDependencies ?? 2,
+		maxCallHierarchyFiles: options?.maxCallHierarchyFiles ?? 2,
+	};
 
 	// 1. Always include the active file if present
 	if (activeEditorContext?.documentUri) {
@@ -25,6 +39,7 @@ export async function getHeuristicRelevantFiles(
 	// 2. Include files in the same directory as the active file
 	if (activeEditorContext?.filePath) {
 		const activeFileDir = path.dirname(activeEditorContext.filePath);
+		let sameDirCount = 0;
 		for (const fileUri of allScannedFiles) {
 			if (cancellationToken?.isCancellationRequested) {
 				break;
@@ -33,7 +48,14 @@ export async function getHeuristicRelevantFiles(
 				.relative(projectRoot.fsPath, fileUri.fsPath)
 				.replace(/\\/g, "/");
 			if (path.dirname(relativePath) === activeFileDir) {
-				relevantFilesSet.add(fileUri);
+				if (sameDirCount >= effectiveOptions.maxSameDirectoryFiles) {
+					break;
+				}
+				if (!relevantFilesSet.has(fileUri)) {
+					// Only add and count if genuinely new to the set
+					relevantFilesSet.add(fileUri);
+					sameDirCount++;
+				}
 			}
 		}
 	}
@@ -51,8 +73,12 @@ export async function getHeuristicRelevantFiles(
 		const importedByActiveFile = fileDependencies.get(activeFileRelativePath);
 
 		if (importedByActiveFile) {
+			let directDepCount = 0;
 			for (const depPath of importedByActiveFile) {
 				if (cancellationToken?.isCancellationRequested) {
+					break;
+				}
+				if (directDepCount >= effectiveOptions.maxDirectDependencies) {
 					break;
 				}
 				// Find the original URI for the dependency from allScannedFiles
@@ -62,8 +88,10 @@ export async function getHeuristicRelevantFiles(
 							.relative(projectRoot.fsPath, uri.fsPath)
 							.replace(/\\/g, "/") === depPath
 				);
-				if (depUri) {
+				if (depUri && !relevantFilesSet.has(depUri)) {
+					// Only add and count if genuinely new to the set
 					relevantFilesSet.add(depUri);
+					directDepCount++;
 				}
 			}
 		}
@@ -89,7 +117,7 @@ export async function getHeuristicRelevantFiles(
 			for (const importerPath of importersOfActiveFile) {
 				if (
 					cancellationToken?.isCancellationRequested ||
-					countAdded >= MAX_REVERSE_DEPENDENCIES_TO_INCLUDE
+					countAdded >= effectiveOptions.maxReverseDependencies // Use effectiveOptions
 				) {
 					break; // Stop if cancelled or limit reached
 				}
@@ -100,7 +128,8 @@ export async function getHeuristicRelevantFiles(
 							.relative(projectRoot.fsPath, uri.fsPath)
 							.replace(/\\/g, "/") === importerPath
 				);
-				if (importerUri) {
+				if (importerUri && !relevantFilesSet.has(importerUri)) {
+					// Only add and count if genuinely new to the set
 					relevantFilesSet.add(importerUri);
 					countAdded++;
 				}
@@ -113,21 +142,24 @@ export async function getHeuristicRelevantFiles(
 		activeEditorContext?.documentUri && // Ensure there's an active file
 		activeSymbolDetailedInfo // Ensure detailed symbol info is available
 	) {
+		let callHierarchyFilesAdded = 0; // Single counter for combined call hierarchy
+
 		// Helper function to process calls and add URIs to the set
 		const addCallHierarchyUris = (
 			calls:
 				| vscode.CallHierarchyIncomingCall[]
 				| vscode.CallHierarchyOutgoingCall[]
-				| undefined,
-			limit: number
+				| undefined
 		) => {
 			if (!calls || calls.length === 0) {
 				return;
 			}
-			let countAdded = 0;
 			for (const call of calls) {
-				if (cancellationToken?.isCancellationRequested || countAdded >= limit) {
-					break;
+				if (cancellationToken?.isCancellationRequested) {
+					return; // Return early if cancelled
+				}
+				if (callHierarchyFilesAdded >= effectiveOptions.maxCallHierarchyFiles) {
+					return; // Limit reached, return from helper
 				}
 				let callUri: vscode.Uri | undefined;
 				// Differentiate based on CallHierarchy type to get the correct URI
@@ -152,9 +184,9 @@ export async function getHeuristicRelevantFiles(
 								.replace(/\\/g, "/") === relativeCallPath
 					);
 
-					if (projectFileUri) {
+					if (projectFileUri && !relevantFilesSet.has(projectFileUri)) {
 						relevantFilesSet.add(projectFileUri);
-						countAdded++;
+						callHierarchyFilesAdded++; // Increment the global counter
 					}
 				}
 			}
@@ -162,20 +194,35 @@ export async function getHeuristicRelevantFiles(
 
 		// Process incoming calls
 		if (activeSymbolDetailedInfo.incomingCalls) {
-			addCallHierarchyUris(
-				activeSymbolDetailedInfo.incomingCalls,
-				MAX_CALL_HIERARCHY_INCOMING_FILES_TO_INCLUDE
-			);
+			addCallHierarchyUris(activeSymbolDetailedInfo.incomingCalls);
 		}
 
 		// Process outgoing calls
 		if (activeSymbolDetailedInfo.outgoingCalls) {
-			addCallHierarchyUris(
-				activeSymbolDetailedInfo.outgoingCalls,
-				MAX_CALL_HIERARCHY_OUTGOING_FILES_TO_INCLUDE
-			);
+			addCallHierarchyUris(activeSymbolDetailedInfo.outgoingCalls);
 		}
 	}
 
-	return Array.from(relevantFilesSet);
+	let resultFiles = Array.from(relevantFilesSet);
+
+	// Prioritize active editor context document URI if it exists and is in the set
+	if (activeEditorContext?.documentUri) {
+		const activeFileUri = activeEditorContext.documentUri;
+		const activeFileIndex = resultFiles.findIndex(
+			(uri) => uri.fsPath === activeFileUri.fsPath
+		);
+		if (activeFileIndex !== -1) {
+			// Remove the active file from its current position
+			resultFiles.splice(activeFileIndex, 1);
+			// Add it to the beginning of the array
+			resultFiles.unshift(activeFileUri);
+		}
+	}
+
+	// Enforce overall total limit after prioritizing active file
+	if (resultFiles.length > effectiveOptions.maxHeuristicFilesTotal) {
+		resultFiles = resultFiles.slice(0, effectiveOptions.maxHeuristicFilesTotal);
+	}
+
+	return resultFiles;
 }

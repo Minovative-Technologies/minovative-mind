@@ -19,3 +19,21 @@ export const TEMPERATURE = 2;
 
 // Minovative commands for the chat input
 export const MINOVATIVE_COMMANDS = ["/plan", "/commit"];
+
+// Optimization settings keys (heuristics context)
+export const OPTIMIZATION_SETTINGS_KEYS = {
+	MAX_HEURISTIC_FILES_TOTAL: "heuristicContext.maxHeuristicFilesTotal",
+	MAX_SAME_DIRECTORY_FILES: "heuristicContext.maxSameDirectoryFiles",
+	MAX_DIRECT_DEPENDENCIES: "heuristicContext.maxDirectDependencies",
+	MAX_REVERSE_DEPENDENCIES: "heuristicContext.maxReverseDependencies",
+	MAX_CALL_HIERARCHY_FILES: "heuristicContext.maxCallHierarchyFiles",
+};
+
+// Default optimization settings for heuristics context
+export const DEFAULT_OPTIMIZATION_SETTINGS = {
+	[OPTIMIZATION_SETTINGS_KEYS.MAX_HEURISTIC_FILES_TOTAL]: 7,
+	[OPTIMIZATION_SETTINGS_KEYS.MAX_SAME_DIRECTORY_FILES]: 3,
+	[OPTIMIZATION_SETTINGS_KEYS.MAX_DIRECT_DEPENDENCIES]: 3,
+	[OPTIMIZATION_SETTINGS_KEYS.MAX_REVERSE_DEPENDENCIES]: 2,
+	[OPTIMIZATION_SETTINGS_KEYS.MAX_CALL_HIERARCHY_FILES]: 2,
+};

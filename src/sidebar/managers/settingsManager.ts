@@ -26,6 +26,11 @@ const OPTIMIZATION_SETTINGS_KEYS = {
 	MAX_PROMPT_LENGTH: "optimization.maxPromptLength",
 	ENABLE_STREAMING: "optimization.enableStreaming",
 	FALLBACK_TO_HEURISTICS: "optimization.fallbackToHeuristics",
+	MAX_HEURISTIC_FILES_TOTAL: "optimization.maxHeuristicFilesTotal",
+	MAX_SAME_DIRECTORY_FILES: "optimization.maxSameDirectoryFiles",
+	MAX_DIRECT_DEPENDENCIES: "optimization.maxDirectDependencies",
+	MAX_REVERSE_DEPENDENCIES: "optimization.maxReverseDependencies",
+	MAX_CALL_HIERARCHY_FILES: "optimization.maxCallHierarchyFiles",
 };
 
 // Default optimization settings
@@ -46,6 +51,11 @@ const DEFAULT_OPTIMIZATION_SETTINGS = {
 	maxPromptLength: 50000,
 	enableStreaming: false,
 	fallbackToHeuristics: true,
+	maxHeuristicFilesTotal: 50,
+	maxSameDirectoryFiles: 20,
+	maxDirectDependencies: 20,
+	maxReverseDependencies: 10,
+	maxCallHierarchyFiles: 15,
 };
 
 export class SettingsManager {
@@ -134,6 +144,26 @@ export class SettingsManager {
 			fallbackToHeuristics: this.getSetting(
 				OPTIMIZATION_SETTINGS_KEYS.FALLBACK_TO_HEURISTICS,
 				DEFAULT_OPTIMIZATION_SETTINGS.fallbackToHeuristics
+			),
+			maxHeuristicFilesTotal: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.MAX_HEURISTIC_FILES_TOTAL,
+				DEFAULT_OPTIMIZATION_SETTINGS.maxHeuristicFilesTotal
+			),
+			maxSameDirectoryFiles: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.MAX_SAME_DIRECTORY_FILES,
+				DEFAULT_OPTIMIZATION_SETTINGS.maxSameDirectoryFiles
+			),
+			maxDirectDependencies: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.MAX_DIRECT_DEPENDENCIES,
+				DEFAULT_OPTIMIZATION_SETTINGS.maxDirectDependencies
+			),
+			maxReverseDependencies: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.MAX_REVERSE_DEPENDENCIES,
+				DEFAULT_OPTIMIZATION_SETTINGS.maxReverseDependencies
+			),
+			maxCallHierarchyFiles: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.MAX_CALL_HIERARCHY_FILES,
+				DEFAULT_OPTIMIZATION_SETTINGS.maxCallHierarchyFiles
 			),
 		};
 	}

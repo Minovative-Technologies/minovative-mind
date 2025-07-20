@@ -200,20 +200,6 @@ export async function selectRelevantFilesAI(
 		}
 	}
 
-	// Initialize the set of final selected URIs with any heuristically pre-selected files
-	const finalSelectedUris: Set<vscode.Uri> = new Set(
-		preSelectedHeuristicFiles || []
-	);
-
-	// Ensure the active editor's file is always part of the final selection if available,
-	// unless it's already included by the heuristics.
-	if (
-		activeEditorContext?.documentUri &&
-		!finalSelectedUris.has(activeEditorContext.documentUri)
-	) {
-		finalSelectedUris.add(activeEditorContext.documentUri);
-	}
-
 	const relativeFilePaths = allScannedFiles.map((uri) =>
 		path.relative(projectRoot.fsPath, uri.fsPath).replace(/\\/g, "/")
 	);
@@ -369,7 +355,7 @@ export async function selectRelevantFilesAI(
 
 	Instructions for your response:
 	1.  Analyze all the provided information to understand the user's goal.
-	2.  Crucially consider the 'Heuristically Pre-selected Files' if present; these files are highly likely to be relevant and should almost always be included unless explicitly contradictory to the request.
+	2.  Review the 'Heuristically Pre-selected Files' if present. While these files are initial candidates based on proximity, **your critical task is to select *only* the most directly relevant subset of files** from *all* available files (including and beyond the heuristically pre-selected ones) to address the user's request and provided diagnostics. **Actively discard any heuristically suggested files that do not directly contribute to solving the problem or fulfilling the request.** Prioritize files essential for the task over simply related ones.
 	3.  Carefully examine the 'Internal File Relationships' section if present, as it provides crucial context on how files relate to each other, forming logical modules or feature areas.
 	4.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes. Prioritize files that are imported by the active file, or by other files you deem highly relevant to the user's request.
 	5.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
@@ -421,17 +407,29 @@ export async function selectRelevantFilesAI(
 			.replace(/\s*```$/, "");
 
 		const selectedPaths: unknown = JSON.parse(cleanedResponse);
+		const aiSelectedFilesSet = new Set<vscode.Uri>(); // NEW: aiSelectedFilesSet initialization
 
 		if (
 			!Array.isArray(selectedPaths) ||
 			!selectedPaths.every((p) => typeof p === "string")
 		) {
 			console.warn(
-				"[SmartContextSelector] AI did not return a valid JSON array of strings. Returning heuristically pre-selected files. Response:",
+				"[SmartContextSelector] AI did not return a valid JSON array of strings. Falling back to heuristics + active file. Response:",
 				selectedPaths
 			);
-			// Fallback to just heuristic files if AI response is invalid
-			const result = Array.from(finalSelectedUris);
+			// Fallback logic for invalid AI response: combine pre-selected heuristics and active file
+			let fallbackResultFiles: vscode.Uri[] = Array.from(
+				preSelectedHeuristicFiles || []
+			); // Start with heuristics
+			if (
+				activeEditorContext?.documentUri &&
+				!fallbackResultFiles.some(
+					(uri) => uri.fsPath === activeEditorContext.documentUri.fsPath
+				)
+			) {
+				fallbackResultFiles.unshift(activeEditorContext.documentUri); // Add active file if not already present
+			}
+			const result = fallbackResultFiles; // Set result for caching and return
 
 			// Cache the fallback result
 			if (useCache) {
@@ -465,7 +463,7 @@ export async function selectRelevantFilesAI(
 						.toLowerCase() === normalizedSelectedPath.toLowerCase()
 			);
 			if (originalUri) {
-				finalSelectedUris.add(originalUri); // Add AI-selected files to the set
+				aiSelectedFilesSet.add(originalUri); // Add AI-selected files to the set
 			} else {
 				console.warn(
 					`[SmartContextSelector] AI selected a file not in the original scan or with altered path: ${selectedPath}`
@@ -473,8 +471,20 @@ export async function selectRelevantFilesAI(
 			}
 		}
 
+		let finalResultFiles: vscode.Uri[] = Array.from(aiSelectedFilesSet); // NEW: Create finalResultFiles from AI selection
+
+		// NEW: Add active editor's file if it exists and is NOT already in aiSelectedFilesSet
+		if (
+			activeEditorContext?.documentUri &&
+			!finalResultFiles.some(
+				(uri) => uri.fsPath === activeEditorContext.documentUri.fsPath
+			)
+		) {
+			finalResultFiles.unshift(activeEditorContext.documentUri); // Ensure active file is first
+		}
+
 		// Cache the successful result
-		const result = Array.from(finalSelectedUris);
+		const result = finalResultFiles; // Modified to use finalResultFiles
 		if (useCache) {
 			const cacheKey = generateAISelectionCacheKey(
 				userRequest,
@@ -492,7 +502,7 @@ export async function selectRelevantFilesAI(
 			});
 		}
 
-		// Return the combined set of heuristic and AI-selected files
+		// Return the final combined AI-selected and active files
 		return result;
 	} catch (error) {
 		console.error(
@@ -500,8 +510,19 @@ export async function selectRelevantFilesAI(
 			error
 		);
 		// In case of an error (API error, parsing error, etc.),
-		// fall back to the heuristically pre-selected files.
-		const result = Array.from(finalSelectedUris);
+		// fall back to the heuristically pre-selected files AND the active file.
+		let fallbackResultFiles: vscode.Uri[] = Array.from(
+			preSelectedHeuristicFiles || []
+		); // Start with heuristics
+		if (
+			activeEditorContext?.documentUri &&
+			!fallbackResultFiles.some(
+				(uri) => uri.fsPath === activeEditorContext.documentUri.fsPath
+			)
+		) {
+			fallbackResultFiles.unshift(activeEditorContext.documentUri); // Add active file if not already present
+		}
+		const result = fallbackResultFiles; // Set result for caching and return
 
 		// Cache the error fallback result
 		if (useCache) {

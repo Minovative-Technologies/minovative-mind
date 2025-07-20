@@ -1,4 +1,3 @@
-// src/services/contextService.ts
 import * as vscode from "vscode";
 import * as path from "path";
 import BPromise from "bluebird";
@@ -12,7 +11,10 @@ import {
 	buildDependencyGraph,
 	buildReverseDependencyGraph,
 } from "../context/dependencyGraphBuilder";
-import { getHeuristicRelevantFiles } from "../context/heuristicContextSelector"; // Import heuristic selector
+import {
+	getHeuristicRelevantFiles,
+	HeuristicSelectionOptions,
+} from "../context/heuristicContextSelector"; // Import heuristic selector
 import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
@@ -116,7 +118,8 @@ export class ContextService {
 			this.sequentialContextService = new SequentialContextService(
 				this.aiRequestService,
 				workspaceRoot,
-				this.postMessageToWebview
+				this.postMessageToWebview,
+				this.settingsManager
 			);
 		}
 		return this.sequentialContextService;
@@ -468,6 +471,13 @@ export class ContextService {
 
 			// Populate heuristicSelectedFiles by awaiting a call to getHeuristicRelevantFiles
 			try {
+				// Retrieve optimization settings
+				const optimizationSettings =
+					this.settingsManager.getOptimizationSettings();
+				// Create a heuristicOptions object populated with these settings
+				const heuristicOptions: HeuristicSelectionOptions =
+					optimizationSettings;
+
 				heuristicSelectedFiles = await getHeuristicRelevantFiles(
 					allScannedFiles,
 					rootFolder.uri,
@@ -475,7 +485,8 @@ export class ContextService {
 					fileDependencies,
 					reverseFileDependencies, // Pass reverseFileDependencies
 					activeSymbolDetailedInfo, // Pass activeSymbolDetailedInfo
-					cancellationToken
+					cancellationToken,
+					heuristicOptions // Pass heuristicOptions as the last argument
 				);
 				if (heuristicSelectedFiles.length > 0) {
 					this.postMessageToWebview({
