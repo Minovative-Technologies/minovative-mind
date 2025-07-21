@@ -35,25 +35,32 @@ export function updateApiKeyStatus(
 export function updateStatus(
 	elements: RequiredDomElements,
 	text: string,
-	isError: boolean = false
+	isError: boolean = false,
+	showLoadingDots: boolean = false
 ): void {
 	const sanitizedText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-	elements.statusArea.textContent = sanitizedText;
+	let displayHtml = sanitizedText;
+
+	if (showLoadingDots) {
+		displayHtml += `<span class="loading-text"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>`;
+	}
+
+	elements.statusArea.innerHTML = displayHtml;
 	elements.statusArea.style.color = isError
 		? "var(--vscode-errorForeground)"
 		: "var(--vscode-descriptionForeground)";
 
-	if (!isError) {
+	if (!isError && !showLoadingDots) {
 		setTimeout(() => {
 			// Only clear if the current content is still the one set by this timeout
-			if (elements.statusArea.textContent === sanitizedText) {
+			if (elements.statusArea.innerHTML === displayHtml) {
 				elements.statusArea.textContent = "";
 			}
-		}, 10000); // 10 seconds for non-error messages
-	} else {
+		}, 10000); // 10 seconds for non-error messages (when no loading dots)
+	} else if (isError) {
 		setTimeout(() => {
 			// Only clear if the current content is still the one set by this timeout
-			if (elements.statusArea.textContent === sanitizedText) {
+			if (elements.statusArea.innerHTML === displayHtml) {
 				elements.statusArea.textContent = "";
 			}
 		}, 45000); // 45 seconds for error messages

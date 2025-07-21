@@ -151,7 +151,8 @@ export class ContextService {
 			const scanStartTime = Date.now();
 			this.postMessageToWebview({
 				type: "statusUpdate",
-				value: "Minovative Mind is scanning workspace for relevant files...",
+				value: "Minovative Mind is scanning workspace for relevant files",
+				showLoadingDots: true, // ADDED
 			});
 
 			const allScannedFiles = await scanWorkspace({
@@ -195,7 +196,8 @@ export class ContextService {
 			const dependencyStartTime = Date.now();
 			this.postMessageToWebview({
 				type: "statusUpdate",
-				value: "Minovative Mind is analyzing file dependencies...",
+				value: "Minovative Mind is analyzing file dependencies",
+				showLoadingDots: true, // ADDED
 			});
 
 			const fileDependencies = await buildDependencyGraph(
@@ -572,7 +574,8 @@ export class ContextService {
 			) {
 				this.postMessageToWebview({
 					type: "statusUpdate",
-					value: "Minovative Mind is identifying relevant files using AI...", // Updated message
+					value: "Minovative Mind is identifying relevant files using AI", // Updated message
+					showLoadingDots: true, // ADDED
 				});
 				try {
 					const selectionOptions: SelectRelevantFilesAIOptions = {

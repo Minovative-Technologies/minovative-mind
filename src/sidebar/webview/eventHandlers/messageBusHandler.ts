@@ -863,7 +863,12 @@ export function initializeMessageBusHandler(
 			}
 			case "statusUpdate": {
 				if (typeof message.value === "string") {
-					updateStatus(elements, message.value, message.isError ?? false);
+					updateStatus(
+						elements,
+						message.value,
+						message.isError ?? false,
+						message.showLoadingDots ?? false
+					);
 					if (
 						appState.isCancellationInProgress &&
 						message.value.toLowerCase().includes("cancelled")
