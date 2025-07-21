@@ -16,6 +16,7 @@ import {
 } from "./statusManager";
 import { RequiredDomElements } from "../types/webviewTypes";
 import { initializeDomElements } from "../state/domElements";
+import { ImageInlineData } from "../../common/sidebarTypes"; // New import
 
 // Global reference to setLoadingState function
 let globalSetLoadingState:
@@ -40,7 +41,8 @@ export function appendMessage(
 	messageIndexForHistory?: number,
 	isRelevantFilesExpandedForHistory?: boolean,
 	isPlanExplanationForRender: boolean = false,
-	isPlanStepUpdateForRender: boolean = false // New parameter
+	isPlanStepUpdateForRender: boolean = false,
+	imageParts?: ImageInlineData[] // New parameter
 ): void {
 	// elements.chatContainer is guaranteed to be present by the RequiredDomElements type,
 	// so no null check is needed for chatContainer itself.
@@ -653,6 +655,25 @@ export function appendMessage(
 				textElement.innerHTML = renderedHtml;
 				// Store the original markdown text for copy functionality
 				textElement.dataset.originalMarkdown = text;
+
+				// Add image attached indicator for user messages with image parts
+				if (
+					className.includes("user-message") &&
+					imageParts &&
+					imageParts.length > 0
+				) {
+					const imageIndicatorSpan = document.createElement("span");
+					imageIndicatorSpan.classList.add("image-attached-indicator");
+					imageIndicatorSpan.textContent = "Image Attached";
+					imageIndicatorSpan.style.fontSize = "0.9em";
+					imageIndicatorSpan.style.opacity = "0.7";
+					imageIndicatorSpan.style.fontStyle = "italic";
+					imageIndicatorSpan.style.backgroundColor = "#222";
+					imageIndicatorSpan.style.padding = "4px 8px";
+					imageIndicatorSpan.style.borderRadius = "5px";
+					textElement.appendChild(imageIndicatorSpan);
+				}
+
 				// Enable buttons for completed messages IF NOT a plan step update
 				if (!isPlanStepUpdateForRender) {
 					if (copyButton) {

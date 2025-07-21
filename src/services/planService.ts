@@ -3,7 +3,10 @@ import * as path from "path";
 import { GenerationConfig } from "@google/generative-ai";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import * as sidebarTypes from "../sidebar/common/sidebarTypes"; // Import sidebarTypes
-import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes"; // ADDED IMPORT
+import {
+	ExtensionToWebviewMessages,
+	HistoryEntryPart,
+} from "../sidebar/common/sidebarTypes"; // ADDED IMPORT // MODIFIED: Added HistoryEntryPart
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
 import {
 	createInitialPlanningExplanationPrompt,
@@ -159,9 +162,10 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 			);
 
 			let accumulatedTextualResponse = "";
+			// Line 164: Modify first argument to wrap string prompt in HistoryEntryPart array
 			textualPlanResponse =
 				await this.provider.aiRequestService.generateWithRetry(
-					textualPlanPrompt,
+					[{ text: textualPlanPrompt }], // MODIFIED
 					modelName,
 					undefined,
 					"initial plan explanation",
@@ -263,7 +267,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 									? new Error(finalErrorForDisplay)
 									: new Error("Unknown error"), // Pass an actual Error instance
 								"An unexpected error occurred during initial plan generation.",
-								"Error: ",
+								"AI response error: ",
 								rootFolder.uri
 						  ),
 				}),
@@ -416,9 +420,10 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 			});
 
 			let textualPlanResponse = "";
+			// Line 421: Modify first argument to wrap string prompt in HistoryEntryPart array
 			textualPlanResponse =
 				await this.provider.aiRequestService.generateWithRetry(
-					textualPlanPrompt,
+					[{ text: textualPlanPrompt }], // MODIFIED
 					modelName,
 					undefined,
 					"editor action plan explanation",
@@ -655,9 +660,10 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 				}
 
 				// AI Request
+				// Line 660: Modify first argument to wrap string prompt in HistoryEntryPart array
 				structuredPlanJsonString =
 					await this.provider.aiRequestService.generateWithRetry(
-						currentJsonPlanningPrompt, // Use the dynamically updated prompt
+						[{ text: currentJsonPlanningPrompt }], // MODIFIED
 						planContext.modelName,
 						undefined,
 						"structured plan generation",
@@ -1607,6 +1613,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 			.map(
 				(entry) =>
 					`Role: ${entry.role}\nContent:\n${entry.parts
+						.filter((p): p is { text: string } => "text" in p) // MODIFIED: Change type guard here
 						.map((p) => p.text)
 						.join("\n")}`
 			)
@@ -1775,9 +1782,10 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 						message: `AI generating overall correction plan (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
 					});
 
+					// Line 1780: Modify first argument to wrap string prompt in HistoryEntryPart array
 					let correctionPlanJsonString =
 						await this.provider.aiRequestService.generateWithRetry(
-							correctionPlanPrompt,
+							[{ text: correctionPlanPrompt }], // MODIFIED
 							planContext.modelName,
 							undefined,
 							`final correction plan generation (attempt ${currentCorrectionAttempt})`,
@@ -1966,9 +1974,10 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 					message: `AI generating command correction plan (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
 				});
 
+				// Line 1971: Modify first argument to wrap string prompt in HistoryEntryPart array
 				let correctionPlanJsonString =
 					await this.provider.aiRequestService.generateWithRetry(
-						correctionPlanPrompt,
+						[{ text: correctionPlanPrompt }], // MODIFIED
 						planContext.modelName,
 						undefined,
 						`command correction plan generation (attempt ${currentCorrectionAttempt})`,

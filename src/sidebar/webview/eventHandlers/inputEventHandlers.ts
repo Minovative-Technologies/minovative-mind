@@ -9,9 +9,15 @@ import {
 import { MINOVATIVE_COMMANDS } from "../../common/sidebarConstants";
 import { appState } from "../state/appState";
 import { RequiredDomElements } from "../types/webviewTypes";
+import {
+	readFileAsBase64,
+	displayImagePreview,
+	clearImagePreviews,
+} from "../utils/imageUtils";
 
 /**
- * Initializes all event listeners related to the chat input field and command suggestions.
+ * Initializes all event listeners related to the chat input field and command suggestions,
+ * and now also image file uploads.
  * @param elements The necessary DOM elements, encapsulated in RequiredDomElements.
  * @param setLoadingState A callback function to update the global loading state in the main application.
  */
@@ -20,10 +26,23 @@ export function initializeInputEventListeners(
 	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	const { chatInput } = elements;
+	// Assuming these elements are now part of RequiredDomElements for compilation
+	// If not, a TypeScript error will occur here, implying that RequiredDomElements needs to be updated.
+	// Also assuming appState.selectedImages is an array of { file: File, mimeType: string, data: string, previewElement: HTMLElement }
+	// If not, a TypeScript error will occur here, implying that WebviewAppState needs to be updated.
+	const imageUploadInput = elements.imageUploadInput;
+	const clearImagesButton = elements.clearImagesButton;
+	const imagePreviewsContainer = elements.imagePreviewsContainer!; // Use non-null assertion as per instruction to address diagnostic
 
 	if (!chatInput) {
 		console.error(
 			"Chat input element not found. Cannot initialize input event listeners."
+		);
+		return;
+	}
+	if (!imageUploadInput || !clearImagesButton || !imagePreviewsContainer) {
+		console.error(
+			"Image upload related DOM elements not found. Cannot initialize image upload event listeners."
 		);
 		return;
 	}
@@ -130,5 +149,70 @@ export function initializeInputEventListeners(
 				hideCommandSuggestions(elements, setLoadingState);
 			}
 		}, 150); // 150ms delay to allow click event to propagate
+	});
+
+	// Event listener for image file selection
+	imageUploadInput.addEventListener("change", async (event: Event) => {
+		const input = event.target as HTMLInputElement;
+		if (!input.files || input.files.length === 0) {
+			console.log("No files selected.");
+			// Clear existing previews if input becomes empty (e.g., user cancels file selection)
+			clearImagePreviews(imagePreviewsContainer);
+			appState.selectedImages = [];
+			input.value = ""; // Reset the input value so selecting the same file again triggers 'change'
+			clearImagesButton.style.display = "none";
+			setLoadingState(appState.isLoading, elements); // Call after clearing images to update preview area visibility
+			return;
+		}
+
+		const files = Array.from(input.files);
+
+		// Clear any previously selected images and state
+		clearImagePreviews(imagePreviewsContainer);
+		appState.selectedImages = [];
+
+		for (const file of files) {
+			try {
+				const base64Data = await readFileAsBase64(file);
+				const mimeType = file.type;
+
+				const removeImageCallback = (elToRemove: HTMLDivElement) => {
+					// Remove from appState.selectedImages
+					appState.selectedImages = appState.selectedImages.filter(
+						(img) => img.previewElement !== elToRemove
+					);
+					// Remove from DOM
+					elToRemove.remove();
+					elements.imageUploadInput.value = ""; // Reset the input value after an image is removed
+					setLoadingState(appState.isLoading, elements); // CRITICAL REQ: Call after removal
+					// Update button visibility
+					clearImagesButton.style.display =
+						appState.selectedImages.length > 0 ? "inline-flex" : "none";
+				};
+
+				const previewElement = displayImagePreview(
+					file,
+					imagePreviewsContainer,
+					removeImageCallback
+				);
+
+				// Push file, mimeType, data, and previewElement into appState.selectedImages
+				appState.selectedImages.push({
+					file: file,
+					mimeType: mimeType,
+					data: base64Data.data,
+					previewElement: previewElement, // Store reference to the DOM element for easy removal
+				});
+			} catch (error) {
+				console.error(`Error reading or displaying file ${file.name}:`, error);
+				// Optionally display an error message to the user
+			}
+		}
+
+		// CRITICAL REQ: Call after the loop to update the overall image preview area visibility
+		setLoadingState(appState.isLoading, elements);
+		// Show clearImagesButton if images are selected, otherwise hide it.
+		clearImagesButton.style.display =
+			appState.selectedImages.length > 0 ? "inline-flex" : "none";
 	});
 }

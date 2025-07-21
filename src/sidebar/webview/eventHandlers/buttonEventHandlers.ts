@@ -12,6 +12,7 @@ import {
 	faChevronRight,
 	faPlus,
 	faUndo,
+	faImage, // Added faImage import
 } from "@fortawesome/free-solid-svg-icons";
 import { setIconForButton } from "../utils/iconHelpers";
 import { postMessageToExtension } from "../utils/vscodeApi";
@@ -19,13 +20,13 @@ import { updateStatus, updateApiKeyStatus } from "../ui/statusManager";
 import { appState } from "../state/appState";
 import { sendMessage } from "../messageSender";
 import {
-	hideCommitReviewUI,
 	hidePlanParseErrorUI,
 	// createPlanConfirmationUI, // This function creates the UI and attaches internal confirmation event listeners - not used directly here
 } from "../ui/confirmationAndReviewUIs";
 import { stopTypingAnimation } from "../ui/typingAnimation";
 import { RequiredDomElements } from "../types/webviewTypes"; // Correct import path
 import { md } from "../utils/markdownRenderer"; // Import markdown renderer
+import { clearImagePreviews } from "../utils/imageUtils"; // New import
 
 /**
  * Initializes all button and interactive element event listeners in the webview.
@@ -55,6 +56,8 @@ export function initializeButtonEventListeners(
 		cancelGenerationButton,
 		chatContainer,
 		revertChangesButton,
+		attachImageButton, // Modified destructuring: rename uploadImageButton to attachImageButton
+		clearImagesButton,
 	} = elements;
 
 	// Initial icon setup for buttons
@@ -72,6 +75,8 @@ export function initializeButtonEventListeners(
 	setIconForButton(confirmCommitButton, faCheck);
 	setIconForButton(cancelCommitButton, faTimes);
 	setIconForButton(revertChangesButton, faUndo);
+	setIconForButton(attachImageButton, faImage); // Added icon for attachImageButton
+	setIconForButton(clearImagesButton, faTimes);
 	// `createPlanConfirmationUI` is called during webview initialization (e.g., in main.ts)
 	// and it handles its own button icon setup internally.
 
@@ -243,6 +248,24 @@ export function initializeButtonEventListeners(
 
 		postMessageToExtension({ type: "universalCancel" });
 		updateStatus(elements, "Cancelling operations...", false);
+	});
+
+	// Attach Image Button
+	attachImageButton.addEventListener("click", () => {
+		console.log(
+			"Attach Image button clicked, programmatically clicking hidden input."
+		);
+		elements.imageUploadInput.click();
+	});
+
+	// Clear Images Button
+	clearImagesButton.addEventListener("click", () => {
+		console.log("Clear Images button clicked.");
+		clearImagePreviews(elements.imagePreviewsContainer);
+		appState.selectedImages = [];
+		elements.imageUploadInput.value = "";
+		setLoadingState(appState.isLoading, elements); // Added this line
+		elements.clearImagesButton.style.display = "none"; // Hide the button
 	});
 
 	// Chat Container (for message actions: copy, delete, open file)

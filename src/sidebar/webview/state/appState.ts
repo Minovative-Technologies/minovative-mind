@@ -38,4 +38,5 @@ export const appState: WebviewAppState = {
 	totalKeys: 0,
 	isTokenUsageVisible: false, // Initialize token usage visibility
 	nextMessageIndex: 0,
+	selectedImages: [], // Initialize the new property
 };

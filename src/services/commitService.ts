@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
+import { HistoryEntryPart } from "../sidebar/common/sidebarTypes";
 import {
 	constructGitCommitCommand,
 	getGitStagedDiff,
@@ -128,7 +129,7 @@ export class CommitService {
 			// Generate commit message using AI
 			let commitMessage =
 				await this.provider.aiRequestService.generateWithRetry(
-					commitMessagePrompt,
+					[{ text: commitMessagePrompt }],
 					modelName,
 					undefined,
 					"commit message generation",

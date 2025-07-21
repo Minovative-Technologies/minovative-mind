@@ -1,14 +1,22 @@
 // src/services/aiRequestService.ts
 import * as vscode from "vscode";
-import { Content, GenerationConfig } from "@google/generative-ai";
+import {
+	Content,
+	GenerationConfig,
+	GenerativeContentBlob,
+} from "@google/generative-ai";
 import { ApiKeyManager } from "../sidebar/managers/apiKeyManager";
-import { HistoryEntry } from "../sidebar/common/sidebarTypes";
+import {
+	HistoryEntry,
+	HistoryEntryPart,
+	ImageInlineData,
+} from "../sidebar/common/sidebarTypes";
 import {
 	ERROR_OPERATION_CANCELLED,
 	ERROR_QUOTA_EXCEEDED,
 	ERROR_SERVICE_UNAVAILABLE,
 	generateContentStream,
-	countGeminiTokens, // <-- ADD THIS IMPORT
+	countGeminiTokens,
 } from "../ai/gemini";
 import {
 	ParallelProcessor,
@@ -30,9 +38,28 @@ export class AIRequestService {
 	private transformHistoryForGemini(history: HistoryEntry[]): Content[] {
 		return history.map((entry) => ({
 			role: entry.role,
-			parts: entry.parts.map((part) => ({
-				text: part.text,
-			})),
+			parts: entry.parts.map((part) => {
+				// HistoryEntryPart can be either { text: string } or { inlineData: ImageInlineData }
+				if ("inlineData" in part) {
+					// If 'inlineData' property exists, it's an image part
+					const inlineData = part.inlineData;
+					return {
+						inlineData: {
+							data: inlineData.data,
+							mimeType: inlineData.mimeType,
+						},
+					};
+				} else if ("text" in part) {
+					// If 'text' property exists, it's a text part
+					return {
+						text: part.text,
+					};
+				}
+				// Fallback for unexpected cases. This should theoretically not be reached
+				// if HistoryEntryPart is strictly defined as {text: string} | {inlineData: ImageInlineData}.
+				// Keeping it for robustness as per the original code's implied fallback.
+				return { text: "" };
+			}),
 		}));
 	}
 
@@ -41,7 +68,7 @@ export class AIRequestService {
 	 * It handles API key rotation on quota errors, retries, and cancellation.
 	 */
 	public async generateWithRetry(
-		prompt: string,
+		userContentParts: HistoryEntryPart[], // Changed parameter from prompt: string
 		modelName: string,
 		history: readonly HistoryEntry[] | undefined,
 		requestType: string = "request",
@@ -65,7 +92,6 @@ export class AIRequestService {
 		// Initialize these variables at the top of generateWithRetry
 		let finalInputTokens = 0;
 		let finalOutputTokens = 0; // Initialize here for broader scope
-		let totalInputTextForContext = prompt; // Default to prompt, will include history below
 
 		if (!currentApiKey) {
 			if (apiKeyList.length > 0) {
@@ -88,22 +114,47 @@ export class AIRequestService {
 				? this.transformHistoryForGemini(history as HistoryEntry[])
 				: undefined;
 
-		// Construct totalInputTextForContext including history for consistent heuristic fallback and tracking context
-		if (history && history.length > 0) {
-			const historyText = history
-				.map((entry) => entry.parts.map((part) => part.text).join(" "))
+		const currentUserContentPartsForGemini = userContentParts
+			.map((part) => {
+				if ("text" in part && part.text !== undefined) {
+					return { text: part.text };
+				} else if ("inlineData" in part) {
+					return { inlineData: part.inlineData };
+				}
+				return { text: "" }; // Fallback
+			})
+			.filter(
+				(part) =>
+					("text" in part && (part as { text: string }).text.length > 0) ||
+					"inlineData" in part
+			); // Ensure valid parts
+
+		const requestContentsForGemini: Content[] = [
+			...(historyForGemini || []),
+			{ role: "user", parts: currentUserContentPartsForGemini },
+		];
+
+		const userMessageTextForContext = userContentParts
+			.filter((part): part is { text: string } => "text" in part)
+			.map((part) => part.text)
+			.join(" ");
+		let totalInputTextForContext = userMessageTextForContext;
+		if (historyForGemini && historyForGemini.length > 0) {
+			const historyTextParts = historyForGemini
+				.map((entry) =>
+					entry.parts.map((p) => ("text" in p ? p.text : "")).join(" ")
+				)
 				.join(" ");
-			totalInputTextForContext = historyText + " " + prompt;
+			totalInputTextForContext =
+				historyTextParts + " " + userMessageTextForContext;
 		}
 
-		// NEW: Calculate input tokens accurately using Gemini API before starting the request
 		if (this.tokenTrackingService && currentApiKey) {
 			try {
 				finalInputTokens = await countGeminiTokens(
 					currentApiKey,
 					modelName,
-					prompt,
-					historyForGemini
+					requestContentsForGemini
 				);
 				console.log(
 					`[AIRequestService] Accurately counted ${finalInputTokens} input tokens for model ${modelName}.`
@@ -113,7 +164,6 @@ export class AIRequestService {
 					`[AIRequestService] Failed to get accurate input token count from Gemini API (${modelName}), falling back to estimate. Error:`,
 					e
 				);
-				// Fallback to heuristic if API call for counting fails
 				finalInputTokens = this.tokenTrackingService.estimateTokens(
 					totalInputTextForContext
 				);
@@ -146,11 +196,12 @@ export class AIRequestService {
 					throw new Error("API Key became invalid during retry loop.");
 				}
 
+				// The requestContents for generateContentStream is implicitly built inside gemini.ts
+				// by combining 'prompt' and 'history'.
 				const stream = generateContentStream(
 					currentApiKey,
 					modelName,
-					prompt,
-					historyForGemini, // Ensure historyForGemini is passed to generateContentStream
+					requestContentsForGemini,
 					generationConfig,
 					token,
 					isMergeOperation
@@ -185,10 +236,11 @@ export class AIRequestService {
 				// NEW: Accurately count and track output tokens after the response is complete
 				if (this.tokenTrackingService && currentApiKey) {
 					try {
+						// Update call to countGeminiTokens to pass only the output text for output token count
 						finalOutputTokens = await countGeminiTokens(
 							currentApiKey,
 							modelName,
-							accumulatedResult
+							[{ role: "model", parts: [{ text: accumulatedResult }] }]
 						);
 						console.log(
 							`[AIRequestService] Accurately counted ${finalOutputTokens} output tokens for model ${modelName}.`
@@ -334,7 +386,7 @@ export class AIRequestService {
 	public async generateMultipleInParallel(
 		requests: Array<{
 			id: string;
-			prompt: string;
+			userContentParts: HistoryEntryPart[]; // Changed from prompt: string
 			modelName: string;
 			history?: readonly HistoryEntry[];
 			generationConfig?: GenerationConfig;
@@ -351,7 +403,7 @@ export class AIRequestService {
 			id: request.id,
 			task: () =>
 				this.generateWithRetry(
-					request.prompt,
+					request.userContentParts, // Changed to new parameter
 					request.modelName,
 					request.history,
 					`parallel-${request.id}`,
@@ -404,7 +456,7 @@ export class AIRequestService {
 	public async generateInBatches(
 		requests: Array<{
 			id: string;
-			prompt: string;
+			userContentParts: HistoryEntryPart[]; // Changed from prompt: string
 			modelName: string;
 			history?: readonly HistoryEntry[];
 			generationConfig?: GenerationConfig;
@@ -422,7 +474,7 @@ export class AIRequestService {
 			id: request.id,
 			task: () =>
 				this.generateWithRetry(
-					request.prompt,
+					request.userContentParts, // Changed to new parameter
 					request.modelName,
 					request.history,
 					`batch-${request.id}`,

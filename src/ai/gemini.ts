@@ -85,8 +85,7 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
  *
  * @param apiKey The API key.
  * @param modelName The specific Gemini model name to use.
- * @param prompt The user's text prompt.
- * @param history Optional chat history for context.
+ * @param contents The content array for the Gemini model.
  * @param generationConfig Optional configuration for this generation request (e.g., for JSON mode).
  * @param token Optional cancellation token from VS Code.
  * @param isMergeOperation Optional boolean, true if this generation is for a merge conflict resolution.
@@ -95,8 +94,7 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
 export async function* generateContentStream(
 	apiKey: string,
 	modelName: string,
-	prompt: string,
-	history?: Content[],
+	contents: Content[],
 	generationConfig?: GenerationConfig,
 	token?: vscode.CancellationToken,
 	isMergeOperation: boolean = false
@@ -119,11 +117,6 @@ export async function* generateContentStream(
 		);
 	}
 
-	const requestContents: Content[] = [
-		...(history || []),
-		{ role: "user", parts: [{ text: prompt }] },
-	];
-
 	// This is now valid after updating the @google/generative-ai package.
 	const requestConfig = {
 		...generationConfig,
@@ -135,10 +128,20 @@ export async function* generateContentStream(
 	let contentYielded = false;
 
 	try {
-		const truncatedPrompt =
-			prompt.length > 100 ? `${prompt.substring(0, 100)}...` : prompt;
+		const truncatedContentsLog = contents
+			.map((c) =>
+				c.parts
+					.map((p) =>
+						"text" in p
+							? (p as { text: string }).text.substring(0, 50) +
+							  ((p as { text: string }).text.length > 50 ? "..." : "")
+							: "[IMAGE]"
+					)
+					.join(" ")
+			)
+			.join(" | ");
 		console.log(
-			`Gemini (${modelName}): Sending stream request. Prompt: "${truncatedPrompt}"`
+			`Gemini (${modelName}): Sending stream request. Contents: "${truncatedContentsLog}"`
 		);
 		console.log(
 			`Gemini (${modelName}): Using generationConfig: ${JSON.stringify(
@@ -150,7 +153,7 @@ export async function* generateContentStream(
 		}
 
 		const result = await model.generateContentStream({
-			contents: requestContents,
+			contents: contents,
 			generationConfig: requestConfig,
 		});
 
@@ -269,15 +272,13 @@ export function resetClient() {
  *
  * @param apiKey The API key to use.
  * @param modelName The name of the model (e.g., 'gemini-pro').
- * @param text The main text content to count.
- * @param history Optional conversation history as Gemini Content objects.
+ * @param contents The content array for the Gemini model.
  * @returns The total token count.
  */
 export async function countGeminiTokens(
 	apiKey: string,
 	modelName: string,
-	text: string,
-	history?: Content[]
+	contents: Content[]
 ): Promise<number> {
 	// Ensure the generative AI client and model are initialized for the given key and model name.
 	// This function internally sets the global 'model' variable if needed.
@@ -293,19 +294,12 @@ export async function countGeminiTokens(
 		);
 	}
 
-	const parts = [{ text: text }];
-	// Combine history and current text into contents array for token counting
-	const requestContents: Content[] = [
-		...(history || []),
-		{ role: "user", parts },
-	];
-
 	try {
 		console.log(
 			`[Gemini Token Counter] Requesting token count for model '${modelName}'...`
 		);
 		const { totalTokens } = await model.countTokens({
-			contents: requestContents,
+			contents: contents,
 		});
 		console.log(
 			`[Gemini Token Counter] Successfully counted ${totalTokens} tokens for model '${modelName}'.`

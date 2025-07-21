@@ -77,6 +77,11 @@
     </div>
   </div>
 
+  <!-- New location for image previews container as per instructions -->
+  <div id="image-previews-container" class="image-previews-container" style="display: none;">
+    <!-- Image previews will be dynamically added here by JavaScript -->
+  </div>
+
   <div id="chat-input-controls-wrapper">
     <!-- Google Search Grounding Toggle -->
     <div id="grounding-toggle-container" style="display: flex; align-items: center; margin-bottom: 6px;">
@@ -90,10 +95,18 @@
       <!-- Suggestions will be dynamically added here by JavaScript -->
     </div>
 
+    <!-- Original Image Previews Area and its contents moved as per instructions -->
     <div id="input-container">
       <textarea id="chat-input" rows="3" placeholder="Enter message or /plan [request]..."></textarea>
 
-      <button id="send-button" title="Send Message">S</button>
+      <div class="input-action-buttons">
+        <button id="send-button" title="Send Message">S</button>
+
+        <div class="image-input-action-buttons-container">
+          <button id="clear-images-button" title="Clear All Images" style="display: none;"></button>
+          <button id="attach-image-button" class="icon-button" title="Attach Image"></button>
+        </div>
+      </div>
 
       <!-- Added button to cancel ongoing generation -->
       <button id="cancel-generation-button" title="Cancel Generation" style="display: none;">
@@ -101,6 +114,8 @@
         <i class="fas fa-stop"></i>
       </button>
     </div>
+    <!-- Hidden file input for image uploads -->
+    <input type="file" id="image-upload-input" accept="image/*" multiple style="display: none;">
   </div>
 
   <!-- Added plan-parse-error-container as per instructions -->

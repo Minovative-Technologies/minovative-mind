@@ -13,6 +13,7 @@ import {
 	CodeFileStreamStartMessage,
 	CodeFileStreamChunkMessage,
 	CodeFileStreamEndMessage,
+	ChatMessage, // Import ChatMessage for type casting
 } from "../../common/sidebarTypes";
 import {
 	stopTypingAnimation,
@@ -997,7 +998,7 @@ export function initializeMessageBusHandler(
 					elements.chatContainer.innerHTML = "";
 					appState.nextMessageIndex = message.value.length; // Synchronize the next message index
 					// Re-populate the chat display with each historical entry.
-					message.value.forEach((msg: any, index: number) => {
+					message.value.forEach((msg: ChatMessage, index: number) => {
 						if (
 							msg &&
 							typeof msg.sender === "string" &&
@@ -1014,7 +1015,8 @@ export function initializeMessageBusHandler(
 								index,
 								msg.isRelevantFilesExpanded,
 								msg.isPlanExplanation, // isPlanExplanationForRender
-								msg.isPlanStepUpdate // Pass the new flag here
+								msg.isPlanStepUpdate, // Pass the new flag here
+								msg.imageParts // Pass the 12th parameter
 							);
 						}
 					});

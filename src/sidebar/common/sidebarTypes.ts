@@ -3,10 +3,15 @@ import * as vscode from "vscode";
 import { Content } from "@google/generative-ai"; // Assuming History might be needed if HistoryEntry evolves
 import { ActiveSymbolDetailedInfo } from "../../services/contextService"; // NEW: Required for PlanGenerationContext
 
-// Define the specific structure for parts within HistoryEntry
-export interface HistoryEntryPart {
-	text: string;
+export interface ImageInlineData {
+	mimeType: string;
+	data: string; // Base64 encoded string
 }
+
+// Define the specific structure for parts within HistoryEntry
+export type HistoryEntryPart =
+	| { text: string }
+	| { inlineData: ImageInlineData };
 
 // HistoryEntry should align with Gemini API's TextPart expectation for its content parts
 // by explicitly defining its parts property, overriding the general 'Part[]' from 'Content'.
@@ -65,8 +70,10 @@ export interface ChatMessage {
 	className: string;
 	diffContent?: string;
 	relevantFiles?: string[];
+	isRelevantFilesExpanded?: boolean;
 	isPlanExplanation?: boolean;
 	isPlanStepUpdate?: boolean;
+	imageParts?: ImageInlineData[];
 }
 
 export interface EditChatMessage {
@@ -85,6 +92,13 @@ export interface RevertRequestMessage {
 	type: "revertRequest";
 }
 
+export interface WebviewToExtensionChatMessageType {
+	type: "chatMessage";
+	value: string;
+	groundingEnabled: boolean;
+	imageParts?: Array<{ mimeType: string; data: string }>; // Optional array of image data
+}
+
 /**
  * Union type for all messages sent from the Webview to the Extension.
  * Each member should have a distinct 'type' literal property.
@@ -94,7 +108,8 @@ export type WebviewToExtensionMessages =
 	| UpdateRelevantFilesDisplayMessage
 	| EditChatMessage
 	| GeneratePlanPromptFromAIMessage
-	| RevertRequestMessage; // Added RevertRequestMessage
+	| RevertRequestMessage // Added RevertRequestMessage
+	| WebviewToExtensionChatMessageType;
 
 // New message type: Extension to Webview for pre-filling chat input
 export interface PrefillChatInput {

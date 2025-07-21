@@ -16,6 +16,7 @@ import {
 	faPenToSquare, // Import faPenToSquare as per instructions
 	faChartLine, // Import faChartLine for token usage icon
 	faLightbulb,
+	faImage,
 } from "@fortawesome/free-solid-svg-icons";
 
 // Add the imported icons to the Font Awesome library for use in the webview.
@@ -36,7 +37,8 @@ library.add(
 	faExclamationTriangle,
 	faPenToSquare, // Add faPenToSquare to the library as per instructions
 	faChartLine, // Add faChartLine to the library for token usage icon
-	faLightbulb
+	faLightbulb,
+	faImage
 );
 
 /**

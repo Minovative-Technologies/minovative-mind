@@ -4,6 +4,7 @@ import { appendMessage } from "./ui/chatMessageRenderer";
 import { MINOVATIVE_COMMANDS } from "../common/sidebarConstants";
 import { updateStatus } from "./ui/statusManager";
 import { RequiredDomElements } from "./types/webviewTypes";
+import { clearImagePreviews } from "./utils/imageUtils";
 
 /**
  * Sends a chat message or command to the VS Code extension.
@@ -122,6 +123,10 @@ export function sendMessage(
 		// Increment message index for the new user message before appending
 		const userMessageIndex = appState.nextMessageIndex++;
 		// Ensure appendMessage and updateStatus pass 'elements' as their first argument
+		const imagePartsToSend = appState.selectedImages.map((img) => ({
+			mimeType: img.mimeType,
+			data: img.data,
+		}));
 		appendMessage(
 			elements,
 			"You",
@@ -130,16 +135,26 @@ export function sendMessage(
 			true,
 			undefined,
 			undefined,
-			userMessageIndex
+			userMessageIndex,
+			false, // isRelevantFilesExpandedForHistory
+			false, // isPlanExplanationForRender
+			false, // isPlanStepUpdateForRender
+			imagePartsToSend.length > 0 ? imagePartsToSend : undefined // imageParts
 		);
 		updateStatus(elements, "Sending message to AI...");
 		const groundingEnabled = elements.groundingToggle?.checked ?? false;
+
 		postMessageToExtension({
 			type: "chatMessage",
 			value: fullMessage,
 			groundingEnabled,
+			imageParts: imagePartsToSend.length > 0 ? imagePartsToSend : undefined,
 		});
 	}
 
 	console.log("[MessageSender] Message sent to extension.");
+
+	clearImagePreviews(elements.imagePreviewsContainer);
+	appState.selectedImages = [];
+	elements.clearImagesButton.style.display = "none";
 }

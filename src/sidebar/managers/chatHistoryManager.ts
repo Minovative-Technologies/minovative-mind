@@ -1,9 +1,10 @@
-// src/sidebar/managers/chatHistoryManager.ts
 import * as vscode from "vscode";
 import {
 	HistoryEntry,
 	ChatMessage,
 	UpdateRelevantFilesDisplayMessage,
+	HistoryEntryPart, // Added import for HistoryEntryPart
+	ImageInlineData, // Added import for ImageInlineData
 } from "../common/sidebarTypes"; // Assuming ChatMessage is defined here for save/load
 
 const CHAT_HISTORY_STORAGE_KEY = "minovativeMindChatHistory";
@@ -40,7 +41,18 @@ export class ChatHistoryManager {
 							item !== null &&
 							typeof item.role === "string" &&
 							Array.isArray(item.parts) &&
-							item.parts.every((p) => typeof p.text === "string") &&
+							item.parts.every(
+								(p) =>
+									(typeof p === "object" &&
+										p !== null &&
+										"text" in p &&
+										typeof p.text === "string") || // Modified line
+									("inlineData" in p &&
+										typeof p.inlineData === "object" &&
+										p.inlineData !== null &&
+										typeof p.inlineData.mimeType === "string" &&
+										typeof p.inlineData.data === "string")
+							) &&
 							// Add validation for diffContent, relevantFiles, and isRelevantFilesExpanded
 							(item.diffContent === undefined ||
 								typeof item.diffContent === "string") &&
@@ -100,35 +112,71 @@ export class ChatHistoryManager {
 
 	public addHistoryEntry(
 		role: "user" | "model",
-		text: string,
+		content: string | HistoryEntryPart[], // Modified parameter type
 		diffContent?: string,
 		relevantFiles?: string[],
 		isRelevantFilesExpanded?: boolean,
 		isPlanExplanation: boolean = false,
 		isPlanStepUpdate: boolean = false
 	): void {
+		let parts: HistoryEntryPart[];
+		let contentForDuplicateCheck: string;
+
+		if (typeof content === "string") {
+			parts = [{ text: content }];
+			contentForDuplicateCheck = content;
+		} else {
+			parts = content;
+			// For duplicate check, try to get the first text part.
+			// If it's a user message, it's expected to have a text part first.
+			contentForDuplicateCheck =
+				parts.length > 0 && "text" in parts[0] ? parts[0].text : "";
+		}
+
 		// Existing logic for managing chat history and preventing duplicates
 		if (this._chatHistory.length > 0) {
 			const lastEntry = this._chatHistory[this._chatHistory.length - 1];
-			if (lastEntry.role === role && lastEntry.parts[0]?.text === text) {
+			// Updated duplicate check to use contentForDuplicateCheck
+			if (
+				lastEntry.role === role &&
+				lastEntry.parts.length > 0 &&
+				"text" in lastEntry.parts[0] &&
+				lastEntry.parts[0].text === contentForDuplicateCheck
+			) {
 				// Prevent adding duplicate messages for certain types of status updates
 				if (
-					text.startsWith("Changes reverted") ||
-					(text === "Plan execution finished successfully." &&
-						lastEntry.parts[0]?.text === text) ||
-					(text === "Plan execution cancelled by user." &&
-						lastEntry.parts[0]?.text === text) ||
-					(text === "Chat generation cancelled by user." &&
-						lastEntry.parts[0]?.text === text) ||
-					(text === "Commit message generation cancelled by user." &&
-						lastEntry.parts[0]?.text === text) ||
-					(text === "Structured plan generation cancelled by user." &&
-						lastEntry.parts[0]?.text === text) ||
-					(text.startsWith("Step ") &&
-						!text.includes("FAILED") &&
-						!text.includes("SKIPPED"))
+					contentForDuplicateCheck.startsWith("Changes reverted") ||
+					(contentForDuplicateCheck ===
+						"Plan execution finished successfully." &&
+						("text" in lastEntry.parts[0]
+							? lastEntry.parts[0].text
+							: undefined) === contentForDuplicateCheck) || // Modified line
+					(contentForDuplicateCheck === "Plan execution cancelled by user." &&
+						("text" in lastEntry.parts[0]
+							? lastEntry.parts[0].text
+							: undefined) === contentForDuplicateCheck) || // Modified line
+					(contentForDuplicateCheck === "Chat generation cancelled by user." &&
+						("text" in lastEntry.parts[0]
+							? lastEntry.parts[0].text
+							: undefined) === contentForDuplicateCheck) || // Modified line
+					(contentForDuplicateCheck ===
+						"Commit message generation cancelled by user." &&
+						("text" in lastEntry.parts[0]
+							? lastEntry.parts[0].text
+							: undefined) === contentForDuplicateCheck) || // Modified line
+					(contentForDuplicateCheck ===
+						"Structured plan generation cancelled by user." &&
+						("text" in lastEntry.parts[0]
+							? lastEntry.parts[0].text
+							: undefined) === contentForDuplicateCheck) || // Modified line
+					(contentForDuplicateCheck.startsWith("Step ") &&
+						!contentForDuplicateCheck.includes("FAILED") &&
+						!contentForDuplicateCheck.includes("SKIPPED"))
 				) {
-					console.log("Skipping potential duplicate history entry:", text);
+					console.log(
+						"Skipping potential duplicate history entry:",
+						contentForDuplicateCheck
+					);
 					return;
 				}
 			}
@@ -136,7 +184,7 @@ export class ChatHistoryManager {
 
 		const newEntry: HistoryEntry = {
 			role,
-			parts: [{ text }],
+			parts: parts, // Use the determined parts array
 			...(diffContent && { diffContent }),
 			// The existing logic correctly assigns relevantFiles and sets isRelevantFilesExpanded
 			// based on provided value or defaults it based on relevantFiles.length <= 3 if relevant files are present.
@@ -253,7 +301,13 @@ export class ChatHistoryManager {
 		}
 
 		// 3. Update the text of the first part of the messageToEdit
-		messageToEdit.parts[0].text = newContent;
+		// Ensure parts[0] exists and is a text part before attempting to update.
+		if (messageToEdit.parts.length > 0 && "text" in messageToEdit.parts[0]) {
+			messageToEdit.parts[0].text = newContent;
+		} else {
+			// If there's no text part or parts array is empty, replace it with a new text part.
+			messageToEdit.parts = [{ text: newContent }];
+		}
 
 		// 4. Truncate the array, removing all messages after the edited message.
 		this._chatHistory.splice(index + 1);
@@ -286,19 +340,28 @@ export class ChatHistoryManager {
 		if (fileUri) {
 			try {
 				const saveableHistory: ChatMessage[] = this._chatHistory.map(
-					(entry) => ({
-						sender: entry.role === "user" ? "User" : "Model",
-						text: entry.parts.map((p) => p.text).join(""),
-						className: entry.role === "user" ? "user-message" : "ai-message",
-						...(entry.diffContent && { diffContent: entry.diffContent }),
-						...(entry.relevantFiles && { relevantFiles: entry.relevantFiles }),
-						...(entry.isPlanExplanation && {
-							isPlanExplanation: entry.isPlanExplanation,
-						}),
-						...(entry.isPlanStepUpdate && {
-							isPlanStepUpdate: entry.isPlanStepUpdate,
-						}),
-					})
+					(entry) => {
+						// For saving, we only extract text content as ChatMessage on disk doesn't support images currently.
+						const textContent = entry.parts
+							.filter((p): p is { text: string } => "text" in p)
+							.map((p) => p.text)
+							.join("\n");
+						return {
+							sender: entry.role === "user" ? "User" : "Model",
+							text: textContent,
+							className: entry.role === "user" ? "user-message" : "ai-message",
+							...(entry.diffContent && { diffContent: entry.diffContent }),
+							...(entry.relevantFiles && {
+								relevantFiles: entry.relevantFiles,
+							}),
+							...(entry.isPlanExplanation && {
+								isPlanExplanation: entry.isPlanExplanation,
+							}),
+							...(entry.isPlanStepUpdate && {
+								isPlanStepUpdate: entry.isPlanStepUpdate,
+							}),
+						};
+					}
 				);
 				const contentString = JSON.stringify(saveableHistory, null, 2);
 				await vscode.workspace.fs.writeFile(
@@ -347,7 +410,7 @@ export class ChatHistoryManager {
 						(item) =>
 							item &&
 							typeof item.sender === "string" &&
-							typeof item.text === "string" &&
+							typeof item.text === "string" && // ChatMessage only has 'text', not 'parts'
 							(item.sender === "User" ||
 								item.sender === "Model" ||
 								item.sender === "System") &&
@@ -365,7 +428,7 @@ export class ChatHistoryManager {
 					this._chatHistory = loadedData.map(
 						(item: ChatMessage): HistoryEntry => ({
 							role: item.sender === "User" ? "user" : "model",
-							parts: [{ text: item.text }],
+							parts: [{ text: item.text }], // Convert ChatMessage.text back to a single HistoryEntryPart
 							diffContent: item.diffContent,
 							relevantFiles: item.relevantFiles,
 							isRelevantFilesExpanded: item.relevantFiles
@@ -406,19 +469,42 @@ export class ChatHistoryManager {
 
 	public restoreChatHistoryToWebview(): void {
 		// Ensures the entire chat history is rendered in the webview to maintain UI consistency.
-		const historyForWebview: ChatMessage[] = this._chatHistory.map((entry) => ({
-			sender: entry.role === "user" ? "User" : "Model",
-			text: entry.parts.map((p) => p.text).join(""),
-			className: entry.role === "user" ? "user-message" : "ai-message",
-			...(entry.diffContent && { diffContent: entry.diffContent }),
-			...(entry.relevantFiles && { relevantFiles: entry.relevantFiles }),
-			...(entry.relevantFiles &&
-				entry.isRelevantFilesExpanded !== undefined && {
-					isRelevantFilesExpanded: entry.isRelevantFilesExpanded,
-				}),
-			isPlanExplanation: entry.isPlanExplanation,
-			isPlanStepUpdate: entry.isPlanStepUpdate,
-		}));
+		const historyForWebview: (ChatMessage & {
+			imageParts?: ImageInlineData[];
+		})[] = this._chatHistory.map((entry) => {
+			let concatenatedText = "";
+			const currentImageParts: ImageInlineData[] = [];
+
+			entry.parts.forEach((part) => {
+				if ("text" in part) {
+					concatenatedText += part.text;
+				} else if ("inlineData" in part) {
+					currentImageParts.push(part.inlineData);
+				}
+			});
+
+			const baseChatMessage: ChatMessage & { imageParts?: ImageInlineData[] } =
+				{
+					sender: entry.role === "user" ? "User" : "Model",
+					text: concatenatedText.trim(), // Use the accumulated text
+					className: entry.role === "user" ? "user-message" : "ai-message",
+					...(entry.diffContent && { diffContent: entry.diffContent }),
+					...(entry.relevantFiles && { relevantFiles: entry.relevantFiles }),
+					...(entry.relevantFiles &&
+						entry.isRelevantFilesExpanded !== undefined && {
+							isRelevantFilesExpanded: entry.isRelevantFilesExpanded,
+						}),
+					isPlanExplanation: entry.isPlanExplanation,
+					isPlanStepUpdate: entry.isPlanStepUpdate,
+				};
+
+			// Conditionally add imageParts if there are any
+			if (currentImageParts.length > 0) {
+				// The ChatMessage type (locally extended) now includes imageParts
+				baseChatMessage.imageParts = currentImageParts;
+			}
+			return baseChatMessage;
+		});
 		this.postMessageToWebview({
 			type: "restoreHistory",
 			value: historyForWebview,

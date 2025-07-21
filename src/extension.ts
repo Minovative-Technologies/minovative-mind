@@ -3,6 +3,7 @@ import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
 import { cleanCodeOutput } from "./utils/codeUtils";
 import * as sidebarTypes from "./sidebar/common/sidebarTypes";
+import { HistoryEntryPart } from "./sidebar/common/sidebarTypes"; // Added import for HistoryEntryPart
 import { hasMergeConflicts } from "./utils/mergeUtils"; // Added import for mergeUtils
 import { CodeSelectionService } from "./services/codeSelectionService";
 import { getSymbolsInDocument } from "./services/symbolService";
@@ -92,7 +93,7 @@ async function executeExplainAction(
 		// Removed activeApiKey (second argument) from the call
 		// Signature: _generateWithRetry(prompt, modelName, history, requestType)
 		const result = await sidebarProvider.aiRequestService.generateWithRetry(
-			prompt, // 1st arg: prompt
+			[{ text: prompt }], // 1st arg: prompt
 			// activeApiKey, // Removed 2nd arg: apiKey
 			selectedModel, // Now 2nd arg: modelName (was 3rd)
 			undefined, // Now 3rd arg: history (not needed for explain) (was 4th)
@@ -176,7 +177,7 @@ async function executeDocsAction(
 
 	try {
 		const result = await sidebarProvider.aiRequestService.generateWithRetry(
-			prompt,
+			[{ text: prompt }],
 			selectedModel,
 			undefined, // No history needed for single documentation generation
 			"generate documentation"
@@ -443,7 +444,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 						try {
 							await sidebarProvider.chatService.handleRegularChat(
-								userChatPrompt
+								[{ text: userChatPrompt }] // Changed from string to HistoryEntryPart array
 							);
 							vscode.window.showInformationMessage(
 								"Code sent to chat. Check Minovative Mind sidebar for response."

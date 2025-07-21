@@ -19,9 +19,9 @@ export interface RequiredDomElements {
 	saveChatButton: HTMLButtonElement;
 	loadChatButton: HTMLButtonElement;
 	cancelGenerationButton: HTMLButtonElement;
-	planConfirmationContainer: HTMLDivElement;
-	confirmPlanButton: HTMLButtonElement;
-	cancelPlanButton: HTMLButtonElement;
+	planConfirmationContainer: HTMLDivElement | null;
+	confirmPlanButton: HTMLButtonElement | null;
+	cancelPlanButton: HTMLButtonElement | null;
 	planParseErrorContainer: HTMLDivElement;
 	planParseErrorDisplay: HTMLParagraphElement;
 	failedJsonDisplay: HTMLElement;
@@ -45,9 +45,15 @@ export interface RequiredDomElements {
 	revertChangesButton: HTMLButtonElement;
 
 	// New properties for clear chat confirmation
-	chatClearConfirmationContainer: HTMLDivElement;
-	confirmClearChatButton: HTMLButtonElement;
-	cancelClearChatButton: HTMLButtonElement;
+	chatClearConfirmationContainer: HTMLDivElement | null;
+	confirmClearChatButton: HTMLButtonElement | null;
+	cancelClearChatButton: HTMLButtonElement | null;
+
+	// New properties for image upload
+	imageUploadInput: HTMLInputElement;
+	attachImageButton: HTMLButtonElement;
+	imagePreviewsContainer: HTMLDivElement;
+	clearImagesButton: HTMLButtonElement;
 }
 
 export interface PendingPlanData {
@@ -70,6 +76,16 @@ export interface EditChatMessage {
 	type: "editChatMessage";
 	messageIndex: number; // The index of the message in the chat history array
 	newContent: string; // The new, edited content of the message
+}
+
+/**
+ * Represents the state of an image file selected for upload in the webview.
+ */
+export interface ImageUploadState {
+	file: File;
+	mimeType: string;
+	data: string; // Base64 encoded string of the image
+	previewElement: HTMLDivElement; // Reference to the DOM element displaying the preview
 }
 
 export interface WebviewAppState {
@@ -97,4 +113,5 @@ export interface WebviewAppState {
 	totalKeys: number;
 	isTokenUsageVisible: boolean; // New property to track token usage visibility
 	nextMessageIndex: number;
+	selectedImages: ImageUploadState[];
 }

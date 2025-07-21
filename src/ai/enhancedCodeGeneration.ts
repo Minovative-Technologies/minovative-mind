@@ -5,7 +5,10 @@ import { AIRequestService } from "../services/aiRequestService";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 import { cleanCodeOutput } from "../utils/codeUtils";
 import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils"; // MODIFIED: Added getSeverityName
-import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes";
+import {
+	ExtensionToWebviewMessages,
+	HistoryEntryPart,
+} from "../sidebar/common/sidebarTypes";
 
 /**
  * Real-time feedback interface for code generation
@@ -251,7 +254,7 @@ export class EnhancedCodeGenerator {
 
 		try {
 			const rawContent = await this.aiRequestService.generateWithRetry(
-				enhancedPrompt,
+				[{ text: enhancedPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
 				modelName,
 				undefined,
 				"enhanced file generation",
@@ -515,7 +518,7 @@ ${
 Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
-			refinementPrompt,
+			[{ text: refinementPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
 			modelName,
 			undefined,
 			"code refinement",
@@ -717,7 +720,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 
 		try {
 			const rawContent = await this.aiRequestService.generateWithRetry(
-				enhancedPrompt,
+				[{ text: enhancedPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
 				modelName,
 				undefined,
 				"enhanced file modification",
@@ -877,7 +880,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		}\n\nYour response MUST contain **ONLY** the refined file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
-			refinementPrompt,
+			[{ text: refinementPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
 			modelName,
 			undefined,
 			"refine modification",
@@ -1421,7 +1424,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
-			alternativePrompt,
+			[{ text: alternativePrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
 			modelName,
 			undefined,
 			"alternative code correction",
@@ -1464,7 +1467,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
-			syntaxPrompt,
+			[{ text: syntaxPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
 			modelName,
 			undefined,
 			"syntax correction",
@@ -1507,7 +1510,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
-			importPrompt,
+			[{ text: importPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
 			modelName,
 			undefined,
 			"import correction",
@@ -1551,7 +1554,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
-			practicePrompt,
+			[{ text: practicePrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
 			modelName,
 			undefined,
 			"best practice correction",
@@ -1594,7 +1597,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
-			securityPrompt,
+			[{ text: securityPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
 			modelName,
 			undefined,
 			"security correction",

@@ -945,7 +945,7 @@ div#commit-message-display pre,
 	animation-delay: 0.2s;
 }
 
-.code-file-stream-footer .loading-dots .dot:nth-child(3) {
+.code-file-stream-footer .dot:nth-child(3) {
 	animation-delay: 0.4s;
 }
 
@@ -1459,9 +1459,6 @@ div#commit-message-display tr:nth-child(even),
 	background-color: var(--vscode-input-background);
 	transition: border-color 0.1s ease-in-out;
 	padding: 2px; /* Small padding around */
-	gap: var(
-		--element-spacing
-	); /* Space between input, send, and cancel buttons */
 }
 #input-container:focus-within {
 	border-color: var(--vscode-focusBorder);
@@ -1491,22 +1488,33 @@ div#commit-message-display tr:nth-child(even),
 	color: var(--vscode-input-placeholderForeground);
 }
 
+.input-action-buttons {
+	display: flex;
+	gap: 7px;
+	margin-left: auto; /* Push buttons to the right */
+	align-items: end; /* Align buttons to the bottom */
+}
+
+.input-action-buttons button {
+	height: var(--input-height);
+	width: var(--input-height);
+	padding: 0;
+	border-radius: var(--border-radius);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+}
+
 /* Style for the send button */
 #input-container button#send-button {
 	flex-shrink: 0;
-	padding: 0; /* Remove internal padding */
-	height: var(--input-height);
 	width: calc(var(--input-height) + 10px);
 	background-color: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
 	border: none;
-	border-radius: var(--border-radius);
-	cursor: pointer;
-	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
-		border-color 0.1s ease-in-out; /* Ensured color and border-color transition */
-	display: inline-flex; /* Use flexbox for centering icon */
-	align-items: center;
-	justify-content: center;
 	margin: 0; /* Ensure no extra margin */
 }
 #input-container button#send-button:hover {
@@ -1557,6 +1565,135 @@ div#commit-message-display tr:nth-child(even),
 #input-container button#cancel-generation-button .fa-icon {
 	/* Cancel Icon */
 	font-size: 1.1em; /* Match size of send icon */
+}
+
+/* --- Image Upload Styles --- */
+#image-upload-input {
+	display: none;
+}
+
+#image-previews-area {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+	padding: var(--element-spacing);
+	background-color: var(--vscode-input-background);
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius);
+	margin-bottom: var(--element-spacing);
+	min-height: 80px;
+	max-height: 120px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	transition: all 0.2s ease-in-out;
+	display: none; /* Default display as per instruction */
+}
+
+#image-previews-container {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 10px; /* Space between image previews and buttons */
+}
+
+.input-action-buttons #clear-images-button {
+	flex-shrink: 0; /* Keep flex-shrink, as it's not a common button property */
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-button-border, var(--border-color));
+	width: calc(var(--input-height) + 10px);
+	margin: 0; /* Ensure no extra margin */
+}
+.input-action-buttons #clear-images-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+.input-action-buttons #clear-images-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	/* Colors inherited from parent selector, per instruction */
+}
+
+.image-input-action-buttons-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 5px; /* Space between buttons */
+}
+
+.input-action-buttons #attach-image-button {
+	flex-shrink: 0; /* Keep flex-shrink, as it's not a common button property */
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-button-border, var(--border-color));
+	width: calc(var(--input-height) + 10px);
+	margin: 0; /* Ensure no extra margin */
+}
+.input-action-buttons #attach-image-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+.input-action-buttons #attach-image-button:disabled {
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Keep explicit background for disabled state */
+	color: var(
+		--vscode-button-secondaryForeground
+	); /* Keep explicit color for disabled state */
+	opacity: 0.5;
+	cursor: not-allowed;
+	border-color: var(
+		--vscode-button-border,
+		var(--border-color)
+	); /* Keep explicit border for disabled state */
+}
+.input-action-buttons #attach-image-button .fa-icon {
+	font-size: 1.1em;
+}
+
+.image-preview-wrapper {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--element-spacing, 5px);
+	border: 1px solid var(--vscode-editorGroup-border);
+	border-radius: 4px;
+	padding: 4px;
+	position: relative;
+	width: 100%;
+	box-sizing: border-box;
+}
+.image-preview-wrapper .image-filename-display {
+	display: inline-block;
+	background-color: var(--vscode-editor-background);
+	color: var(--vscode-foreground);
+	padding: 5px 8px;
+	border-radius: var(--border-radius);
+	border: 1px solid var(--vscode-panel-border);
+	font-size: var(--vscode-font-size);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	line-height: 1.2;
+	box-sizing: border-box;
+	flex-grow: 1;
+	width: 100%;
+}
+.image-preview-remove-button {
+	border: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--copy-button-size);
+	height: var(--copy-button-size);
+	background-color: var(--vscode-inputValidation-errorBackground);
+	border-radius: var(--border-radius);
+	color: var(--vscode-errorForeground);
+	cursor: pointer;
+	font-weight: bold;
+	font-size: 1.2em;
+	padding: 0;
 }
 
 /* --- Model/API Key Sections --- */

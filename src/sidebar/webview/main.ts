@@ -65,14 +65,14 @@ function setLoadingState(
 
 	// Determine visibility of complex UI containers
 	const planConfirmationVisible =
-		elements.planConfirmationContainer.style.display !== "none";
+		elements.planConfirmationContainer?.style.display !== "none" || false;
 	const planParseErrorVisible =
 		elements.planParseErrorContainer.style.display !== "none";
 	const commitReviewVisible =
 		elements.commitReviewContainer.style.display !== "none";
 	// Introduce new variable for clear chat confirmation visibility
 	const chatClearConfirmationVisible =
-		elements.chatClearConfirmationContainer.style.display !== "none";
+		elements.chatClearConfirmationContainer?.style.display !== "none" || false;
 
 	// Introduce new constants for granular control
 	const canInteractWithMainChatControls =
@@ -84,16 +84,16 @@ function setLoadingState(
 	const canSendCurrentInput =
 		canInteractWithMainChatControls && !appState.isCommandSuggestionsVisible;
 
-	console.log(
-		`[setLoadingState] UI Display States: planConfirmationContainer=${elements.planConfirmationContainer.style.display}, planParseErrorContainer=${elements.planParseErrorContainer.style.display}, commitReviewContainer=${elements.commitReviewContainer.style.display}, chatClearConfirmationContainer=${elements.chatClearConfirmationContainer.style.display}, isCommandSuggestionsVisible=${appState.isCommandSuggestionsVisible}`
-	);
-
 	// Determine enablement for chat history management buttons
 	const canInteractWithChatHistoryButtons =
 		!loading &&
 		!appState.isAwaitingUserReview && // Refactored
 		!appState.isCommandSuggestionsVisible &&
 		!appState.isCancellationInProgress;
+
+	// Define enablement for image upload controls
+	const canInteractWithImageControls =
+		!loading && !appState.isAwaitingUserReview;
 
 	console.log(
 		`[setLoadingState] Final computed canInteractWithMainChatControls=${canInteractWithMainChatControls}, canSendCurrentInput=${canSendCurrentInput}, canInteractWithChatHistoryButtons=${canInteractWithChatHistoryButtons}`
@@ -142,6 +142,45 @@ function setLoadingState(
 		!commitReviewVisible ||
 		elements.commitMessageTextarea.value.trim() === "";
 
+	// Apply disabled states for image upload controls
+	const attachImageButton = elements.attachImageButton; // Alias for clarity as per instruction 1
+	elements.imageUploadInput.disabled = !canInteractWithImageControls;
+	// elements.imageUploadInput.style.display line removed as per instruction. (It should remain 'none' as per index.html)
+	attachImageButton.disabled = !canInteractWithImageControls;
+	// Re-add uploadImageButton.style.display with 'inline-flex' as per instruction for attachImageButton.
+	attachImageButton.style.display = canInteractWithImageControls
+		? "inline-flex"
+		: "none";
+	// Updated logic for clearImagesButton.disabled
+	elements.clearImagesButton.disabled =
+		!canInteractWithImageControls || appState.selectedImages.length === 0;
+	// The clearImagesButton.style.display line was not part of the removal instruction,
+	// nor was it part of the 'set its style.display' instruction (which targeted uploadImageButton).
+	// Therefore, keep its existing display logic.
+	elements.clearImagesButton.style.display =
+		appState.selectedImages.length > 0 && canInteractWithImageControls
+			? "inline-flex"
+			: "none";
+	// New additions for clearImagesButton pointerEvents and opacity as per instruction
+	elements.clearImagesButton.style.pointerEvents = canInteractWithImageControls
+		? ""
+		: "none";
+	elements.clearImagesButton.style.opacity = canInteractWithImageControls
+		? "1"
+		: "0.5";
+
+	// For image previews container, disable pointer events and reduce opacity for a disabled look
+	elements.imagePreviewsContainer.style.pointerEvents =
+		canInteractWithImageControls ? "" : "none";
+	elements.imagePreviewsContainer.style.opacity = canInteractWithImageControls
+		? "1"
+		: "0.5";
+	// Updated logic for imagePreviewsContainer.style.display
+	elements.imagePreviewsContainer.style.display =
+		appState.selectedImages.length > 0 && canInteractWithImageControls
+			? "flex"
+			: "none";
+
 	console.log(
 		`[setLoadingState] Status: loading=${loading}, planConfVis=${planConfirmationVisible}, planParseErrVis=${planParseErrorVisible}, commitRevVis=${commitReviewVisible}`
 	);
@@ -178,7 +217,9 @@ function setLoadingState(
 
 	// Hide confirmation/error/review UIs if a new loading operation starts
 	if (loading && planConfirmationVisible) {
-		elements.planConfirmationContainer.style.display = "none";
+		if (elements.planConfirmationContainer) {
+			elements.planConfirmationContainer.style.display = "none";
+		}
 		appState.pendingPlanData = null; // Clear pending plan data if a new request starts
 		updateStatus(
 			elements,
@@ -211,7 +252,9 @@ function setLoadingState(
 	}
 	// Add conditional block to hide clear chat confirmation UI
 	if (loading && chatClearConfirmationVisible) {
-		elements.chatClearConfirmationContainer.style.display = "none";
+		if (elements.chatClearConfirmationContainer) {
+			elements.chatClearConfirmationContainer.style.display = "none";
+		}
 		updateStatus(
 			elements,
 			"New request initiated, clear chat confirmation UI hidden.",

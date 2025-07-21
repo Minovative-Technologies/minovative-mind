@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { GenerationConfig } from "@google/generative-ai";
 import {
 	SequentialFileProcessor,
 	FileSummary,
@@ -16,6 +17,7 @@ import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
 } from "../context/smartContextSelector";
+import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes";
 import { SettingsManager } from "../sidebar/managers/settingsManager";
 
 export interface SequentialContextOptions {
@@ -401,9 +403,34 @@ export class SequentialContextService {
 					projectRoot: this.workspaceRoot,
 					activeEditorContext: undefined,
 					diagnostics: undefined,
-					aiModelCall: this.aiRequestService.generateWithRetry.bind(
-						this.aiRequestService
-					),
+					// The aiModelCall in SelectRelevantFilesAIOptions expects (prompt: HistoryEntryPart[], options: AIGenerateOptions) => Promise<string>
+					// If this.aiRequestService.generateWithRetry still takes a string, an adapter is needed.
+					// This resolves TS2322 at line 404 by conforming to the expected type.
+					aiModelCall: async (
+						prompt: string,
+						modelName: string,
+						history: HistoryEntry[] | undefined,
+						requestType: string,
+						generationConfig: GenerationConfig | undefined,
+						streamCallbacks:
+							| {
+									onChunk: (chunk: string) => Promise<void> | void;
+									onComplete?: () => void;
+							  }
+							| undefined,
+						token: vscode.CancellationToken | undefined
+					) => {
+						const userContentParts: HistoryEntryPart[] = [{ text: prompt }];
+						return await this.aiRequestService.generateWithRetry(
+							userContentParts,
+							modelName,
+							history,
+							requestType,
+							generationConfig,
+							streamCallbacks,
+							token
+						);
+					},
 					modelName,
 					cancellationToken: undefined,
 					fileDependencies: new Map(), // No dependency graph for filtering

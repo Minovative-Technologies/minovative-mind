@@ -1,11 +1,16 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import BPromise from "bluebird";
+import { GenerationConfig } from "@google/generative-ai";
 import { SettingsManager } from "../sidebar/managers/settingsManager";
 import { ChatHistoryManager } from "../sidebar/managers/chatHistoryManager";
 import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
 import { AIRequestService } from "./aiRequestService";
-import { PlanGenerationContext } from "../sidebar/common/sidebarTypes";
+import {
+	PlanGenerationContext,
+	HistoryEntryPart,
+	HistoryEntry,
+} from "../sidebar/common/sidebarTypes";
 import { scanWorkspace } from "../context/workspaceScanner";
 import {
 	buildDependencyGraph,
@@ -585,9 +590,32 @@ export class ContextService {
 						projectRoot: rootFolder.uri,
 						activeEditorContext: editorContext,
 						diagnostics: effectiveDiagnosticsString, // UPDATED: Use effectiveDiagnosticsString
-						aiModelCall: this.aiRequestService.generateWithRetry.bind(
-							this.aiRequestService
-						),
+						// Modified to adapt prompt from string to HistoryEntryPart[]
+						aiModelCall: async (
+							prompt: string,
+							modelName: string,
+							history: HistoryEntry[] | undefined,
+							requestType: string,
+							generationConfig: GenerationConfig | undefined,
+							streamCallbacks:
+								| {
+										onChunk: (chunk: string) => Promise<void> | void;
+										onComplete?: () => void;
+								  }
+								| undefined,
+							token: vscode.CancellationToken | undefined
+						) => {
+							const messages: HistoryEntryPart[] = [{ text: prompt }];
+							return this.aiRequestService.generateWithRetry(
+								messages,
+								modelName,
+								history,
+								requestType,
+								generationConfig,
+								streamCallbacks,
+								token
+							);
+						},
 						modelName: this.settingsManager.getSelectedModelName(),
 						cancellationToken,
 						fileDependencies,

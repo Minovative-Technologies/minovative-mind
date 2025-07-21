@@ -1,5 +1,6 @@
 import { EnhancedCodeGenerator } from "../../ai/enhancedCodeGeneration";
 import * as sidebarTypes from "../common/sidebarTypes";
+import { HistoryEntryPart } from "../common/sidebarTypes"; // Added for specific type import as per instructions
 import * as vscode from "vscode";
 import { TEMPERATURE } from "../common/sidebarConstants";
 import { AIRequestService } from "../../services/aiRequestService";
@@ -126,6 +127,9 @@ export function createInitialPlanningExplanationPrompt(
 			.map(
 				(entry) =>
 					`Role: ${entry.role}\nContent:\n${entry.parts
+						.filter(
+							(p): p is HistoryEntryPart & { text: string } => "text" in p
+						) // Apply type guard
 						.map((p) => p.text)
 						.join("\n")}`
 			)
@@ -398,6 +402,9 @@ export function createPlanningPrompt(
 			.map(
 				(entry) =>
 					`Role: ${entry.role}\nContent:\n${entry.parts
+						.filter(
+							(p): p is HistoryEntryPart & { text: string } => "text" in p
+						) // Apply type guard
 						.map((p) => p.text)
 						.join("\n")}`
 			)
@@ -648,6 +655,9 @@ export function createCorrectionPlanPrompt(
 					.map(
 						(entry) =>
 							`Role: ${entry.role}\nContent:\n${entry.parts
+								.filter(
+									(p): p is HistoryEntryPart & { text: string } => "text" in p
+								) // Apply type guard
 								.map((p) => p.text)
 								.join("\n")}`
 					)
@@ -1209,7 +1219,7 @@ AI Response: ${aiMessageContent}`;
 
 	try {
 		const result = await aiRequestService.generateWithRetry(
-			prompt,
+			[{ text: prompt }], // Modified as per instruction
 			modelName,
 			undefined, // No history needed for this type of request
 			"lightweight plan prompt",

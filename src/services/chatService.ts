@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { UrlContextService } from "./urlContextService";
-import { HistoryEntry } from "../sidebar/common/sidebarTypes"; // Import HistoryEntry for type safety
+import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes"; // Import HistoryEntry for type safety, and HistoryEntryPart
 
 export class ChatService {
 	private urlContextService: UrlContextService;
@@ -12,7 +12,7 @@ export class ChatService {
 	}
 
 	public async handleRegularChat(
-		userMessage: string,
+		userContentParts: HistoryEntryPart[], // Modified signature
 		groundingEnabled: boolean = false
 	): Promise<void> {
 		const { settingsManager } = this.provider;
@@ -25,10 +25,18 @@ export class ChatService {
 		let success = true;
 		let finalAiResponseText: string | null = null;
 
+		// Extract text content for services that only handle text (UrlContextService, ContextService)
+		const userMessageTextForContext = userContentParts
+			.filter((part): part is { text: string } => "text" in part)
+			.map((part) => part.text)
+			.join("\n");
+
 		try {
 			// Automatically process URLs in the user message for context
 			const urlContexts =
-				await this.urlContextService.processMessageForUrlContext(userMessage);
+				await this.urlContextService.processMessageForUrlContext(
+					userMessageTextForContext
+				);
 			const urlContextString =
 				this.urlContextService.formatUrlContexts(urlContexts);
 
@@ -48,7 +56,7 @@ export class ChatService {
 			const projectContext =
 				await this.provider.contextService.buildProjectContext(
 					token,
-					userMessage
+					userMessageTextForContext // Use text-only for project context building
 				);
 			if (projectContext.contextString.startsWith("[Error")) {
 				throw new Error(projectContext.contextString);
@@ -67,16 +75,23 @@ export class ChatService {
 				value: { modelName, relevantFiles: projectContext.relevantFiles },
 			});
 
-			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and never provide full code snippets to user's requests, be concise and informative.\n\nProject Context:\n${
-				projectContext.contextString
-			}${
-				urlContextString ? `\n\n${urlContextString}` : ""
-			}\n\nUser Query:\n${userMessage}\n\nAssistant Response:`;
+			// Revise construction of input for aiRequestService.generateWithRetry
+			const initialSystemPrompt: HistoryEntryPart[] = [
+				{
+					text: `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and never provide full code snippets to user's requests, be concise and informative.\n\nProject Context:\n${
+						projectContext.contextString
+					}${urlContextString ? `\n\n${urlContextString}` : ""}`,
+				},
+			];
+			const fullUserTurnContents: HistoryEntryPart[] = [
+				...initialSystemPrompt,
+				...userContentParts, // Append the direct user input (text + images)
+			];
 
 			let accumulatedResponse = "";
 			finalAiResponseText =
 				await this.provider.aiRequestService.generateWithRetry(
-					finalPrompt,
+					fullUserTurnContents, // Pass HistoryEntryPart[] as the first argument
 					modelName,
 					this.provider.chatHistoryManager.getChatHistory(),
 					"chat",
@@ -116,7 +131,7 @@ export class ChatService {
 
 				this.provider.chatHistoryManager.addHistoryEntry(
 					"model",
-					accumulatedResponse,
+					[{ text: accumulatedResponse }], // Ensure content is HistoryEntryPart[]
 					undefined,
 					projectContext.relevantFiles,
 					projectContext.relevantFiles &&
@@ -175,7 +190,6 @@ export class ChatService {
 		let success = true;
 		let finalAiResponseText: string | null = null;
 		let currentHistory: readonly HistoryEntry[] = [];
-		let userMessageText: string = "";
 		let relevantFiles: string[] | undefined;
 
 		try {
@@ -204,20 +218,24 @@ export class ChatService {
 				!editedUserMessageEntry ||
 				editedUserMessageEntry.role !== "user" ||
 				!editedUserMessageEntry.parts ||
-				editedUserMessageEntry.parts.length === 0 ||
-				!editedUserMessageEntry.parts[0].text
+				editedUserMessageEntry.parts.length === 0
 			) {
 				throw new Error(
 					"Validation Error: Edited user message not found or is not a user message with valid content."
 				);
 			}
 
-			userMessageText = editedUserMessageEntry.parts[0].text;
+			const userContentPartsForRegen = editedUserMessageEntry.parts; // Get HistoryEntryPart[]
+			// Extract text content for services that only handle text
+			const userMessageTextForContext = userContentPartsForRegen
+				.filter((part): part is { text: string } => "text" in part)
+				.map((part) => part.text)
+				.join("\n");
 
-			// 4. Call contextService.buildProjectContext using token and userMessageText.
+			// 4. Call contextService.buildProjectContext using token and userMessageText (text-only for context).
 			const projectContext = await contextService.buildProjectContext(
 				token,
-				userMessageText
+				userMessageTextForContext
 			);
 
 			if (projectContext.contextString.startsWith("[Error")) {
@@ -239,14 +257,20 @@ export class ChatService {
 				value: { modelName, relevantFiles: relevantFiles },
 			});
 
-			// 7. Construct the finalPrompt including existing 'You are Minovative Mind...' prefix,
-			// the projectContext.contextString, and the userMessageText from the edited message,
-			// and an 'Assistant Response:'.
-			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and never provide full code snippets to user's requests, be concise and informative.\n\nProject Context:\n${projectContext.contextString}\n\nUser Query:\n${userMessageText}\n\nAssistant Response:`;
+			// Construct the full user turn contents, including system prompt and user input
+			const initialSystemPrompt: HistoryEntryPart[] = [
+				{
+					text: `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and never provide full code snippets to user's requests, be concise and informative.\n\nProject Context:\n${projectContext.contextString}`,
+				},
+			];
+			const fullUserTurnContents: HistoryEntryPart[] = [
+				...initialSystemPrompt,
+				...userContentPartsForRegen, // Append the direct user input (text + images)
+			];
 
 			let accumulatedResponse = "";
 			finalAiResponseText = await aiRequestService.generateWithRetry(
-				finalPrompt,
+				fullUserTurnContents, // Pass HistoryEntryPart[] as the first argument
 				modelName,
 				currentHistory, // Pass the truncated currentHistory
 				"chat",
@@ -279,7 +303,7 @@ export class ChatService {
 				// 10. If successful, add the new model response to chatHistoryManager.
 				chatHistoryManager.addHistoryEntry(
 					"model",
-					accumulatedResponse,
+					[{ text: accumulatedResponse }], // Ensure content is HistoryEntryPart[]
 					undefined, // No diff content for a chat response
 					relevantFiles,
 					relevantFiles && relevantFiles.length <= 3
@@ -324,7 +348,6 @@ export class ChatService {
 					: finalAiResponseText,
 			});
 
-			// c. Dispose of the activeOperationCancellationTokenSource.
 			this.provider.activeOperationCancellationTokenSource?.dispose();
 			this.provider.activeOperationCancellationTokenSource = undefined;
 			this.provider.chatHistoryManager.restoreChatHistoryToWebview();

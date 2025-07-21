@@ -118,6 +118,20 @@ export function initializeDomElements(): RequiredDomElements | null {
 		"token-usage-toggle"
 	) as HTMLButtonElement;
 
+	// Image upload elements
+	const imageUploadInput = document.getElementById(
+		"image-upload-input"
+	) as HTMLInputElement;
+	const attachImageButton = document.getElementById(
+		"attach-image-button"
+	) as HTMLButtonElement;
+	const imagePreviewsContainer = document.getElementById(
+		"image-previews-container"
+	) as HTMLDivElement;
+	const clearImagesButton = document.getElementById(
+		"clear-images-button"
+	) as HTMLButtonElement;
+
 	// The current implementation of main.ts does not retrieve planConfirmationContainer,
 	// confirmPlanButton, or cancelPlanButton via getElementById at startup.
 	// Instead, they are dynamically created within createPlanConfirmationUI()
@@ -161,6 +175,12 @@ export function initializeDomElements(): RequiredDomElements | null {
 		tokenUsageContainer,
 		tokenUsageDisplay,
 		tokenUsageToggle,
+
+		// Image upload elements
+		imageUploadInput,
+		attachImageButton,
+		imagePreviewsContainer,
+		clearImagesButton,
 	};
 
 	const missingElements: string[] = [];

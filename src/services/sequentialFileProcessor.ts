@@ -3,6 +3,7 @@ import { AIRequestService } from "./aiRequestService";
 import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor";
 import { ActiveSymbolDetailedInfo } from "./contextService";
 import { DEFAULT_MODEL, TEMPERATURE } from "../sidebar/common/sidebarConstants";
+import { HistoryEntryPart } from "../sidebar/common/sidebarTypes";
 
 export interface FileSummary {
 	filePath: string;
@@ -240,7 +241,7 @@ export class SequentialFileProcessor {
 
 			try {
 				detailedAnalysis = await this.aiRequestService.generateWithRetry(
-					analysisPrompt,
+					[{ text: analysisPrompt }],
 					options.modelName,
 					undefined,
 					`file-analysis-${relativePath}`,

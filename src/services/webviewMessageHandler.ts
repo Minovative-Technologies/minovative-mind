@@ -4,6 +4,9 @@ import * as path from "path";
 import {
 	ToggleRelevantFilesDisplayMessage,
 	EditChatMessage,
+	ImageInlineData, // NEW: Added import for ImageInlineData
+	WebviewToExtensionChatMessageType, // NEW: Added import for WebviewToExtensionChatMessageType
+	HistoryEntryPart, // Ensure HistoryEntryPart is imported for type safety
 } from "../sidebar/common/sidebarTypes";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { generateLightweightPlanPrompt } from "../sidebar/services/aiInteractionService";
@@ -73,6 +76,8 @@ export async function handleWebviewMessage(
 
 		case "planRequest": {
 			const userRequest = data.value;
+			// This addHistoryEntry call might need to be updated to support HistoryEntryPart[] if userRequest is changed to such.
+			// For now, it remains as a string because /plan is a command, not multi-modal input.
 			provider.chatHistoryManager.addHistoryEntry(
 				"user",
 				`/plan ${userRequest}`
@@ -125,6 +130,7 @@ export async function handleWebviewMessage(
 
 			if (provider.lastPlanGenerationContext) {
 				const contextForRetry = { ...provider.lastPlanGenerationContext };
+				// This addHistoryEntry call remains as a string because it's an internal message.
 				provider.chatHistoryManager.addHistoryEntry(
 					"model",
 					"User requested retry of structured plan generation."
@@ -150,11 +156,14 @@ export async function handleWebviewMessage(
 			break;
 
 		case "chatMessage": {
-			const userMessage = data.value;
-			const groundingEnabled = !!data.groundingEnabled;
-			if (userMessage.trim().toLowerCase() === "/commit") {
-				// If a /commit command is sent via chat input,
-				// ensure a cancellation token is prepared and passed.
+			// Cast incoming data to the specific message type
+			const chatMessageData = data as WebviewToExtensionChatMessageType;
+			const userMessageText = chatMessageData.value;
+			const groundingEnabled = !!chatMessageData.groundingEnabled;
+			const incomingImageParts = chatMessageData.imageParts; // Array of ImageInlineData | undefined
+
+			// Handle /commit command first (existing logic)
+			if (userMessageText.trim().toLowerCase() === "/commit") {
 				if (!provider.activeOperationCancellationTokenSource) {
 					provider.activeOperationCancellationTokenSource =
 						new vscode.CancellationTokenSource();
@@ -162,13 +171,48 @@ export async function handleWebviewMessage(
 				await provider.commitService.handleCommitCommand(
 					provider.activeOperationCancellationTokenSource.token
 				);
-			} else {
-				provider.chatHistoryManager.addHistoryEntry("user", userMessage);
-				await provider.chatService.handleRegularChat(
-					userMessage,
-					groundingEnabled
-				);
+				break; // Exit case after handling /commit
 			}
+
+			// Construct userHistoryParts array
+			const userHistoryParts: HistoryEntryPart[] = [];
+
+			// Add the user's text message if not empty, or a default message if only images
+			if (userMessageText.trim() !== "") {
+				userHistoryParts.push({ text: userMessageText });
+			} else if (incomingImageParts && incomingImageParts.length > 0) {
+				// Prepend text if only images are provided, for context
+				userHistoryParts.push({ text: "Here are some images for context." });
+			}
+
+			// If incomingImageParts exist, iterate and push them as inlineData parts
+			if (incomingImageParts && incomingImageParts.length > 0) {
+				for (const img of incomingImageParts) {
+					userHistoryParts.push({ inlineData: img });
+				}
+			}
+
+			// Handle cases where no text or images are provided
+			if (userHistoryParts.length === 0) {
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Please provide a message or images to send.",
+					isError: true,
+				});
+				await provider.endUserOperation("failed");
+				break;
+			}
+
+			// Update the provider.chatHistoryManager.addHistoryEntry call
+			// Pass userHistoryParts to addHistoryEntry
+			provider.chatHistoryManager.addHistoryEntry("user", userHistoryParts);
+
+			// Update the await provider.chatService.handleRegularChat call
+			// Pass userHistoryParts as the first argument instead of userMessage
+			await provider.chatService.handleRegularChat(
+				userHistoryParts,
+				groundingEnabled
+			);
 			break;
 		}
 
@@ -676,7 +720,8 @@ export async function handleWebviewMessage(
 
 			// Concatenate all parts to get the full AI message content
 			const aiMessageContent = historyEntry.parts
-				.map((part) => part.text)
+				.map((part) => ("text" in part && part.text ? part.text : ""))
+				.filter((text) => text.length > 0) // Filter out empty strings from non-text parts
 				.join("\n");
 
 			if (!aiMessageContent || aiMessageContent.trim() === "") {
