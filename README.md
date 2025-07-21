@@ -35,7 +35,6 @@ To get started with Minovative Mind:
 ### Enhanced AI Reasoning (Thinking Capabilities)
 
 - **Advanced AI Configuration**: Leverages advanced AI configuration to enable deeper internal reasoning and problem-solving before generating responses, leading to more robust and accurate outcomes.
-- **Thinking Budget**: Configurable thinking budget for complex reasoning tasks.
 
 ### Efficient AI Resource Management
 
@@ -297,7 +296,6 @@ Minovative Mind is highly customizable to fit your specific development workflow
 
 - **AI Model Selection**: Choose your preferred Google Gemini model for different tasks (`AVAILABLE_GEMINI_MODELS` from `src/sidebar/common/sidebarConstants.ts`, managed by `SettingsManager` in `src/sidebar/managers/settingsManager.ts`).
 - **API Key Management**: Securely store and manage your API keys.
-- **Thinking Budget**: Adjust the AI's reasoning depth for complex problem-solving.
 - **Dynamic Feature Gating**: Features are dynamically enabled or disabled based on your user tier and subscription level (e.g., for Premium capabilities). These settings (`src/sidebar/managers/settingsManager.ts`) allow you to fine-tune the extension's behavior to your needs.
 
 ## Internal Architecture Highlights
