@@ -110,17 +110,6 @@ export function initializeMessageBusHandler(
 				container.classList.add("code-file-stream-container");
 				container.dataset.streamId = streamId;
 
-				// Header for file path and loading dots
-				const header = document.createElement("div");
-				header.classList.add("code-file-stream-header");
-				header.innerHTML = `
-                    <span class="file-path">${filePath}</span>
-                    <span class="status-indicator">
-                        <span class="loading-dots">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
-                    </span>
-                `;
-				container.appendChild(header);
-
 				// Pre and Code elements for content
 				const pre = document.createElement("pre");
 				const codeElement = document.createElement("code");
@@ -128,6 +117,17 @@ export function initializeMessageBusHandler(
 				codeElement.classList.add("hljs"); // For highlight.js
 				pre.appendChild(codeElement);
 				container.appendChild(pre);
+
+				// NEW: Footer for file path and loading dots
+				const footer = document.createElement("div");
+				footer.classList.add("code-file-stream-footer");
+				footer.innerHTML = `
+                    <span class="file-path">${filePath}</span>
+                    <span class="status-indicator">
+                        <span class="loading-dots">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
+                    </span>
+                `;
+				container.appendChild(footer);
 
 				codeStreamingArea.appendChild(container);
 				activeCodeStreams.set(streamId, { container, codeElement });
@@ -170,13 +170,13 @@ export function initializeMessageBusHandler(
 
 				const streamInfo = activeCodeStreams.get(streamId);
 				if (streamInfo) {
-					const header = streamInfo.container.querySelector(
-						".code-file-stream-header"
+					const footer = streamInfo.container.querySelector(
+						".code-file-stream-footer"
 					);
-					const statusIndicator = header?.querySelector(
+					const statusIndicator = footer?.querySelector(
 						".status-indicator"
 					) as HTMLElement | null;
-					const loadingDots = header?.querySelector(
+					const loadingDots = footer?.querySelector(
 						".loading-dots"
 					) as HTMLElement | null;
 

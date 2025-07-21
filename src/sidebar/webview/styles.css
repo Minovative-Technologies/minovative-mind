@@ -779,16 +779,24 @@ div#commit-message-display pre,
  */
 
 /* Redefine .code-file-stream-container pre to match general code block styling */
+.code-file-stream-container {
+	border: 1px solid var(--vscode-editorGroup-border);
+	padding: 0; /* Remove padding here, will be handled by pre/footer */
+	border-radius: 4px;
+	background-color: var(--vscode-editor-background);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+}
+
 .code-file-stream-container pre {
 	background-color: var(
 		--vscode-textCodeBlock-background
 	); /* VSCode var for code block bg */
 	padding: 12px 16px; /* Increased padding for better visual appeal */
-	border-radius: 6px; /* Slightly more rounded corners */
-	margin-top: 0.8em;
-	margin-bottom: 0.8em;
-	border: 1px solid var(--vscode-editorWidget-border, var(--border-color)); /* Subtle border */
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1), inset 0 1px 2px rgba(0, 0, 0, 0.05); /* Enhanced shadow for depth */
+	border-radius: 6px 6px 0 0; /* Rounded top corners, flat bottom */
+	margin-top: 0; /* Remove top margin as container handles it */
+	margin-bottom: 0; /* Remove bottom margin as footer is separate */
+	border: none; /* No border for the pre itself, container has it */
+	box-shadow: none; /* No shadow for the pre itself, container has it */
 	white-space: pre-wrap; /* Preserve whitespace and allow wrapping */
 	overflow-wrap: break-word; /* Ensure long lines and words wrap correctly within the code block, preventing horizontal scrolling. */
 	overflow-x: auto; /* Enable horizontal scrolling for very long lines */
@@ -838,7 +846,7 @@ div#commit-message-display pre,
 }
 
 /* Add hover effect to streamed code blocks */
-.code-file-stream-container pre:hover {
+.code-file-stream-container:hover {
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15),
 		inset 0 1px 2px rgba(0, 0, 0, 0.05);
 	transform: translateY(-1px);
@@ -883,6 +891,87 @@ div#commit-message-display pre,
 	word-break: normal; /* Restore default word breaking behavior for code */
 	overflow-wrap: break-word; /* Ensure lines and words wrap correctly */
 }
+
+/* New CSS rules for the .code-file-stream-footer class and its descendants */
+.code-file-stream-footer {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 5px 12px; /* Similar to header padding, adjusted for footer */
+	border-top: 1px dashed var(--vscode-input-border); /* Separator from code */
+	background-color: var(
+		--vscode-editorWidget-background
+	); /* Subtle background */
+	border-radius: 0 0 4px 4px; /* Rounded bottom corners */
+	font-size: 0.85em;
+	color: var(--vscode-descriptionForeground);
+	min-height: 25px; /* Ensure minimum height */
+}
+
+.code-file-stream-footer .file-path {
+	flex-grow: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	margin-right: 10px; /* Space between path and status */
+	font-weight: 500;
+}
+
+.code-file-stream-footer .status-indicator {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	flex-shrink: 0; /* Prevent from shrinking */
+}
+
+.code-file-stream-footer .loading-dots {
+	display: inline-flex;
+	font-weight: normal;
+	color: var(--vscode-textPreformat-foreground);
+	font-style: italic;
+	gap: 1px; /* Tighter spacing for dots */
+}
+
+.code-file-stream-footer .loading-dots .dot {
+	animation: blink 1.4s infinite both;
+	display: inline-block;
+}
+
+.code-file-stream-footer .loading-dots .dot:nth-child(1) {
+	animation-delay: 0s;
+}
+
+.code-file-stream-footer .loading-dots .dot:nth-child(2) {
+	animation-delay: 0.2s;
+}
+
+.code-file-stream-footer .loading-dots .dot:nth-child(3) {
+	animation-delay: 0.4s;
+}
+
+.code-file-stream-footer .status-icon {
+	font-size: 1.1em;
+	vertical-align: middle;
+}
+
+.code-file-stream-footer .status-indicator.success .status-icon {
+	color: var(--vscode-terminal-ansiGreen); /* Green for success */
+}
+
+.code-file-stream-footer .status-indicator.error .status-icon {
+	color: var(--vscode-errorForeground); /* Red for error */
+}
+
+.code-file-stream-footer .error-details {
+	color: var(--vscode-errorForeground);
+	font-size: 1em; /* Inherit or similar to parent for consistency */
+	margin-left: 5px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 200px; /* Limit width of error details */
+}
+
 /*
  * --- END CHANGES FOR LIVE STREAMING STYLING (Unify with chat snippet styles) ---
  */
@@ -2658,60 +2747,6 @@ ul#staged-files-list li.empty-state {
 	overflow-x: hidden; /* Hide horizontal overflow */
 	overflow-y: auto;
 	box-shadow: var(--vscode-widget-shadow);
-}
-
-.code-file-stream-container {
-	border: 1px solid var(--vscode-editorGroup-border);
-	padding: 8px;
-	border-radius: 4px;
-	background-color: var(--vscode-editor-background);
-	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
-}
-
-.code-stream-header {
-	font-weight: bold;
-	color: var(--vscode-foreground);
-	margin-bottom: 5px;
-	display: flex;
-	align-items: center;
-	gap: 5px;
-	padding-bottom: 5px;
-	border-bottom: 1px dashed var(--vscode-input-border); /* Separator */
-}
-
-.code-stream-header .loading-text {
-	font-weight: normal;
-	color: var(--vscode-textPreformat-foreground);
-	font-style: italic;
-}
-
-.code-stream-header.success {
-	color: var(--vscode-terminal-ansiGreen); /* Greenish for success */
-}
-
-.code-stream-header.error {
-	color: var(--vscode-errorForeground); /* Red for error */
-}
-
-.code-stream-header .checkmark {
-	color: var(--vscode-terminal-ansiGreen);
-	font-size: 1.1em;
-}
-
-.code-stream-header .error-icon {
-	color: var(--vscode-errorForeground);
-	font-size: 1.1em;
-}
-
-.code-stream-error-details {
-	color: var(--vscode-errorForeground);
-	font-size: 0.9em;
-	margin-top: 8px;
-	background-color: var(--vscode-input-background);
-	border: 1px solid var(--vscode-errorForeground);
-	padding: 5px 8px;
-	border-radius: 3px;
-	font-family: var(--vscode-editor-font-family);
 }
 /* --- END CHANGES FOR LIVE STREAMING STYLING --- */
 
