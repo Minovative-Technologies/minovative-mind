@@ -21,7 +21,7 @@ export function createInitialPlanningExplanationPrompt(
 
 	if (editorContext) {
 		if (editorContext.instruction.toLowerCase() === "/fix") {
-			instructionType = `The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix.`;
+			instructionType = `The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix. Only focus on fixing the diagnostics provided.`;
 			specificContextPrompt = `
         --- Specific User Request Context from Editor ---
         File Path: ${editorContext.filePath}
@@ -141,7 +141,7 @@ export function createInitialPlanningExplanationPrompt(
     **Instructions for Plan Explanation:**
     1.  Analyze Request & Context: ${mainInstructions}. Use the broader project context below for reference. The broader project context includes '**detailed symbol information** to help you understand code structure and relationships.'. ${
 		editorContext && diagnosticsString
-			? "**Pay very close attention to the 'Relevant Diagnostics' section and ensure your textual plan describes, in great detail, how you will address them for '/fix' requests.**"
+			? "**Only focus on fixing the 'Relevant Diagnostics' section and ensure your textual plan describes, in great detail, how you will address them for '/fix' requests.**"
 			: ""
 	}
     2.  **Be Comprehensive:** Your explanation should cover all necessary steps to achieve the user's goal.
@@ -426,7 +426,7 @@ export function createPlanningPrompt(
         Language: ${editorContext.languageId}
         
         --- Instruction Type ---
-        The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix
+        The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix. Only focus on fixing the diagnostics provided.
         --- End Instruction Type ---
 
         --- Selected Code in Editor ---
@@ -568,7 +568,7 @@ export function createPlanningPrompt(
     **Instructions for Plan Generation:**
     1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
 		editorContext && actualDiagnosticsString
-			? "**Pay close attention to the 'Relevant Diagnostics' section and ensure your plan, in great detail, addresses them for '/fix' requests.**"
+			? "**Only focus on fixing the 'Relevant Diagnostics' section and ensure your plan, in great detail, addresses them for '/fix' requests.**"
 			: ""
 	} Also carefully review the 'Recent Chat History' if provided. This history contains previous interactions, including any steps already taken or files created/modified. When planning \`modify_file\` actions, especially for refactoring, leverage the 'Symbol Information' and particularly the 'Active Symbol Detailed Information' sections to ensure all related definitions and references are accurately considered for modification. **For '/fix' requests, specifically ensure that the 'Active Symbol Detailed Information' is robustly used for precise targeting and impact analysis of changes within \`modification_prompt\` values.** Additionally, prioritize \`modify_file\` steps that account for global symbol impact when a symbol is refactored.
     

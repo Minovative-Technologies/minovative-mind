@@ -283,13 +283,9 @@ export function appendMessage(
 
 		contextFilesDiv.appendChild(fileList);
 
-		// Insert context files after the sender's strong tag
-		const senderStrongTag = messageElement.querySelector("strong");
-		if (senderStrongTag) {
-			senderStrongTag.insertAdjacentElement("afterend", contextFilesDiv);
-		} else {
-			messageElement.appendChild(contextFilesDiv); // Fallback
-		}
+		// Append context files to the message element,
+		// placing it at the end of the main content, before action buttons.
+		messageElement.appendChild(contextFilesDiv);
 	}
 
 	let copyButton: HTMLButtonElement | null = null;

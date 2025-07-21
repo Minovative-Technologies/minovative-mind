@@ -1779,7 +1779,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 						value: {
 							text: formatUserFacingErrorMessage(
 								correctionError,
-								"AI final self-correction failed due to an unexpected issue. Retry /fix again. Manual review may be required.",
+								"AI final self-correction failed due to an unexpected issue. Retry with /fix. Manual review may be required.",
 								"AI self-correction failed: ",
 								rootUri
 							),

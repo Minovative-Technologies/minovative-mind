@@ -67,7 +67,7 @@ export class ChatService {
 				value: { modelName, relevantFiles: projectContext.relevantFiles },
 			});
 
-			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown.\n\nProject Context:\n${
+			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and never provide full code snippets to user's requests, be concise and informative.\n\nProject Context:\n${
 				projectContext.contextString
 			}${
 				urlContextString ? `\n\n${urlContextString}` : ""
@@ -242,7 +242,7 @@ export class ChatService {
 			// 7. Construct the finalPrompt including existing 'You are Minovative Mind...' prefix,
 			// the projectContext.contextString, and the userMessageText from the edited message,
 			// and an 'Assistant Response:'.
-			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown.\n\nProject Context:\n${projectContext.contextString}\n\nUser Query:\n${userMessageText}\n\nAssistant Response:`;
+			const finalPrompt = `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and never provide full code snippets to user's requests, be concise and informative.\n\nProject Context:\n${projectContext.contextString}\n\nUser Query:\n${userMessageText}\n\nAssistant Response:`;
 
 			let accumulatedResponse = "";
 			finalAiResponseText = await aiRequestService.generateWithRetry(
