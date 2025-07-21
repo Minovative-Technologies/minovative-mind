@@ -2,6 +2,16 @@
 
 Minovative Mind is a powerful VS Code extension designed to integrate advanced AI capabilities directly into your development workflow. It leverages Google Gemini models to provide intelligent assistance, automate tasks, and enhance productivity.
 
+## Getting Started / Installation
+
+To get started with Minovative Mind:
+
+1. Open VS Code.
+2. Navigate to the Extensions view (`Ctrl+Shift+X` or `Cmd+Shift+X`).
+3. Search for `Minovative Mind`.
+4. Click `Install`.
+5. Once installed, open the Minovative Mind sidebar from the Activity Bar and configure your AI API Key to unlock all features.
+
 ## Core AI Capabilities
 
 ### AI Chat Interface
@@ -10,6 +20,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - **Contextual Awareness**: The AI intelligently understands the active file, selected code, current workspace, and relevant project files, providing highly contextual responses to queries.
 - **General Q&A**: Supports general programming questions, debugging help, and conceptual inquiries.
 - **Interactive File Display**: Displays relevant file paths within AI chat responses, providing interactive elements to collapse/expand the file list and open files directly.
+- **Direct 'Chat with Code' from Editor**: Users can right-click directly in the active editor (or use the universal shortcut `Ctrl/Cmd+M`) and select a 'Chat with AI' option. This sends selected code snippets or the entire active file directly to the AI chat for contextual discussions and queries, leveraging the AI's deep understanding of your codebase. This feature is orchestrated by `src/extension.ts` (specifically, the 'chat' branch of the `minovative-mind.modifySelection` command) and processed by `src/services/chatService.ts` (`handleRegularChat`).
 - **HTML Rendering**: Enables HTML rendering in Markdown chat responses for richer content.
 - **Intelligent Command Suggestions & Autocomplete**: As you type `/` in the chat input, the extension provides real-time suggestions and autocomplete options for available commands (e.g., `/plan`, `/fix`, `/docs`, `/commit`), improving discoverability and efficiency.
 - **Copy Message Feature**: A "Copy Message" button is integrated with AI chat responses, allowing users to easily copy the generated text (including formatted code blocks) to their clipboard.
@@ -19,7 +30,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
   - **Submission/Cancellation**: Press `Enter` (without `Shift`) or click outside the text area to apply your changes. Press `Escape` to discard changes and revert the message to its original state.
   - **Impact on Chat History and AI Interaction**: Upon submission, your message in the chat history will be updated, and all subsequent AI responses following that message will be cleared. The AI will then re-process the conversation using your edited message as the new context, allowing for real-time refinement of interactions.
 - **Enhanced Chat History Management**: Introduces a robust confirmation dialog for clearing chat history. This critical operation now explicitly requires user consent and irrevocably deletes all associated revertible change data, ensuring greater control over your conversational data.
-- **Generate Plans from AI Messages**: A new 'Generate Plan' button is now available on AI chat messages. Clicking it extracts the AI's response content, converts it into a concise `/plan` prompt, and pre-fills it directly into your chat input, streamlining the creation of follow-up actions and project plans.
+- **Generate Plans from AI Messages**: This feature directly streamlines turning AI suggestions into executable plans. A "Generate Plan" button appears on AI chat messages. Clicking it extracts the AI's response content (leveraging `generateLightweightPlanPrompt` in `src/sidebar/services/aiInteractionService.ts`), converts it into a concise `/plan` command, and pre-fills it directly into the chat input, making it effortless to transform AI's ideas into actionable development steps.
 
 ### Enhanced AI Reasoning (Thinking Capabilities)
 
@@ -28,7 +39,7 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 
 ### Efficient AI Resource Management
 
-- **Accurate Token Counting**: Integrates precise token counting using the Gemini API to optimize API usage and enhance cost efficiency for all AI interactions.
+- **Accurate Token Counting**: Integrates precise token counting using the Gemini API to optimize API usage and enhance cost efficiency for all AI interactions. Users can **view real-time token statistics** (input tokens, output tokens, total tokens, request count) directly within the VS Code sidebar, ensuring transparency and dynamic updates. `TokenTrackingService` (from `src/services/tokenTrackingService.ts`) handles the counting, while `updateTokenUsageDisplay` and `toggleTokenUsageDisplay` (from `src/sidebar/webview/main.ts`) manage the UI presentation.
 
 ### Contextual Code Explanation
 
@@ -41,12 +52,12 @@ Minovative Mind is a powerful VS Code extension designed to integrate advanced A
 - **Flexible Instructions (Premium Tier)**: Users can select any code snippet or operate on the **entire active file if no selection is present**, and provide free-form instructions (e.g., "Refactor this function to use async/await").
 - **Quick Access**: Triggered via a keyboard shortcut (`Ctrl+M` or `Cmd+M`) or the editor's right-click context menu (`Minovative Mind > Custom Modifications`).
 - **AI-Generated Documentation (`/docs`)**: Typing `/docs` for selected code automatically generates appropriate documentation (e.g., `JSDoc`, `Python doc-strings`) and inserts it directly into the file.
-- **Automated Code Fixing (`/fix`) (Premium Tier)**: Typing `/fix` prompts the AI to analyze selected code, or the **entire active file if no selection is present**, including relevant `VS Code` diagnostics (warnings, errors), and propose/apply fixes directly within the editor.
+- **Automated Code Fixing (`/fix`) (Premium Tier)**: Typing `/fix` prompts the AI to analyze selected code, or the **entire active file if no selection is present**, including relevant `VS Code` diagnostics (warnings, errors), and propose/apply fixes directly within the editor. When modifications are initiated without explicit text selection, Minovative Mind intelligently analyzes cursor position, active diagnostics, and code structure to automatically identify and select the most relevant code unit (e.g., function, class, or the entire file) for targeted modifications. This intelligent auto-selection is powered by logic in `src/extension.ts`, `src/services/codeSelectionService.ts` (`findRelevantSymbolForFix`, `findLogicalCodeUnitForPrompt`), and `src/services/contextService.ts`.
 - **AI Merge Conflict Resolution (`/merge`) (Premium Tier)**: Automatically detects and resolves Git merge conflicts in the active file. The AI analyzes conflict markers, generates a semantically coherent merged version, applies the resolution, and un-marks the file as conflicted, streamlining a common tedious task.
 - **Symbol-Aware Refactoring**: Leverages VS Code's symbol information (functions, classes, variables, references, definitions, and types) to enable more precise, comprehensive, and robust refactorings and modifications across your entire project.
 - **Modular Code Generation**: The AI is explicitly instructed to promote modular code generation principles, encouraging maintainable and scalable solutions.
-- **Diagnostic-Aware Modifications**: The AI leverages relevant VS Code diagnostics (warnings, errors) in a more contextual manner, thanks to deeper integration with a dedicated diagnostic service, leading to more accurate and problem-solving custom modifications for both targeted selections and whole-file operations.
-- **Production-Ready Code Focus**: AI persona updated to focus on generating production-ready, robust, and secure code.
+- **AI Self-Correction & Validation Pipeline**: Minovative Mind features a sophisticated **internal self-correction loop** that rigorously validates AI-generated code _before_ it's written to your files. This system actively queries VS Code's diagnostic engine (`DiagnosticService` in `src/utils/diagnosticUtils.ts`) to detect real-time syntax errors, compilation issues, linting warnings, and other problems in the AI's proposed code changes. If issues are found, the AI receives targeted feedback, including specific diagnostics and code snippets, and attempts to refine its output iteratively (managed by `EnhancedCodeGenerator` in `src/ai/enhancedCodeGeneration.ts` via methods like `_validateCode` and `_refineContent`). For code modifications, it also performs **diff analysis** (`_analyzeDiff`) to ensure changes are reasonable and surgical. This robust, iterative process ensures a higher quality, error-free, and production-ready output, significantly minimizing manual debugging on the user's part.
+- **Production-Ready Code Focus**: The AI's persona within Minovative Mind is meticulously crafted to ensure production-ready, robust, and secure code generation. Prompts are designed with stringent instructions to the AI (e.g., 'Accuracy First', 'Style Consistency', 'Surgical Precision & Minimal Changes', 'No Extra Text', 'Error Prevention', 'Security') (referencing `src/ai/enhancedCodeGeneration.ts`'s `_createEnhancedGenerationPrompt` and `_createEnhancedModificationPrompt` prompts). This guarantees outputs that are not only functional but also adhere strictly to best practices, seamlessly integrate into existing codebases, and minimize unnecessary 'noise' or cosmetic changes, maximizing utility and code quality.
 
 #### Enhanced AI Code Generation Accuracy
 
@@ -87,6 +98,10 @@ Introduced core services and utilities for advanced AI-driven development.
 - ParallelProcessor was integrated to enable concurrent AI requests and file processing.
 - EnhancedCodeGenerator was updated to utilize incremental updates for code modifications.
 - AIRequestService gained new methods for parallel and batched AI request execution.
+
+#### Real-time Code Streaming Updates
+
+Minovative Mind provides a seamless and interactive experience during code generation and modification. For `create_file` or `modify_file` steps within an executed plan, users can observe code being written or updated character-by-character directly in a dedicated UI area within the sidebar or within the editor itself. This real-time streaming allows immediate feedback and enhances the sense of collaborative development. This feature relies on `src/ai/enhancedCodeGeneration.ts` for managing the code generation process and `src/sidebar/SidebarProvider.ts` for processing and rendering stream messages (specifically `codeFileStreamStart`, `codeFileStreamChunk`, and `codeFileStreamEnd` events).
 
 ## Advanced Workflow & Automation
 
@@ -137,7 +152,6 @@ Introduced core services and utilities for advanced AI-driven development.
 
 - **Customer Portal Access**: Users can conveniently manage their Premium subscription details, view billing information, and update payment methods via a secure link to the Stripe Customer Portal, accessible directly from the extension's settings.
 - **Transparent Feature Gating**: The extension clearly indicates which features are available or restricted based on the user's current authentication status and subscription tier.
-- **Dynamic Feature Gating**: Features are dynamically enabled or disabled based on user tier, authentication, and subscription status, using a centralized feature gating utility.
 
 ## Customization & Management
 
@@ -237,20 +251,36 @@ Introduced core services and utilities for advanced AI-driven development.
 ### Heuristic and AI-Driven File Relevance Selection
 
 - **Heuristic File Selection**: Uses dependency graphs, symbol analysis, and recent changes to select the most relevant files for context, even in large projects.
-- **AI-Driven File Selection**: Summarizes all or a subset of files and uses the AI to select the most relevant files for the current request, combining both heuristic and AI-driven approaches for optimal context.
+- **AI-Driven File Selection**: When the AI selects relevant files for context, it leverages "intelligent summaries of files." These summaries (generated using `intelligentlySummarizeFileContent` and stored as `FileSummary` from `src/services/sequentialFileProcessor.ts`) provide a quick, high-level understanding of file content, enabling efficient and accurate context selection. This approach is supported by `SequentialContextService` (from `src/services/sequentialContextService.ts`) and `smartContextSelector.ts`, combining both heuristic and AI-driven approaches for optimal context.
 
 ### Project Change Logging
 
 - **Change Log Context**: Tracks recent file changes (created, modified, deleted) and provides this change log as context to the AI, ensuring responses and plans are aware of the latest project state.
+- **Revert Executed Plans**: Users can undo the effects of successfully executed AI plans, providing a crucial safety mechanism. The system automatically logs changes made by plans (leveraging `ProjectChangeLogger` and the `RevertibleChangeSet` type from `src/types/workflow.ts`). A "Revert Changes" button in the sidebar (linked to `src/sidebar/webview/main.ts` and `src/services/RevertService.ts`) allows users to initiate this process. **Warning**: Clearing chat history irrevocably deletes all associated revertible change data.
+
+### Workflow Continuity & Persistent State
+
+Minovative Mind automatically persists critical session state across VS Code restarts, ensuring uninterrupted development. This includes:
+
+- **Pending AI Operations**: Ongoing plan generations awaiting user confirmation (`pendingPlanGenerationContext`).
+- **Active AI Generation**: Flags indicating if the AI is actively processing a user request (`isGeneratingUserRequest`).
+- **Revertibility Data**: A history of completed plan change sets (`completedPlanChangeSets`) that can be reverted.
+
+This persistent state is managed by `src/sidebar/SidebarProvider.ts` utilizing VS Code's `vscode.Memento` (specifically `workspaceState`) to store and restore `_persistedPendingPlanData`, `isGeneratingUserRequest`, and `completedPlanChangeSets`.
 
 ### Robust Error and Status Feedback
 
 - **Granular Status Updates**: Provides detailed status updates in the sidebar and chat, including warnings and errors for dependency graph building, file selection, and context generation.
 - **Fallback Strategies**: If smart context selection fails, falls back to heuristic selection, the active file, or a subset of files, ensuring the AI always receives some context.
 
+## User Control & Transparency
+
+Throughout complex operations like plan generation, execution, and code streaming, Minovative Mind provides **real-time progress notifications** (`vscode.window.withProgress`). You'll see updates directly in VS Code's status bar and notifications, ensuring transparency. Crucially, almost all long-running AI operations are **fully cancellable** (`vscode.CancellationTokenSource` and checks for `token.isCancellationRequested` pervade `src/services/planService.ts`, `src/sidebar/SidebarProvider.ts`'s `triggerUniversalCancellation`), giving you immediate control to stop processes if needed, preventing resource waste or unwanted actions.
+
 ## Advanced File and Workspace Processing
 
-The system employs sophisticated processing mechanisms to analyze codebases efficiently. It utilizes **Incremental Context Building**, processing files individually and progressively building context where insights from prior files inform subsequent analysis. This is coupled with **Detailed File Analysis**, which assesses file complexity, detects its purpose, generates AI insights, tracks dependencies, and collects vital file statistics. For enhanced user visibility, **Progress Tracking** offers real-time updates, file-by-file feedback, and performance metrics. Furthermore, it supports efficient and concurrent **Batch Processing** with configurable sizes and optimized memory usage.
+The system employs sophisticated processing mechanisms to analyze codebases efficiently.
+Minovative Mind's **context building** (`_formatRelevantFilesForPrompt` in `src/services/planService.ts`) intelligently filters and formats relevant files for the AI, gracefully handling large files (e.g., skipping files over 1MB (`maxFileSizeForSnippet`)), intelligently identifying and excluding binary content, and dynamically detecting programming languages based on extensions and common filenames (even for those without standard extensions like `Dockerfile`, `Makefile`, `.gitignore`). This ensures the AI always receives pertinent, actionable code snippets while avoiding irrelevant or problematic data, optimizing token usage and AI focus. This is complemented by **Incremental Context Building**, processing files individually and progressively building context where insights from prior files inform subsequent analysis. Furthermore, **Detailed File Analysis** assesses file complexity, detects its purpose, generates AI insights, tracks dependencies, and collects vital file statistics. For enhanced user visibility, **Progress Tracking** offers real-time updates, file-by-file feedback, and performance metrics. It also supports efficient and concurrent **Batch Processing** with configurable sizes and optimized memory usage.
 
 ## Caching Mechanisms
 
@@ -271,18 +301,34 @@ The extension incorporates sophisticated caching strategies to enhance performan
 
 ### Command Execution Safety
 
-- **User Confirmation**: All shell commands require explicit user confirmation before execution.
-- **Command Validation**: Commands are validated and logged for security auditing.
-- **Cancellation Support**: All operations can be cancelled by the user at any time.
+- **Command Execution Safety & User Control**: When an AI-generated plan includes shell commands (`run_command`), Minovative Mind prioritizes your safety and control. Each command is presented with a **clear, explicit user confirmation prompt** directly in VS Code (`vscode.window.showWarningMessage` used in `src/services/planService.ts`). You always have the power to 'Allow', 'Skip', or 'Cancel Plan' for any command, ensuring you retain full oversight and prevent unintended system-level changes. This direct intervention mechanism empowers you to review and approve every potentially impactful action.
+
+## Customization and Configuration
+
+Minovative Mind is highly customizable to fit your specific development workflow. Easily configure various aspects directly in the sidebar or via VS Code settings:
+
+- **AI Model Selection**: Choose your preferred Google Gemini model for different tasks (`AVAILABLE_GEMINI_MODELS` from `src/sidebar/common/sidebarConstants.ts`, managed by `SettingsManager` in `src/sidebar/managers/settingsManager.ts`).
+- **API Key Management**: Securely store and manage your API keys.
+- **Thinking Budget**: Adjust the AI's reasoning depth for complex problem-solving.
+- **Dynamic Feature Gating**: Features are dynamically enabled or disabled based on your user tier and subscription level (e.g., for Premium capabilities). These settings (`src/sidebar/managers/settingsManager.ts`) allow you to fine-tune the extension's behavior to your needs.
 
 ## Internal Architecture Highlights
 
-- **Dynamic Feature Gating**: Features are dynamically enabled or disabled based on user tier, authentication, and subscription status, using a centralized feature gating utility.
 - **Settings Management**: User preferences (e.g., smart context, model selection) are managed and persisted, affecting extension behavior in real time.
-- **Git Integration**: Can stage all changes in the workspace and build/execute git commit commands with AI-generated messages.
+- **Robust Error Handling & User Feedback**: Minovative Mind provides clear, actionable feedback when issues arise. Our **intelligent error reporting system** delivers user-friendly messages directly within VS Code notifications and the chat interface, guiding you on how to resolve problems effectively (`showErrorNotification` in `src/utils/notificationUtils.ts`). For transient AI API failures (e.g., 'quota exceeded', network issues, timeouts), the extension automatically implements **robust retry mechanisms with exponential back-off** (logic in `_executePlanSteps` within `src/services/planService.ts`), ensuring resilience and minimizing workflow interruptions, allowing you to focus on coding.
+- **Comprehensive Git Integration**: Minovative Mind offers **deep and comprehensive integration with Git**, streamlining essential version control tasks directly within your workflow. Beyond AI-driven commit message generation (`/commit`, leveraging `CommitService` in `src/services/commitService.ts`) and intelligent merge conflict resolution (`/merge`), the extension seamlessly interacts with your staged changes, accurately retrieves file content from Git history (`getGitFileContentFromHead`, `getGitFileContentFromIndex` from `src/sidebar/services/gitService.ts`), and can automatically unmark resolved merge conflict files (`unmarkFileAsResolved` in `src/services/gitConflictResolutionService.ts`). This integrated approach accelerates your Git workflow, allowing you to manage code changes more efficiently.
 - **Utility Features**: Includes utilities for formatting file trees, sanitizing error messages, handling workspace-relative paths, and detecting merge conflicts in file content.
-- **Advanced Error Handling**: Comprehensive error handling with user-friendly messages and automatic retry mechanisms for transient failures.
-- **Enhanced API Error Handling**: The extension now incorporates an advanced, robust retry mechanism for AI API requests. Specifically, it introduces a 60-second (1-minute) delay when a '429 Too Many Requests' (quota exceeded) error occurs. This ensures graceful recovery, prevents continuous hammering of the API, and automatically retries operations after a cool down period, significantly improving the reliability and resilience of AI interactions.
 - **Streaming AI Responses**: Real-time streaming of AI responses with typing animations and progress indicators.
+- **Robust Concurrency Management**: The extension leverages the `bluebird` library and a custom `src/utils/parallelProcessor.ts` utility for efficient, concurrent processing of intensive background tasks. This includes operations such as comprehensive workspace scanning, building detailed dependency graphs, and performing complex context analysis. By executing these tasks in parallel, Minovative Mind ensures that the VS Code UI remains responsive and fluid, preventing freezes during demanding AI operations. The `package.json` reflects the `bluebird` dependency, and its usage can be observed in `src/services/contextService.ts` (e.g., `BPromise.map`) and within the `ParallelProcessor` class itself.
+
+## Development Toolchain
+
+Minovative Mind is built with a modern and robust development toolchain to ensure code quality, performance, and maintainability:
+
+- **TypeScript**: Utilized for its strong typing capabilities, which enhance code reliability, catch errors early in development, and improve developer productivity through better autocompletion and refactoring support.
+- **Webpack**: Configured for efficient bundling of the extension's source code, optimizing load times and ensuring a streamlined distribution. This includes separate bundles for the extension host and the webview.
+- **ESLint**: Employed for static code analysis, enforcing consistent code style, identifying potential bugs, and ensuring adherence to best practices across the codebase.
+
+These tools are meticulously configured through `package.json` (for scripts and dependencies), `webpack.config.js` (for bundling logic), and `eslint.config.mjs` (for linting rules).
 
 By combining these features, Minovative Mind aims to provide a comprehensive AI-powered assistant directly within `VS Code`, significantly streamlining development tasks and improving overall developer productivity.
