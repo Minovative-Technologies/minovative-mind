@@ -3,6 +3,7 @@ import * as path from "path";
 import { GenerationConfig } from "@google/generative-ai";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import * as sidebarTypes from "../sidebar/common/sidebarTypes"; // Import sidebarTypes
+import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes"; // ADDED IMPORT
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
 import {
 	createInitialPlanningExplanationPrompt,
@@ -54,7 +55,8 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		private provider: SidebarProvider,
 		private workspaceRootUri: vscode.Uri | undefined, // Add workspaceRootUri
 		private gitConflictResolutionService: GitConflictResolutionService, // Add GitConflictResolutionService
-		enhancedCodeGenerator: EnhancedCodeGenerator
+		enhancedCodeGenerator: EnhancedCodeGenerator,
+		private postMessageToWebview: (message: ExtensionToWebviewMessages) => void // ADDED PARAMETER
 	) {
 		this.urlContextService = new UrlContextService();
 		this.enhancedCodeGenerator = enhancedCodeGenerator;
@@ -858,7 +860,9 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							plan.steps!,
 							rootUri,
 							planContext,
-							combinedToken
+							combinedToken,
+							progress, // FIXED: Passing progress from `withProgress` callback
+							this.postMessageToWebview // ADDED: Pass this.postMessageToWebview
 						);
 
 						let overallPlanExecutionSuccess = true; // Represents if steps executed without user cancellation/fatal errors
@@ -977,7 +981,9 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		steps: PlanStep[],
 		rootUri: vscode.Uri,
 		context: sidebarTypes.PlanGenerationContext, // Renamed to context for clarity
-		combinedToken: vscode.CancellationToken // Removed `progress` from this function signature as it's not used directly here
+		combinedToken: vscode.CancellationToken,
+		progress: vscode.Progress<{ message?: string; increment?: number }>, // ADDED: progress parameter
+		postMessageToWebview: (message: ExtensionToWebviewMessages) => void // ADDED: postMessageToWebview parameter
 	): Promise<Set<vscode.Uri>> {
 		const affectedFileUris = new Set<vscode.Uri>();
 		const totalSteps = steps.length;
@@ -1732,7 +1738,9 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							parsedPlanResult.plan.steps!,
 							rootUri,
 							planContext,
-							token
+							token,
+							progress, // FIXED: Passing progress to `_executePlanSteps`
+							this.postMessageToWebview // ADDED: Passing postMessageToWebview
 						);
 						// Add any new files or modifications from the sub-plan to the overall set for re-validation
 						subPlanAffectedFiles.forEach((uri) => affectedFileUris.add(uri));

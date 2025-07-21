@@ -9,6 +9,7 @@ import { applyAITextEdits, cleanCodeOutput } from "../../utils/codeUtils";
 import { ProjectChangeLogger } from "../../workflow/ProjectChangeLogger";
 import { generateFileChangeSummary } from "../../utils/diffingUtils";
 import { FileChangeEntry } from "../../types/workflow";
+import { ExtensionToWebviewMessages } from "../../sidebar/common/sidebarTypes"; // NEW IMPORT
 
 // Define enums and interfaces for plan execution
 export enum PlanStepAction {
@@ -87,7 +88,8 @@ export async function executePlanStep(
 		diffContent?: string;
 	}) => void,
 	aiRequestService: AIRequestService,
-	enhancedCodeGenerator: EnhancedCodeGenerator
+	enhancedCodeGenerator: EnhancedCodeGenerator,
+	postMessageToWebview: (message: ExtensionToWebviewMessages) => void
 ): Promise<void> {
 	progress.report({ message: step.description });
 
@@ -157,7 +159,9 @@ export async function executePlanStep(
 							modelName,
 							aiRequestService,
 							enhancedCodeGenerator,
-							token
+							token,
+							postMessageToWebview, // Pass the new parameter
+							false // isMergeOperation: false
 						);
 					} catch (aiError: any) {
 						const errorMessage = `Failed to generate initial content for ${path.basename(
@@ -188,7 +192,8 @@ export async function executePlanStep(
 						changeLogger,
 						postChatUpdate,
 						aiRequestService, // Pass the AIRequestService instance
-						enhancedCodeGenerator
+						enhancedCodeGenerator,
+						postMessageToWebview
 					);
 					return; // Exit to prevent further execution of modify logic that expects an existing file
 				} else {
@@ -218,7 +223,9 @@ export async function executePlanStep(
 					modelName, // Pass correct modelName
 					aiRequestService, // Pass AIRequestService instance
 					enhancedCodeGenerator, // Pass enhancedCodeGenerator instance
-					token
+					token,
+					postMessageToWebview, // Pass the new parameter
+					false // isMergeOperation: false
 				);
 			} catch (aiError: any) {
 				const errorMessage = `Failed to modify file ${path.basename(

@@ -9,6 +9,10 @@ import {
 	AiStreamingState,
 	PersistedPlanData,
 	PlanExecutionFinishedMessage,
+	// New imports for code streaming
+	CodeFileStreamStartMessage,
+	CodeFileStreamChunkMessage,
+	CodeFileStreamEndMessage,
 } from "../../common/sidebarTypes";
 import {
 	stopTypingAnimation,
@@ -27,11 +31,30 @@ import { postMessageToExtension } from "../utils/vscodeApi";
 import { RequiredDomElements } from "../types/webviewTypes";
 import { resetUIStateAfterCancellation } from "../ui/statusManager";
 
+// Add global variables for code streaming
+const activeCodeStreams = new Map<
+	string,
+	{ container: HTMLDivElement; codeElement: HTMLElement }
+>();
+let codeStreamingArea: HTMLElement | null = null;
+
+// Helper function for code streaming state reset
+const resetCodeStreams = () => {
+	activeCodeStreams.clear();
+	if (codeStreamingArea) {
+		codeStreamingArea.innerHTML = "";
+		codeStreamingArea.style.display = "none";
+	}
+};
+
 export function initializeMessageBusHandler(
 	elements: RequiredDomElements,
 	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
-	// Helper for streaming state reset
+	// Initialize codeStreamingArea at the beginning
+	codeStreamingArea = document.getElementById("code-streaming-area");
+
+	// Helper for AI chat streaming state reset
 	const resetStreamingAnimationState = () => {
 		stopTypingAnimation();
 		appState.currentAiMessageContentElement = null;
@@ -66,6 +89,145 @@ export function initializeMessageBusHandler(
 				// The plan confirmation UI should only be shown after aiResponseEnd for streaming plans.
 				if (message.isLoading === false) {
 					setLoadingState(false, elements);
+				}
+				break;
+			}
+
+			case "codeFileStreamStart": {
+				const { streamId, filePath, languageId } =
+					message.value as CodeFileStreamStartMessage["value"];
+				console.log(
+					`[Webview] Code stream start: ${filePath} (Stream ID: ${streamId})`
+				);
+
+				if (!codeStreamingArea) {
+					console.error("[Webview] Code streaming area not found.");
+					return;
+				}
+
+				// Create container for this file's stream
+				const container = document.createElement("div");
+				container.classList.add("code-file-stream-container");
+				container.dataset.streamId = streamId;
+
+				// Header for file path and loading dots
+				const header = document.createElement("div");
+				header.classList.add("code-file-stream-header");
+				header.innerHTML = `
+                    <span class="file-path">${filePath}</span>
+                    <span class="status-indicator">
+                        <span class="loading-dots">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
+                    </span>
+                `;
+				container.appendChild(header);
+
+				// Pre and Code elements for content
+				const pre = document.createElement("pre");
+				const codeElement = document.createElement("code");
+				codeElement.classList.add(`language-${languageId}`);
+				codeElement.classList.add("hljs"); // For highlight.js
+				pre.appendChild(codeElement);
+				container.appendChild(pre);
+
+				codeStreamingArea.appendChild(container);
+				activeCodeStreams.set(streamId, { container, codeElement });
+
+				codeStreamingArea.style.display = "flex"; // Show the overall streaming area
+				codeStreamingArea.scrollTop = codeStreamingArea.scrollHeight; // Scroll to bottom
+				break;
+			}
+
+			case "codeFileStreamChunk": {
+				const { streamId, chunk } =
+					message.value as CodeFileStreamChunkMessage["value"];
+				// console.log(`[Webview] Code stream chunk for ${streamId}: ${chunk.length} chars`);
+
+				const streamInfo = activeCodeStreams.get(streamId);
+				if (streamInfo) {
+					streamInfo.codeElement.textContent += chunk;
+					// Re-highlight the element with each chunk
+					// hljs might be global or needs to be imported. Assuming global for now.
+					if ((window as any).hljs) {
+						(window as any).hljs.highlightElement(streamInfo.codeElement);
+					}
+					if (codeStreamingArea) {
+						codeStreamingArea.scrollTop = codeStreamingArea.scrollHeight; // Scroll to bottom
+					}
+				} else {
+					console.warn(
+						`[Webview] Received chunk for unknown stream ID: ${streamId}`
+					);
+				}
+				break;
+			}
+
+			case "codeFileStreamEnd": {
+				const { streamId, success, error } =
+					message.value as CodeFileStreamEndMessage["value"];
+				console.log(
+					`[Webview] Code stream end for ${streamId}. Success: ${success}, Error: ${error}`
+				);
+
+				const streamInfo = activeCodeStreams.get(streamId);
+				if (streamInfo) {
+					const header = streamInfo.container.querySelector(
+						".code-file-stream-header"
+					);
+					const statusIndicator = header?.querySelector(
+						".status-indicator"
+					) as HTMLElement | null;
+					const loadingDots = header?.querySelector(
+						".loading-dots"
+					) as HTMLElement | null;
+
+					// Remove loading dots
+					if (loadingDots) {
+						loadingDots.remove();
+					}
+
+					// Add success/error icon
+					if (statusIndicator) {
+						const icon = document.createElement("span");
+						icon.classList.add("status-icon");
+						if (success) {
+							icon.textContent = "✔"; // Green check
+							icon.style.color = "var(--vscode-editorGutter-addedBackground)";
+							icon.title = "Generation complete";
+						} else {
+							icon.textContent = "❌"; // Red cross
+							icon.style.color = "var(--vscode-errorForeground)";
+							icon.title = `Generation failed: ${error || "Unknown error"}`;
+							if (error) {
+								const errorDetails = document.createElement("span");
+								errorDetails.classList.add("error-details");
+								errorDetails.textContent = ` ${error}`;
+								statusIndicator.appendChild(errorDetails);
+							}
+						}
+						statusIndicator.prepend(icon);
+					}
+
+					// Ensure final highlighting is applied
+					if ((window as any).hljs) {
+						(window as any).hljs.highlightElement(streamInfo.codeElement);
+					}
+
+					activeCodeStreams.delete(streamId);
+
+					// If no more active streams, hide the whole area after a delay
+					if (activeCodeStreams.size === 0) {
+						setTimeout(() => {
+							resetCodeStreams();
+						}, 3000); // Hide after 3 seconds
+					}
+
+					if (codeStreamingArea) {
+						codeStreamingArea.scrollTop = codeStreamingArea.scrollHeight; // Scroll to bottom
+					}
+				} else {
+					console.warn(
+						`[Webview] Received end message for unknown stream ID: ${streamId}`
+					);
 				}
 				break;
 			}
@@ -783,6 +945,7 @@ export function initializeMessageBusHandler(
 			case "reenableInput": {
 				console.log("Received reenableInput message. Resetting UI state.");
 				resetUIStateAfterCancellation(elements, setLoadingState);
+				resetCodeStreams(); // Call resetCodeStreams
 				break;
 			}
 			case "planExecutionStarted": {
@@ -829,6 +992,7 @@ export function initializeMessageBusHandler(
 				appState.isPlanExecutionInProgress = false; // Reset plan execution state
 				// REMOVED: appState.hasRevertibleChanges = false; // Reset revert changes state
 				updateEmptyChatPlaceholderVisibility(elements);
+				resetCodeStreams(); // Call resetCodeStreams
 				break;
 			}
 			case "restoreHistory": {

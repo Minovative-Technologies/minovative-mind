@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
 
-function getSeverityName(severity: vscode.DiagnosticSeverity): string {
+export function getSeverityName(severity: vscode.DiagnosticSeverity): string {
 	switch (severity) {
 		case vscode.DiagnosticSeverity.Error:
 			return "Error";

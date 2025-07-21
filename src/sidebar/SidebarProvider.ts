@@ -154,10 +154,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		); // Instantiate before PlanService
 
 		// NEW: Instantiate EnhancedCodeGenerator
+		// Modification: postMessageToWebview is now the third argument, and enableRealTimeFeedback is within the config object (fourth argument).
 		this.enhancedCodeGenerator = new EnhancedCodeGenerator(
 			this.aiRequestService,
 			this.workspaceRootUri || vscode.Uri.file("/"),
-			{ enableRealTimeFeedback: true, maxFeedbackIterations: 5 }
+			this.postMessageToWebview.bind(this), // postMessageToWebview as the actual third argument
+			{
+				enableRealTimeFeedback: true, // enableRealTimeFeedback as a property within the config object
+				maxFeedbackIterations: 5,
+			}
 		);
 
 		// Instantiate RevertService
@@ -168,11 +173,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		// These services need access to the provider's state and other services.
 		// You would create these files following the same pattern.
+		// Modification: Explicitly pass this.postMessageToWebview.bind(this) as the last (fifth) argument.
 		this.planService = new PlanService(
 			this,
 			this.workspaceRootUri, // Pass workspaceRootUri
 			this.gitConflictResolutionService, // Pass the GitConflictResolutionService
-			this.enhancedCodeGenerator // NEW: Pass the instance here
+			this.enhancedCodeGenerator, // Pass the instance here
+			this.postMessageToWebview.bind(this) // New fifth argument
 		);
 		this.chatService = new ChatService(this);
 		this.commitService = new CommitService(this);

@@ -1528,7 +1528,7 @@ div#commit-message-display tr:nth-child(even),
 	height: var(--toggle-thumb-size);
 	background-color: var(--toggle-thumb-background);
 	border-radius: 50%;
-	top: 2px; /* Centering vertically: (toggle-height - thumb-size) / 2. (20 - 16) / 2 = 2px */
+	top: 2px; /* Centering vertically: (20 - 16) / 2 = 2px */
 	left: 2px; /* Initial position on the left side (2px padding) */
 	transition: transform 0.2s ease-in-out;
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); /* Subtle shadow for depth */
@@ -2489,4 +2489,99 @@ ul#staged-files-list li.empty-state {
 .plan-step-message .edit-button,
 .plan-step-message .generate-plan-button {
 	display: none !important; /* Use !important to ensure override */
+}
+#code-streaming-area {
+	display: none; /* Hidden by default, shown when streaming */
+	flex-direction: column; /* Stacks individual file streams */
+	gap: 10px; /* Space between each file's stream container */
+	margin-top: 15px;
+	padding: 10px;
+	background-color: var(--vscode-editorGroupHeader-tabsBackground);
+	border: 1px solid var(--vscode-dropdown-border);
+	border-radius: 5px;
+	max-height: 400px; /* Limit height and enable scrolling */
+	overflow-y: auto;
+	box-shadow: var(--vscode-widget-shadow);
+}
+
+.code-file-stream-container {
+	border: 1px solid var(--vscode-editorGroup-border);
+	padding: 8px;
+	border-radius: 4px;
+	background-color: var(--vscode-editor-background);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+}
+
+.code-stream-header {
+	font-weight: bold;
+	color: var(--vscode-foreground);
+	margin-bottom: 5px;
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding-bottom: 5px;
+	border-bottom: 1px dashed var(--vscode-input-border); /* Separator */
+}
+
+.code-stream-header .loading-text {
+	font-weight: normal;
+	color: var(--vscode-textPreformat-foreground);
+	font-style: italic;
+}
+
+.code-stream-header.success {
+	color: var(--vscode-terminal-ansiGreen); /* Greenish for success */
+}
+
+.code-stream-header.error {
+	color: var(--vscode-errorForeground); /* Red for error */
+}
+
+.code-stream-header .checkmark {
+	color: var(--vscode-terminal-ansiGreen);
+	font-size: 1.1em;
+}
+
+.code-stream-header .error-icon {
+	color: var(--vscode-errorForeground);
+	font-size: 1.1em;
+}
+
+.code-file-stream-container pre {
+	background-color: var(--vscode-editor-background);
+	border: none; /* Already has container border */
+	border-radius: 3px;
+	padding: 8px 0; /* Adjust padding for inner code block */
+	margin: 0; /* Remove default pre margin */
+	overflow-x: auto; /* Enable horizontal scrolling for long lines */
+}
+
+.code-file-stream-container code {
+	display: block; /* Ensure code takes full width and breaks lines */
+	white-space: pre-wrap; /* Wrap long lines */
+	word-break: break-all; /* Break words to prevent overflow */
+	font-family: var(--vscode-editor-font-family);
+	font-size: var(--vscode-editor-font-size);
+	color: var(--vscode-editor-foreground);
+}
+
+.code-stream-error-details {
+	color: var(--vscode-errorForeground);
+	font-size: 0.9em;
+	margin-top: 8px;
+	background-color: var(--vscode-input-background);
+	border: 1px solid var(--vscode-errorForeground);
+	padding: 5px 8px;
+	border-radius: 3px;
+	font-family: var(--vscode-editor-font-family);
+}
+
+/* Basic fade-in animation */
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
 }

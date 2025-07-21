@@ -1,8 +1,11 @@
 import * as vscode from "vscode";
 import * as path from "path";
+import * as crypto from "crypto";
 import { AIRequestService } from "../services/aiRequestService";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 import { cleanCodeOutput } from "../utils/codeUtils";
+import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils"; // MODIFIED: Added getSeverityName
+import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes";
 
 /**
  * Real-time feedback interface for code generation
@@ -69,6 +72,7 @@ export class EnhancedCodeGenerator {
 	constructor(
 		private aiRequestService: AIRequestService,
 		private workspaceRoot: vscode.Uri,
+		private postMessageToWebview: (message: ExtensionToWebviewMessages) => void,
 		private config: {
 			enableRealTimeFeedback?: boolean;
 			maxFeedbackIterations?: number;
@@ -94,39 +98,76 @@ export class EnhancedCodeGenerator {
 		},
 		modelName: string,
 		token?: vscode.CancellationToken,
-		feedbackCallback?: (feedback: RealTimeFeedback) => void
+		feedbackCallback?: (feedback: RealTimeFeedback) => void,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<{ content: string; validation: CodeValidationResult }> {
-		if (this.config.enableRealTimeFeedback) {
-			return this._generateWithRealTimeFeedback(
-				filePath,
-				generatePrompt,
-				context,
-				modelName,
-				token,
-				feedbackCallback
-			);
-		} else {
-			// Fallback to original method
-			const initialContent = await this._generateInitialContent(
-				filePath,
-				generatePrompt,
-				context,
-				modelName,
-				token
-			);
+		const languageId = this._getLanguageId(path.extname(filePath));
+		const streamId = crypto.randomUUID();
 
-			const validation = await this._validateAndRefineContent(
-				filePath,
-				initialContent,
-				context,
-				modelName,
-				token
-			);
+		this.postMessageToWebview({
+			type: "codeFileStreamStart",
+			value: { streamId: streamId, filePath: filePath, languageId: languageId },
+		});
 
-			return {
-				content: validation.finalContent,
-				validation,
-			};
+		try {
+			if (this.config.enableRealTimeFeedback) {
+				const result = await this._generateWithRealTimeFeedback(
+					filePath,
+					generatePrompt,
+					context,
+					modelName,
+					streamId,
+					token,
+					feedbackCallback,
+					onCodeChunkCallback
+				);
+				this.postMessageToWebview({
+					type: "codeFileStreamEnd",
+					value: { streamId: streamId, filePath: filePath, success: true },
+				});
+				return result;
+			} else {
+				const initialContent = await this._generateInitialContent(
+					filePath,
+					generatePrompt,
+					context,
+					modelName,
+					streamId,
+					token,
+					onCodeChunkCallback
+				);
+
+				const validation = await this._validateAndRefineContent(
+					filePath,
+					initialContent,
+					context,
+					modelName,
+					streamId,
+					token,
+					onCodeChunkCallback
+				);
+
+				const result = {
+					content: validation.finalContent,
+					validation,
+				};
+				this.postMessageToWebview({
+					type: "codeFileStreamEnd",
+					value: { streamId: streamId, filePath: filePath, success: true },
+				});
+				return result;
+			}
+		} catch (error: any) {
+			this.postMessageToWebview({
+				type: "codeFileStreamEnd",
+				value: {
+					streamId: streamId,
+					filePath: filePath,
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				},
+			});
+			throw error;
 		}
 	}
 
@@ -144,17 +185,45 @@ export class EnhancedCodeGenerator {
 			activeSymbolInfo?: ActiveSymbolDetailedInfo;
 		},
 		modelName: string,
-		token?: vscode.CancellationToken
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<{ content: string; validation: CodeValidationResult }> {
-		// Fallback to original full file modification
-		return this._modifyFileContentFull(
-			filePath,
-			modificationPrompt,
-			currentContent,
-			context,
-			modelName,
-			token
-		);
+		const languageId = this._getLanguageId(path.extname(filePath));
+		const streamId = crypto.randomUUID();
+
+		this.postMessageToWebview({
+			type: "codeFileStreamStart",
+			value: { streamId: streamId, filePath: filePath, languageId: languageId },
+		});
+
+		try {
+			const result = await this._modifyFileContentFull(
+				filePath,
+				modificationPrompt,
+				currentContent,
+				context,
+				modelName,
+				streamId,
+				token,
+				onCodeChunkCallback
+			);
+			this.postMessageToWebview({
+				type: "codeFileStreamEnd",
+				value: { streamId: streamId, filePath: filePath, success: true },
+			});
+			return result;
+		} catch (error: any) {
+			this.postMessageToWebview({
+				type: "codeFileStreamEnd",
+				value: {
+					streamId: streamId,
+					filePath: filePath,
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				},
+			});
+			throw error;
+		}
 	}
 
 	/**
@@ -165,7 +234,9 @@ export class EnhancedCodeGenerator {
 		generatePrompt: string,
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
 		const fileExtension = path.extname(filePath);
 		const languageId = this._getLanguageId(fileExtension);
@@ -178,17 +249,31 @@ export class EnhancedCodeGenerator {
 			languageId
 		);
 
-		const rawContent = await this.aiRequestService.generateWithRetry(
-			enhancedPrompt,
-			modelName,
-			undefined,
-			"enhanced file generation",
-			undefined,
-			undefined,
-			token
-		);
+		try {
+			const rawContent = await this.aiRequestService.generateWithRetry(
+				enhancedPrompt,
+				modelName,
+				undefined,
+				"enhanced file generation",
+				undefined,
+				{
+					onChunk: async (chunk: string) => {
+						this.postMessageToWebview({
+							type: "codeFileStreamChunk",
+							value: { streamId: streamId, filePath: filePath, chunk: chunk },
+						});
+						if (onCodeChunkCallback) {
+							await onCodeChunkCallback(chunk);
+						}
+					},
+				},
+				token
+			);
 
-		return cleanCodeOutput(rawContent); // Modified as per instructions
+			return cleanCodeOutput(rawContent);
+		} catch (error: any) {
+			throw error;
+		}
 	}
 
 	/**
@@ -207,7 +292,7 @@ export class EnhancedCodeGenerator {
 
 **CRITICAL REQUIREMENTS:**
 1. **Accuracy First**: Ensure all imports, types, and dependencies are *absolutely* correct and precisely specified. Verify module paths, type definitions, and API usage.
-2. **Style Consistency**: Adhere *rigorously* to the project's existing coding patterns, conventions, and formatting. Maintain current indentation, naming, and structural choices.
+2. **Style Consistency**: Adhere * rigorously* to the project's existing coding patterns, conventions, and formatting. Maintain current indentation, naming, and structural choices.
 3. **Error Prevention**: Generate code that will compile and run *without any errors or warnings*. Proactively identify and mitigate potential runtime issues, logical flaws, and edge cases.
 4. **Best Practices**: Employ modern language features, established design patterns, and industry best practices to ensure high-quality, efficient, and robust code.
 5. **Security**: Implement secure coding practices meticulously, identifying and addressing potential vulnerabilities relevant to the language and context.
@@ -258,7 +343,9 @@ Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN C
 		content: string,
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<CodeValidationResult> {
 		const validation = await this._validateCode(filePath, content);
 
@@ -278,7 +365,9 @@ Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN C
 			validation.issues,
 			context,
 			modelName,
-			token
+			streamId,
+			token,
+			onCodeChunkCallback
 		);
 
 		const finalValidation = await this._validateCode(filePath, refinedContent);
@@ -300,27 +389,53 @@ Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN C
 	): Promise<CodeValidationResult> {
 		const issues: CodeIssue[] = [];
 		const suggestions: string[] = [];
-		const fileExtension = path.extname(filePath);
-		const languageId = this._getLanguageId(fileExtension);
+		let hasError = false;
 
-		// Check for common issues based on language
-		if (languageId === "typescript" || languageId === "javascript") {
-			// Check for missing imports
-			const importIssues = this._checkImportIssues(content, filePath);
-			issues.push(...importIssues);
+		const fileUri = vscode.Uri.file(filePath);
+		const diagnostics = DiagnosticService.getDiagnosticsForUri(fileUri);
 
-			// Check for syntax issues
-			const syntaxIssues = this._checkSyntaxIssues(content, languageId);
-			issues.push(...syntaxIssues);
+		for (const diag of diagnostics) {
+			const severityName = getSeverityName(diag.severity);
+			let issueSeverity: CodeIssue["severity"];
+			let issueType: CodeIssue["type"];
 
-			// Check for best practices
-			const bestPracticeIssues = this._checkBestPractices(content, languageId);
-			issues.push(...bestPracticeIssues);
+			// Map VS Code severity to CodeIssue severity
+			if (severityName === "Error") {
+				issueSeverity = "error";
+				hasError = true;
+			} else if (severityName === "Warning") {
+				issueSeverity = "warning";
+			} else {
+				issueSeverity = "info";
+			}
+
+			// Map VS Code diagnostic to CodeIssue type (prioritize specific types, then broad categories)
+			const messageLower = diag.message.toLowerCase();
+			if (messageLower.includes("unused import")) {
+				issueType = "unused_import";
+			} else if (
+				issueSeverity === "error" ||
+				issueSeverity === "warning" ||
+				messageLower.includes("syntax") ||
+				messageLower.includes("compilation") ||
+				messageLower.includes("lint")
+			) {
+				issueType = "syntax"; // General compilation/linting issues
+			} else if (messageLower.includes("security")) {
+				issueType = "security"; // Explicitly map security if mentioned
+			} else if (messageLower.includes("best practice")) {
+				issueType = "best_practice"; // Explicitly map best practice if mentioned
+			} else {
+				issueType = "other"; // General fallback
+			}
+
+			issues.push({
+				type: issueType,
+				message: diag.message,
+				line: diag.range.start.line + 1, // VS Code diagnostics are 0-indexed, CodeIssue is 1-indexed
+				severity: issueSeverity,
+			});
 		}
-
-		// Check for security issues
-		const securityIssues = this._checkSecurityIssues(content, languageId);
-		issues.push(...securityIssues);
 
 		// Generate suggestions for improvement
 		if (issues.length === 0) {
@@ -334,8 +449,8 @@ Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN C
 		}
 
 		return {
-			isValid: issues.length === 0,
-			finalContent: content,
+			isValid: !hasError, // isValid is false if any error diagnostic is found
+			finalContent: content, // content is not modified by this method
 			issues,
 			suggestions,
 		};
@@ -350,10 +465,12 @@ Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN C
 		issues: CodeIssue[],
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
 		const languageId = this._getLanguageId(path.extname(filePath));
-		const refinementPrompt = `The generated code has the following issues that need to be fixed:
+		const refinementPrompt = `The generated code has the following **VS Code-reported compilation/linting issues** that need to be fixed:
 
 **Issues to Address:**
 ${issues
@@ -378,7 +495,7 @@ ${content}
 - **Import Correctness:** Verify and correct all imports. Ensure all necessary imports are present, and eliminate any unused or redundant ones.
 - **Variable and Type Usage:** Reinforce correct variable declarations, scope, and accurate TypeScript types.
 - **Functionality Preservation:** Ensure original or intended new functionality is perfectly maintained.
-- **Compile and Runtime Errors:** Demand code that compiles and runs *without any errors or warnings*, proactively identifying and mitigating potential runtime issues, logical flaws, edge cases (e.g., empty arrays, zero values), null/undefined checks, and off-by-one errors.
+- **Compile and Runtime Errors:** Demand code that compiles and runs *without any errors or warnings*, proactively identifying and mitigating potential runtime issues, logical flaws, and edge cases (e.g., empty arrays, zero values), null/undefined checks, and off-by-one errors.
 - **Code Style and Formatting:** Stricter adherence to existing project coding style and formatting conventions (indentation, spacing, line breaks, bracket placement, naming conventions), ensuring seamless integration.
 - **Efficiency and Performance:** Instruct to review for code efficiency, optimizing loops, eliminating redundant computations, and choosing appropriate data structures/algorithms.
 - **Modularity and Maintainability:** Ensure code is modular with clear separation of concerns, easy to read, understand, and maintain.
@@ -403,10 +520,25 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			undefined,
 			"code refinement",
 			undefined,
-			undefined,
+			{
+				onChunk: async (chunk: string) => {
+					const currentStreamId = streamId;
+					this.postMessageToWebview({
+						type: "codeFileStreamChunk",
+						value: {
+							streamId: currentStreamId,
+							filePath: filePath,
+							chunk: chunk,
+						},
+					});
+					if (onCodeChunkCallback) {
+						await onCodeChunkCallback(chunk);
+					}
+				},
+			},
 			token
 		);
-		return cleanCodeOutput(rawContent); // Modified as per instructions
+		return cleanCodeOutput(rawContent);
 	}
 
 	/**
@@ -520,208 +652,6 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 	}
 
 	/**
-	 * Check for import-related issues
-	 */
-	private _checkImportIssues(content: string, filePath: string): CodeIssue[] {
-		const issues: CodeIssue[] = [];
-		const lines = content.split("\n");
-
-		// Check for unused imports (basic check)
-		const importLines = lines.filter((line) =>
-			line.trim().startsWith("import")
-		);
-		const usedIdentifiers = this._extractUsedIdentifiers(content);
-
-		for (let i = 0; i < importLines.length; i++) {
-			const importLine = importLines[i];
-			const importedItems = this._extractImportedItems(importLine);
-
-			for (const item of importedItems) {
-				if (!usedIdentifiers.includes(item)) {
-					issues.push({
-						type: "unused_import",
-						message: `Unused import: ${item}`,
-						line: lines.indexOf(importLine) + 1,
-						severity: "warning",
-					});
-				}
-			}
-		}
-
-		return issues;
-	}
-
-	/**
-	 * Check for syntax issues
-	 */
-	private _checkSyntaxIssues(content: string, languageId: string): CodeIssue[] {
-		const issues: CodeIssue[] = [];
-
-		// Basic syntax checks
-		if (languageId === "typescript" || languageId === "javascript") {
-			// Check for missing semicolons (basic check)
-			const lines = content.split("\n");
-			for (let i = 0; i < lines.length; i++) {
-				const line = lines[i].trim();
-				if (
-					line &&
-					!line.endsWith(";") &&
-					!line.endsWith("{") &&
-					!line.endsWith("}") &&
-					!line.startsWith("//")
-				) {
-					// This is a very basic check - in practice, you'd use a proper parser
-					if (
-						line.includes("=") ||
-						line.includes("return") ||
-						line.includes("const") ||
-						line.includes("let")
-					) {
-						issues.push({
-							type: "syntax",
-							message: "Consider adding semicolon",
-							line: i + 1,
-							severity: "warning",
-						});
-					}
-				}
-			}
-		}
-
-		return issues;
-	}
-
-	/**
-	 * Check for best practices
-	 */
-	private _checkBestPractices(
-		content: string,
-		languageId: string
-	): CodeIssue[] {
-		const issues: CodeIssue[] = [];
-
-		if (languageId === "typescript" || languageId === "javascript") {
-			// Check for console.log in production code
-			if (content.includes("console.log(")) {
-				issues.push({
-					type: "best_practice",
-					message: "Consider removing console.log statements for production",
-					line: 0,
-					severity: "warning",
-				});
-			}
-
-			// Check for proper error handling
-			if (
-				content.includes("async") &&
-				!content.includes("try") &&
-				!content.includes("catch")
-			) {
-				issues.push({
-					type: "best_practice",
-					message: "Consider adding proper error handling for async operations",
-					line: 0,
-					severity: "warning",
-				});
-			}
-		}
-
-		return issues;
-	}
-
-	/**
-	 * Check for security issues
-	 */
-	private _checkSecurityIssues(
-		content: string,
-		languageId: string
-	): CodeIssue[] {
-		const issues: CodeIssue[] = [];
-
-		// Check for potential security issues
-		const securityPatterns = [
-			{ pattern: "eval(", message: "Avoid using eval() for security reasons" },
-			{
-				pattern: "innerHTML",
-				message: "Be careful with innerHTML to prevent XSS",
-			},
-			{
-				pattern: "document.write",
-				message: "Avoid document.write for security reasons",
-			},
-		];
-
-		for (const { pattern, message } of securityPatterns) {
-			if (content.includes(pattern)) {
-				issues.push({
-					type: "security",
-					message,
-					line: 0,
-					severity: "warning",
-				});
-			}
-		}
-
-		return issues;
-	}
-
-	/**
-	 * Extract used identifiers from content
-	 */
-	private _extractUsedIdentifiers(content: string): string[] {
-		// This is a simplified implementation
-		// In practice, you'd use a proper AST parser
-		const identifiers: string[] = [];
-		const regex = /\b[a-zA-Z_$][a-zA-Z0-9_$]*\b/g;
-		const matches = content.match(regex) || [];
-
-		for (const match of matches) {
-			if (
-				![
-					"const",
-					"let",
-					"var",
-					"function",
-					"class",
-					"import",
-					"export",
-					"from",
-					"as",
-				].includes(match)
-			) {
-				identifiers.push(match);
-			}
-		}
-
-		return [...new Set(identifiers)];
-	}
-
-	/**
-	 * Extract imported items from import statement
-	 */
-	private _extractImportedItems(importLine: string): string[] {
-		const items: string[] = [];
-
-		// Handle different import patterns
-		const patterns = [
-			/import\s*{\s*([^}]+)\s*}\s*from/,
-			/import\s+(\w+)\s+from/,
-			/import\s+(\w+)/,
-			/import\s*{\s*([^}]+)\s*}/,
-		];
-
-		for (const pattern of patterns) {
-			const match = importLine.match(pattern);
-			if (match) {
-				const imported = match[1].split(",").map((item) => item.trim());
-				items.push(...imported);
-			}
-		}
-
-		return items;
-	}
-
-	/**
 	 * Analyze file structure for modification context
 	 */
 	private async _analyzeFileStructure(
@@ -773,7 +703,9 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		fileAnalysis: FileStructureAnalysis,
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
 		const enhancedPrompt = this._createEnhancedModificationPrompt(
 			filePath,
@@ -783,21 +715,36 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			context
 		);
 
-		const rawContent = await this.aiRequestService.generateWithRetry(
-			enhancedPrompt,
-			modelName,
-			undefined,
-			"enhanced file modification",
-			undefined,
-			undefined,
-			token
-		);
-		return cleanCodeOutput(rawContent); // Modified as per instructions
+		try {
+			const rawContent = await this.aiRequestService.generateWithRetry(
+				enhancedPrompt,
+				modelName,
+				undefined,
+				"enhanced file modification",
+				undefined,
+				{
+					onChunk: async (chunk: string) => {
+						this.postMessageToWebview({
+							type: "codeFileStreamChunk",
+							value: { streamId: streamId, filePath: filePath, chunk: chunk },
+						});
+						if (onCodeChunkCallback) {
+							await onCodeChunkCallback(chunk);
+						}
+					},
+				},
+				token
+			);
+			return cleanCodeOutput(rawContent);
+		} catch (error: any) {
+			throw error;
+		}
 	}
 
 	/**
 	 * Create enhanced modification prompt
-	 */ private _createEnhancedModificationPrompt(
+	 */
+	private _createEnhancedModificationPrompt(
 		filePath: string,
 		modificationPrompt: string,
 		currentContent: string,
@@ -818,7 +765,9 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		modifiedContent: string,
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<CodeValidationResult> {
 		// Check if the modification is reasonable
 		const diffAnalysis = this._analyzeDiff(originalContent, modifiedContent);
@@ -841,7 +790,9 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			diffAnalysis.issues,
 			context,
 			modelName,
-			token
+			streamId,
+			token,
+			onCodeChunkCallback
 		);
 
 		const finalValidation = await this._validateCode(filePath, refinedContent);
@@ -856,7 +807,8 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 
 	/**
 	 * Analyze the diff between original and modified content
-	 */ private _analyzeDiff(original: string, modified: string): DiffAnalysis {
+	 */
+	private _analyzeDiff(original: string, modified: string): DiffAnalysis {
 		const originalLines = original.split("\n");
 		const modifiedLines = modified.split("\n");
 
@@ -867,7 +819,11 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		const originalLength = originalLines.length;
 		const modifiedLength = modifiedLines.length;
 		const changeRatio =
-			Math.abs(modifiedLength - originalLength) / originalLength;
+			originalLength === 0
+				? modifiedLength > 0
+					? 1
+					: 0
+				: Math.abs(modifiedLength - originalLength) / originalLength;
 
 		if (changeRatio > 0.8) {
 			issues.push(
@@ -898,14 +854,17 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 
 	/**
 	 * Refine modification based on diff analysis
-	 */ private async _refineModification(
+	 */
+	private async _refineModification(
 		filePath: string,
 		originalContent: string,
 		modifiedContent: string,
 		issues: string[],
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
 		const refinementPrompt = `The modification seems to have issues that need to be addressed:\n\n**Issues with the modification:**\n${issues
 			.map((issue) => `- ${issue}`)
@@ -913,7 +872,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			path.extname(filePath)
 		)}\n${originalContent}\n\`\`\`\n\n**Current Modification:**\n\`\`\`${this._getLanguageId(
 			path.extname(filePath)
-		)}\n${modifiedContent}\n\`\`\`\n\n**Refinement Instructions:**\n- **Extreme Targeted Fixes:** Apply only the most precise and surgical fixes to address the reported issues. Do not introduce any unrelated changes or refactoring.\n- **Preserve Unchanged Code:** Absolutely preserve all surrounding code that is not directly affected by the reported issues. Avoid reformatting or touching lines that do not require modification.\n- **Minimize Diff Size:** Strive to make the diff (changes between 'Original Content' and 'Current Modification') as small and focused as possible. Avoid unnecessary line additions or deletions.\n- **Strict Style Adherence:** Strictly adhere to the original file's existing code style, formatting (indentation, spacing, line breaks, bracket placement), and naming conventions.\n- **Functionality and Correctness:** Ensure the modified code maintains all original functionality and is fully functional and error-free after correction.\n\n**Project Context:**\n${
+		)}\n${modifiedContent}\n\`\`\`\n\n**Refinement Instructions:**\n- **Extreme Targeted Fixes:** Apply only the most precise and surgical fixes to address the reported issues. Do not introduce any unrelated changes or refactoring.\n- **Preserve Unchanged Code:** Absolutely preserve all surrounding code that is not directly affected by the reported issues. Avoid reformatting or touching lines that do not require modification.\n- **Minimize Diff Size:** Strive to make the diff (changes between 'Original Content' and 'Current Modification') as small and focused as possible. Avoid unnecessary line additions or deletions.\n- **Strict Style Adherence:** Strictly adhere to the original file's existing code style, formatting (indentation, spacing, line breaks, bracket placement), and naming conventions.\n- **Functionality and Correctness:** Ensure the modified code maintains all original functionality and is fully functional and error-free after correction. Specifically address any **VS Code-reported compilation/linting issues**.\n\n**Project Context:**\n${
 			context.projectContext
 		}\n\nYour response MUST contain **ONLY** the refined file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
@@ -921,102 +880,24 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			refinementPrompt,
 			modelName,
 			undefined,
-			"modification refinement",
+			"refine modification",
 			undefined,
-			undefined,
+			{
+				onChunk: async (chunk: string) => {
+					this.postMessageToWebview({
+						type: "codeFileStreamChunk",
+						value: { streamId: streamId, filePath: filePath, chunk: chunk },
+					});
+					if (onCodeChunkCallback) {
+						await onCodeChunkCallback(chunk);
+					}
+				},
+			},
 			token
 		);
-		return cleanCodeOutput(rawContent); // Modified as per instructions
-	}
-
-	/**
-	 * Apply incremental changes to content
-	 */
-	private _applyIncrementalChangesToContent(
-		content: string,
-		changes: any[] // Changed from CodeChange[] as CodeChange is removed
-	): string {
-		const lines = content.split("\n");
-		const sortedChanges = [...changes].sort(
-			(a, b) => b.range.start.line - a.range.start.line
-		); // Sort in reverse order to maintain line numbers
-
-		for (const change of sortedChanges) {
-			const startLine = change.range.start.line;
-			const endLine = change.range.end.line;
-			const startChar = change.range.start.character;
-			const endChar = change.range.end.character;
-
-			if (change.type === "insert") {
-				// Insert new text at the specified position
-				const newLines = change.newText.split("\n");
-				if (newLines.length === 1) {
-					// Single line insertion
-					const line = lines[startLine] || "";
-					const before = line.substring(0, startChar);
-					const after = line.substring(startChar);
-					lines[startLine] = before + change.newText + after;
-				} else {
-					// Multi-line insertion
-					const firstLine = lines[startLine] || "";
-					const before = firstLine.substring(0, startChar);
-					const after = firstLine.substring(startChar);
-
-					lines[startLine] = before + newLines[0];
-					lines.splice(startLine + 1, 0, ...newLines.slice(1, -1));
-					if (newLines.length > 1) {
-						lines.splice(
-							startLine + newLines.length - 1,
-							0,
-							newLines[newLines.length - 1] + after
-						);
-					}
-				}
-			} else if (change.type === "delete") {
-				// Delete the specified range
-				if (startLine === endLine) {
-					// Same line deletion
-					const line = lines[startLine] || "";
-					lines[startLine] =
-						line.substring(0, startChar) + line.substring(endChar);
-				} else {
-					// Multi-line deletion
-					const firstLine = lines[startLine] || "";
-					const lastLine = lines[endLine] || "";
-					lines[startLine] =
-						firstLine.substring(0, startChar) + lastLine.substring(endChar);
-					lines.splice(startLine + 1, endLine - startLine);
-				}
-			} else if (change.type === "replace" || change.type === "modify") {
-				// Replace the specified range
-				if (startLine === endLine) {
-					// Same line replacement
-					const line = lines[startLine] || "";
-					lines[startLine] =
-						line.substring(0, startChar) +
-						change.newText +
-						line.substring(endChar);
-				} else {
-					// Multi-line replacement
-					const firstLine = lines[startLine] || "";
-					const lastLine = lines[endLine] || "";
-					const newLines = change.newText.split("\n");
-
-					lines[startLine] = firstLine.substring(0, startChar) + newLines[0];
-					lines.splice(
-						startLine + 1,
-						endLine - startLine,
-						...newLines.slice(1, -1)
-					);
-					if (newLines.length > 1) {
-						lines[startLine + newLines.length - 1] =
-							newLines[newLines.length - 1] + lastLine.substring(endChar);
-					}
-				}
-			}
-		}
-
-		return lines.join("\n");
+		// Clean the output to ensure it contains only valid code
+		// This is a safety net to ensure no extra text is included
+		return cleanCodeOutput(rawContent);
 	}
 
 	/**
@@ -1033,7 +914,9 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			activeSymbolInfo?: ActiveSymbolDetailedInfo;
 		},
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<{ content: string; validation: CodeValidationResult }> {
 		// Step 1: Analyze current file structure and dependencies
 		const fileAnalysis = await this._analyzeFileStructure(
@@ -1049,7 +932,9 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			fileAnalysis,
 			context,
 			modelName,
-			token
+			streamId,
+			token,
+			onCodeChunkCallback
 		);
 
 		// Step 3: Validate and refine the modification
@@ -1059,7 +944,9 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			modifiedContent,
 			context,
 			modelName,
-			token
+			streamId,
+			token,
+			onCodeChunkCallback
 		);
 
 		return {
@@ -1192,8 +1079,10 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			activeSymbolInfo?: ActiveSymbolDetailedInfo;
 		},
 		modelName: string,
+		streamId: string,
 		token?: vscode.CancellationToken,
-		feedbackCallback?: (feedback: RealTimeFeedback) => void
+		feedbackCallback?: (feedback: RealTimeFeedback) => void,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<{ content: string; validation: CodeValidationResult }> {
 		let currentContent = "";
 		let iteration = 0;
@@ -1227,7 +1116,9 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 				generatePrompt,
 				context,
 				modelName,
-				token
+				streamId,
+				token,
+				onCodeChunkCallback
 			);
 
 			// Step 2: Real-time validation and correction loop
@@ -1280,7 +1171,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 
 				this._sendFeedback(feedbackCallback, {
 					stage: "correction",
-					message: `Found ${currentIssues} issues, applying corrections...`,
+					message: `Found ${currentIssues} VS Code-reported compilation/linting issues, applying corrections...`, // MODIFIED PROMPT
 					issues: validation.issues,
 					suggestions: [
 						"Fixing syntax errors",
@@ -1290,14 +1181,15 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 					progress: 20 + iteration * 15,
 				});
 
-				// Apply corrections
 				const correctedContent = await this._applyRealTimeCorrections(
 					filePath,
 					currentContent,
 					validation.issues,
 					context,
 					modelName,
-					token
+					streamId,
+					token,
+					onCodeChunkCallback
 				);
 
 				// Check if corrections actually improved the code
@@ -1337,7 +1229,9 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 						validation.issues,
 						context,
 						modelName,
-						token
+						streamId,
+						token,
+						onCodeChunkCallback
 					);
 
 					const alternativeValidation = await this._validateCode(
@@ -1421,13 +1315,15 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		issues: CodeIssue[],
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		// Group issues by type for targeted correction
 		const syntaxIssues = issues.filter((i) => i.type === "syntax");
 		const importIssues = issues.filter((i) => i.type === "unused_import");
-		const practiceIssues = issues.filter((i) => i.type === "best_practice");
+		const bestPracticeIssues = issues.filter((i) => i.type === "best_practice");
 		const securityIssues = issues.filter((i) => i.type === "security");
+		const otherIssues = issues.filter((i) => i.type === "other");
 
 		let correctedContent = content;
 
@@ -1439,7 +1335,9 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 				syntaxIssues,
 				context,
 				modelName,
-				token
+				streamId,
+				token,
+				onCodeChunkCallback
 			);
 		}
 
@@ -1450,33 +1348,55 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 				importIssues,
 				context,
 				modelName,
-				token
+				streamId,
+				token,
+				onCodeChunkCallback
 			);
 		}
 
-		if (practiceIssues.length > 0) {
+		// Combine best_practice and general 'other' issues, as they might stem from general diagnostics
+		const combinedPracticeAndOtherIssues = [
+			...bestPracticeIssues,
+			...otherIssues,
+		];
+		if (combinedPracticeAndOtherIssues.length > 0) {
 			correctedContent = await this._correctPracticeIssues(
 				filePath,
 				correctedContent,
-				practiceIssues,
+				combinedPracticeAndOtherIssues, // Pass combined issues
 				context,
 				modelName,
-				token
+				streamId,
+				token,
+				onCodeChunkCallback
 			);
 		}
 
+		// Explicitly call _correctSecurityIssues, even if securityIssues array is empty based on current _validateCode mapping
 		if (securityIssues.length > 0) {
+			// Keep this check, though it might be empty
 			correctedContent = await this._correctSecurityIssues(
 				filePath,
 				correctedContent,
-				securityIssues,
+				securityIssues, // Will be empty unless `_validateCode` explicitly maps to "security"
 				context,
 				modelName,
-				token
+				streamId,
+				token,
+				onCodeChunkCallback
 			);
 		}
 
-		return correctedContent;
+		return await this._applyAlternativeCorrections(
+			filePath,
+			correctedContent,
+			issues, // Re-pass all issues for alternative corrections if needed
+			context,
+			modelName,
+			streamId,
+			token,
+			onCodeChunkCallback
+		);
 	}
 
 	/**
@@ -1488,9 +1408,11 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		issues: CodeIssue[],
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const alternativePrompt = `The code has the following issues that need to be fixed using a different approach:\n\n**Issues to Address:**\n${issues
+		const alternativePrompt = `The code has the following **VS Code-reported compilation/linting issues** that need to be fixed using a different approach:\n\n**Issues to Address:**\n${issues
 			.map((issue) => `- ${issue.type}: ${issue.message} (Line ${issue.line})`)
 			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
 			path.extname(filePath)
@@ -1504,10 +1426,20 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			undefined,
 			"alternative code correction",
 			undefined,
-			undefined,
+			{
+				onChunk: async (chunk: string) => {
+					this.postMessageToWebview({
+						type: "codeFileStreamChunk",
+						value: { streamId: streamId, filePath: filePath, chunk: chunk },
+					});
+					if (onCodeChunkCallback) {
+						await onCodeChunkCallback(chunk);
+					}
+				},
+			},
 			token
 		);
-		return cleanCodeOutput(rawContent); // Modified as per instructions
+		return cleanCodeOutput(rawContent);
 	}
 
 	/**
@@ -1519,9 +1451,11 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		issues: CodeIssue[],
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const syntaxPrompt = `Fix the following syntax issues in the code:\n\n**Syntax Issues:**\n${issues
+		const syntaxPrompt = `Fix the following **VS Code-reported compilation/linting issues** (syntax errors) in the code:\n\n**Syntax Issues:**\n${issues
 			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
 			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
 			path.extname(filePath)
@@ -1535,10 +1469,20 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			undefined,
 			"syntax correction",
 			undefined,
-			undefined,
+			{
+				onChunk: async (chunk: string) => {
+					this.postMessageToWebview({
+						type: "codeFileStreamChunk",
+						value: { streamId: streamId, filePath: filePath, chunk: chunk },
+					});
+					if (onCodeChunkCallback) {
+						await onCodeChunkCallback(chunk);
+					}
+				},
+			},
 			token
 		);
-		return cleanCodeOutput(rawContent); // Modified as per instructions
+		return cleanCodeOutput(rawContent);
 	}
 
 	/**
@@ -1550,9 +1494,11 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		issues: CodeIssue[],
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const importPrompt = `Fix the following import issues in the code:\n\n**Import Issues:**\n${issues
+		const importPrompt = `Fix the following **VS Code-reported compilation/linting issues** (import errors/warnings) in the code:\n\n**Import Issues:**\n${issues
 			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
 			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
 			path.extname(filePath)
@@ -1566,10 +1512,20 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			undefined,
 			"import correction",
 			undefined,
-			undefined,
+			{
+				onChunk: async (chunk: string) => {
+					this.postMessageToWebview({
+						type: "codeFileStreamChunk",
+						value: { streamId: streamId, filePath: filePath, chunk: chunk },
+					});
+					if (onCodeChunkCallback) {
+						await onCodeChunkCallback(chunk);
+					}
+				},
+			},
 			token
 		);
-		return cleanCodeOutput(rawContent); // Modified as per instructions
+		return cleanCodeOutput(rawContent);
 	}
 
 	/**
@@ -1580,13 +1536,17 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		issues: CodeIssue[],
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const practicePrompt = `Fix the following best practice issues in the code:\n\n**Best Practice Issues:**\n${issues
-			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
+		const practicePrompt = `Fix the following **VS Code-reported compilation/linting issues** (best practice or other general issues) in the code:\n\n**Issues to Address:**\n${issues
+			.map(
+				(issue) => `- Type: ${issue.type}, Line ${issue.line}: ${issue.message}`
+			)
 			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
 			path.extname(filePath)
-		)}\n${content}\n\`\`\`\n\n**Correction Instructions:**\n- Follow coding best practices\n- Improve code readability\n- Use proper naming conventions\n- Apply design patterns where appropriate\n- Ensure code is maintainable\n\n**Project Context:**\n${
+		)}\n${content}\n\`\`\`\n\n**Correction Instructions:**\n- Follow coding best practices\n- Improve code readability\n- Use proper naming conventions\n- Apply design patterns where appropriate\n- Ensure code is maintainable\n- Address any other identified issues that are not syntax or import related.\n\n**Project Context:**\n${
 			context.projectContext
 		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
@@ -1596,10 +1556,20 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			undefined,
 			"best practice correction",
 			undefined,
-			undefined,
+			{
+				onChunk: async (chunk: string) => {
+					this.postMessageToWebview({
+						type: "codeFileStreamChunk",
+						value: { filePath: filePath, chunk: chunk, streamId: streamId },
+					});
+					if (onCodeChunkCallback) {
+						await onCodeChunkCallback(chunk);
+					}
+				},
+			},
 			token
 		);
-		return cleanCodeOutput(rawContent); // Modified as per instructions
+		return cleanCodeOutput(rawContent);
 	}
 
 	/**
@@ -1611,9 +1581,11 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		issues: CodeIssue[],
 		context: any,
 		modelName: string,
-		token?: vscode.CancellationToken
+		streamId: string,
+		token?: vscode.CancellationToken,
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const securityPrompt = `Fix the following security issues in the code:\n\n**Security Issues:**\n${issues
+		const securityPrompt = `Fix the following **VS Code-reported compilation/linting issues** (security vulnerabilities) in the code:\n\n**Security Issues:**\n${issues
 			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
 			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
 			path.extname(filePath)
@@ -1627,10 +1599,20 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			undefined,
 			"security correction",
 			undefined,
-			undefined,
+			{
+				onChunk: async (chunk: string) => {
+					this.postMessageToWebview({
+						type: "codeFileStreamChunk",
+						value: { streamId: streamId, filePath: filePath, chunk: chunk },
+					});
+					if (onCodeChunkCallback) {
+						await onCodeChunkCallback(chunk);
+					}
+				},
+			},
 			token
 		);
-		return cleanCodeOutput(rawContent); // Modified as per instructions
+		return cleanCodeOutput(rawContent);
 	}
 
 	/**

@@ -1078,8 +1078,13 @@ export async function _performModification(
 	aiRequestService: AIRequestService,
 	enhancedCodeGenerator: EnhancedCodeGenerator,
 	token: vscode.CancellationToken,
+	postMessageToWebview: (
+		message: sidebarTypes.ExtensionToWebviewMessages
+	) => void,
 	isMergeOperation: boolean = false // isMergeOperation parameter
 ): Promise<string> {
+	const streamId = crypto.randomUUID(); // Added as per instruction 1
+
 	let specializedMergeInstruction = "";
 	if (isMergeOperation) {
 		// This is the core enhancement: detailed merge instructions for the AI
@@ -1141,6 +1146,12 @@ export async function _performModification(
 
 	let modifiedContent = "";
 	try {
+		// Send codeFileStreamStart message immediately before content generation
+		postMessageToWebview({
+			type: "codeFileStreamStart",
+			value: { streamId: streamId, filePath: filePath, languageId: languageId }, // Modified as per instruction 2
+		});
+
 		const generationContext = {
 			projectContext: "",
 			relevantSnippets: "",
@@ -1152,11 +1163,35 @@ export async function _performModification(
 			modificationPrompt,
 			generationContext,
 			modelName,
-			token
+			token,
+			undefined, // feedbackCallback
+			async (chunk: string) => {
+				// onCodeChunkCallback that sends messages
+				postMessageToWebview({
+					type: "codeFileStreamChunk",
+					value: { streamId: streamId, filePath: filePath, chunk: chunk }, // Modified as per instruction 3
+				});
+			}
 		);
 		modifiedContent = genResult.content;
+
+		// Send `codeFileStreamEnd` on success
+		postMessageToWebview({
+			type: "codeFileStreamEnd",
+			value: { streamId: streamId, filePath: filePath, success: true }, // Modified as per instruction 4
+		});
 	} catch (error) {
 		console.error("Error during AI file", error); // Log any caught errors
+		// Send `codeFileStreamEnd` on error
+		postMessageToWebview({
+			type: "codeFileStreamEnd",
+			value: {
+				streamId: streamId, // Modified as per instruction 4 (use the declared streamId)
+				filePath: filePath,
+				success: false,
+				error: error instanceof Error ? error.message : String(error),
+			},
+		});
 		throw error; // Re-throw them to ensure proper upstream handling by planExecutionService
 	}
 

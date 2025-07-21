@@ -156,6 +156,26 @@ interface UpdateOptimizationSettingsMessage {
 	value: any;
 }
 
+export interface CodeFileStreamStartMessage {
+	type: "codeFileStreamStart";
+	value: { streamId: string; filePath: string; languageId: string };
+}
+
+export interface CodeFileStreamChunkMessage {
+	type: "codeFileStreamChunk";
+	value: { streamId: string; filePath: string; chunk: string };
+}
+
+export interface CodeFileStreamEndMessage {
+	type: "codeFileStreamEnd";
+	value: {
+		streamId: string;
+		filePath: string;
+		success: boolean;
+		error?: string;
+	};
+}
+
 export interface AppendRealtimeModelMessage {
 	type: "appendRealtimeModelMessage";
 	value: { text: string; isError?: boolean };
@@ -286,7 +306,10 @@ export type ExtensionToWebviewMessages =
 	| UpdateTokenStatisticsMessage // Added UpdateTokenStatisticsMessage
 	| UpdateCurrentTokenEstimatesMessage // NEW
 	| RestoreStreamingProgressMessage // NEW: Added RestoreStreamingProgressMessage
-	| RestorePendingCommitReviewMessage; // NEW: Added RestorePendingCommitReviewMessage
+	| RestorePendingCommitReviewMessage
+	| CodeFileStreamStartMessage // NEW: Added CodeFileStreamStartMessage
+	| CodeFileStreamChunkMessage // NEW: Added CodeFileStreamChunkMessage
+	| CodeFileStreamEndMessage; // NEW: Added CodeFileStreamEndMessage
 
 export interface PlanGenerationContext {
 	type: "chat" | "editor";
