@@ -79,22 +79,11 @@ The extension employs a sophisticated, multi-stage correction and refinement pro
 - **Progress Tracking**: Provides detailed progress updates with stage information
 - **Iteration Limits**: Prevents infinite loops with configurable iteration limits
 
-#### Inline Edit System
-
-- **Purpose**: This system allows the AI to make precise, targeted changes to files instead of rewriting entire files. This approach leads to significantly better accuracy, performance, and user experience.
-- **Mechanism**: The AI generates specific edit instructions (e.g., add lines, remove lines, change content within a line range) which the system applies directly to the file. It includes robust validation with an automatic fallback mechanism to full file modification if inline edits fail or are invalid, ensuring reliability.
-- **Key Benefits**:
-  - **Precision**: Only specific lines are modified, preserving existing code, formatting, and structure, and avoiding accidental changes.
-  - **Robustness**: Built-in validation and an intelligent fallback system ensure modifications are applied correctly, even in complex scenarios.
-  - **Multi-Tier Approach**: Uses inline edit instructions first, then incremental changes, and only falls back to full file rewrites when needed.
-  - **Command Integration**: Works seamlessly with `/plan`, `/fix`, `/merge`, and custom request commands.
-
 #### AI Workflow Orchestration & Incremental Updates
 
 Introduced core services and utilities for advanced AI-driven development.
 
 - EnhancedWorkflowService was added to orchestrate multi-step AI tasks with parallel processing and dependency management.
-- IncrementalCodeUpdater was implemented to generate and apply minimal, precise code changes.
 - ParallelProcessor was integrated to enable concurrent AI requests and file processing.
 - EnhancedCodeGenerator was updated to utilize incremental updates for code modifications.
 - AIRequestService gained new methods for parallel and batched AI request execution.
