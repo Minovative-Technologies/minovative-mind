@@ -277,6 +277,11 @@ export interface ChatClearedMessage {
 	type: "chatCleared";
 }
 
+// NEW: Define ResetCodeStreamingAreaMessage
+export interface ResetCodeStreamingAreaMessage {
+	type: "resetCodeStreamingArea";
+}
+
 /**
  * Union type for all messages sent from the Extension to the Webview.
  * Each member should have a distinct 'type' literal property.
@@ -309,7 +314,8 @@ export type ExtensionToWebviewMessages =
 	| RestorePendingCommitReviewMessage
 	| CodeFileStreamStartMessage // NEW: Added CodeFileStreamStartMessage
 	| CodeFileStreamChunkMessage // NEW: Added CodeFileStreamChunkMessage
-	| CodeFileStreamEndMessage; // NEW: Added CodeFileStreamEndMessage
+	| CodeFileStreamEndMessage
+	| ResetCodeStreamingAreaMessage; // NEW: Added ResetCodeStreamingAreaMessage
 
 export interface PlanGenerationContext {
 	type: "chat" | "editor";

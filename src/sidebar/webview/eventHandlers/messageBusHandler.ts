@@ -214,13 +214,6 @@ export function initializeMessageBusHandler(
 
 					activeCodeStreams.delete(streamId);
 
-					// If no more active streams, hide the whole area after a delay
-					if (activeCodeStreams.size === 0) {
-						setTimeout(() => {
-							resetCodeStreams();
-						}, 3000); // Hide after 3 seconds
-					}
-
 					if (codeStreamingArea) {
 						codeStreamingArea.scrollTop = codeStreamingArea.scrollHeight; // Scroll to bottom
 					}
@@ -945,7 +938,7 @@ export function initializeMessageBusHandler(
 			case "reenableInput": {
 				console.log("Received reenableInput message. Resetting UI state.");
 				resetUIStateAfterCancellation(elements, setLoadingState);
-				resetCodeStreams(); // Call resetCodeStreams
+				resetCodeStreams();
 				break;
 			}
 			case "planExecutionStarted": {
@@ -972,7 +965,6 @@ export function initializeMessageBusHandler(
 			case "revertCompleted": {
 				console.log("[Webview] Received revertCompleted message.");
 				appState.hasRevertibleChanges = false; // Hide the revert button
-				// REMOVED: setLoadingState(false, elements); // Re-enable inputs
 				postMessageToExtension({
 					type: "statusUpdate",
 					value: "Revert completed.",
@@ -990,9 +982,8 @@ export function initializeMessageBusHandler(
 				appState.pendingPlanData = null; // Ensure this is reset too
 				appState.pendingCommitReviewData = null; // Ensure this is reset too
 				appState.isPlanExecutionInProgress = false; // Reset plan execution state
-				// REMOVED: appState.hasRevertibleChanges = false; // Reset revert changes state
 				updateEmptyChatPlaceholderVisibility(elements);
-				resetCodeStreams(); // Call resetCodeStreams
+				resetCodeStreams();
 				break;
 			}
 			case "restoreHistory": {
@@ -1091,6 +1082,13 @@ export function initializeMessageBusHandler(
 				elements.chatInput.disabled = false;
 				elements.sendButton.disabled = false;
 				setLoadingState(false, elements);
+				break;
+			}
+			case "resetCodeStreamingArea": {
+				console.log(
+					"[Webview] Received resetCodeStreamingArea message. Resetting code streams."
+				);
+				resetCodeStreams();
 				break;
 			}
 			default:

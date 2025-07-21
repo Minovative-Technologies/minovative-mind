@@ -974,6 +974,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 						this.provider.completedPlanChangeSets.length > 0,
 				});
 			}
+			this.postMessageToWebview({ type: "resetCodeStreamingArea" });
 		}
 	}
 
