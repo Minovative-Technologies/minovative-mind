@@ -31,6 +31,8 @@ import { formatUserFacingErrorMessage } from "../utils/errorFormatter"; // Impor
 import { showErrorNotification } from "../utils/notificationUtils"; // Add this import
 import { UrlContextService } from "./urlContextService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
+import { executeCommand, CommandResult } from "../utils/commandExecution"; // ADDED IMPORT
+import { ChildProcess } from "child_process"; // ADDED IMPORT
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
@@ -862,7 +864,8 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							planContext,
 							combinedToken,
 							progress, // FIXED: Passing progress from `withProgress` callback
-							this.postMessageToWebview // ADDED: Pass this.postMessageToWebview
+							this.postMessageToWebview, // ADDED: Pass this.postMessageToWebview
+							originalRootInstruction // ADDED: Pass originalRootInstruction
 						);
 
 						let overallPlanExecutionSuccess = true; // Represents if steps executed without user cancellation/fatal errors
@@ -984,7 +987,8 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		context: sidebarTypes.PlanGenerationContext, // Renamed to context for clarity
 		combinedToken: vscode.CancellationToken,
 		progress: vscode.Progress<{ message?: string; increment?: number }>, // ADDED: progress parameter
-		postMessageToWebview: (message: ExtensionToWebviewMessages) => void // ADDED: postMessageToWebview parameter
+		postMessageToWebview: (message: ExtensionToWebviewMessages) => void, // ADDED: postMessageToWebview parameter
+		originalRootInstruction: string // ADDED: originalRootInstruction parameter
 	): Promise<Set<vscode.Uri>> {
 		const affectedFileUris = new Set<vscode.Uri>();
 		const totalSteps = steps.length;
@@ -1036,6 +1040,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							summary: `Created directory: '${step.path}'`,
 							timestamp: Date.now(),
 						});
+						currentStepCompletedSuccessfullyOrSkipped = true;
 					} else if (isCreateFileStep(step)) {
 						const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 						// 1. Create the empty file
@@ -1093,6 +1098,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							originalContent: "", // Added as per instructions 1.b
 							newContent: content ?? "", // Added as per instructions 1.b
 						});
+						currentStepCompletedSuccessfullyOrSkipped = true;
 					} else if (isModifyFileStep(step)) {
 						const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 						const existingContent = Buffer.from(
@@ -1196,6 +1202,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 								isPlanStepUpdate: true,
 							});
 						}
+						currentStepCompletedSuccessfullyOrSkipped = true;
 					} else if (isRunCommandStep(step)) {
 						const userChoice = await vscode.window.showWarningMessage(
 							`The plan wants to run a command: \`${step.command}\`\n\nAllow?`,
@@ -1204,13 +1211,83 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							"Skip"
 						);
 						if (userChoice === "Allow") {
-							const term = vscode.window.createTerminal({
-								name: `Minovative Mind Step ${index + 1}`,
-								cwd: rootUri.fsPath,
-							});
-							term.show();
-							term.sendText(step.command);
-							// Consider adding a way to await command completion or handle its output
+							try {
+								const commandResult: CommandResult = await executeCommand(
+									step.command,
+									rootUri.fsPath,
+									combinedToken,
+									this.provider.activeChildProcesses
+								);
+
+								if (commandResult.exitCode !== 0) {
+									// Failure scenario
+									const errorMessage = `Command \`${step.command}\` failed with exit code ${commandResult.exitCode}.
+                                    \n--- STDOUT ---\n${commandResult.stdout}
+                                    \n--- STDERR ---\n${commandResult.stderr}`;
+
+									this._postChatUpdateForPlanExecution({
+										type: "appendRealtimeModelMessage",
+										value: {
+											text: `Step ${
+												index + 1
+											} FAILED: Command execution error.`,
+											isError: true,
+										},
+										diffContent: errorMessage, // Display stdout/stderr as diff content
+										isPlanStepUpdate: true,
+									});
+
+									const correctionSuccessful =
+										await this._performCommandCorrection(
+											step.command,
+											commandResult.stdout,
+											commandResult.stderr,
+											rootUri,
+											combinedToken,
+											context,
+											progress,
+											originalRootInstruction
+										);
+
+									if (!correctionSuccessful) {
+										throw new Error(
+											`Command execution failed and AI correction failed. Command: ${step.command}`
+										);
+									}
+									currentStepCompletedSuccessfullyOrSkipped = true; // Correction successful
+								} else {
+									// Success scenario (exitCode === 0, potentially with warnings in stderr)
+									const successMessage = `Command \`${step.command}\` executed successfully.
+                                    \n--- STDOUT ---\n${commandResult.stdout}
+                                    \n--- STDERR ---\n${commandResult.stderr}`; // stderr here implies warnings/non-critical output
+
+									this._postChatUpdateForPlanExecution({
+										type: "appendRealtimeModelMessage",
+										value: { text: `Step ${index + 1} OK: Command executed.` },
+										diffContent: successMessage, // Display output as diff content
+										isPlanStepUpdate: true,
+									});
+									currentStepCompletedSuccessfullyOrSkipped = true;
+								}
+							} catch (commandExecError: any) {
+								// Handle cancellation or other unexpected errors during executeCommand itself
+								if (commandExecError.message === ERROR_OPERATION_CANCELLED) {
+									throw commandExecError; // Propagate cancellation
+								}
+								// Treat other errors during execution as a failure of the step
+								let detailedError = `Error executing command \`${step.command}\`: ${commandExecError.message}`;
+								this._postChatUpdateForPlanExecution({
+									type: "appendRealtimeModelMessage",
+									value: {
+										text: `Step ${index + 1} FAILED: ${detailedError}`,
+										isError: true,
+									},
+									isPlanStepUpdate: true,
+								});
+								// This will fall through to the general catch block of the outer while loop for user intervention
+								// No need to set currentStepCompletedSuccessfullyOrSkipped = true here, as we want to trigger user intervention.
+								// The existing general error handling for the step should take over.
+							}
 						} else {
 							currentStepCompletedSuccessfullyOrSkipped = true; // User chose to skip the command
 							this._postChatUpdateForPlanExecution({
@@ -1220,7 +1297,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							});
 						}
 					}
-					currentStepCompletedSuccessfullyOrSkipped = true; // Step succeeded or was explicitly skipped (e.e.g., user skipped command)
+					// currentStepCompletedSuccessfullyOrSkipped = true; // This line was moved inside each successful step branch
 				} catch (error: any) {
 					let errorMsg = formatUserFacingErrorMessage(
 						error,
@@ -1741,7 +1818,8 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							planContext,
 							token,
 							progress, // FIXED: Passing progress to `_executePlanSteps`
-							this.postMessageToWebview // ADDED: Passing postMessageToWebview
+							this.postMessageToWebview, // ADDED: Passing postMessageToWebview
+							originalUserInstruction // ADDED: Pass originalRootInstruction
 						);
 						// Add any new files or modifications from the sub-plan to the overall set for re-validation
 						subPlanAffectedFiles.forEach((uri) => affectedFileUris.add(uri));
@@ -1797,6 +1875,189 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 			type: "appendRealtimeModelMessage",
 			value: {
 				text: `Overall validation failed after ${this.MAX_CORRECTION_PLAN_ATTEMPTS} attempts to auto-correct errors. Please review the affected files manually.`,
+				isError: true,
+			},
+			isPlanStepUpdate: true,
+		});
+		return false; // All attempts exhausted, still errors
+	}
+
+	private async _performCommandCorrection(
+		failedCommand: string,
+		stdout: string,
+		stderr: string,
+		rootUri: vscode.Uri,
+		token: vscode.CancellationToken,
+		planContext: sidebarTypes.PlanGenerationContext,
+		progress: vscode.Progress<{ message?: string; increment?: number }>,
+		originalUserInstruction: string
+	): Promise<boolean> {
+		let currentCorrectionAttempt = 1;
+		while (currentCorrectionAttempt <= this.MAX_CORRECTION_PLAN_ATTEMPTS) {
+			if (token.isCancellationRequested) {
+				this._postChatUpdateForPlanExecution({
+					type: "appendRealtimeModelMessage",
+					value: { text: `Command correction cancelled.` },
+					isPlanStepUpdate: true,
+				});
+				return false;
+			}
+
+			const correctionContext = `The command \`${failedCommand}\` failed with exit code ${
+				stdout === "" && stderr === "" ? "unknown" : "non-zero"
+			}. Here's its output:\n\nSTDOUT:\n\`\`\`\n${stdout}\n\`\`\`\n\nSTDERR:\n\`\`\`\n${stderr}\n\`\`\`\n\nAnalyze this failure and generate a plan to correct the issue in the codebase. This might involve modifying files, creating new ones, or even running different commands. If the problem is environmental, suggest a fix by modifying files.`;
+
+			this._postChatUpdateForPlanExecution({
+				type: "appendRealtimeModelMessage",
+				value: {
+					text: `Attempting AI correction for failed command (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
+					isError: true, // Mark as error related for chat history styling
+				},
+				diffContent: correctionContext, // Show context for AI to debug
+				isPlanStepUpdate: true,
+			});
+
+			try {
+				const jsonGenerationConfig: GenerationConfig = {
+					responseMimeType: "application/json",
+					temperature: sidebarConstants.TEMPERATURE,
+				};
+
+				const filesForCorrectionSnippets = Array.from(
+					planContext.relevantFiles ?? []
+				).map((uri) => path.relative(rootUri.fsPath, uri).replace(/\\/g, "/"));
+				const dynamicallyGeneratedRelevantSnippets =
+					await this._formatRelevantFilesForPrompt(
+						filesForCorrectionSnippets,
+						rootUri,
+						token
+					);
+
+				const recentChanges = this.provider.changeLogger.getChangeLog();
+				const formattedRecentChanges =
+					this._formatRecentChangesForPrompt(recentChanges);
+
+				let modifiedProjectContextForCorrection = planContext.projectContext;
+				if (planContext.activeSymbolDetailedInfo) {
+					modifiedProjectContextForCorrection += `\n\n--- Active Symbol Detailed Information For Correction ---\n${JSON.stringify(
+						planContext.activeSymbolDetailedInfo,
+						null,
+						2
+					)}\n--- End Active Symbol Detailed Information For Correction ---`;
+				}
+				modifiedProjectContextForCorrection += `\n\n--- JSON Escaping Instructions --- \n${this.JSON_ESCAPING_INSTRUCTIONS}\n--- End JSON Escaping Instructions ---`;
+
+				const correctionPlanPrompt = createCorrectionPlanPrompt(
+					originalUserInstruction,
+					modifiedProjectContextForCorrection,
+					planContext.editorContext,
+					planContext.chatHistory ?? [],
+					dynamicallyGeneratedRelevantSnippets,
+					correctionContext, // Pass the command failure context as diagnostics string
+					formattedRecentChanges,
+					currentCorrectionAttempt > 1
+						? `Previous command correction attempt (${
+								currentCorrectionAttempt - 1
+						  }) failed.`
+						: undefined
+				);
+
+				progress.report({
+					message: `AI generating command correction plan (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
+				});
+
+				let correctionPlanJsonString =
+					await this.provider.aiRequestService.generateWithRetry(
+						correctionPlanPrompt,
+						planContext.modelName,
+						undefined,
+						`command correction plan generation (attempt ${currentCorrectionAttempt})`,
+						jsonGenerationConfig,
+						undefined,
+						token
+					);
+
+				correctionPlanJsonString = correctionPlanJsonString
+					.replace(/^```json\s*/im, "")
+					.replace(/\s*```$/im, "")
+					.trim();
+
+				const parsedPlanResult: ParsedPlanResult = await parseAndValidatePlan(
+					correctionPlanJsonString,
+					rootUri
+				);
+
+				if (token.isCancellationRequested) {
+					throw new Error(ERROR_OPERATION_CANCELLED);
+				}
+
+				if (parsedPlanResult.plan) {
+					this._postChatUpdateForPlanExecution({
+						type: "appendRealtimeModelMessage",
+						value: { text: `Applying command correction plan.` },
+						isPlanStepUpdate: true,
+					});
+
+					// Execute the generated correction plan.
+					const subPlanAffectedFiles = await this._executePlanSteps(
+						parsedPlanResult.plan.steps!,
+						rootUri,
+						planContext,
+						token,
+						progress,
+						this.postMessageToWebview,
+						originalUserInstruction // Pass the new parameter here
+					);
+					// After correction, consider the command issue resolved if the plan ran without immediate error.
+					this._postChatUpdateForPlanExecution({
+						type: "appendRealtimeModelMessage",
+						value: { text: `Command correction plan applied.`, isError: false },
+						isPlanStepUpdate: true,
+					});
+					return true; // Correction plan was generated and executed
+				} else {
+					console.error(
+						`[MinovativeMind] Failed to parse/validate AI command correction plan (Attempt ${currentCorrectionAttempt}): ${parsedPlanResult.error}`
+					);
+					this._postChatUpdateForPlanExecution({
+						type: "appendRealtimeModelMessage",
+						value: {
+							text: formatUserFacingErrorMessage(
+								new Error(
+									parsedPlanResult.error ||
+										"Failed to parse the correction plan."
+								),
+								"The AI generated an invalid command correction plan. Please check the Developer Tools console for more details.",
+								"AI command correction error: ",
+								rootUri
+							),
+							isError: true,
+						},
+						isPlanStepUpdate: true,
+					});
+				}
+			} catch (correctionError: any) {
+				this._postChatUpdateForPlanExecution({
+					type: "appendRealtimeModelMessage",
+					value: {
+						text: formatUserFacingErrorMessage(
+							correctionError,
+							"AI command self-correction failed due to an unexpected issue. Manual review may be required.",
+							"AI command correction failed: ",
+							rootUri
+						),
+						isError: true,
+					},
+					isPlanStepUpdate: true,
+				});
+			}
+			currentCorrectionAttempt++;
+		}
+
+		this._postChatUpdateForPlanExecution({
+			type: "appendRealtimeModelMessage",
+			value: {
+				text: `Command correction failed after ${this.MAX_CORRECTION_PLAN_ATTEMPTS} attempts. Manual intervention required.`,
 				isError: true,
 			},
 			isPlanStepUpdate: true,
