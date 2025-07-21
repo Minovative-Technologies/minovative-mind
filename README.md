@@ -17,6 +17,7 @@ To get started with Minovative Mind:
 ### AI Chat Interface
 
 - **Direct Interaction**: Users can chat directly with the AI assistant via a dedicated sidebar view.
+- **Multimodal Chat with Image Upload**: Enhances the chat experience by enabling users to seamlessly include images directly within their messages. This feature supports direct image uploads and allows the AI to interpret visual context alongside text, enabling richer and more comprehensive queries.
 - **Contextual Awareness**: The AI intelligently understands the active file, selected code, current workspace, and relevant project files, providing highly contextual responses to queries.
 - **General Q&A**: Supports general programming questions, debugging help, and conceptual inquiries.
 - **Interactive File Display**: Displays relevant file paths within AI chat responses, providing interactive elements to collapse/expand the file list and open files directly.
