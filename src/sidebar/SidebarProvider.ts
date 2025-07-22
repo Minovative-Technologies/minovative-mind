@@ -9,7 +9,7 @@ import { ChatHistoryManager } from "./managers/chatHistoryManager";
 // Other Imports
 import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
 import { RevertService } from "../services/RevertService";
-import { FileChangeEntry, RevertibleChangeSet } from "../types/workflow";
+import { RevertibleChangeSet } from "../types/workflow";
 import { getHtmlForWebview } from "./ui/webviewHelper";
 import * as sidebarConstants from "./common/sidebarConstants";
 import * as sidebarTypes from "./common/sidebarTypes";
@@ -159,6 +159,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.aiRequestService,
 			this.workspaceRootUri || vscode.Uri.file("/"),
 			this.postMessageToWebview.bind(this), // postMessageToWebview as the actual third argument
+			this.changeLogger, // <--- MODIFICATION: Inserted this.changeLogger here
 			{
 				enableRealTimeFeedback: true, // enableRealTimeFeedback as a property within the config object
 				maxFeedbackIterations: 5,

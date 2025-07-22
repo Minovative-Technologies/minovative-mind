@@ -4,11 +4,11 @@ import * as crypto from "crypto";
 import { AIRequestService } from "../services/aiRequestService";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 import { cleanCodeOutput } from "../utils/codeUtils";
-import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils"; // MODIFIED: Added getSeverityName
-import {
-	ExtensionToWebviewMessages,
-	HistoryEntryPart,
-} from "../sidebar/common/sidebarTypes";
+import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils";
+import { generateFileChangeSummary } from "../utils/diffingUtils"; // NEW: Import generateFileChangeSummary
+import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes";
+import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger"; // NEW
+import { RevertibleChangeSet, FileChangeEntry } from "../types/workflow"; // NEW
 
 /**
  * Real-time feedback interface for code generation
@@ -36,6 +36,7 @@ export interface CodeIssue {
 	message: string;
 	line: number;
 	severity: "error" | "warning" | "info";
+	code?: string | number; // MODIFIED: Add code property
 }
 
 export interface FileAnalysis {
@@ -61,6 +62,17 @@ export interface DiffAnalysis {
 	changeRatio: number;
 }
 
+// NEW: Define EnhancedGenerationContext interface
+export interface EnhancedGenerationContext {
+	projectContext: string;
+	relevantSnippets: string;
+	editorContext?: any;
+	activeSymbolInfo?: ActiveSymbolDetailedInfo;
+	fileStructureAnalysis?: FileStructureAnalysis;
+	lastFailedCorrectionDiff?: string;
+	successfulChangeHistory?: string; // NEW: Added property
+}
+
 /**
  * Enhanced code generation with improved accuracy through:
  * 1. Better context analysis
@@ -72,10 +84,25 @@ export interface DiffAnalysis {
  * 7. Real-time feedback loop for immediate validation
  */
 export class EnhancedCodeGenerator {
+	// NEW: Define issue ordering constants
+	private readonly issueTypeOrder: CodeIssue["type"][] = [
+		"syntax",
+		"unused_import",
+		"security",
+		"best_practice",
+		"other",
+	];
+	private readonly severityOrder: CodeIssue["severity"][] = [
+		"error",
+		"warning",
+		"info",
+	];
+
 	constructor(
 		private aiRequestService: AIRequestService,
 		private workspaceRoot: vscode.Uri,
 		private postMessageToWebview: (message: ExtensionToWebviewMessages) => void,
+		private changeLogger: ProjectChangeLogger, // MODIFIED: Add changeLogger parameter
 		private config: {
 			enableRealTimeFeedback?: boolean;
 			maxFeedbackIterations?: number;
@@ -93,12 +120,7 @@ export class EnhancedCodeGenerator {
 	public async generateFileContent(
 		filePath: string,
 		generatePrompt: string,
-		context: {
-			projectContext: string;
-			relevantSnippets: string;
-			editorContext?: any;
-			activeSymbolInfo?: ActiveSymbolDetailedInfo;
-		},
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		token?: vscode.CancellationToken,
 		feedbackCallback?: (feedback: RealTimeFeedback) => void,
@@ -181,12 +203,7 @@ export class EnhancedCodeGenerator {
 		filePath: string,
 		modificationPrompt: string,
 		currentContent: string,
-		context: {
-			projectContext: string;
-			relevantSnippets: string;
-			editorContext?: any;
-			activeSymbolInfo?: ActiveSymbolDetailedInfo;
-		},
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
@@ -235,7 +252,7 @@ export class EnhancedCodeGenerator {
 	private async _generateInitialContent(
 		filePath: string,
 		generatePrompt: string,
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
@@ -285,7 +302,7 @@ export class EnhancedCodeGenerator {
 	private _createEnhancedGenerationPrompt(
 		filePath: string,
 		generatePrompt: string,
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		languageId: string
 	): string {
 		const fileAnalysis = this._analyzeFilePath(filePath);
@@ -309,6 +326,7 @@ export class EnhancedCodeGenerator {
 
 **Style Guide for ${languageId}:**
 ${styleGuide}
+**Strict Adherence**: Rigorously follow all guidelines within this style guide to ensure seamless integration and absolute code consistency. Any deviation is considered a critical error.
 
 **Generation Instructions:**
 ${generatePrompt}
@@ -322,20 +340,35 @@ ${context.relevantSnippets}
 ${
 	context.activeSymbolInfo
 		? `**Active Symbol Information:**
+- **Contextual Accuracy**: Leverage this detailed information to ensure correct integration, function signatures, parameter types, class structures, and naming conventions for any generated code that interacts with these symbols.
 ${JSON.stringify(context.activeSymbolInfo, null, 2)}`
 		: ""
 }
 
-**IMPORTANT:**
-- Ensure all imports are correct and necessary
-- Follow the project's naming conventions
-- Use appropriate error handling
-- Include proper type definitions for TypeScript
-- Make the code modular and maintainable
-- Consider performance implications
-- Add appropriate comments for complex logic
+${
+	context.fileStructureAnalysis
+		? this._formatFileStructureAnalysis(context.fileStructureAnalysis) + "\n"
+		: ""
+}
+${
+	context.successfulChangeHistory
+		? `
+${context.successfulChangeHistory}
+`
+		: ""
+}
 
-Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
+**IMPORTANT:**
+- Ensure all imports are correct and necessary.
+- Follow the project's naming conventions.
+- **Robust Error Handling**: Implement comprehensive error handling, including null/undefined checks, input validations for edge cases, and graceful handling of asynchronous failures.
+- Include proper type definitions for TypeScript.
+- Make the code modular and maintainable.
+- **Zero Errors/Warnings**: Strive for code that produces *zero* VS Code compilation or linting errors/warnings.
+- Consider performance implications.
+- Add appropriate comments for complex logic.
+
+Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 	}
 
 	/**
@@ -344,7 +377,7 @@ Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN C
 	private async _validateAndRefineContent(
 		filePath: string,
 		content: string,
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
@@ -432,11 +465,26 @@ Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN C
 				issueType = "other"; // General fallback
 			}
 
+			let issueCode: string | number | undefined;
+			if (
+				typeof diag.code === "object" &&
+				diag.code !== null &&
+				"value" in diag.code
+			) {
+				issueCode = (diag.code as { value: string | number }).value;
+			} else if (
+				typeof diag.code === "string" ||
+				typeof diag.code === "number"
+			) {
+				issueCode = diag.code;
+			}
+
 			issues.push({
 				type: issueType,
 				message: diag.message,
 				line: diag.range.start.line + 1, // VS Code diagnostics are 0-indexed, CodeIssue is 1-indexed
 				severity: issueSeverity,
+				code: issueCode, // MODIFIED: Use issueCode
 			});
 		}
 
@@ -466,26 +514,25 @@ Your response MUST contain **ONLY** the file content. **ABSOLUTELY NO MARKDOWN C
 		filePath: string,
 		content: string,
 		issues: CodeIssue[],
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
 		const languageId = this._getLanguageId(path.extname(filePath));
+		// MODIFIED: Replace issue formatting
+		const groupedAndPrioritizedIssues = this._groupAndPrioritizeIssues(issues);
+		const formattedIssues = this._formatGroupedIssuesForPrompt(
+			groupedAndPrioritizedIssues,
+			languageId,
+			content
+		);
+
 		const refinementPrompt = `The generated code has the following **VS Code-reported compilation/linting issues** that need to be fixed:
 
 **Issues to Address:**
-${issues
-	.map((issue) => {
-		const snippet = this._getCodeSnippet(content, issue.line);
-		return `**Severity:** ${issue.severity.toUpperCase()}\n**Type:** ${
-			issue.type
-		}\n**Message:** ${
-			issue.message
-		}\n**Code Snippet:**\n\`\`\`${languageId}\n${snippet}\n\`\`\``;
-	})
-	.join("\n\n")}
+${formattedIssues}
 
 **Original Content:**
 \`\`\`${languageId}
@@ -493,8 +540,10 @@ ${content}
 \`\`\`
 
 **Refinement Instructions:**
+-   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
+-   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
+-   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
 - **Absolute Comprehensive Issue Resolution:** Fix *every single identified issue* meticulously, ensuring perfectly valid, error-free code.
-- **Surgical Precision & Minimal Changes:** Stress focused, targeted changes to resolve specific issues, forbidding unrelated refactoring, reformatting, or cosmetic changes unless essential.
 - **Import Correctness:** Verify and correct all imports. Ensure all necessary imports are present, and eliminate any unused or redundant ones.
 - **Variable and Type Usage:** Reinforce correct variable declarations, scope, and accurate TypeScript types.
 - **Functionality Preservation:** Ensure original or intended new functionality is perfectly maintained.
@@ -503,10 +552,12 @@ ${content}
 - **Efficiency and Performance:** Instruct to review for code efficiency, optimizing loops, eliminating redundant computations, and choosing appropriate data structures/algorithms.
 - **Modularity and Maintainability:** Ensure code is modular with clear separation of concerns, easy to read, understand, and maintain.
 - **Production Readiness:** Demand the final code be production-ready, robust, and clean.
-- **No Extra Text**: Ensure NO additional text, commentary, or conversational elements are present outside the pure code.
 
 **Project Context:**
 ${context.projectContext}
+
+**Relevant Code Snippets:**
+${context.relevantSnippets}
 
 **Active Symbol Information (if available, for context on related code and impact analysis):**
 ${
@@ -515,7 +566,27 @@ ${
 		: "N/A"
 }
 
-Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
+${
+	context.fileStructureAnalysis
+		? this._formatFileStructureAnalysis(context.fileStructureAnalysis) + "\n"
+		: ""
+}
+
+${
+	context.successfulChangeHistory
+		? `
+${context.successfulChangeHistory}
+`
+		: ""
+}
+
+${
+	context.lastFailedCorrectionDiff
+		? `--- Previous Failed Correction Attempt Diff ---\n**IMPORTANT**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. Use this information to understand *why* the previous attempt failed and devise a *fundamentally different and more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
+		: ""
+}
+
+Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: refinementPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -697,14 +768,246 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 	}
 
 	/**
+	 * Create Helper for Formatting `FileStructureAnalysis`
+	 */
+	private _formatFileStructureAnalysis(
+		analysis?: FileStructureAnalysis
+	): string {
+		if (!analysis) {
+			return "";
+		}
+
+		let formatted = "**File Structure Analysis:**\n";
+		if (analysis.imports.length > 0) {
+			formatted += `- Imports: ${analysis.imports.length} lines\n`;
+		}
+		if (analysis.exports.length > 0) {
+			formatted += `- Exports: ${analysis.exports.length} lines\n`;
+		}
+		if (analysis.functions.length > 0) {
+			formatted += `- Functions: ${analysis.functions.length} functions\n`;
+		}
+		if (analysis.classes.length > 0) {
+			formatted += `- Classes: ${analysis.classes.length} classes\n`;
+		}
+		if (analysis.variables.length > 0) {
+			formatted += `- Variables: ${analysis.variables.length} variables\n`;
+		}
+		if (analysis.comments.length > 0) {
+			formatted += `- Comments: ${analysis.comments.length} lines\n`;
+		}
+		formatted +=
+			"Analyze this structure to understand the file's organization and apply changes consistently.";
+		return formatted;
+	}
+
+	/**
+	 * Formats successful change sets into a concise string for AI prompts.
+	 * Limits output to the last 3 change sets and 3 changes per set.
+	 * @param changeSets An array of RevertibleChangeSet.
+	 * @returns A formatted string summary of recent changes.
+	 */
+	private _formatSuccessfulChangesForPrompt(
+		changeSets: RevertibleChangeSet[]
+	): string {
+		if (!changeSets || changeSets.length === 0) {
+			return "";
+		}
+
+		const recentChangeSets = changeSets.slice(-3); // Get last 3 change sets
+		let formattedHistory =
+			"--- Recent Successful Project Changes (Context for AI) ---\n";
+
+		for (const changeSet of recentChangeSets) {
+			const date = new Date(changeSet.timestamp).toLocaleString();
+			formattedHistory += `\n**Plan Executed on ${date} (ID: ${changeSet.id.substring(
+				0,
+				8
+			)})**\n`;
+			if (changeSet.planSummary) {
+				// Changed from changeSet.summary
+				formattedHistory += `Summary: ${changeSet.planSummary}\n`; // Changed from changeSet.summary
+			}
+			formattedHistory += `Changes:\n`;
+			const limitedChanges = changeSet.changes.slice(0, 3); // Limit to last 3 changes per set
+			for (const change of limitedChanges) {
+				formattedHistory += `- **${change.changeType.toUpperCase()}**: \`${
+					change.filePath
+				}\` - ${change.summary.split("\n")[0]}\n`;
+			}
+			if (changeSet.changes.length > 3) {
+				formattedHistory += `  ...and ${
+					changeSet.changes.length - 3
+				} more changes.\n`;
+			}
+		}
+		formattedHistory += "\n--- End Recent Successful Project Changes ---\n";
+		return formattedHistory;
+	}
+
+	/**
+	 * Groups and prioritizes code issues for prompt generation.
+	 * Issues are grouped by a combination of type, severity, and specific code (if applicable).
+	 * Priorities are based on predefined orders (`issueTypeOrder`, `severityOrder`).
+	 * Special handling for 'cannot find name' errors by grouping them by the missing name.
+	 * @param issues An array of CodeIssue objects.
+	 * @returns A Map where keys are formatted group headers and values are arrays of CodeIssue.
+	 */
+	private _groupAndPrioritizeIssues(
+		issues: CodeIssue[]
+	): Map<string, CodeIssue[]> {
+		const groupedIssues = new Map<string, CodeIssue[]>();
+
+		// Sort issues initially based on predefined order and then line number
+		issues.sort((a, b) => {
+			const typeOrderA = this.issueTypeOrder.indexOf(a.type);
+			const typeOrderB = this.issueTypeOrder.indexOf(b.type);
+			if (typeOrderA !== typeOrderB) {
+				return typeOrderA - typeOrderB;
+			}
+
+			const severityOrderA = this.severityOrder.indexOf(a.severity);
+			const severityOrderB = this.severityOrder.indexOf(b.severity);
+			if (severityOrderA !== severityOrderB) {
+				return severityOrderA - severityOrderB;
+			}
+
+			return a.line - b.line;
+		});
+
+		for (const issue of issues) {
+			let groupKey = "";
+			// Special grouping for 'cannot find name' errors
+			if (
+				issue.message.includes("Cannot find name") &&
+				issue.type === "syntax" &&
+				issue.severity === "error"
+			) {
+				const match = issue.message.match(/Cannot find name '([^']*)'/);
+				const missingName = match ? match[1] : "unknown_name";
+				groupKey = `TYPE: ${issue.type.toUpperCase()} / SEVERITY: ${issue.severity.toUpperCase()} / CODE: Cannot find name '${missingName}'`;
+			} else {
+				groupKey = `TYPE: ${issue.type.toUpperCase()} / SEVERITY: ${issue.severity.toUpperCase()}${
+					issue.code ? ` / CODE: ${issue.code}` : ""
+				}`;
+			}
+
+			if (!groupedIssues.has(groupKey)) {
+				groupedIssues.set(groupKey, []);
+			}
+			groupedIssues.get(groupKey)!.push(issue);
+		}
+
+		return groupedIssues;
+	}
+
+	/**
+	 * Formats grouped and prioritized issues into a Markdown string for AI prompts.
+	 * @param groupedIssues A Map of grouped CodeIssue objects.
+	 * @param languageId The language ID of the file (e.g., 'typescript', 'javascript').
+	 * @param content The full content of the file to extract code snippets.
+	 * @returns A formatted Markdown string representing the issues.
+	 */
+	private _formatGroupedIssuesForPrompt(
+		groupedIssues: Map<string, CodeIssue[]>,
+		languageId: string,
+		content: string
+	): string {
+		let formattedString = "";
+
+		// Sort group keys based on issue type and severity order
+		const sortedGroupKeys = Array.from(groupedIssues.keys()).sort(
+			(keyA, keyB) => {
+				const issueTypeA =
+					this.issueTypeOrder.find((type) =>
+						keyA.includes(`TYPE: ${type.toUpperCase()}`)
+					) || "other";
+				const issueTypeB =
+					this.issueTypeOrder.find((type) =>
+						keyB.includes(`TYPE: ${type.toUpperCase()}`)
+					) || "other";
+				const typeOrderResult =
+					this.issueTypeOrder.indexOf(issueTypeA as CodeIssue["type"]) -
+					this.issueTypeOrder.indexOf(issueTypeB as CodeIssue["type"]);
+				if (typeOrderResult !== 0) {
+					return typeOrderResult;
+				}
+
+				const severityA =
+					this.severityOrder.find((severity) =>
+						keyA.includes(`SEVERITY: ${severity.toUpperCase()}`)
+					) || "info";
+				const severityB =
+					this.severityOrder.find((severity) =>
+						keyB.includes(`SEVERITY: ${severity.toUpperCase()}`)
+					) || "info";
+				return (
+					this.severityOrder.indexOf(severityA as CodeIssue["severity"]) -
+					this.severityOrder.indexOf(severityB as CodeIssue["severity"])
+				);
+			}
+		);
+
+		for (const groupKey of sortedGroupKeys) {
+			const issuesInGroup = groupedIssues.get(groupKey)!;
+			formattedString += `--- Issue Group: ${groupKey} ---\n`;
+
+			// Add suggested strategy for the group
+			let suggestedStrategy =
+				"Review the provided code snippet and diagnostic message. Apply the most targeted fix to resolve this specific issue while adhering to all critical requirements.";
+			if (groupKey.includes("Cannot find name")) {
+				suggestedStrategy =
+					"This group contains 'Cannot find name' errors. This often means a missing import, a typo in a variable/function name, or an undeclared variable. Carefully check imports and variable/function declarations. If it's a missing dependency, add the necessary import. If it's an undeclared variable, declare it with the correct type. If it's a typo, correct the spelling. Pay close attention to case sensitivity.";
+			} else if (groupKey.includes("TYPE: UNUSED_IMPORT")) {
+				suggestedStrategy =
+					"This group contains unused import warnings. Remove the unused import statement to clean up the code. Ensure no other code relies on this import before removal.";
+			} else if (groupKey.includes("TYPE: SECURITY")) {
+				suggestedStrategy =
+					"This group contains security issues. Implement secure coding practices, validate inputs, handle sensitive data correctly, and follow security best practices to mitigate these vulnerabilities.";
+			} else if (groupKey.includes("TYPE: BEST_PRACTICE")) {
+				suggestedStrategy =
+					"This group contains best practice issues. Refine the code to align with established coding patterns, improve readability, and ensure maintainability. This might involve refactoring small sections, improving naming, or using more idiomatic language features.";
+			} else if (
+				groupKey.includes("TYPE: SYNTAX") &&
+				groupKey.includes("ERROR")
+			) {
+				suggestedStrategy =
+					"This group contains critical syntax errors. Focus on correcting the exact syntax mistake indicated by the message (e.g., missing semicolon, incorrect keyword, bad function signature).";
+			} else if (groupKey.includes("TYPE: OTHER")) {
+				suggestedStrategy =
+					"This group contains general issues. Analyze the specific message and problematic code. Apply a precise fix that resolves the issue without unnecessary changes.";
+			}
+			formattedString += `Suggested Strategy: ${suggestedStrategy}\n`;
+
+			for (const issue of issuesInGroup) {
+				formattedString += `--- Individual Issue Details ---\n`;
+				formattedString += `Severity: ${issue.severity.toUpperCase()}\n`;
+				formattedString += `Type: ${issue.type}\n`;
+				formattedString += `Line: ${issue.line}\n`;
+				formattedString += `Message: ${issue.message}\n`;
+				if (issue.code) {
+					formattedString += `Issue Code: ${issue.code}\n`;
+				}
+				formattedString += `Problematic Code Snippet:\n`;
+				formattedString += `\`\`\`${languageId}\n`;
+				formattedString += `${this._getCodeSnippet(content, issue.line)}\n`;
+				formattedString += `\`\`\`\n`;
+				formattedString += `--- End Individual Issue Details ---\n\n`;
+			}
+			formattedString += "\n"; // Add extra newline between groups
+		}
+
+		return formattedString;
+	}
+
+	/**
 	 * Generate modification with enhanced context
 	 */
 	private async _generateModification(
 		filePath: string,
 		modificationPrompt: string,
 		currentContent: string,
-		fileAnalysis: FileStructureAnalysis,
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: fileAnalysis now part of context
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
@@ -714,8 +1017,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			filePath,
 			modificationPrompt,
 			currentContent,
-			fileAnalysis,
-			context
+			context // MODIFIED: Pass context directly
 		);
 
 		try {
@@ -751,12 +1053,43 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		filePath: string,
 		modificationPrompt: string,
 		currentContent: string,
-		fileAnalysis: FileStructureAnalysis,
-		context: any
+		context: EnhancedGenerationContext // MODIFIED: fileAnalysis now part of context
 	): string {
 		const languageId = this._getLanguageId(path.extname(filePath));
+		// MODIFIED: Get fileAnalysis from context
+		const fileAnalysis = context.fileStructureAnalysis;
 
-		return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions.\n\n**CRITICAL REQUIREMENTS:**\n1. **Preserve Existing Structure**: Maintain the current file organization, structural patterns, and architectural design. Do not refactor unrelated code.\n2. **Surgical Precision & Minimal Changes**: Make *only* the exact, most targeted changes required by the 'Modification Instructions'. Do not introduce extraneous refactoring, reformatting, or stylistic changes (e.g., whitespace-only changes, reordering unrelated code blocks) unless explicitly requested and essential for the modification.\n3. **No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*. Do not output content that differs from the original *only* by whitespace, comments, or minor formatting.\n4. **Maintain Imports**: Maintain all *necessary* existing imports and add *only* strictly required new ones. Ensure import order is preserved unless a new logical grouping is absolutely essential for the requested modification.\n5. **Consistent Style**: Strictly follow the existing code style, formatting, and conventions of the current file.\n6. **Error Prevention**: Ensure the modified code compiles and runs *without any errors or warnings*. Proactively address potential runtime issues, logical flaws, and edge cases.\n\n**File Path:** ${filePath}\n**Language:** ${languageId}\n\n**Current File Structure:**\n- Imports: ${fileAnalysis.imports.length} lines\n- Exports: ${fileAnalysis.exports.length} lines  \n- Functions: ${fileAnalysis.functions.length} functions\n- Classes: ${fileAnalysis.classes.length} classes\n- Variables: ${fileAnalysis.variables.length} variables\n\n**Modification Instructions:**\n${modificationPrompt}\n\n**Current File Content:**\n\`\`\`${languageId}\n${currentContent}\n\`\`\`\n\n**Project Context:**\n${context.projectContext}\n\n**Relevant Code Snippets:**\n${context.relevantSnippets}\n\n**IMPORTANT:**\n- Make only the requested modifications\n- Preserve all existing functionality\n- Maintain the existing code structure and style\n- Add necessary imports if new dependencies are used\n- Ensure the code remains functional and error-free\n- Follow the project's coding conventions\n\nYour response MUST contain **ONLY** the complete modified file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE MODIFIED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure, modified file content and nothing else.`;
+		return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions.\n\n**CRITICAL REQUIREMENTS:**\n1. **Preserve Existing Structure**: Maintain the current file organization, structural patterns, and architectural design. Do not refactor unrelated code.\n2. **Surgical Precision & Minimal Changes**: Make *only* the exact, most targeted changes required by the 'Modification Instructions'. Do not introduce extraneous refactoring, reformatting, or stylistic changes (e.g., whitespace-only changes, reordering unrelated code blocks) unless explicitly requested and essential for the modification.\n3. **No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*. Do not output content that differs from the original *only* by whitespace, comments, or minor formatting.\n4. **Maintain Imports**: Maintain all *necessary* existing imports and add *only* strictly required new ones. Ensure import order is preserved unless a new logical grouping is absolutely essential for the requested modification.\n5. **Consistent Style**: Strictly follow the existing code style, formatting, and conventions of the current file.\n6. **Error Prevention**: Ensure the modified code compiles and runs *without any errors or warnings*. Proactively address potential runtime issues, logical flaws, and edge cases.\n\n**File Path:** ${filePath}\n**Language:** ${languageId}\n\n${this._formatFileStructureAnalysis(
+			fileAnalysis
+		)}\n\n**Modification Instructions:**\n${modificationPrompt}\n\n**Current File Content:**\n\`\`\`${languageId}\n${currentContent}\n\`\`\`\n\n**Project Context:**\n${
+			context.projectContext
+		}\n\n**Relevant Code Snippets:**
+${context.relevantSnippets}
+
+**Active Symbol Information (if available, for context on related code and impact analysis):**
+${
+	context.activeSymbolInfo
+		? JSON.stringify(context.activeSymbolInfo, null, 2)
+		: "N/A"
+}
+
+${
+	context.successfulChangeHistory
+		? `
+${context.successfulChangeHistory}
+`
+		: ""
+}
+
+**IMPORTANT:**
+- Make only the requested modifications
+- Preserve all existing functionality
+- Maintain the existing code structure and style
+- Add necessary imports if new dependencies are used
+- Ensure the code remains functional and error-free
+- Follow the project's coding conventions
+
+Your response MUST contain **ONLY** the modified file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 	}
 
 	/**
@@ -766,7 +1099,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		filePath: string,
 		originalContent: string,
 		modifiedContent: string,
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
@@ -862,22 +1195,92 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		filePath: string,
 		originalContent: string,
 		modifiedContent: string,
-		issues: string[],
-		context: any,
+		diffIssues: string[], // Renamed 'issues' to 'diffIssues' to avoid conflict with `issues` for `_validateCode`
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const refinementPrompt = `The modification seems to have issues that need to be addressed:\n\n**Issues with the modification:**\n${issues
+		const languageId = this._getLanguageId(path.extname(filePath));
+		let initialFeedback =
+			"The modification seems to have issues that need to be addressed:";
+
+		if (
+			diffIssues.includes(
+				"Modification seems too drastic - consider a more targeted approach"
+			)
+		) {
+			initialFeedback +=
+				"\n- **Drastic Change Detected**: The changes introduce a very high ratio of new/removed lines compared to the original content. This might indicate an unintended refactoring or deletion.";
+		}
+		if (
+			diffIssues.includes("All imports were removed - this may be incorrect")
+		) {
+			initialFeedback +=
+				"\n- **Import Integrity Compromised**: All imports appear to have been removed, which is highly likely to cause compilation errors.";
+		}
+		if (
+			diffIssues.length === 0 &&
+			(this._analyzeDiff(originalContent, modifiedContent).changeRatio > 0.8 ||
+				this._analyzeDiff(originalContent, modifiedContent).issues.length > 0)
+		) {
+			// Fallback if diffIssues array is empty but diff analysis still flags issues (e.g., from initial call to _validateAndRefineModification)
+			if (
+				this._analyzeDiff(originalContent, modifiedContent).changeRatio > 0.8
+			) {
+				initialFeedback +=
+					"\n- **Drastic Change Detected**: The changes introduce a very high ratio of new/removed lines compared to the original content. This might indicate an unintended refactoring or deletion.";
+			}
+			if (
+				this._analyzeDiff(originalContent, modifiedContent).issues.includes(
+					"All imports were removed - this may be incorrect"
+				)
+			) {
+				initialFeedback +=
+					"\n- **Import Integrity Compromised**: All imports appear to have been removed, which is highly likely to cause compilation errors.";
+			}
+		}
+
+		const refinementPrompt = `${initialFeedback}\n\n**Issues with the modification:**\n${diffIssues
 			.map((issue) => `- ${issue}`)
-			.join("\n")}\n\n**Original Content:**\n\`\`\`${this._getLanguageId(
-			path.extname(filePath)
-		)}\n${originalContent}\n\`\`\`\n\n**Current Modification:**\n\`\`\`${this._getLanguageId(
-			path.extname(filePath)
-		)}\n${modifiedContent}\n\`\`\`\n\n**Refinement Instructions:**\n- **Extreme Targeted Fixes:** Apply only the most precise and surgical fixes to address the reported issues. Do not introduce any unrelated changes or refactoring.\n- **Preserve Unchanged Code:** Absolutely preserve all surrounding code that is not directly affected by the reported issues. Avoid reformatting or touching lines that do not require modification.\n- **Minimize Diff Size:** Strive to make the diff (changes between 'Original Content' and 'Current Modification') as small and focused as possible. Avoid unnecessary line additions or deletions.\n- **Strict Style Adherence:** Strictly adhere to the original file's existing code style, formatting (indentation, spacing, line breaks, bracket placement), and naming conventions.\n- **Functionality and Correctness:** Ensure the modified code maintains all original functionality and is fully functional and error-free after correction. Specifically address any **VS Code-reported compilation/linting issues**.\n\n**Project Context:**\n${
+			.join(
+				"\n"
+			)}\n\n**Original Content:**\n\`\`\`${languageId}\n${originalContent}\n\`\`\`\n\n**Current Modification:**\n\`\`\`${languageId}\n${modifiedContent}\n\`\`\`\n\n**Refinement Instructions:**\n- **Revert Unintended Structural Changes**: If the modification drastically altered the file's inherent structure (e.g., deleted major components or refactored unrelated sections), revert those unintended changes.\n- **Maintain Import Integrity**: Ensure all necessary imports are present and correct. Do not remove existing imports unless they are explicitly unused by the new, correct code. Add only strictly required new imports.\n- **Targeted Changes**: For small functional changes, ensure the modification is highly localized and does not affect unrelated parts of the codebase.\n- **Extreme Targeted Fixes:** Apply only the most precise and surgical fixes to address the reported issues. Do not introduce any unrelated changes or refactoring.\n- **Preserve Unchanged Code:** Absolutely preserve all surrounding code that is not directly affected by the reported issues. Avoid reformatting or touching lines that do not require modification.\n- **Minimize Diff Size:** Strive to make the diff (changes between 'Original Content' and 'Current Modification') as small and focused as possible. Avoid unnecessary line additions or deletions.\n- **Strict Style Adherence:** Strictly adhere to the original file's existing code style, formatting (indentation, spacing, line breaks, bracket placement), and naming conventions.\n- **Functionality and Correctness:** Ensure the modified code maintains all original functionality and is fully functional and error-free after correction. Specifically address any **VS Code-reported compilation/linting issues**.\n\n**Project Context:**\n${
 			context.projectContext
-		}\n\nYour response MUST contain **ONLY** the refined file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
+		}
+
+**Relevant Code Snippets:**
+${context.relevantSnippets}
+
+**Active Symbol Information (if available, for context on related code and impact analysis):**
+${
+	context.activeSymbolInfo
+		? JSON.stringify(context.activeSymbolInfo, null, 2)
+		: "N/A"
+}
+
+${
+	context.fileStructureAnalysis
+		? this._formatFileStructureAnalysis(context.fileStructureAnalysis) + "\n"
+		: ""
+}
+
+${
+	context.successfulChangeHistory
+		? `
+${context.successfulChangeHistory}
+`
+		: ""
+}
+
+${
+	context.lastFailedCorrectionDiff
+		? `--- Previous Failed Correction Attempt Diff ---\n**IMPORTANT**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. Use this information to understand *why* the previous attempt failed and devise a *fundamentally different and more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
+		: ""
+}
+
+Your response MUST contain **ONLY** the modified file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: refinementPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -910,12 +1313,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		filePath: string,
 		modificationPrompt: string,
 		currentContent: string,
-		context: {
-			projectContext: string;
-			relevantSnippets: string;
-			editorContext?: any;
-			activeSymbolInfo?: ActiveSymbolDetailedInfo;
-		},
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
@@ -927,13 +1325,21 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			currentContent
 		);
 
+		// MODIFIED: Create a new context object that includes fileStructureAnalysis and successfulChangeHistory
+		const contextWithAllAnalysis: EnhancedGenerationContext = {
+			...context,
+			fileStructureAnalysis: fileAnalysis,
+			successfulChangeHistory: this._formatSuccessfulChangesForPrompt(
+				this.changeLogger.getCompletedPlanChangeSets()
+			), // NEW: Populate history
+		};
+
 		// Step 2: Generate modification with enhanced context
 		const modifiedContent = await this._generateModification(
 			filePath,
 			modificationPrompt,
 			currentContent,
-			fileAnalysis,
-			context,
+			contextWithAllAnalysis, // MODIFIED: Pass the new context object
 			modelName,
 			streamId,
 			token,
@@ -945,7 +1351,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 			filePath,
 			currentContent,
 			modifiedContent,
-			context,
+			contextWithAllAnalysis, // MODIFIED: Pass the new context object
 			modelName,
 			streamId,
 			token,
@@ -1075,12 +1481,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 	private async _generateWithRealTimeFeedback(
 		filePath: string,
 		generatePrompt: string,
-		context: {
-			projectContext: string;
-			relevantSnippets: string;
-			editorContext?: any;
-			activeSymbolInfo?: ActiveSymbolDetailedInfo;
-		},
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
@@ -1143,9 +1544,25 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 					progress: 20 + iteration * 15,
 				});
 
+				// MODIFIED: Capture content before correction attempt for diff calculation
+				let currentContentBeforeCorrectionAttempt = currentContent;
+
 				// Validate current content
 				const validation = await this._validateCode(filePath, currentContent);
 				const currentIssues = validation.issues.length;
+
+				// MODIFIED: Analyze file structure and update context, and add successfulChangeHistory
+				const fileStructureAnalysis = await this._analyzeFileStructure(
+					filePath,
+					currentContent
+				);
+				const updatedContext: EnhancedGenerationContext = {
+					...context,
+					fileStructureAnalysis,
+					successfulChangeHistory: this._formatSuccessfulChangesForPrompt(
+						this.changeLogger.getCompletedPlanChangeSets()
+					), // NEW: Populate history
+				};
 
 				if (currentIssues === 0) {
 					// No issues found, we're done
@@ -1156,6 +1573,9 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 						suggestions: validation.suggestions,
 						progress: 100,
 					});
+
+					// MODIFIED: Clear diff on success
+					context.lastFailedCorrectionDiff = undefined;
 
 					return {
 						content: currentContent,
@@ -1188,7 +1608,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 					filePath,
 					currentContent,
 					validation.issues,
-					context,
+					updatedContext, // MODIFIED: Pass updatedContext
 					modelName,
 					streamId,
 					token,
@@ -1206,6 +1626,8 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 					// Corrections helped
 					resolvedIssues += currentIssues - correctedIssues;
 					currentContent = correctedContent;
+					// MODIFIED: Clear diff on success
+					context.lastFailedCorrectionDiff = undefined;
 
 					this._sendFeedback(feedbackCallback, {
 						stage: "improvement",
@@ -1218,6 +1640,14 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 					});
 				} else if (correctedIssues === currentIssues) {
 					// No improvement, try different approach
+					// MODIFIED: Calculate and store diff for failed correction
+					const { formattedDiff } = await generateFileChangeSummary(
+						currentContentBeforeCorrectionAttempt,
+						correctedContent,
+						filePath
+					);
+					context.lastFailedCorrectionDiff = formattedDiff;
+
 					this._sendFeedback(feedbackCallback, {
 						stage: "alternative",
 						message: "Trying alternative correction approach...",
@@ -1230,7 +1660,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 						filePath,
 						currentContent,
 						validation.issues,
-						context,
+						updatedContext, // MODIFIED: Pass updatedContext with potential diff
 						modelName,
 						streamId,
 						token,
@@ -1246,12 +1676,23 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 						currentContent = alternativeContent;
 						resolvedIssues +=
 							currentIssues - alternativeValidation.issues.length;
+						// MODIFIED: Clear diff on success
+						context.lastFailedCorrectionDiff = undefined;
 					} else {
 						// No improvement with alternative approach, break to avoid infinite loop
+						// MODIFIED: Diff is already set if it came from previous `correctedIssues === currentIssues` branch
 						break;
 					}
 				} else {
 					// Corrections made things worse, revert and break
+					// MODIFIED: Calculate and store diff for failed correction
+					const { formattedDiff } = await generateFileChangeSummary(
+						currentContentBeforeCorrectionAttempt,
+						correctedContent,
+						filePath
+					);
+					context.lastFailedCorrectionDiff = formattedDiff;
+
 					this._sendFeedback(feedbackCallback, {
 						stage: "revert",
 						message:
@@ -1316,7 +1757,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		filePath: string,
 		content: string,
 		issues: CodeIssue[],
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
@@ -1409,19 +1850,74 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		filePath: string,
 		content: string,
 		issues: CodeIssue[],
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const alternativePrompt = `The code has the following **VS Code-reported compilation/linting issues** that need to be fixed using a different approach:\n\n**Issues to Address:**\n${issues
-			.map((issue) => `- ${issue.type}: ${issue.message} (Line ${issue.line})`)
-			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
-			path.extname(filePath)
-		)}\n${content}\n\`\`\`\n\n**Alternative Correction Strategy:**\n- Use a completely different approach to fix these issues\n- Consider architectural changes if needed\n- Focus on the root cause rather than symptoms\n- Ensure the solution is more robust and maintainable\n\n**Project Context:**\n${
-			context.projectContext
-		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
+		const languageId = this._getLanguageId(path.extname(filePath));
+		// MODIFIED: Replace issue formatting
+		const groupedAndPrioritizedIssues = this._groupAndPrioritizeIssues(issues);
+		const formattedIssues = this._formatGroupedIssuesForPrompt(
+			groupedAndPrioritizedIssues,
+			languageId,
+			content
+		);
+
+		const alternativePrompt = `The code has the following **VS Code-reported compilation/linting issues** that need to be fixed using a different approach:
+
+**Issues to Address:**
+${formattedIssues}
+
+**Current Content:**
+\`\`\`${languageId}
+${content}
+\`\`\`
+
+**Alternative Correction Strategy:**
+-   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
+-   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
+-   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
+- Use a completely different approach to fix these issues
+- Consider architectural changes if needed
+- Focus on the root cause rather than symptoms
+- Ensure the solution is more robust and maintainable
+
+**Project Context:**
+${context.projectContext}
+
+**Relevant Code Snippets:**
+${context.relevantSnippets}
+
+**Active Symbol Information (if available, for context on related code and impact analysis):**
+${
+	context.activeSymbolInfo
+		? JSON.stringify(context.activeSymbolInfo, null, 2)
+		: "N/A"
+}
+
+${
+	context.fileStructureAnalysis
+		? this._formatFileStructureAnalysis(context.fileStructureAnalysis) + "\n"
+		: ""
+}
+
+${
+	context.successfulChangeHistory
+		? `
+${context.successfulChangeHistory}
+`
+		: ""
+}
+
+${
+	context.lastFailedCorrectionDiff
+		? `--- Previous Failed Correction Attempt Diff ---\n**IMPORTANT**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. Use this information to understand *why* the previous attempt failed and devise a *fundamentally different and more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
+		: ""
+}
+
+Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: alternativePrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -1452,19 +1948,68 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		filePath: string,
 		content: string,
 		issues: CodeIssue[],
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const syntaxPrompt = `Fix the following **VS Code-reported compilation/linting issues** (syntax errors) in the code:\n\n**Syntax Issues:**\n${issues
-			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
-			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
-			path.extname(filePath)
-		)}\n${content}\n\`\`\`\n\n**Correction Instructions:**\n- Fix all syntax errors\n- Ensure proper language syntax\n- Maintain the original functionality\n- Keep the code structure intact\n\n**Project Context:**\n${
-			context.projectContext
-		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
+		const languageId = this._getLanguageId(path.extname(filePath));
+		// MODIFIED: Replace issue formatting
+		const groupedAndPrioritizedIssues = this._groupAndPrioritizeIssues(issues);
+		const formattedIssues = this._formatGroupedIssuesForPrompt(
+			groupedAndPrioritizedIssues,
+			languageId,
+			content
+		);
+
+		const syntaxPrompt = `Fix the following **VS Code-reported compilation/linting issues** (syntax errors) in the code:
+
+**Syntax Issues:**
+${formattedIssues}
+
+**Current Content:**
+\`\`\`${languageId}
+${content}
+\`\`\`
+
+**Correction Instructions:**
+-   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
+-   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
+-   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
+- Fix all syntax errors
+- Ensure proper language syntax
+- Maintain the original functionality
+- Keep the code structure intact
+
+**Project Context:**
+${context.projectContext}
+
+**Relevant Code Snippets:**
+${context.relevantSnippets}
+
+**Active Symbol Information (if available, for context on related code and impact analysis):**
+${
+	context.activeSymbolInfo
+		? JSON.stringify(context.activeSymbolInfo, null, 2)
+		: "N/A"
+}
+
+${
+	context.fileStructureAnalysis
+		? this._formatFileStructureAnalysis(context.fileStructureAnalysis) + "\n"
+		: ""
+}
+
+${
+	context.successfulChangeHistory
+		? `
+${context.successfulChangeHistory}
+`
+		: ""
+}
+
+Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: syntaxPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -1495,19 +2040,68 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		filePath: string,
 		content: string,
 		issues: CodeIssue[],
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const importPrompt = `Fix the following **VS Code-reported compilation/linting issues** (import errors/warnings) in the code:\n\n**Import Issues:**\n${issues
-			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
-			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
-			path.extname(filePath)
-		)}\n${content}\n\`\`\`\n\n**Correction Instructions:**\n- Remove unused imports\n- Add missing imports\n- Fix import paths\n- Ensure all imports are necessary and correct\n\n**Project Context:**\n${
-			context.projectContext
-		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
+		const languageId = this._getLanguageId(path.extname(filePath));
+		// MODIFIED: Replace issue formatting
+		const groupedAndPrioritizedIssues = this._groupAndPrioritizeIssues(issues);
+		const formattedIssues = this._formatGroupedIssuesForPrompt(
+			groupedAndPrioritizedIssues,
+			languageId,
+			content
+		);
+
+		const importPrompt = `Fix the following **VS Code-reported compilation/linting issues** (import errors/warnings) in the code:
+
+**Import Issues:**
+${formattedIssues}
+
+**Current Content:**
+\`\`\`${languageId}
+${content}
+\`\`\`
+
+**Correction Instructions:**
+-   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
+-   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
+-   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
+- Remove unused imports
+- Add missing imports
+- Fix import paths
+- Ensure all imports are necessary and correct
+
+**Project Context:**
+${context.projectContext}
+
+**Relevant Code Snippets:**
+${context.relevantSnippets}
+
+**Active Symbol Information (if available, for context on related code and impact analysis):**
+${
+	context.activeSymbolInfo
+		? JSON.stringify(context.activeSymbolInfo, null, 2)
+		: "N/A"
+}
+
+${
+	context.fileStructureAnalysis
+		? this._formatFileStructureAnalysis(context.fileStructureAnalysis) + "\n"
+		: ""
+}
+
+${
+	context.successfulChangeHistory
+		? `
+${context.successfulChangeHistory}
+`
+		: ""
+}
+
+Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: importPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -1537,21 +2131,70 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		filePath: string,
 		content: string,
 		issues: CodeIssue[],
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const practicePrompt = `Fix the following **VS Code-reported compilation/linting issues** (best practice or other general issues) in the code:\n\n**Issues to Address:**\n${issues
-			.map(
-				(issue) => `- Type: ${issue.type}, Line ${issue.line}: ${issue.message}`
-			)
-			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
-			path.extname(filePath)
-		)}\n${content}\n\`\`\`\n\n**Correction Instructions:**\n- Follow coding best practices\n- Improve code readability\n- Use proper naming conventions\n- Apply design patterns where appropriate\n- Ensure code is maintainable\n- Address any other identified issues that are not syntax or import related.\n\n**Project Context:**\n${
-			context.projectContext
-		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
+		const languageId = this._getLanguageId(path.extname(filePath));
+		// MODIFIED: Replace issue formatting
+		const groupedAndPrioritizedIssues = this._groupAndPrioritizeIssues(issues);
+		const formattedIssues = this._formatGroupedIssuesForPrompt(
+			groupedAndPrioritizedIssues,
+			languageId,
+			content
+		);
+
+		const practicePrompt = `Fix the following **VS Code-reported compilation/linting issues** (best practice or other general issues) in the code:
+
+**Issues to Address:**
+${formattedIssues}
+
+**Current Content:**
+\`\`\`${languageId}
+${content}
+\`\`\`
+
+**Correction Instructions:**
+-   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
+-   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
+-   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
+- Follow coding best practices
+- Improve code readability
+- Use proper naming conventions
+- Apply design patterns where appropriate
+- Ensure code is maintainable
+- Address any other identified issues that are not syntax or import related.
+
+**Project Context:**
+${context.projectContext}
+
+**Relevant Code Snippets:**
+${context.relevantSnippets}
+
+**Active Symbol Information (if available, for context on related code and impact analysis):**
+${
+	context.activeSymbolInfo
+		? JSON.stringify(context.activeSymbolInfo, null, 2)
+		: "N/A"
+}
+
+${
+	context.fileStructureAnalysis
+		? this._formatFileStructureAnalysis(context.fileStructureAnalysis) + "\n"
+		: ""
+}
+
+${
+	context.successfulChangeHistory
+		? `
+${context.successfulChangeHistory}
+`
+		: ""
+}
+
+Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: practicePrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -1582,19 +2225,69 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		filePath: string,
 		content: string,
 		issues: CodeIssue[],
-		context: any,
+		context: EnhancedGenerationContext, // MODIFIED: Change context type
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
-		const securityPrompt = `Fix the following **VS Code-reported compilation/linting issues** (security vulnerabilities) in the code:\n\n**Security Issues:**\n${issues
-			.map((issue) => `- Line ${issue.line}: ${issue.message}`)
-			.join("\n")}\n\n**Current Content:**\n\`\`\`${this._getLanguageId(
-			path.extname(filePath)
-		)}\n${content}\n\`\`\`\n\n**Correction Instructions:**\n- Fix all security vulnerabilities\n- Use secure coding practices\n- Validate inputs properly\n- Handle sensitive data correctly\n- Follow security best practices\n\n**Project Context:**\n${
-			context.projectContext
-		}\n\nYour response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
+		const languageId = this._getLanguageId(path.extname(filePath));
+		// MODIFIED: Replace issue formatting
+		const groupedAndPrioritizedIssues = this._groupAndPrioritizeIssues(issues);
+		const formattedIssues = this._formatGroupedIssuesForPrompt(
+			groupedAndPrioritizedIssues,
+			languageId,
+			content
+		);
+
+		const securityPrompt = `Fix the following **VS Code-reported compilation/linting issues** (security vulnerabilities) in the code:
+
+**Security Issues:**
+${formattedIssues}
+
+**Current Content:**
+\`\`\`${languageId}
+${content}
+\`\`\`
+
+**Correction Instructions:**
+-   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
+-   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
+-   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
+- Fix all security vulnerabilities
+- Use secure coding practices
+- Validate inputs properly
+- Handle sensitive data correctly
+- Follow security best practices
+
+**Project Context:**
+${context.projectContext}
+
+**Relevant Code Snippets:**
+${context.relevantSnippets}
+
+**Active Symbol Information (if available, for context on related code and impact analysis):**
+${
+	context.activeSymbolInfo
+		? JSON.stringify(context.activeSymbolInfo, null, 2)
+		: "N/A"
+}
+
+${
+	context.fileStructureAnalysis
+		? this._formatFileStructureAnalysis(context.fileStructureAnalysis) + "\n"
+		: ""
+}
+
+${
+	context.successfulChangeHistory
+		? `
+${context.successfulChangeHistory}
+`
+		: ""
+}
+
+Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: securityPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
