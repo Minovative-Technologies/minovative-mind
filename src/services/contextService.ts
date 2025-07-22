@@ -579,7 +579,7 @@ export class ContextService {
 			) {
 				this.postMessageToWebview({
 					type: "statusUpdate",
-					value: "Minovative Mind is identifying relevant files using AI", // Updated message
+					value: "Identifying relevant files", // Updated message
 					showLoadingDots: true, // ADDED
 				});
 				try {
