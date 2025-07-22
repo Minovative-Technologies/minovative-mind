@@ -1439,7 +1439,6 @@ div#commit-message-display tr:nth-child(even),
 /* --- Status Area --- */
 #status-area {
 	font-size: 0.9em;
-	color: var(--vscode-focusBorder) !important;
 	min-height: 1.5em;
 	text-align: center;
 	padding: 10px 0px 0px 0px; /* Reduced top padding */
