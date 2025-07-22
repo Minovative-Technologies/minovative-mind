@@ -313,9 +313,10 @@ export class EnhancedCodeGenerator {
 **CRITICAL REQUIREMENTS:**
 1. **Accuracy First**: Ensure all imports, types, and dependencies are *absolutely* correct and precisely specified. Verify module paths, type definitions, and API usage.
 2. **Style Consistency**: Adhere * rigorously* to the project's existing coding patterns, conventions, and formatting. Maintain current indentation, naming, and structural choices.
-3. **Error Prevention**: Generate code that will compile and run *without any errors or warnings*. Proactively identify and mitigate potential runtime issues, logical flaws, and edge cases.
-4. **Best Practices**: Employ modern language features, established design patterns, and industry best practices to ensure high-quality, efficient, and robust code.
-5. **Security**: Implement secure coding practices meticulously, identifying and addressing potential vulnerabilities relevant to the language and context.
+3. **Error Prevention**: Generate code that will compile and run *without any errors or warnings*. Proactively anticipate and guard against common pitfalls beyond just the immediate task, such as null/undefined checks, input validations, edge cases, and off-by-one errors.
+4. **Best Practices**: Employ modern language features, established design patterns, and industry best practices to ensure high-quality, efficient, and robust code that is production-ready, maintainable, and clean.
+5. **Surgical Precision & No Unrelated Changes**: DO NOT introduce extraneous refactoring, reformatting, or cosmetic alterations. Generate only the necessary new code.
+6. **Security**: Implement secure coding practices meticulously, identifying and addressing potential vulnerabilities relevant to the language and context.
 
 **File Analysis:**
 - Path: ${filePath}
@@ -353,6 +354,8 @@ ${
 ${
 	context.successfulChangeHistory
 		? `
+**Successful Change History:**
+Analyze past successful patterns and apply similar effective solution strategies to new generations.
 ${context.successfulChangeHistory}
 `
 		: ""
@@ -364,7 +367,7 @@ ${context.successfulChangeHistory}
 - **Robust Error Handling**: Implement comprehensive error handling, including null/undefined checks, input validations for edge cases, and graceful handling of asynchronous failures.
 - Include proper type definitions for TypeScript.
 - Make the code modular and maintainable.
-- **Zero Errors/Warnings**: Strive for code that produces *zero* VS Code compilation or linting errors/warnings.
+- **Zero Errors/Warnings**: Produce code *without any VS Code compilation or linting errors/warnings*. This is an absolute, non-negotiable requirement.
 - Consider performance implications.
 - Add appropriate comments for complex logic.
 
@@ -575,6 +578,8 @@ ${
 ${
 	context.successfulChangeHistory
 		? `
+**Successful Change History:**
+Identify and replicate effective solution patterns from these past successes.
 ${context.successfulChangeHistory}
 `
 		: ""
@@ -582,7 +587,7 @@ ${context.successfulChangeHistory}
 
 ${
 	context.lastFailedCorrectionDiff
-		? `--- Previous Failed Correction Attempt Diff ---\n**IMPORTANT**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. Use this information to understand *why* the previous attempt failed and devise a *fundamentally different and more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
+		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
 
@@ -1059,7 +1064,7 @@ Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO 
 		// MODIFIED: Get fileAnalysis from context
 		const fileAnalysis = context.fileStructureAnalysis;
 
-		return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions.\n\n**CRITICAL REQUIREMENTS:**\n1. **Preserve Existing Structure**: Maintain the current file organization, structural patterns, and architectural design. Do not refactor unrelated code.\n2. **Surgical Precision & Minimal Changes**: Make *only* the exact, most targeted changes required by the 'Modification Instructions'. Do not introduce extraneous refactoring, reformatting, or stylistic changes (e.g., whitespace-only changes, reordering unrelated code blocks) unless explicitly requested and essential for the modification.\n3. **No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*. Do not output content that differs from the original *only* by whitespace, comments, or minor formatting.\n4. **Maintain Imports**: Maintain all *necessary* existing imports and add *only* strictly required new ones. Ensure import order is preserved unless a new logical grouping is absolutely essential for the requested modification.\n5. **Consistent Style**: Strictly follow the existing code style, formatting, and conventions of the current file.\n6. **Error Prevention**: Ensure the modified code compiles and runs *without any errors or warnings*. Proactively address potential runtime issues, logical flaws, and edge cases.\n\n**File Path:** ${filePath}\n**Language:** ${languageId}\n\n${this._formatFileStructureAnalysis(
+		return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions.\n\n**CRITICAL REQUIREMENTS:**\n1. **Preserve Existing Structure**: Maintain the current file organization, structural patterns, and architectural design without unrelated refactoring. This is paramount for seamless integration.\n2. **Surgical Precision & Minimal Changes**: Make *only* the exact, most targeted and minimal changes required by the 'Modification Instructions'. Do not introduce extraneous refactoring, reformatting, or stylistic changes (e.g., whitespace-only changes, reordering unrelated code blocks) unless explicitly requested and essential for the modification.\n3. **No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*, strictly avoiding changes that are solely whitespace, comments, or minor formatting, unless explicitly requested.\n4. **Maintain Imports**: Maintain all *necessary* existing imports and add *only* strictly required new ones. Ensure import order is preserved unless a new logical grouping is absolutely essential for the requested modification.\n5. **Consistent Style**: Strictly follow the existing code style, formatting, and conventions of the current file.\n6. **Error Prevention**: Ensure the modified code compiles and runs *without any errors or warnings* and proactively address potential runtime issues, logical flaws, and edge cases (e.g., null/undefined checks, off-by-one errors, input validations).\n7. **Production Readiness**: Stress robustness, maintainability, and adherence to best practices for all modifications.\n\n**File Path:** ${filePath}\n**Language:** ${languageId}\n\n${this._formatFileStructureAnalysis(
 			fileAnalysis
 		)}\n\n**Modification Instructions:**\n${modificationPrompt}\n\n**Current File Content:**\n\`\`\`${languageId}\n${currentContent}\n\`\`\`\n\n**Project Context:**\n${
 			context.projectContext
@@ -1076,6 +1081,8 @@ ${
 ${
 	context.successfulChangeHistory
 		? `
+**Successful Change History:**
+Learn from previous effective modifications.
 ${context.successfulChangeHistory}
 `
 		: ""
@@ -1269,6 +1276,8 @@ ${
 ${
 	context.successfulChangeHistory
 		? `
+**Successful Change History:**
+Identify and replicate effective solution patterns from these past successes.
 ${context.successfulChangeHistory}
 `
 		: ""
@@ -1276,7 +1285,7 @@ ${context.successfulChangeHistory}
 
 ${
 	context.lastFailedCorrectionDiff
-		? `--- Previous Failed Correction Attempt Diff ---\n**IMPORTANT**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. Use this information to understand *why* the previous attempt failed and devise a *fundamentally different and more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
+		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
 
@@ -1879,10 +1888,12 @@ ${content}
 -   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
-- Use a completely different approach to fix these issues
+- Implement a genuinely different problem-solving approach to fix these issues, strictly avoiding re-attempting similar fixes that have failed or were unproductive.
 - Consider architectural changes if needed
 - Focus on the root cause rather than symptoms
 - Ensure the solution is more robust and maintainable
+- **Proactive Error Mitigation**: Anticipate and guard against common pitfalls, such as null/undefined checks, input validations, edge cases, and off-by-one errors.
+- **Production Readiness**: Ensure the solution is robust, maintainable, secure, clean, and efficient, adhering to industry best practices for production-ready code.
 
 **Project Context:**
 ${context.projectContext}
@@ -1906,6 +1917,8 @@ ${
 ${
 	context.successfulChangeHistory
 		? `
+**Successful Change History:**
+Identify and replicate effective solution patterns from these past successes.
 ${context.successfulChangeHistory}
 `
 		: ""
@@ -1913,7 +1926,7 @@ ${context.successfulChangeHistory}
 
 ${
 	context.lastFailedCorrectionDiff
-		? `--- Previous Failed Correction Attempt Diff ---\n**IMPORTANT**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. Use this information to understand *why* the previous attempt failed and devise a *fundamentally different and more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
+		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
 
@@ -1974,9 +1987,11 @@ ${content}
 \`\`\`
 
 **Correction Instructions:**
+- **Learn from History**: Analyze and learn from the provided Successful Change History to replicate effective solutions, and from the Previous Failed Correction Attempt Diff to understand past failures and avoid repeating unproductive strategies.
 -   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
+- **Proactive Error Mitigation**: Beyond fixing the immediate issues, proactively prevent future occurrences where applicable, such as robust type usage, proper import organization, secure data handling, and comprehensive null/undefined checks.
 - Fix all syntax errors
 - Ensure proper language syntax
 - Maintain the original functionality
@@ -2004,8 +2019,16 @@ ${
 ${
 	context.successfulChangeHistory
 		? `
+**Successful Change History:**
+Identify and replicate effective solution patterns from these past successes.
 ${context.successfulChangeHistory}
 `
+		: ""
+}
+
+${
+	context.lastFailedCorrectionDiff
+		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
 
@@ -2066,9 +2089,11 @@ ${content}
 \`\`\`
 
 **Correction Instructions:**
+- **Learn from History**: Analyze and learn from the provided Successful Change History to replicate effective solutions, and from the Previous Failed Correction Attempt Diff to understand past failures and avoid repeating unproductive strategies.
 -   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
+- **Proactive Error Mitigation**: Beyond fixing the immediate issues, proactively prevent future occurrences where applicable, such as robust type usage, proper import organization, secure data handling, and comprehensive null/undefined checks.
 - Remove unused imports
 - Add missing imports
 - Fix import paths
@@ -2096,8 +2121,16 @@ ${
 ${
 	context.successfulChangeHistory
 		? `
+**Successful Change History:**
+Identify and replicate effective solution patterns from these past successes.
 ${context.successfulChangeHistory}
 `
+		: ""
+}
+
+${
+	context.lastFailedCorrectionDiff
+		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
 
@@ -2157,9 +2190,11 @@ ${content}
 \`\`\`
 
 **Correction Instructions:**
+- **Learn from History**: Analyze and learn from the provided Successful Change History to replicate effective solutions, and from the Previous Failed Correction Attempt Diff to understand past failures and avoid repeating unproductive strategies.
 -   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
+- **Proactive Error Mitigation**: Beyond fixing the immediate issues, proactively prevent future occurrences where applicable, such as robust type usage, proper import organization, secure data handling, and comprehensive null/undefined checks.
 - Follow coding best practices
 - Improve code readability
 - Use proper naming conventions
@@ -2191,6 +2226,12 @@ ${
 		? `
 ${context.successfulChangeHistory}
 `
+		: ""
+}
+
+${
+	context.lastFailedCorrectionDiff
+		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
 
@@ -2251,9 +2292,11 @@ ${content}
 \`\`\`
 
 **Correction Instructions:**
+- **Learn from History**: Analyze and learn from the provided Successful Change History to replicate effective solutions, and from the Previous Failed Correction Attempt Diff to understand past failures and avoid repeating unproductive strategies.
 -   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
+- **Proactive Error Mitigation**: Beyond fixing the immediate issues, proactively prevent future occurrences where applicable, such as robust type usage, proper import organization, secure data handling, and comprehensive null/undefined checks.
 - Fix all security vulnerabilities
 - Use secure coding practices
 - Validate inputs properly
@@ -2284,6 +2327,12 @@ ${
 		? `
 ${context.successfulChangeHistory}
 `
+		: ""
+}
+
+${
+	context.lastFailedCorrectionDiff
+		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
 
