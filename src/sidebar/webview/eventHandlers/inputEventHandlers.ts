@@ -6,6 +6,7 @@ import {
 	highlightCommand,
 	isInputtingCompleteCommand,
 } from "../ui/commandSuggestions";
+import { updateStatus } from "../ui/statusManager";
 import { MINOVATIVE_COMMANDS } from "../../common/sidebarConstants";
 import { appState } from "../state/appState";
 import { RequiredDomElements } from "../types/webviewTypes";
@@ -215,4 +216,86 @@ export function initializeInputEventListeners(
 		clearImagesButton.style.display =
 			appState.selectedImages.length > 0 ? "inline-flex" : "none";
 	});
+
+	// PASTE EVENT LISTENER FOR CHAT INPUT
+	elements.chatInput.addEventListener(
+		"paste",
+		async (event: ClipboardEvent) => {
+			const clipboardItems = event.clipboardData?.items;
+			if (!clipboardItems) {
+				return;
+			}
+
+			let imageFile: File | null = null;
+
+			for (let i = 0; i < clipboardItems.length; i++) {
+				const item = clipboardItems[i];
+				if (item.kind === "file" && item.type.startsWith("image/")) {
+					const file = item.getAsFile();
+					if (file) {
+						imageFile = file;
+						event.preventDefault(); // Stop default paste behavior for images
+						break; // Only handle the first image found
+					}
+				}
+			}
+
+			if (imageFile) {
+				// Clear any previously selected images and state
+				clearImagePreviews(imagePreviewsContainer);
+				appState.selectedImages = [];
+				elements.imageUploadInput.value = ""; // Clear the file input for consistency
+
+				const removeImageCallback = (elToRemove: HTMLDivElement) => {
+					// Remove from appState.selectedImages
+					appState.selectedImages = appState.selectedImages.filter(
+						(img) => img.previewElement !== elToRemove
+					);
+					// Remove from DOM
+					elToRemove.remove();
+					elements.imageUploadInput.value = ""; // Reset the input value after an image is removed
+					setLoadingState(appState.isLoading, elements); // CRITICAL REQ: Call after removal
+					// Update button visibility
+					clearImagesButton.style.display =
+						appState.selectedImages.length > 0 ? "inline-flex" : "none";
+				};
+
+				try {
+					const base64Data = await readFileAsBase64(imageFile);
+					const mimeType = imageFile.type;
+
+					const previewElement = displayImagePreview(
+						imageFile,
+						imagePreviewsContainer,
+						removeImageCallback
+					);
+
+					appState.selectedImages.push({
+						file: imageFile,
+						mimeType: mimeType,
+						data: base64Data.data,
+						previewElement: previewElement,
+					});
+
+					elements.clearImagesButton.style.display = "inline-flex";
+					setLoadingState(appState.isLoading, elements); // Update UI after successful image paste
+				} catch (error) {
+					console.error("Error processing pasted image:", error);
+					updateStatus(
+						elements,
+						"Failed to paste image. Please try again.",
+						true
+					);
+					// Reset the image state to prevent partial uploads
+					clearImagePreviews(imagePreviewsContainer);
+					appState.selectedImages = [];
+					elements.imageUploadInput.value = "";
+					elements.clearImagesButton.style.display = "none";
+					setLoadingState(appState.isLoading, elements); // Update UI after error
+				}
+			} else {
+				return; // No image file found in clipboard
+			}
+		}
+	);
 }

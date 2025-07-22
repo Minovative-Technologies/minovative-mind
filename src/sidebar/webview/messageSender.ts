@@ -21,6 +21,10 @@ export function sendMessage(
 	// Replace direct accesses to DOM elements with 'elements' properties
 	const fullMessage = elements.chatInput.value.trim();
 	elements.chatInput.value = ""; // Clear input immediately
+	const imagePartsToSend = appState.selectedImages.map((img) => ({
+		mimeType: img.mimeType,
+		data: img.data,
+	}));
 
 	// Replace direct DOM checks and global state with 'elements' and 'appState'
 	if (
@@ -97,7 +101,11 @@ export function sendMessage(
 			true,
 			undefined,
 			undefined,
-			userMessageIndex
+			userMessageIndex,
+			false, // isRelevantFilesExpandedForHistory
+			false, // isPlanExplanationForRender
+			false, // isPlanStepUpdateForRender
+			imagePartsToSend.length > 0 ? imagePartsToSend : undefined // imageParts
 		);
 		updateStatus(elements, "Requesting plan generation...");
 		postMessageToExtension({ type: "planRequest", value: planRequest });
@@ -123,10 +131,6 @@ export function sendMessage(
 		// Increment message index for the new user message before appending
 		const userMessageIndex = appState.nextMessageIndex++;
 		// Ensure appendMessage and updateStatus pass 'elements' as their first argument
-		const imagePartsToSend = appState.selectedImages.map((img) => ({
-			mimeType: img.mimeType,
-			data: img.data,
-		}));
 		appendMessage(
 			elements,
 			"You",
