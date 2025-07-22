@@ -11,6 +11,7 @@ import {
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { generateLightweightPlanPrompt } from "../sidebar/services/aiInteractionService";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini"; // CRITICAL: Added import for ERROR_OPERATION_CANCELLED
+import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 
 export async function handleWebviewMessage(
 	data: any,
@@ -752,7 +753,7 @@ export async function handleWebviewMessage(
 				// 2. Modify the call to `generateLightweightPlanPrompt` inside the `try` block to pass the `token` as the fourth argument
 				const generatedPlanText = await generateLightweightPlanPrompt(
 					aiMessageContent,
-					provider.settingsManager.getSelectedModelName(),
+					DEFAULT_FLASH_LITE_MODEL,
 					provider.aiRequestService,
 					token // Pass the cancellation token
 				);

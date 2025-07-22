@@ -8,6 +8,10 @@ import { hasMergeConflicts } from "./utils/mergeUtils"; // Added import for merg
 import { CodeSelectionService } from "./services/codeSelectionService";
 import { getSymbolsInDocument } from "./services/symbolService";
 import { DiagnosticService } from "./utils/diagnosticUtils";
+import {
+	DEFAULT_FLASH_LITE_MODEL,
+	DEFAULT_FLASH_MODEL,
+} from "./sidebar/common/sidebarConstants";
 
 // Helper function type definition for AI action results (kept for potential future use)
 type ActionResult =
@@ -39,7 +43,7 @@ async function executeExplainAction(
 	const fileName = editor.document.fileName;
 
 	const activeApiKey = sidebarProvider.apiKeyManager.getActiveApiKey(); // Still needed for initial check
-	const selectedModel = sidebarProvider.settingsManager.getSelectedModelName();
+	const selectedModel = DEFAULT_FLASH_LITE_MODEL; // Use default model for explain action
 
 	if (!activeApiKey) {
 		// Keep this check as it's user-facing before the call
@@ -130,7 +134,7 @@ async function executeDocsAction(
 	effectiveRange: vscode.Range // Renamed from selectionRange
 ): Promise<ActionResult> {
 	const activeApiKey = sidebarProvider.apiKeyManager.getActiveApiKey();
-	const selectedModel = sidebarProvider.settingsManager.getSelectedModelName();
+	const selectedModel = DEFAULT_FLASH_LITE_MODEL; // Use default model for documentation generation
 
 	if (!activeApiKey) {
 		return {
@@ -384,9 +388,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					codeContextDescription = "the following code snippet";
 				}
 
-				// Model Availability: Get selectedModel from sidebarProvider.settingsManager.getSelectedModelName().
-				const selectedModel =
-					sidebarProvider.settingsManager.getSelectedModelName();
+				const selectedModel = DEFAULT_FLASH_MODEL; // Use default model for chat
 				if (!selectedModel) {
 					vscode.window.showErrorMessage(
 						"Minovative Mind: No AI model selected. Please check the sidebar."
@@ -627,8 +629,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			// New /docs instruction handling (now using the upfront logic, this block still handles execution)
 			if (instruction === "/docs") {
-				const selectedModel =
-					sidebarProvider.settingsManager.getSelectedModelName();
+				const selectedModel = DEFAULT_FLASH_LITE_MODEL; // Use default model for documentation generation
 				if (!selectedModel) {
 					vscode.window.showErrorMessage(
 						"Minovative Mind: No AI model selected. Please check the sidebar."
@@ -701,7 +702,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			});
 
 			// Send aiResponseStart immediately to show streaming state
-			const modelName = sidebarProvider.settingsManager.getSelectedModelName();
+			const modelName = DEFAULT_FLASH_LITE_MODEL; // Use default model for /fix, /merge, or custom prompt
 			sidebarProvider.postMessageToWebview({
 				type: "aiResponseStart",
 				value: { modelName, relevantFiles: [] }, // Empty relevantFiles initially, will be updated later
@@ -761,8 +762,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	const explainDisposable = vscode.commands.registerCommand(
 		"minovative-mind.explainSelection",
 		async () => {
-			const selectedModel =
-				sidebarProvider.settingsManager.getSelectedModelName();
+			const selectedModel = DEFAULT_FLASH_LITE_MODEL; // Use default model for explain action
 			if (!selectedModel) {
 				vscode.window.showErrorMessage(
 					"Minovative Mind: No AI model selected. Please check the sidebar."

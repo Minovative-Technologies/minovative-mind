@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
-import { HistoryEntryPart } from "../sidebar/common/sidebarTypes";
 import {
 	constructGitCommitCommand,
 	getGitStagedDiff,
@@ -12,6 +11,7 @@ import {
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { ChildProcess } from "child_process";
 import { generateFileChangeSummary } from "../utils/diffingUtils";
+import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 
 export class CommitService {
 	constructor(private provider: SidebarProvider) {}
@@ -25,7 +25,7 @@ export class CommitService {
 		token: vscode.CancellationToken
 	): Promise<void> {
 		const { settingsManager } = this.provider;
-		const modelName = settingsManager.getSelectedModelName();
+		const modelName = DEFAULT_FLASH_LITE_MODEL; // Use the default model for commit messages
 
 		let success = false; // Added variable
 		let errorMessage: string | null = null; // Added variable

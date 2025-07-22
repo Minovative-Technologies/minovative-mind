@@ -63,7 +63,7 @@ export function updateStatus(
 			if (elements.statusArea.innerHTML === displayHtml) {
 				elements.statusArea.textContent = "";
 			}
-		}, 45000); // 45 seconds for error messages
+		}, 15000); // 15 seconds for error messages
 	}
 }
 

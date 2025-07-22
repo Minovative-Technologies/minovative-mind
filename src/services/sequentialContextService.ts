@@ -8,7 +8,6 @@ import { AIRequestService } from "./aiRequestService";
 import { scanWorkspace } from "../context/workspaceScanner";
 import { buildDependencyGraph } from "../context/dependencyGraphBuilder";
 import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor";
-import { DEFAULT_MODEL } from "../sidebar/common/sidebarConstants";
 import {
 	getHeuristicRelevantFiles,
 	HeuristicSelectionOptions,
@@ -19,6 +18,7 @@ import {
 } from "../context/smartContextSelector";
 import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes";
 import { SettingsManager } from "../sidebar/managers/settingsManager";
+import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 
 export interface SequentialContextOptions {
 	enableSequentialProcessing?: boolean;
@@ -87,7 +87,7 @@ export class SequentialContextService {
 			enableDetailedAnalysis = true,
 			includeDependencies = true,
 			complexityThreshold = "high",
-			modelName = DEFAULT_MODEL,
+			modelName = DEFAULT_FLASH_LITE_MODEL,
 			onProgress,
 			onFileProcessed,
 		} = options;
@@ -194,7 +194,7 @@ export class SequentialContextService {
 			enableDetailedAnalysis = true,
 			includeDependencies = true,
 			complexityThreshold = "high",
-			modelName = DEFAULT_MODEL,
+			modelName = DEFAULT_FLASH_LITE_MODEL,
 		} = options;
 
 		if (!enableSequentialProcessing) {

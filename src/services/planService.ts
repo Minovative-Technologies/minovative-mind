@@ -2,8 +2,8 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { GenerationConfig } from "@google/generative-ai";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
-import * as sidebarTypes from "../sidebar/common/sidebarTypes"; // Import sidebarTypes
-import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes"; // ADDED IMPORT // MODIFIED: Added HistoryEntryPart
+import * as sidebarTypes from "../sidebar/common/sidebarTypes";
+import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes";
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
 import {
 	createInitialPlanningExplanationPrompt,
@@ -26,14 +26,13 @@ import { typeContentIntoEditor } from "../sidebar/services/planExecutionService"
 import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
 import { GitConflictResolutionService } from "./gitConflictResolutionService";
-import { applyAITextEdits } from "../utils/codeUtils"; // For applying precise text edits
-import { DiagnosticService } from "../utils/diagnosticUtils"; // Correct DiagnosticService import
-import { formatUserFacingErrorMessage } from "../utils/errorFormatter"; // Import formatUserFacingErrorMessage
-import { showErrorNotification } from "../utils/notificationUtils"; // Add this import
+import { applyAITextEdits } from "../utils/codeUtils";
+import { DiagnosticService } from "../utils/diagnosticUtils";
+import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
+import { showErrorNotification } from "../utils/notificationUtils";
 import { UrlContextService } from "./urlContextService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
-import { executeCommand, CommandResult } from "../utils/commandExecution"; // ADDED IMPORT
-import { ChildProcess } from "child_process"; // ADDED IMPORT
+import { executeCommand, CommandResult } from "../utils/commandExecution";
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
@@ -52,7 +51,10 @@ export class PlanService {
 
 -   **Newline (\`\\n\`) Characters**: To represent a standard newline *character* (line feed) in JSON, use the standard JSON escape sequence \`\\n\`. This applies to multiline strings or when you explicitly need a newline character in text.
 
-Adherence to these precise JSON escaping rules is paramount for the \`ExecutionPlan\` to be parsed successfully. Mis-escaped backslashes are a common cause of \`Bad escaped character in JSON\` errors. Review your generated strings carefully to ensure all backslashes that are part of the content are correctly doubled for the JSON format.`;
+Adherence to these precise JSON escaping rules is paramount for the \`ExecutionPlan\` to be parsed successfully. Mis-escaped backslashes are a common cause of \`Bad escaped character in JSON\` errors. Review your generated strings carefully to ensure all backslashes that are part of the content are correctly doubled for the JSON format.
+--- CRITICAL INSTRUCTION FOR FILE MODIFICATIONS ---
+**Consolidate File Changes**: When the plan involves multiple modifications to the *same file*, you **MUST** consolidate all these modifications into a *single* \`modifyFile\` step for that file. Do not create separate \`modifyFile\` steps for the same file if all changes can be logically combined into one comprehensive modification operation. The system will then generate the entire new content for that file in one go and apply it atomically, ensuring a single, unified change per file. For example, if a file needs a new function and an import fix, these should be handled in one \`modifyFile\` step. This applies to both initial plan generation and correction plans.
+--- END CRITICAL INSTRUCTION FOR FILE MODIFICATIONS ---`;
 
 	constructor(
 		private provider: SidebarProvider,
@@ -79,7 +81,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 	// --- CHAT-INITIATED PLAN ---
 	public async handleInitialPlanRequest(userRequest: string): Promise<void> {
 		const { settingsManager, apiKeyManager, changeLogger } = this.provider;
-		const modelName = settingsManager.getSelectedModelName();
+		const modelName = sidebarConstants.DEFAULT_FLASH_LITE_MODEL; // Use default model for initial plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
 		if (!apiKey) {
@@ -316,7 +318,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		isMergeOperation: boolean = false // Added isMergeOperation parameter
 	): Promise<sidebarTypes.PlanGenerationResult> {
 		const { settingsManager, apiKeyManager, changeLogger } = this.provider;
-		const modelName = settingsManager.getSelectedModelName();
+		const modelName = sidebarConstants.DEFAULT_FLASH_LITE_MODEL; // Use default model for editor-initiated plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
 		const rootFolder = vscode.workspace.workspaceFolders?.[0];
@@ -494,8 +496,6 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 			);
 			// END ADDED
 
-			// Removed UI handling block as per instructions
-
 			finalResult = {
 				success: true,
 				textualPlanExplanation: textualPlanResponse,
@@ -662,7 +662,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 				structuredPlanJsonString =
 					await this.provider.aiRequestService.generateWithRetry(
 						[{ text: currentJsonPlanningPrompt }], // MODIFIED
-						planContext.modelName,
+						sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
 						undefined,
 						"structured plan generation",
 						jsonGenerationConfig,
@@ -1828,11 +1828,11 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 						message: `AI generating overall correction plan (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
 					});
 
-					// Line 1780: Modify first argument to wrap string prompt in HistoryEntryPart array
+					// Modify first argument to wrap string prompt in HistoryEntryPart array
 					let correctionPlanJsonString =
 						await this.provider.aiRequestService.generateWithRetry(
 							[{ text: correctionPlanPrompt }], // MODIFIED
-							planContext.modelName,
+							sidebarConstants.DEFAULT_FLASH_LITE_MODEL, // Use default model for correction plans
 							undefined,
 							`final correction plan generation (attempt ${currentCorrectionAttempt})`,
 							jsonGenerationConfig,
@@ -2024,7 +2024,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 				let correctionPlanJsonString =
 					await this.provider.aiRequestService.generateWithRetry(
 						[{ text: correctionPlanPrompt }], // MODIFIED
-						planContext.modelName,
+						sidebarConstants.DEFAULT_FLASH_LITE_MODEL, // Use default model for correction plans
 						undefined,
 						`command correction plan generation (attempt ${currentCorrectionAttempt})`,
 						jsonGenerationConfig,

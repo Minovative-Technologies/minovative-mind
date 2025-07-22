@@ -1,16 +1,8 @@
 // src/services/aiRequestService.ts
 import * as vscode from "vscode";
-import {
-	Content,
-	GenerationConfig,
-	GenerativeContentBlob,
-} from "@google/generative-ai";
+import { Content, GenerationConfig } from "@google/generative-ai";
 import { ApiKeyManager } from "../sidebar/managers/apiKeyManager";
-import {
-	HistoryEntry,
-	HistoryEntryPart,
-	ImageInlineData,
-} from "../sidebar/common/sidebarTypes";
+import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes";
 import {
 	ERROR_OPERATION_CANCELLED,
 	ERROR_QUOTA_EXCEEDED,

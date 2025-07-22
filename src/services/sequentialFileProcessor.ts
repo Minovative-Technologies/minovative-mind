@@ -2,8 +2,10 @@ import * as vscode from "vscode";
 import { AIRequestService } from "./aiRequestService";
 import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor";
 import { ActiveSymbolDetailedInfo } from "./contextService";
-import { DEFAULT_MODEL, TEMPERATURE } from "../sidebar/common/sidebarConstants";
-import { HistoryEntryPart } from "../sidebar/common/sidebarTypes";
+import {
+	DEFAULT_FLASH_LITE_MODEL,
+	TEMPERATURE,
+} from "../sidebar/common/sidebarConstants";
 
 export interface FileSummary {
 	filePath: string;
@@ -80,7 +82,7 @@ export class SequentialFileProcessor {
 			enableDetailedAnalysis = true,
 			includeDependencies = true,
 			complexityThreshold = "high",
-			modelName = DEFAULT_MODEL,
+			modelName = DEFAULT_FLASH_LITE_MODEL, // Use the default model for sequential processing
 			onProgress,
 			onFileProcessed,
 		} = options;

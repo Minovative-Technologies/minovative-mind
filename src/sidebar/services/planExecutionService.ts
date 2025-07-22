@@ -10,6 +10,7 @@ import { ProjectChangeLogger } from "../../workflow/ProjectChangeLogger";
 import { generateFileChangeSummary } from "../../utils/diffingUtils";
 import { FileChangeEntry } from "../../types/workflow";
 import { ExtensionToWebviewMessages } from "../../sidebar/common/sidebarTypes"; // NEW IMPORT
+import { DEFAULT_FLASH_MODEL } from "../common/sidebarConstants";
 
 // Define enums and interfaces for plan execution
 export enum PlanStepAction {
@@ -108,7 +109,7 @@ export async function executePlanStep(
 	// Retrieve the model name from VS Code settings
 	const modelName: string = vscode.workspace
 		.getConfiguration("minovativeMind")
-		.get("modelName", "gemini-2.5-flash");
+		.get("modelName", DEFAULT_FLASH_MODEL);
 
 	switch (step.action) {
 		case PlanStepAction.ModifyFile:

@@ -371,6 +371,8 @@ ${context.successfulChangeHistory}
 - Consider performance implications.
 - Add appropriate comments for complex logic.
 
+**CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
+
 Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 	}
 
@@ -590,6 +592,8 @@ ${
 		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
+
+**CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
 Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
@@ -1094,7 +1098,9 @@ ${context.successfulChangeHistory}
 - Maintain the existing code structure and style
 - Add necessary imports if new dependencies are used
 - Ensure the code remains functional and error-free
-- Follow the project's coding conventions
+- Follow the project's coding conventions.
+
+**CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
 Your response MUST contain **ONLY** the modified file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 	}
@@ -1288,6 +1294,8 @@ ${
 		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
+
+**CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
 Your response MUST contain **ONLY** the modified file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
@@ -1930,6 +1938,8 @@ ${
 		: ""
 }
 
+**CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
+
 Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
@@ -2031,6 +2041,8 @@ ${
 		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
+
+**CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
 Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
@@ -2134,6 +2146,8 @@ ${
 		: ""
 }
 
+**CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
+
 Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
@@ -2235,6 +2249,8 @@ ${
 		: ""
 }
 
+**CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
+
 Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
@@ -2335,6 +2351,8 @@ ${
 		? `--- Previous Failed Correction Attempt Diff ---\n**CRITICAL**: Analyze this diff carefully. The previous attempt to fix issues resulted in this specific change, and it *did not improve the situation*. You MUST understand *why* the previous attempt failed, identify the unproductive changes, and devise a *fundamentally different and significantly more effective strategy* to fix the issues without reintroducing past mistakes.\n\`\`\`diff\n${context.lastFailedCorrectionDiff}\n\`\`\`\n`
 		: ""
 }
+
+**CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
 Your response MUST contain **ONLY** the corrected file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else.`;
 

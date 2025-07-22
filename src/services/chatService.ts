@@ -3,6 +3,7 @@ import { SidebarProvider } from "../sidebar/SidebarProvider";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { UrlContextService } from "./urlContextService";
 import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes"; // Import HistoryEntry for type safety, and HistoryEntryPart
+import { DEFAULT_FLASH_MODEL } from "../sidebar/common/sidebarConstants";
 
 export class ChatService {
 	private urlContextService: UrlContextService;
@@ -16,7 +17,7 @@ export class ChatService {
 		groundingEnabled: boolean = false
 	): Promise<void> {
 		const { settingsManager } = this.provider;
-		const modelName = settingsManager.getSelectedModelName();
+		const modelName = DEFAULT_FLASH_MODEL; // Use the default model for regular chat
 
 		this.provider.activeOperationCancellationTokenSource =
 			new vscode.CancellationTokenSource();
@@ -78,7 +79,7 @@ export class ChatService {
 			// Revise construction of input for aiRequestService.generateWithRetry
 			const initialSystemPrompt: HistoryEntryPart[] = [
 				{
-					text: `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and never provide full code snippets to user's requests, be concise and informative.\n\nProject Context:\n${
+					text: `You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and don't provide code to user's requests, just be concise and informative to there prompts and request.\n\nProject Context:\n${
 						projectContext.contextString
 					}${urlContextString ? `\n\n${urlContextString}` : ""}`,
 				},
@@ -179,7 +180,7 @@ export class ChatService {
 			contextService,
 			aiRequestService,
 		} = this.provider;
-		const modelName = settingsManager.getSelectedModelName();
+		const modelName = DEFAULT_FLASH_MODEL; // Use the default model for regeneration
 
 		// 1. Cancel any existing activeOperationCancellationTokenSource and create a new one.
 		this.provider.activeOperationCancellationTokenSource?.cancel();
@@ -260,7 +261,7 @@ export class ChatService {
 			// Construct the full user turn contents, including system prompt and user input
 			const initialSystemPrompt: HistoryEntryPart[] = [
 				{
-					text: `You are Minovative Mind, an AI assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and never provide full code snippets to user's requests, be concise and informative.\n\nProject Context:\n${projectContext.contextString}`,
+					text: `You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and don't provide code to user's requests, just be concise and informative to there prompts and request.\n\nProject Context:\n${projectContext.contextString}`,
 				},
 			];
 			const fullUserTurnContents: HistoryEntryPart[] = [
@@ -337,7 +338,6 @@ export class ChatService {
 			const isCancellation = finalAiResponseText === ERROR_OPERATION_CANCELLED;
 
 			// Only send aiResponseEnd if we haven't already cancelled
-			// CRITICAL CHANGE: Removed the 'if' condition. aiResponseEnd must always be sent.
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
 				success: success,

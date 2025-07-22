@@ -33,7 +33,10 @@ import * as SymbolService from "./symbolService";
 import { DiagnosticService } from "../utils/diagnosticUtils";
 import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor"; // Import for file content summarization
 import { SequentialContextService } from "./sequentialContextService"; // Import sequential context service
-import { DEFAULT_MODEL } from "../sidebar/common/sidebarConstants";
+import {
+	DEFAULT_FLASH_LITE_MODEL,
+	DEFAULT_MODEL,
+} from "../sidebar/common/sidebarConstants";
 
 // Constants for symbol processing
 const MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT = 6; // Example depth for symbol hierarchy serialization
@@ -156,7 +159,7 @@ export class ContextService {
 			const scanStartTime = Date.now();
 			this.postMessageToWebview({
 				type: "statusUpdate",
-				value: "Minovative Mind is scanning workspace for relevant files",
+				value: "Scanning workspace for relevant files",
 				showLoadingDots: true, // ADDED
 			});
 
@@ -201,7 +204,7 @@ export class ContextService {
 			const dependencyStartTime = Date.now();
 			this.postMessageToWebview({
 				type: "statusUpdate",
-				value: "Minovative Mind is analyzing file dependencies",
+				value: "Analyzing file dependencies",
 				showLoadingDots: true, // ADDED
 			});
 
@@ -616,7 +619,7 @@ export class ContextService {
 								token
 							);
 						},
-						modelName: this.settingsManager.getSelectedModelName(),
+						modelName: DEFAULT_FLASH_LITE_MODEL, // Use the default model for selection
 						cancellationToken,
 						fileDependencies,
 						preSelectedHeuristicFiles: heuristicSelectedFiles, // Pass heuristicSelectedFiles
@@ -789,7 +792,7 @@ export class ContextService {
 					enableDetailedAnalysis: options?.enableDetailedAnalysis ?? true,
 					includeDependencies: options?.includeDependencies ?? true,
 					complexityThreshold: options?.complexityThreshold ?? "medium",
-					modelName: options?.modelName ?? DEFAULT_MODEL,
+					modelName: DEFAULT_FLASH_LITE_MODEL, // Use the default model for sequential processing
 					onProgress: options?.onProgress,
 					onFileProcessed: options?.onFileProcessed,
 				}

@@ -2,7 +2,10 @@ import { EnhancedCodeGenerator } from "../../ai/enhancedCodeGeneration";
 import * as sidebarTypes from "../common/sidebarTypes";
 import { HistoryEntryPart } from "../common/sidebarTypes"; // Added for specific type import as per instructions
 import * as vscode from "vscode";
-import { TEMPERATURE } from "../common/sidebarConstants";
+import {
+	DEFAULT_FLASH_LITE_MODEL,
+	TEMPERATURE,
+} from "../common/sidebarConstants";
 import { AIRequestService } from "../../services/aiRequestService";
 import { ERROR_OPERATION_CANCELLED } from "../../ai/gemini";
 import * as path from "path"; // Required for path manipulation
@@ -542,7 +545,7 @@ export function createPlanningPrompt(
 
     **PLANNING GUIDELINES:**
     1. **Analyze Dependencies:** Consider how changes might affect other parts of the codebase. Generate
-    2. **Ensure Completeness:** The generated steps **must collectively address the *entirety* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
+    2. **Ensure Completeness:** The generated steps **must collectively address the *entireity* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
     3. **Consult Recent Project Changes:** Always consult the "Recent Project Changes (During Current Workflow Execution)" section. Your plan MUST build upon these prior changes. Avoid generating steps that redundantly re-create files already created, or redundantly modify files already changed in prior steps and whose desired state is reflected by that prior modification. Instead, if multiple logical changes are needed for one file, combine *all* those required modifications into a **single** \`modification_prompt\` for that file's \`modify_file\` step. This ensures efficiency and avoids unnecessary operations.
     4. Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
     5. Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
@@ -1220,7 +1223,7 @@ AI Response: ${aiMessageContent}`;
 	try {
 		const result = await aiRequestService.generateWithRetry(
 			[{ text: prompt }], // Modified as per instruction
-			modelName,
+			DEFAULT_FLASH_LITE_MODEL,
 			undefined, // No history needed for this type of request
 			"lightweight plan prompt",
 			undefined, // No specific generation config needed
