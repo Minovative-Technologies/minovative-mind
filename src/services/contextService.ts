@@ -34,6 +34,10 @@ import { DiagnosticService } from "../utils/diagnosticUtils";
 import { intelligentlySummarizeFileContent } from "../context/fileContentProcessor"; // Import for file content summarization
 import { SequentialContextService } from "./sequentialContextService"; // Import sequential context service
 import {
+	detectProjectType,
+	formatProjectProfileForPrompt,
+} from "./projectTypeDetector"; // Import project type detection and formatting
+import {
 	DEFAULT_FLASH_LITE_MODEL,
 	DEFAULT_MODEL,
 } from "../sidebar/common/sidebarConstants";
@@ -169,6 +173,13 @@ export class ContextService {
 				maxFileSize: options?.maxFileSize ?? 1024 * 1024 * 1, // 1MB
 				cacheTimeout: 5 * 60 * 1000, // 5 minutes
 			});
+
+			// Detect project type after scanning
+			const detectedProjectProfile = await detectProjectType(
+				rootFolder.uri,
+				allScannedFiles,
+				{ useCache: options?.useScanCache ?? true }
+			);
 
 			const scanTime = Date.now() - scanStartTime;
 			if (
@@ -708,7 +719,7 @@ export class ContextService {
 			const contextBuildStartTime = Date.now();
 
 			// 3. Update the final call to buildContextString to pass activeSymbolDetailedInfo
-			const contextString = await buildContextString(
+			const rawContextString = await buildContextString(
 				filesForContextBuilding, // Still pass URIs to buildContextString for content reading
 				rootFolder.uri,
 				DEFAULT_CONTEXT_CONFIG,
@@ -717,6 +728,33 @@ export class ContextService {
 				documentSymbolsMap,
 				activeSymbolDetailedInfo // Pass the new argument
 			);
+
+			// --- New logic to prepend project type preamble ---
+			let preamble = "";
+			try {
+				if (detectedProjectProfile) {
+					preamble = formatProjectProfileForPrompt(detectedProjectProfile);
+				} else {
+					console.log("[ContextService] No specific project type detected.");
+				}
+			} catch (preambleError: any) {
+				console.warn(
+					`[ContextService] Error generating project type preamble: ${preambleError.message}`
+				);
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Warning: Could not generate project type info. Reason: ${preambleError.message}`,
+					isError: true,
+				});
+			}
+
+			let finalContextString = rawContextString; // Initialize with the originally built context string
+
+			if (preamble) {
+				// Prepend the detected project type information
+				finalContextString = `${preamble}\n\nProject Context:\n${rawContextString}`;
+			}
+			// --- End new logic ---
 
 			const contextBuildTime = Date.now() - contextBuildStartTime;
 			const totalTime = Date.now() - startTime;
@@ -732,7 +770,7 @@ export class ContextService {
 
 			// Return the new object structure with performance metrics
 			return {
-				contextString: contextString,
+				contextString: finalContextString, // Use the potentially modified context string
 				relevantFiles: relativeFilesForContextBuilding,
 				performanceMetrics: {
 					scanTime,
