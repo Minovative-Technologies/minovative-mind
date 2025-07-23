@@ -1,4 +1,3 @@
-// src/services/aiRequestService.ts
 import * as vscode from "vscode";
 import { Content, GenerationConfig } from "@google/generative-ai";
 import { ApiKeyManager } from "../sidebar/managers/apiKeyManager";
@@ -28,9 +27,8 @@ export class AIRequestService {
 	 * Transforms an array of internal HistoryEntry objects into the format required by the Gemini API's `Content` type.
 	 */
 	private transformHistoryForGemini(history: HistoryEntry[]): Content[] {
-		return history.map((entry) => ({
-			role: entry.role,
-			parts: entry.parts.map((part) => {
+		return history.map((entry) => {
+			const parts: Content["parts"] = entry.parts.map((part) => {
 				// HistoryEntryPart can be either { text: string } or { inlineData: ImageInlineData }
 				if ("inlineData" in part) {
 					// If 'inlineData' property exists, it's an image part
@@ -51,8 +49,18 @@ export class AIRequestService {
 				// if HistoryEntryPart is strictly defined as {text: string} | {inlineData: ImageInlineData}.
 				// Keeping it for robustness as per the original code's implied fallback.
 				return { text: "" };
-			}),
-		}));
+			});
+
+			// If diffContent is present in the history entry, append it as a new part
+			if (entry.diffContent) {
+				parts.push({ text: "Code Diff:\n" + entry.diffContent });
+			}
+
+			return {
+				role: entry.role,
+				parts: parts,
+			};
+		});
 	}
 
 	/**

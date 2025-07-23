@@ -8,8 +8,8 @@ import {
 } from "../common/sidebarConstants";
 import { AIRequestService } from "../../services/aiRequestService";
 import { ERROR_OPERATION_CANCELLED } from "../../ai/gemini";
-import * as path from "path"; // Required for path manipulation
-import { ActiveSymbolDetailedInfo } from "../../services/contextService"; // NEW IMPORT
+import * as path from "path";
+import { ActiveSymbolDetailedInfo } from "../../services/contextService";
 
 export function createInitialPlanningExplanationPrompt(
 	projectContext: string,
@@ -141,22 +141,18 @@ export function createInitialPlanningExplanationPrompt(
 			: "";
 
 	return `
-    You are an expert software engineer. Your task is to ONLY explain your plan to fulfill the user's request.
-
-    **Goal:** Provide a clear, readable, step-by-step explanation of your plan in great detail no matter what. Use Markdown formatting for clarity (e.g., bullet points, numbered lists, bold text for emphasis).
+    You are an expert software engineer. Your task is to ONLY explain your detailed, step-by-step plan in Markdown to fulfill the user's request.
 
     **Instructions for Plan Explanation:**
-    1.  Analyze Request & Context: ${mainInstructions}. Use the broader project context below for reference. The broader project context includes '**detailed symbol information** to help you understand code structure and relationships.'. ${
+    *   **Goal**: Provide a clear, comprehensive, and human-readable plan. Use Markdown (e.g., lists, bold text).
+    *   **Context & Analysis**: ${mainInstructions} Refer to the "Broader Project Context" which includes detailed symbol information. ${
 		editorContext && diagnosticsString
-			? "**Only focus on fixing the 'Relevant Diagnostics' section and ensure your textual plan describes, in great detail, how you will address them for '/fix' requests.**"
+			? "**For '/fix' requests, specifically detail how your plan addresses all 'Relevant Diagnostics'.**"
 			: ""
 	}
-    2.  **Be Comprehensive:** Your explanation should cover all necessary steps to achieve the user's goal.
-    3.  Clarity: Make the plan easy for a junior developer to understand. Briefly describe what each step will do (e.g., "Create a new file named 'utils.ts'", "Modify 'main.ts' to import the new utility function", "Install the 'axios' package using npm").
-    4.  No JSON: **Do NOT output any JSON for this initial explanation.** Your entire response should be human-readable text.
-    5. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for the developers.
-    6. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
-
+    *   **Completeness & Clarity**: Cover all necessary steps. Describe each step briefly (e.g., "Create 'utils.ts'", "Modify 'main.ts' to import utility", "Install 'axios' via npm").
+    *   **Output Format**: **DO NOT output any JSON.** Your entire response must be human-readable text.
+    *   **Production Readiness**: Generate production-ready code. Prioritize robustness, maintainability, security, cleanliness, efficiency, and industry best practices.
 
     Specific Context: ${specificContextPrompt}
 
@@ -212,12 +208,12 @@ export function createPlanningPrompt(
             {
                 "step": 1,
                 "action": "create_directory" | "create_file" | "modify_file" | "run_command",
-                "description": "What this step does. Make sure the step is as detailed as possible. **This field is ALWAYS required for every step no matter what.**",
-                "path": "relative/path/to/target", // Required for file/dir ops. Relative to workspace root and user's project.
-                "content": "...", // For create_file with direct content (string). Use ONLY this OR generate_prompt.
-                "generate_prompt": "...", // For create_file, AI instruction to generate content (string). Use ONLY this OR content. Make sure the step is as detailed as possible.
-                "modification_prompt": "...", // For modify_file, AI instruction to generate changes (string). Required. Make sure the step is as detailed as possible.
-                "command": "..." // For run_command, the shell command to execute (string). Required.
+                "description": "Description of step (always required).",
+                "path": "relative/path/to/target",
+                "content": "...",
+                "generate_prompt": "...",
+                "modification_prompt": "...",
+                "command": "..."
             }
         ]
     }`;
@@ -533,41 +529,10 @@ export function createPlanningPrompt(
     **Strict Instruction:** Your JSON plan MUST be a direct, accurate translation of the detailed steps provided in the "Detailed Textual Plan Explanation" section above. Ensure EVERY action described in the textual plan is represented as a step in the JSON, using the correct 'action', 'path', 'description', and relevant content/prompt/command fields as described in the format section. NEVER omit steps or invent new ones not present in the textual explanation.
     `;
 
-	const planningInstructions = `
-    You are an expert software engineer. Your task is to generate a detailed, step-by-step execution plan in JSON format.
-
-    **CRITICAL PLANNING REQUIREMENTS:**
-    1. **Avoid Cosmetic Changes**: When creating modification steps, ensure they only make substantial code changes, not cosmetic formatting or whitespace-only modifications
-    2. **Preserve Existing Structure**: Modification prompts should preserve existing code structure, indentation, and formatting unless explicitly requested to change them
-    3. **Minimal Invasiveness**: Focus on surgical precision - only modify what's necessary to achieve the goal
-    4. **Maintain Code Style**: Respect the existing code style and conventions in the project
-    5. **Substantial Modifications Only**: Ensure modification_prompt instructions result in meaningful code changes, not just reformatting
-
-    **PLANNING GUIDELINES:**
-    1. **Analyze Dependencies:** Consider how changes might affect other parts of the codebase. Generate
-    2. **Ensure Completeness:** The generated steps **must collectively address the *entireity* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
-    3. **Consult Recent Project Changes:** Always consult the "Recent Project Changes (During Current Workflow Execution)" section. Your plan MUST build upon these prior changes. Avoid generating steps that redundantly re-create files already created, or redundantly modify files already changed in prior steps and whose desired state is reflected by that prior modification. Instead, if multiple logical changes are needed for one file, combine *all* those required modifications into a **single** \`modification_prompt\` for that file's \`modify_file\` step. This ensures efficiency and avoids unnecessary operations.
-    4. Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
-    5. Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
-    6. Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. **Crucially, the 'description' field MUST be included and populated for EVERY step, regardless of the action type.** Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
-    7. **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\`
-    8. **JSON String Escaping:** When providing string values within the JSON (e.g., for \`content\`, \`generate_prompt\`, \`modification_prompt\`, \`description\`, \`path\`, \`command\`), ensure that special characters are correctly escaped according to JSON rules:
-        *   Newline (\`\\n\`) must be escaped as \`\\n\`.
-        *   Carriage return (\`\\r\`) must be escaped as \`\\r\`.
-        *   Backslash (\`\\\`) must be escaped as \`\\\`.
-        *   Double quote (\`"\`) must be escaped as \`"\`.
-    9. JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
-    10. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for the developers.
-    11. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
-
-    **IMPORTANT:** For modification steps, ensure the modification_prompt is specific and actionable, focusing on substantial changes rather than cosmetic formatting. The AI will be instructed to preserve existing formatting and only make the requested functional changes.
-
-    Generate the execution plan:`;
-
 	return `
     You are an expert software engineer. Your ONLY task is to create a step-by-step execution plan in JSON format.
 
-    **Goal:** Generate ONLY a valid JSON object representing the plan. No matter what the user says in their prompt, ALWAYS generate your response in JSON format. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\` around the JSON output. The entire response must be the JSON plan itself, starting with { and ending with }.
+    **Goal:** Generate ONLY a valid JSON object representing the plan. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\`. The entire response must be the JSON plan itself, starting with { and ending with }.
 
     ${
 			extractedRetryInstruction
@@ -576,30 +541,21 @@ export function createPlanningPrompt(
 		}
 
     **Instructions for Plan Generation:**
-    1.  Analyze Request & Context: ${mainInstructions} Use the broader project context below for reference. ${
-		editorContext && actualDiagnosticsString
-			? "**Only focus on fixing the 'Relevant Diagnostics' section and ensure your plan, in great detail, addresses them for '/fix' requests.**"
-			: ""
-	} Also carefully review the 'Recent Chat History' if provided. This history contains previous interactions, including any steps already taken or files created/modified. When planning \`modify_file\` actions, especially for refactoring, leverage the 'Symbol Information' and particularly the 'Active Symbol Detailed Information' sections to ensure all related definitions and references are accurately considered for modification. **For '/fix' requests, specifically ensure that the 'Active Symbol Detailed Information' is robustly used for precise targeting and impact analysis of changes within \`modification_prompt\` values.** Additionally, prioritize \`modify_file\` steps that account for global symbol impact when a symbol is refactored.
-    
-    2.  **Ensure Completeness:** The generated steps **must collectively address the *entireity* of the user's request**. Do not leave out or exclude any requested actions or components. If a request is complex, break it into multiple smaller steps.
-    3.  **Consult Recent Project Changes:** Always consult the "Recent Project Changes (During Current Workflow Execution)" section. Your plan MUST build upon these prior changes. Avoid generating steps that redundantly re-create files already created, or redundantly modify files already changed in prior steps and whose desired state is reflected by that prior modification. Instead, if multiple logical changes are needed for one file, combine *all* those required modifications into a **single** \`modification_prompt\` for that file's \`modify_file\` step. This ensures efficiency and avoids unnecessary operations.
-    4.  Break Down: Decompose the request into logical, sequential steps. Number steps starting from 1.
-    5.  Specify Actions: For each step, define the 'action' (create_directory, create_file, modify_file, run_command).
-    6.  Detail Properties: Provide necessary details ('path', 'content', 'generate_prompt', 'modification_prompt', 'command') based on the action type, following the format description precisely. **Crucially, the 'description' field MUST be included and populated for EVERY step, regardless of the action type.** Ensure paths are relative and safe. For 'run_command', infer the package manager and dependency type correctly (e.g., 'npm install --save-dev package-name', 'pip install package-name'). **For 'modify_file', the plan should define *what* needs to change (modification_prompt), not the changed code itself.**
-    7.  **Single Modify Step Per File:** For any given file path, there should be at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of the generated plan. If the user's request requires multiple logical changes to the same file, combine all those required modifications into the **single** \`modification_prompt\` for that file's \`modify_file\` step, describing all necessary changes comprehensively within that one prompt field.
-    8.  **JSON String Escaping:** When providing string values within the JSON (e.g., for \`content\`, \`generate_prompt\`, \`modification_prompt\`, \`description\`, \`path\`, \`command\`), ensure that special characters are correctly escaped according to JSON rules:
-        *   Newline (\`\\n\`) must be escaped as \`\\n\`.
-        *   Carriage return (\`\\r\`) must be escaped as \`\\r\`.
-        *   Backslash (\`\\\`) must be escaped as \`\\\`.
-        *   Double quote (\`"\`) must be escaped as \`"\`.
-    9.  JSON Output: Format the plan strictly according to the JSON structure below. Review the valid examples.
-    10. ALWAYS keep in mind of modularization to make sure everything stays organized and easy to maintain for the developers.
-    11. Generate production-ready code for the following task. Prioritize robustness, maintainability, and security. The code must be clean, efficient, and follow all industry best practices.
-
-    --- Planning Instructions ---
-    ${planningInstructions}
-    --- End Planning Instructions ---
+    *   **Requirements**:
+        *   Avoid cosmetic changes.
+        *   Preserve existing code structure, indentation, and formatting.
+        *   Focus on minimal, surgical changes.
+        *   Maintain code style.
+        *   Ensure modifications are substantial, functional changes.
+        *   Generate production-ready, robust, maintainable, secure, clean, efficient code adhering to best practices.
+    *   **Guidelines**:
+        *   **Context & Completeness**: ${mainInstructions} Consult "Broader Project Context" (especially symbol info for '/fix' targeting and impact analysis) and "Recent Chat History". Address the *entirety* of the request.
+        *   **Recent Changes**: Build upon "Recent Project Changes". Avoid redundant steps. Combine all logical changes for a single file into one \`modify_file\`'s \`modification_prompt\`.
+        *   **Steps**: Decompose into logical, sequential, 1-indexed steps. Define \`action\` (create_directory, create_file, modify_file, run_command).
+        *   **Properties**: Provide \`path\` (relative, safe, non-empty), \`description\` (required, detailed, explains *why* and *how*). Use \`content\`/\`generate_prompt\` for \`create_file\`, \`modification_prompt\` for \`modify_file\`, \`command\` for \`run_command\` (infer package manager).
+        *   **Single Modify Per File**: At most one \`modify_file\` step per file path. Consolidate all changes for a file into its \`modification_prompt\`.
+        *   **JSON Escaping**: Escape \`\\n\`, \`\\r\`, \`\\\`, \`\"\` within JSON string values.
+        *   **Output**: Strictly adhere to the JSON structure below and examples.
 
     --- Specific Context Prompt ---
     ${specificContextPrompt}
@@ -1005,25 +961,19 @@ ${formatCallHierarchy(activeSymbolDetailedInfo.outgoingCalls)}
 		: "";
 
 	return `
-        You are an expert software engineer. Your ONLY task is to generate a JSON ExecutionPlan to fix errors.
+        You are an expert software engineer. Your ONLY task is to generate a JSON ExecutionPlan to resolve all reported diagnostics.
 
-        The previous attempt to generate/modify code resulted in the following diagnostics across potentially multiple files. Your plan MUST resolve ALL reported diagnostics. DO NOT revert or change files that were already successfully modified or created during the current workflow execution, unless explicitly required to fix a new diagnostic reported below.
+        The previous code generation/modification resulted in issues. Your plan MUST resolve ALL "Error" diagnostics, and address "Warning" and "Information" diagnostics where appropriate without new errors. DO NOT revert changes already completed, unless explicitly required to fix a new regression.
 
         **CRITICAL DIRECTIVES:**
-        1.  **RESOLVE ALL DIAGNOSTICS**: Your plan MUST address and fix ALL "Error" diagnostics. Aim to resolve "Warning" and "Information" diagnostics where appropriate and without introducing new errors.
-        2.  **VERIFY RESOLUTION**: Each proposed change MUST directly resolve a specific diagnostic listed.
-        3.  **GENERATE A JSON PLAN ONLY**: Provide ONLY a valid JSON object strictly following the 'ExecutionPlan' schema. DO NOT include any markdown fences (e.g., \`\`\`json) or any additional explanatory text outside the JSON.
-        4.  **MINIMAL & PRECISE CHANGES**: Make only the absolute minimum and most targeted changes necessary to fix the diagnostics. Do NOT introduce new features, refactor existing correct code, or change existing correct functionality unless directly required to resolve an error.
-        5.  **MAINTAIN CONTEXT**: Preserve the original code style, structure, formatting (indentation, spacing, line breaks), comments, and project conventions (e.g., import order unless new logical grouping is strictly necessary).
-        6.  **PRODUCTION-READY CODE**: All generated or modified code within your plan steps MUST be robust, maintainable, efficient, and adhere to industry best practices, prioritizing modularity and readability.
-        7.  **VALID FILE OPERATIONS**: Only use 'modify_file', 'create_file', 'create_directory', or 'run_command' actions. Ensure 'path' for file operations is non-empty, a relative string to the workspace root, and safe (no '..' or absolute paths).
-        8.  **DETAIL IN DESCRIPTIONS**: Provide clear and concise 'description' for each plan step, explaining *why* that step is necessary and *how* it specifically addresses diagnostics.
-
-        9. Your plan MUST resolve ALL reported diagnostics by generating a valid ExecutionPlan in JSON format. For create_file and modify_file steps, ensure the path field is **non-empty, a relative string** (e.g., 'src/utils/myFile.ts') to the workspace root, and accurately reflects the file being acted upon. This path is critical for successful execution.
-
-        10. APPLY ALL CHANGES FOR EACH FILE. YOU SHOULDN'T HAVE TO CREATE MULTIPLE STEPS FOR THE SAME FILE. If multiple changes are needed for a single file, combine them into a single \`modify_file\` step with a comprehensive \`modification_prompt\` that describes all necessary changes in detail for that single file. There should not contain multiple steps with one tha same file.
-
-        Your output MUST be ONLY a JSON object, with no conversational text, explanations, or markdown formatting (e.g., \`\`\`json\`).
+        *   **Single-Shot Correction**: Resolve ALL reported issues in this single plan. The resulting code MUST compile and run without errors or warnings.
+        *   **JSON Output**: Provide ONLY a valid JSON object strictly following the 'ExecutionPlan' schema. No markdown fences or extra text.
+        *   **Minimal & Precise Changes**: Make only the absolute minimum, most targeted changes necessary to fix diagnostics. No new features, unrelated refactoring, or cosmetic changes.
+        *   **Maintain Context**: Preserve original code style, structure, formatting (indentation, spacing, line breaks), comments, and project conventions (e.g., import order).
+        *   **Production Readiness**: All generated/modified code MUST be robust, maintainable, efficient, and adhere to industry best practices, prioritizing modularity and readability.
+        *   **Valid File Operations**: Use 'modify_file', 'create_file', 'create_directory', or 'run_command'. Ensure 'path' is non-empty, relative to workspace root, and safe (no '..' or absolute paths).
+        *   **Detailed Descriptions**: Provide clear, concise 'description' for each step, explaining *why* it's necessary and *how* it specifically addresses diagnostics.
+        *   **Single Modify Per File**: For any given file path, at most **one** \`modify_file\` step. Combine all logical changes for that file into a single, comprehensive \`modification_prompt\`.
 
         --- Json Escaping Instructions ---
         ${jsonEscapingInstructions}
@@ -1068,15 +1018,6 @@ ${formatCallHierarchy(activeSymbolDetailedInfo.outgoingCalls)}
         --- Few Shot Correction Examples ---
         ${fewShotCorrectionExamples}
         --- Few Shot Correction Examples ---
-
-        When generating steps to resolve diagnostics, you must use the exact file paths indicated in the 'Diagnostics to Address' section for the \`path\` field of \`create_file\` and \`modify_file\` steps.
-
-        **Key Requirements for your plan:**
-        1.  **Resolve ALL Reported Diagnostics:** Every error and warning listed in the 'Diagnostics to Address' section MUST be resolved by your plan.
-        2.  **No Reversion of Changes:** DO NOT revert any changes previously made during the current workflow unless the diagnostic explicitly indicates a regression that needs fixing. The 'Recent Project Changes (During Current Workflow)' section details these changes. **Consult the 'Recent Project Changes (During Current Workflow)' section to avoid redundant correction steps. Focus solely on resolving diagnostics that *persist* after prior modifications, and do not re-modify files if their desired state is already reflected by previous changes.**
-        3.  **Output ONLY JSON:** Your response MUST be a single, valid JSON object for the ExecutionPlan, and nothing else.
-        4.  **Production-Ready Code:** All modifications and new code generated must be production-ready, robust, maintainability, and secure. Emphasize modularity, readability, efficiency, and adherence to industry best practices and clean code principles.
-        5.  **Adhere to Project Structure:** Consider the existing project structure, dependencies, and conventions inferred from the 'Broader Project Context' and 'Relevant Project Snippets'.
         
         ExecutionPlan (ONLY JSON):
 `;
@@ -1113,28 +1054,16 @@ export async function _performModification(
             `;
 	}
 
-	const prompt = `You are an expert AI software developer. Your task is to modify the provided file content based on the given instructions.
+	const prompt = `You are an expert AI software developer tasked with modifying the provided file content based on the given instructions.
 
     --- Specialized Merge Instruction ---
     ${specializedMergeInstruction}
     --- End Specialized Merge Instruction ---
 
-    **CRITICAL REQUIREMENTS TO AVOID COSMETIC CHANGES:**
-    1. **Preserve Exact Formatting**: Maintain the existing indentation, spacing, and line breaks exactly as they are
-    2. **No Whitespace-Only Changes**: Do not modify spaces, tabs, or line endings unless explicitly requested
-    3. **Preserve Comments**: Keep all existing comments in their exact positions and formatting
-    4. **Maintain Import Order**: Keep imports in their current order unless new imports are specifically needed
-    5. **Preserve Code Style**: Do not reformat code or change coding style unless explicitly requested
-    6. **Minimal Changes**: Make only the specific changes requested, nothing more
-    7. **Preserve Empty Lines**: Keep existing empty lines and paragraph breaks exactly as they are
-
-    **SUBSTANTIAL CHANGES ONLY:**
-    - Only modify code that directly addresses the modification instructions
-    - Do not rewrite or reformat existing code that doesn't need changes
-    - Preserve all existing functionality unless explicitly asked to change it
-    - Maintain the exact same structure and organization
-
-    **Crucially, ensure the generated code is modular, readable, adheres to common coding standards for ${languageId}, and is production-ready, efficient, and maintainable.**
+    **CRITICAL REQUIREMENTS:**
+    *   **Preserve Existing Structure & Style**: Maintain the current file organization, structural patterns, and architectural design. Strictly follow existing code style, formatting (indentation, spacing, line breaks), and conventions. Preserve comments and import order unless new imports are strictly necessary.
+    *   **Surgical Precision & Minimal Functional Changes**: Make *only* the exact, most targeted and minimal changes required. Your output must represent a *functional or structural change*, strictly avoiding changes that are solely whitespace, comments, or minor formatting, unless explicitly requested and essential.
+    *   **Error Prevention & Production Readiness**: Ensure the modified code compiles and runs *without any errors or warnings*. Proactively address potential runtime issues, logical flaws, and edge cases (e.g., null/undefined checks, off-by-one errors, input validations). Stress robustness, maintainability, and adherence to best practices for production readiness.
 
     Your output MUST contain **ONLY** the complete, production-ready file content. **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** Your response **MUST START DIRECTLY ON THE FIRST LINE** with the pure, modified file content and nothing else.
 
@@ -1217,7 +1146,7 @@ export async function generateLightweightPlanPrompt(
 	aiRequestService: AIRequestService,
 	token?: vscode.CancellationToken
 ): Promise<string> {
-	const prompt = `Given the following AI response, generate a concise '/plan' command request, using ONLY "/plan [your request]" in the beginning of your request, for the user to review. Focus on the core actionable intent and summary. Do not include any extraneous text.
+	const prompt = `Given the following AI response, generate a concise '/plan' command request, using ONLY "/plan [your request]". Focus on the core actionable intent and summary. Do not include any extraneous text.
 AI Response: ${aiMessageContent}`;
 
 	try {

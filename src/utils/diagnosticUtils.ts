@@ -1,6 +1,10 @@
 import * as vscode from "vscode";
 import * as path from "path";
 
+async function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function getSeverityName(severity: vscode.DiagnosticSeverity): string {
 	switch (severity) {
 		case vscode.DiagnosticSeverity.Error:
@@ -279,4 +283,55 @@ export class DiagnosticService {
 		diagnosticsString += "--- End Relevant Diagnostics ---\n";
 		return diagnosticsString;
 	}
+}
+
+export async function waitForDiagnosticsToClear(
+	uri: vscode.Uri,
+	options?: {
+		timeoutMs?: number;
+		initialIntervalMs?: number;
+		backoffFactor?: number;
+		maxIntervalMs?: number;
+	}
+): Promise<boolean> {
+	const {
+		timeoutMs = 30000,
+		initialIntervalMs = 100,
+		backoffFactor = 1.5,
+		maxIntervalMs = 2000,
+	} = options || {};
+
+	let elapsedTimeMs = 0;
+	let currentIntervalMs = initialIntervalMs;
+	const startTime = Date.now();
+
+	console.log(`Starting to poll diagnostics for: ${uri.fsPath}`);
+
+	while (elapsedTimeMs < timeoutMs) {
+		const diagnostics = DiagnosticService.getDiagnosticsForUri(uri);
+		const errors = diagnostics.filter(
+			(d) => d.severity === vscode.DiagnosticSeverity.Error
+		);
+
+		if (errors.length === 0) {
+			console.log(`Diagnostics cleared for ${uri.fsPath}`);
+			return true; // Diagnostics cleared
+		}
+
+		console.log(
+			`Waiting for diagnostics to clear in ${uri.fsPath}... (${errors.length} errors found). Next check in ${currentIntervalMs}ms.`
+		);
+
+		await sleep(currentIntervalMs);
+		elapsedTimeMs = Date.now() - startTime;
+		currentIntervalMs = Math.min(
+			currentIntervalMs * backoffFactor,
+			maxIntervalMs
+		);
+	}
+
+	console.error(
+		`Timeout: Diagnostics did not clear for ${uri.fsPath} after ${timeoutMs}ms.`
+	);
+	return false; // Timeout reached
 }

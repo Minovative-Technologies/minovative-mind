@@ -27,7 +27,10 @@ import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
 import { GitConflictResolutionService } from "./gitConflictResolutionService";
 import { applyAITextEdits } from "../utils/codeUtils";
-import { DiagnosticService } from "../utils/diagnosticUtils";
+import {
+	DiagnosticService,
+	waitForDiagnosticsToClear,
+} from "../utils/diagnosticUtils"; // MODIFIED: Added waitForDiagnosticsToClear
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { showErrorNotification } from "../utils/notificationUtils";
 import { UrlContextService } from "./urlContextService";
@@ -1696,8 +1699,27 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 				return false;
 			}
 
-			// Give VS Code a moment to update diagnostics for all files
-			await new Promise((resolve) => setTimeout(resolve, 500));
+			// MODIFIED: Replace fixed delay with dynamic waiting for diagnostics to clear
+			for (const fileUri of affectedFileUris) {
+				const waitSuccessful = await waitForDiagnosticsToClear(fileUri, {
+					timeoutMs: 30000, // Default: 30 seconds timeout
+					initialIntervalMs: 100, // Default: Start checking every 100ms
+					backoffFactor: 1.5, // Default: Increase interval by 50% each time
+					maxIntervalMs: 2000, // Default: Cap interval at 2 seconds
+				});
+
+				if (!waitSuccessful) {
+					console.error(
+						`[PlanService] Timeout waiting for diagnostics to clear in ${fileUri.fsPath}. Diagnostics might persist.`
+					);
+					// Do not throw here. The goal is to collect all *persisting* errors and try to correct them.
+				} else {
+					console.log(
+						`[PlanService] Diagnostics cleared successfully for ${fileUri.fsPath}.`
+					);
+				}
+			}
+			// END MODIFIED
 
 			let allErrors: vscode.Diagnostic[] = [];
 			let aggregatedFormattedDiagnostics = "";

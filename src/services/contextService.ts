@@ -638,7 +638,7 @@ export class ContextService {
 						filesForContextBuilding = selectedFiles;
 						this.postMessageToWebview({
 							type: "statusUpdate",
-							value: `Using ${selectedFiles.length} relevant file(s) for context (hybrid selection).`, // Updated message
+							value: `${selectedFiles.length} relevant file(s) for context`, // Updated message
 						});
 					} else {
 						// Fallback logic: if AI returns no *additional* files, or its selection was empty/invalid,
