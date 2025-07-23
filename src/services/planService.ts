@@ -1765,7 +1765,6 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 						temperature: sidebarConstants.TEMPERATURE,
 					};
 
-					// MODIFICATION START
 					// 1. Create a new array `filesForCorrectionSnippets` by mapping `filesWithErrors` to relative string paths.
 					const filesForCorrectionSnippets = Array.from(filesWithErrors).map(
 						(uri) =>
@@ -1803,12 +1802,17 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 					}
 					modifiedProjectContextForCorrection += `\n\n--- JSON Escaping Instructions --- \n${this.JSON_ESCAPING_INSTRUCTIONS}\n--- End JSON Escaping Instructions ---`;
 
+					// Declare and initialize originalContextString
+					const originalContextString =
+						planContext.originalUserRequest ||
+						planContext.editorContext?.instruction ||
+						"";
 					// 4. Modify the `createCorrectionPlanPrompt` function call.
 					const correctionPlanPrompt = createCorrectionPlanPrompt(
-						originalUserInstruction,
-						modifiedProjectContextForCorrection, // Pass the modified project context with JSON instructions and active symbol info
-						planContext.editorContext,
-						planContext.chatHistory ?? [],
+						originalContextString,
+						"",
+						undefined,
+						[],
 						dynamicallyGeneratedRelevantSnippets, // Pass dynamically generated relevant snippets
 						aggregatedFormattedDiagnostics,
 						formattedRecentChanges,
@@ -1818,7 +1822,6 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							  }) failed to resolve all diagnostics.`
 							: undefined
 					);
-					// MODIFICATION END
 
 					progress.report({
 						message: `AI generating overall correction plan (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
@@ -1999,9 +2002,9 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 
 				const correctionPlanPrompt = createCorrectionPlanPrompt(
 					originalUserInstruction,
-					modifiedProjectContextForCorrection,
-					planContext.editorContext,
-					planContext.chatHistory ?? [],
+					"",
+					undefined,
+					[],
 					dynamicallyGeneratedRelevantSnippets,
 					correctionContext, // Pass the command failure context as diagnostics string
 					formattedRecentChanges,
