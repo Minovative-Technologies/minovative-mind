@@ -79,7 +79,7 @@ export class ChatService {
 			// Revise construction of input for aiRequestService.generateWithRetry
 			const initialSystemPrompt: HistoryEntryPart[] = [
 				{
-					text: `You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and don't provide code to user's requests, just be concise and informative to there prompts and request.\n\nProject Context:\n${
+					text: `You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and don't provide code to user's requests, just be concise and informative to there prompts and request. You are the coder that will solve the user's problems for them.\n\nProject Context:\n${
 						projectContext.contextString
 					}${urlContextString ? `\n\n${urlContextString}` : ""}`,
 				},
@@ -261,7 +261,7 @@ export class ChatService {
 			// Construct the full user turn contents, including system prompt and user input
 			const initialSystemPrompt: HistoryEntryPart[] = [
 				{
-					text: `You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and don't provide code to user's requests, just be concise and informative to there prompts and request.\n\nProject Context:\n${projectContext.contextString}`,
+					text: `You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and don't provide code to user's requests, just be concise and informative to there prompts and request. You are the coder that will solve the user's problems for them.\n\nProject Context:\n${projectContext.contextString}`,
 				},
 			];
 			const fullUserTurnContents: HistoryEntryPart[] = [

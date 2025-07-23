@@ -529,6 +529,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
+		// Pop the most recent change set from the stack before user interaction
 		const mostRecentChangeSet = this.completedPlanChangeSets.pop();
 		if (!mostRecentChangeSet) {
 			// This case should ideally not be reached due to the initial length check.
@@ -537,6 +538,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 			return;
 		}
+
+		// State tracking variables for the revert outcome
+		let revertSuccessful: boolean = false;
+		let revertErrorMessage: string = "";
+		let finalStatusMessage: string = "";
+		let isErrorStatus: boolean = false; // Tracks if the final status message should be an error
 
 		const confirmation = await vscode.window.showWarningMessage(
 			"Are you sure you want to revert the changes from the most recent workflow?",
@@ -556,73 +563,74 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"[SidebarProvider] Starting revert of most recent workflow changes..."
 				);
 
+				// Wrap the core revert call in try...catch
 				await this.revertService.revertChanges(mostRecentChangeSet.changes);
 
-				await this.updatePersistedCompletedPlanChangeSets(
-					this.completedPlanChangeSets
-				);
-
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value: "Most recent workflow changes reverted successfully!",
-				});
-				showInfoNotification(
-					"Most recent workflow changes reverted successfully!"
-				);
+				// On successful revert
+				revertSuccessful = true;
+				finalStatusMessage =
+					"Most recent workflow changes reverted successfully!";
+				showInfoNotification(finalStatusMessage);
 				console.log(
 					"[SidebarProvider] Most recent workflow changes reverted successfully."
 				);
-
-				const stillHasRevertibleChanges =
-					this.completedPlanChangeSets.length > 0;
-				this.postMessageToWebview({
-					type: "planExecutionFinished",
-					hasRevertibleChanges: stillHasRevertibleChanges,
-				});
 			} catch (error: any) {
-				const errorMessage = `Failed to revert most recent workflow changes: ${
+				// On revert failure
+				revertSuccessful = false;
+				revertErrorMessage = `Failed to revert most recent workflow changes: ${
 					error.message || String(error)
 				}`;
+				finalStatusMessage = revertErrorMessage;
+				isErrorStatus = true; // Mark as error
 				showErrorNotification(
 					error,
 					"Failed to revert most recent workflow changes.",
 					"Revert Error: ",
 					this.workspaceRootUri
 				);
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value: errorMessage,
-					isError: true,
-				});
 				console.error(
 					"[SidebarProvider] Error reverting most recent workflow changes:",
 					error
 				);
-				// If revert fails, push the change set back to the stack as it wasn't truly reverted
+				// Crucially, if revert fails, push the change set back onto the stack
 				this.completedPlanChangeSets.push(mostRecentChangeSet);
-				await this.updatePersistedCompletedPlanChangeSets(
-					this.completedPlanChangeSets
-				);
-			} finally {
-				// The planExecutionFinished message in the try block updates visibility already.
-				// This finally block just ensures loading state is reset.
 			}
 		} else {
-			// If cancelled by user, push the change set back to the stack
-			this.completedPlanChangeSets.push(mostRecentChangeSet);
-			await this.updatePersistedCompletedPlanChangeSets(
-				this.completedPlanChangeSets
-			);
+			// On user cancellation
+			revertSuccessful = false; // Not a success
+			revertErrorMessage = "Revert operation cancelled by user.";
+			finalStatusMessage = "Revert operation cancelled.";
+			isErrorStatus = false; // Cancellation is not an "error" state but a user choice
+			vscode.window.showInformationMessage(finalStatusMessage);
+			console.log("[SidebarProvider] Revert operation cancelled by user.");
 
-			vscode.window.showInformationMessage(
-				"Revert operation cancelled by user."
-			);
-			this.postMessageToWebview({
-				type: "statusUpdate",
-				value: "Revert operation cancelled.",
-			});
+			// If cancelled, push the change set back onto the stack
+			this.completedPlanChangeSets.push(mostRecentChangeSet);
 		}
 
+		// Unified post-operation handling section, always executes
+		// a. Persist the potentially modified completedPlanChangeSets stack
+		await this.updatePersistedCompletedPlanChangeSets(
+			this.completedPlanChangeSets
+		);
+
+		// b. Calculate stillHasRevertibleChanges
+		const stillHasRevertibleChanges = this.completedPlanChangeSets.length > 0;
+
+		// c. Send the planExecutionFinished message with correct hasRevertibleChanges status
+		this.postMessageToWebview({
+			type: "planExecutionFinished",
+			hasRevertibleChanges: stillHasRevertibleChanges,
+		});
+
+		// d. Send a final status update message to the webview summarizing the outcome
+		this.postMessageToWebview({
+			type: "statusUpdate",
+			value: finalStatusMessage,
+			isError: isErrorStatus,
+		});
+
+		// e. Ensure loading state is false and inputs are re-enabled
 		this.postMessageToWebview({ type: "updateLoadingState", value: false });
 		this.postMessageToWebview({ type: "reenableInput" });
 	}

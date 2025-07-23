@@ -486,6 +486,118 @@ export async function executePlanStep(
 			break;
 		} // End of CreateFile case block
 
+		case PlanStepAction.DeleteFile: {
+			// 1. Validate that step.file is provided; throw an error if it's not.
+			if (!step.file) {
+				throw new Error("Missing file path for DeleteFile action.");
+			}
+
+			// 2. Construct the targetFileUri
+			const targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file);
+			const fileName = path.basename(targetFileUri.fsPath);
+
+			let fileContentBeforeDelete: string = "";
+
+			// 3. Read the original content of the file before deletion
+			try {
+				progress.report({
+					message: `Reading content of ${fileName} before deletion...`,
+				});
+				const contentBuffer = await vscode.workspace.fs.readFile(targetFileUri);
+				fileContentBeforeDelete = contentBuffer.toString();
+			} catch (error: any) {
+				if (
+					error instanceof vscode.FileSystemError &&
+					(error.code === "FileNotFound" || error.code === "EntryNotFound")
+				) {
+					// File not found, log a warning but proceed as if it was an empty file for diffing purposes.
+					// The deletion step will handle the actual "not found" scenario for deletion itself.
+					console.warn(
+						`[PlanExecutionService] File ${fileName} not found for reading before deletion. Assuming empty content for logging.`
+					);
+					fileContentBeforeDelete = ""; // Set to empty string as per instruction
+				} else {
+					// Re-throw any other read errors
+					throw new Error(
+						`Failed to read file ${fileName} before deletion: ${
+							(error as Error).message
+						}`
+					);
+				}
+			}
+
+			// 4. Perform the file deletion
+			try {
+				progress.report({ message: `Deleting file: ${fileName}...` });
+				// Include error handling for the deletion itself, allowing execution to proceed if 'FileNotFound' or 'EntryNotFound' errors occur.
+				await vscode.workspace.fs.delete(targetFileUri, { useTrash: true });
+				console.log(
+					`[PlanExecutionService] Successfully deleted file: ${fileName}`
+				);
+			} catch (error: any) {
+				if (
+					error instanceof vscode.FileSystemError &&
+					(error.code === "FileNotFound" || error.code === "EntryNotFound")
+				) {
+					// File already doesn't exist, consider it a successful "deletion" from plan perspective.
+					console.warn(
+						`[PlanExecutionService] File ${fileName} already not found. No deletion needed.`
+					);
+				} else {
+					// Re-throw other deletion errors
+					throw new Error(
+						`Failed to delete file ${fileName}: ${(error as Error).message}`
+					);
+				}
+			}
+
+			// 6. Use await generateFileChangeSummary and populate removedLines
+			// Summary and formattedDiff are based on originalContent (removed) and empty newContent
+			const { summary, removedLines, formattedDiff } =
+				await generateFileChangeSummary(
+					fileContentBeforeDelete,
+					"", // newContent is empty for a deletion
+					step.file!
+				);
+
+			// 5. Prepare a FileChangeEntry for logging
+			const deleteChangeEntry: FileChangeEntry = {
+				filePath: step.file!,
+				changeType: "deleted",
+				originalContent: fileContentBeforeDelete,
+				newContent: "", // New content is empty after deletion
+				summary: summary,
+				removedLines: removedLines,
+				addedLines: [], // No lines added for deletion
+				timestamp: Date.now(),
+				diffContent: formattedDiff,
+			};
+
+			// 7. Use changeLogger.logChange()
+			changeLogger.logChange(deleteChangeEntry);
+
+			// Log diff content before posting
+			console.log(
+				`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file!}:\n---\n${formattedDiff}\n---`
+			);
+
+			// 8. Inform the user via postChatUpdate
+			postChatUpdate({
+				type: "appendRealtimeModelMessage",
+				value: {
+					text: `Successfully deleted \`${fileName}\`.`,
+					isError: false,
+				},
+				diffContent: formattedDiff,
+			});
+
+			// 9. Report progress for this step
+			progress.report({
+				message: `Successfully deleted ${fileName}.`,
+			});
+			break;
+		}
+
 		default:
 			// For any action not explicitly implemented, throw an error.
 			throw new Error(
