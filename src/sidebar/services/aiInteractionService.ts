@@ -1019,9 +1019,9 @@ ${formatCallHierarchy(activeSymbolDetailedInfo.outgoingCalls)}
         7.  **VALID FILE OPERATIONS**: Only use 'modify_file', 'create_file', 'create_directory', or 'run_command' actions. Ensure 'path' for file operations is non-empty, a relative string to the workspace root, and safe (no '..' or absolute paths).
         8.  **DETAIL IN DESCRIPTIONS**: Provide clear and concise 'description' for each plan step, explaining *why* that step is necessary and *how* it specifically addresses diagnostics.
 
-        Your plan MUST resolve ALL reported diagnostics by generating a valid ExecutionPlan in JSON format. For create_file and modify_file steps, ensure the path field is **non-empty, a relative string** (e.g., 'src/utils/myFile.ts') to the workspace root, and accurately reflects the file being acted upon. This path is critical for successful execution.
+        9. Your plan MUST resolve ALL reported diagnostics by generating a valid ExecutionPlan in JSON format. For create_file and modify_file steps, ensure the path field is **non-empty, a relative string** (e.g., 'src/utils/myFile.ts') to the workspace root, and accurately reflects the file being acted upon. This path is critical for successful execution.
 
-        **Single File, Single Step for Modifications (Critical for Corrections):** For any given file path, ensure there is at most **one** \`modify_file\` step targeting that path within the entire \`steps\` array of this correction plan. If multiple logical changes are required for the same file to fix diagnostics, combine *all* those modifications comprehensively into the **single** \`modification_prompt\` for that file's \`modify_file\` step.
+        10. MOST IMPORTANT: APPLY ALL CHANGES FOR EACH FILE. YOU SHOULDN'T HAVE TO CREATE MULTIPLE STEPS FOR THE SAME FILE. If multiple changes are needed for a single file, combine them into a single \`modify_file\` step with a comprehensive \`modification_prompt\` that describes all necessary changes in detail for that single file. There should not contain multiple steps with one tha same file.
 
         Your output MUST be ONLY a JSON object, with no conversational text, explanations, or markdown formatting (e.g., \`\`\`json\`).
 
