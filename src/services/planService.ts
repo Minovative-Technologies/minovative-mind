@@ -686,8 +686,8 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 
 				// Markdown stripping
 				structuredPlanJsonString = structuredPlanJsonString
-					.replace(/^```json\s*/im, "")
-					.replace(/\s*```$/im, "")
+					.replace(/^\s*/im, "")
+					.replace(/\s*$/im, "")
 					.trim();
 
 				// JSON Parsing and Validation
@@ -918,6 +918,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 			this.provider.activeChildProcesses.forEach((cp) => cp.kill());
 			this.provider.activeChildProcesses = [];
 
+			// 1. Determine the final outcome, defaulting to 'failed' if undefined.
 			let outcome: sidebarTypes.ExecutionOutcome;
 			if (this.provider.currentExecutionOutcome === undefined) {
 				outcome = "failed";
@@ -925,6 +926,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 				outcome = this.provider
 					.currentExecutionOutcome as sidebarTypes.ExecutionOutcome;
 			}
+
 			// Use the provider's notification method to avoid duplicate notifications
 			await this.provider.showPlanCompletionNotification(
 				plan.planDescription || "Unnamed Plan",
@@ -945,42 +947,36 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 			// Centralized call to end user operation and re-enable inputs
 			await this.provider.endUserOperation(outcome);
 
+			// 2. Construct a planSummary string
+			let planSummary: string;
+			const baseDescription = plan.planDescription || "AI Plan Execution";
 			if (outcome === "success") {
-				// Modify the call to this.provider.changeLogger.saveChangesAsLastCompletedPlan() to pass a plan summary
-				// This assumes the method's signature will be updated in ProjectChangeLogger.ts to accept a string argument.
-				this.provider.changeLogger.saveChangesAsLastCompletedPlan(
-					plan.planDescription || "AI Plan Execution"
-				);
-
-				// Then, modify the persistence call
-				// The following line replaces `await this.provider.updatePersistedLastPlanChanges(...)`
-				// This assumes updatePersistedCompletedPlanChangeSets exists on SidebarProvider
-				// and getCompletedPlanChangeSets exists on ProjectChangeLogger.
-				await this.provider.updatePersistedCompletedPlanChangeSets(
-					this.provider.changeLogger.getCompletedPlanChangeSets()
-				);
-
-				// Modify hasRevertibleChanges property within the planExecutionFinished message
-				// This assumes completedPlanChangeSets exists as a public property on SidebarProvider.
-				this.provider.postMessageToWebview({
-					type: "planExecutionFinished",
-					hasRevertibleChanges:
-						this.provider.completedPlanChangeSets.length > 0,
-				});
+				planSummary = baseDescription;
+			} else if (outcome === "cancelled") {
+				planSummary = `${baseDescription} (Cancelled)`;
 			} else {
-				// outcome is "cancelled" or "failed"
-				// Ensure this.provider.changeLogger.clear(); remains
-				this.provider.changeLogger.clear();
-				await this.provider.updatePersistedCompletedPlanChangeSets(null);
-
-				// Modify hasRevertibleChanges property within the planExecutionFinished message
-				// This assumes completedPlanChangeSets exists as a public property on SidebarProvider.
-				this.provider.postMessageToWebview({
-					type: "planExecutionFinished",
-					hasRevertibleChanges:
-						this.provider.completedPlanChangeSets.length > 0,
-				});
+				// outcome === 'failed'
+				planSummary = `${baseDescription} (Failed)`;
 			}
+
+			// 3. Call saveChangesAsLastCompletedPlan regardless of the outcome
+			this.provider.changeLogger.saveChangesAsLastCompletedPlan(planSummary);
+
+			// 4. Update the persistent storage with all completed plan change sets
+			await this.provider.updatePersistedCompletedPlanChangeSets(
+				this.provider.changeLogger.getCompletedPlanChangeSets()
+			);
+
+			// 5. Post the planExecutionFinished message
+			this.provider.postMessageToWebview({
+				type: "planExecutionFinished",
+				hasRevertibleChanges: this.provider.completedPlanChangeSets.length > 0,
+			});
+
+			// 6. Crucially, clear the in-memory log buffer for the next operation AFTER saving the changes
+			this.provider.changeLogger.clear();
+
+			// This should remain at the end of the finally block
 			this.postMessageToWebview({ type: "resetCodeStreamingArea" });
 		}
 	}
@@ -1841,8 +1837,8 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 						);
 
 					correctionPlanJsonString = correctionPlanJsonString
-						.replace(/^```json\s*/im, "")
-						.replace(/\s*```$/im, "")
+						.replace(/^\s*/im, "")
+						.replace(/\s*$/im, "")
 						.trim();
 
 					const parsedPlanResult: ParsedPlanResult = await parseAndValidatePlan(
@@ -2033,8 +2029,8 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 					);
 
 				correctionPlanJsonString = correctionPlanJsonString
-					.replace(/^```json\s*/im, "")
-					.replace(/\s*```$/im, "")
+					.replace(/^\s*/im, "")
+					.replace(/\s*$/im, "")
 					.trim();
 
 				const parsedPlanResult: ParsedPlanResult = await parseAndValidatePlan(
