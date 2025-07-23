@@ -373,7 +373,7 @@ ${context.successfulChangeHistory}
 
 **CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
-Your response MUST contain **ONLY** the corrected file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else. **FAILURE TO ADHERE TO THESE OUTPUT CONSTRAINTS WILL RENDER THE RESPONSE INVALID AND UNUSABLE.**`;
+Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS, NO EXTRA ELEMENTS WHATSOEVER.**`;
 	}
 
 	/**
@@ -595,7 +595,7 @@ ${
 
 **CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
-Your response MUST contain **ONLY** the corrected file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else. **FAILURE TO ADHERE TO THESE OUTPUT CONSTRAINTS WILL RENDER THE RESPONSE INVALID AND UNUSABLE.**`;
+Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS, NO EXTRA ELEMENTS WHATSOEVER.**`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: refinementPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -1102,7 +1102,7 @@ ${context.successfulChangeHistory}
 
 **CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
-Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else. **FAILURE TO ADHERE TO THESE OUTPUT CONSTRAINTS WILL RENDER THE RESPONSE INVALID AND UNUSABLE.**`;
+Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS, NO EXTRA ELEMENTS WHATSOEVER.**`;
 	}
 
 	/**
@@ -1297,7 +1297,7 @@ ${
 
 **CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
-Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else. **FAILURE TO ADHERE TO THESE OUTPUT CONSTRAINTS WILL RENDER THE RESPONSE INVALID AND UNUSABLE.**`;
+Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS, NO EXTRA ELEMENTS WHATSOEVER.**`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: refinementPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -1940,7 +1940,7 @@ ${
 
 **CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
-Your response MUST contain **ONLY** the corrected file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else. **FAILURE TO ADHERE TO THESE OUTPUT CONSTRAINTS WILL RENDER THE RESPONSE INVALID AND UNUSABLE.**`;
+Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS, NO EXTRA ELEMENTS WHATSOEVER.**`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: alternativePrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -2044,7 +2044,7 @@ ${
 
 **CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
-Your response MUST contain **ONLY** the corrected file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else. **FAILURE TO ADHERE TO THESE OUTPUT CONSTRAINTS WILL RENDER THE RESPONSE INVALID AND UNUSABLE.**`;
+Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS, NO EXTRA ELEMENTS WHATSOEVER.**`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: syntaxPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -2148,7 +2148,7 @@ ${
 
 **CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
-Your response MUST contain **ONLY** the corrected file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else. **FAILURE TO ADHERE TO THESE OUTPUT CONSTRAINTS WILL RENDER THE RESPONSE INVALID AND UNUSABLE.**`;
+Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS, NO EXTRA ELEMENTS WHATSOEVER.**`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: importPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -2251,7 +2251,7 @@ ${
 
 **CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
-Your response MUST contain **ONLY** the corrected file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else. **FAILURE TO ADHERE TO THESE OUTPUT CONSTRAINTS WILL RENDER THE RESPONSE INVALID AND UNUSABLE.**`;
+Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS, NO EXTRA ELEMENTS WHATSOEVER.**`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: practicePrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
@@ -2354,7 +2354,7 @@ ${
 
 **CRITICAL NEGATIVE CONSTRAINT**: Your response MUST ONLY contain the code for the SINGLE target file. DO NOT include any file headers, separators, or meta-information (e.g., \`--- File: ... ---\`, \`--- Relevant File: ... ---\`, \`--- Path: ... ---\`, \`--- End File ---\`, or any form of file delimiters) in your output. Your response must **start directly with the pure code content** on the first line and **end directly with the pure code content** on the last line, with no conversational text, explanations, or extraneous elements whatsoever.
 
-Your response MUST contain **ONLY** the corrected file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS (UNLESS PART OF THE GENERATED CODE LOGIC), NO YAML, NO JSON, NO XML, NO EXTRA ELEMENTS WHATSOEVER.** The response **MUST START DIRECTLY ON THE FIRST LINE** with the pure code content and nothing else. **FAILURE TO ADHERE TO THESE OUTPUT CONSTRAINTS WILL RENDER THE RESPONSE INVALID AND UNUSABLE.**`;
+Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE CODE, NOTHING ELSE, ONLY CODE.** **ABSOLUTELY NO MARKDOWN CODE BLOCK FENCES (\`\`\`typescript), NO CONVERSATIONAL TEXT, NO EXPLANATIONS, NO APOLOGIES, NO COMMENTS, NO EXTRA ELEMENTS WHATSOEVER.**`;
 
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: securityPrompt }], // Modified: Wrap prompt string in HistoryEntryPart array
