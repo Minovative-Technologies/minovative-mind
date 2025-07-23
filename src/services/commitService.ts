@@ -117,7 +117,7 @@ export class CommitService {
 					  "\n\n"
 					: "";
 
-			const commitMessagePrompt = `You are an expert using Git. Your task is to generate a short, but highly accurate commit message based on the provided staged changes. Prioritize the detailed file-by-file summaries for content, and use the overall diff for additional context if needed. Make the commit messages in past tense ONLY and provide the commit message in plain text, no markdown format. Make sure to not use these in your prompt: (\\\, ""). Make sure the commit message follow the git commit message best practices.
+			const commitMessagePrompt = `You are an expert using Git. Your task is to generate a short, but highly accurate commit message based on the provided staged changes. Prioritize the detailed file-by-file summaries for content, and use the overall diff for additional context if needed. Make the commit messages in past tense ONLY and provide the commit message in plain text, no markdown format. Make sure to not use special symbols in the message. Make sure the commit message follow the git commit message best practices.
 
 			${detailedSummaries}Overall Staged Diff:
 			\`\`\`diff
