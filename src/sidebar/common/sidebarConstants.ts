@@ -11,12 +11,12 @@ export const MODEL_SELECTION_STORAGE_KEY = "geminiSelectedModel";
 export const AVAILABLE_GEMINI_MODELS = [
 	"gemini-2.5-pro",
 	"gemini-2.5-flash",
-	"gemini-2.5-flash-lite-preview-06-17",
+	"gemini-2.5-flash-lite",
 ];
 
 export const DEFAULT_PRO_MODEL = "gemini-2.5-pro";
 export const DEFAULT_FLASH_MODEL = "gemini-2.5-flash";
-export const DEFAULT_FLASH_LITE_MODEL = "gemini-2.5-flash-lite-preview-06-17";
+export const DEFAULT_FLASH_LITE_MODEL = "gemini-2.5-flash-lite";
 
 export const DEFAULT_MODEL =
 	(AVAILABLE_GEMINI_MODELS.length > 0 &&
