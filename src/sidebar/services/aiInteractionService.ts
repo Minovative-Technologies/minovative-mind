@@ -1021,7 +1021,7 @@ ${formatCallHierarchy(activeSymbolDetailedInfo.outgoingCalls)}
 
         9. Your plan MUST resolve ALL reported diagnostics by generating a valid ExecutionPlan in JSON format. For create_file and modify_file steps, ensure the path field is **non-empty, a relative string** (e.g., 'src/utils/myFile.ts') to the workspace root, and accurately reflects the file being acted upon. This path is critical for successful execution.
 
-        10. MOST IMPORTANT: APPLY ALL CHANGES FOR EACH FILE. YOU SHOULDN'T HAVE TO CREATE MULTIPLE STEPS FOR THE SAME FILE. If multiple changes are needed for a single file, combine them into a single \`modify_file\` step with a comprehensive \`modification_prompt\` that describes all necessary changes in detail for that single file. There should not contain multiple steps with one tha same file.
+        10. APPLY ALL CHANGES FOR EACH FILE. YOU SHOULDN'T HAVE TO CREATE MULTIPLE STEPS FOR THE SAME FILE. If multiple changes are needed for a single file, combine them into a single \`modify_file\` step with a comprehensive \`modification_prompt\` that describes all necessary changes in detail for that single file. There should not contain multiple steps with one tha same file.
 
         Your output MUST be ONLY a JSON object, with no conversational text, explanations, or markdown formatting (e.g., \`\`\`json\`).
 
