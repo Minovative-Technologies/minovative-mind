@@ -283,4 +283,99 @@ export class DiagnosticService {
 		diagnosticsString += "--- End Relevant Diagnostics ---\n";
 		return diagnosticsString;
 	}
+
+	/**
+	 * Waits for diagnostics for a given URI to stabilize.
+	 * Diagnostics are considered stable if they don't change for a specified duration.
+	 * @param uri The URI of the document to monitor.
+	 * @param token A CancellationToken to abort the waiting.
+	 * @param timeoutMs The maximum time to wait in milliseconds. Defaults to 5000ms (5 seconds).
+	 * @param checkIntervalMs The interval between checks in milliseconds. Defaults to 50ms.
+	 * @returns A Promise that resolves when diagnostics stabilize or timeout/cancellation occurs.
+	 */
+	public static async waitForDiagnosticsToStabilize(
+		uri: vscode.Uri,
+		token?: vscode.CancellationToken,
+		timeoutMs: number = 5000,
+		checkIntervalMs: number = 500
+	): Promise<void> {
+		const startTime = Date.now();
+		let lastDiagnosticsString: string | undefined;
+		let stableCount = 0;
+		// Number of consecutive checks without change required for stability
+		const requiredStableChecks = 3;
+
+		console.log(
+			`[DiagnosticService] Waiting for diagnostics to stabilize for ${uri.fsPath}...`
+		);
+
+		while (Date.now() - startTime < timeoutMs) {
+			// Check for cancellation request
+			if (token?.isCancellationRequested) {
+				console.log(
+					`[DiagnosticService] Waiting for diagnostics cancelled for ${uri.fsPath}.`
+				);
+				return; // Exit if cancelled
+			}
+
+			// Retrieve current diagnostics for the URI
+			const currentDiagnostics = vscode.languages.getDiagnostics(uri);
+
+			// Sort diagnostics for consistent stringification.
+			// This ensures that the order of diagnostics doesn't affect the stability check.
+			currentDiagnostics.sort((a, b) => {
+				const cmpSeverity = a.severity - b.severity;
+				if (cmpSeverity !== 0) {
+					return cmpSeverity;
+				}
+				const cmpLine = a.range.start.line - b.range.start.line;
+				if (cmpLine !== 0) {
+					return cmpLine;
+				}
+				const cmpChar = a.range.start.character - b.range.start.character;
+				if (cmpChar !== 0) {
+					return cmpChar;
+				}
+				return a.message.localeCompare(b.message);
+			});
+
+			// Stringify the diagnostics for reliable comparison.
+			// Include essential properties like severity, message, range, and code.
+			const currentDiagnosticsString = JSON.stringify(
+				currentDiagnostics.map((d) => ({
+					severity: d.severity,
+					message: d.message,
+					range: d.range,
+					code: d.code, // Include code property for more robust comparison
+				}))
+			);
+
+			// Check if diagnostics have stabilized
+			if (lastDiagnosticsString === currentDiagnosticsString) {
+				stableCount++;
+				// If diagnostics have remained the same for the required number of checks, consider them stable
+				if (stableCount >= requiredStableChecks) {
+					console.log(
+						`[DiagnosticService] Diagnostics stabilized for ${
+							uri.fsPath
+						} after ${Date.now() - startTime}ms.`
+					);
+					return; // Stability achieved
+				}
+			} else {
+				stableCount = 0; // Reset counter if diagnostics changed
+			}
+
+			// Update the last diagnostics string for the next iteration
+			lastDiagnosticsString = currentDiagnosticsString;
+
+			// Wait for the specified interval before the next check
+			await sleep(checkIntervalMs); // Assuming sleep is available in scope
+		}
+
+		// If the loop finishes due to timeout, log a warning
+		console.warn(
+			`[DiagnosticService] Timeout (${timeoutMs}ms) waiting for diagnostics to stabilize for ${uri.fsPath}. Diagnostics might not be fully up-to-date.`
+		);
+	}
 }

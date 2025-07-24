@@ -158,10 +158,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.enhancedCodeGenerator = new EnhancedCodeGenerator(
 			this.aiRequestService,
 			this.workspaceRootUri || vscode.Uri.file("/"),
-			this.postMessageToWebview.bind(this), // postMessageToWebview as the actual third argument
-			this.changeLogger, // <--- MODIFICATION: Inserted this.changeLogger here
+			this.postMessageToWebview.bind(this),
+			this.changeLogger,
+			this.contextService, // Inserted this.contextService here (5th argument)
 			{
-				enableRealTimeFeedback: true, // enableRealTimeFeedback as a property within the config object
+				// This config block is now the 6th argument
+				enableRealTimeFeedback: true,
 				maxFeedbackIterations: 5,
 			}
 		);

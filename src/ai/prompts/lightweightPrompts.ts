@@ -9,7 +9,7 @@ export async function generateLightweightPlanPrompt(
 	aiRequestService: AIRequestService,
 	token?: vscode.CancellationToken
 ): Promise<string> {
-	const prompt = `Given the following AI response, generate a concise '/plan' command request, using ONLY "/plan [your request]". Focus on the core actionable intent and summary. Do not include any extraneous text.
+	const prompt = `Given the following AI response, generate a detailed plan AI Response for the user to implement, while you are using ONLY "/plan [your plan]". Focus on the core actionable intent and summary. Do not include any extraneous text.
 AI Response: ${aiMessageContent}`;
 
 	try {

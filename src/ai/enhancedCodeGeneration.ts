@@ -2,7 +2,10 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as crypto from "crypto";
 import { AIRequestService } from "../services/aiRequestService";
-import { ActiveSymbolDetailedInfo } from "../services/contextService";
+import {
+	ContextService,
+	ActiveSymbolDetailedInfo,
+} from "../services/contextService"; // MODIFIED: Added ContextService
 import { cleanCodeOutput } from "../utils/codeUtils";
 import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils";
 import { generateFileChangeSummary } from "../utils/diffingUtils";
@@ -95,6 +98,7 @@ export interface EnhancedGenerationContext {
 	lastCorrectionAttemptOutcome?: CorrectionAttemptOutcome; // NEW: Added property
 	recentCorrectionAttemptOutcomes?: CorrectionAttemptOutcome[]; // NEW: Added property
 	isOscillating?: boolean; // NEW: Added property
+	relevantFiles?: string; // NEW: Added property as per instructions
 }
 
 /**
@@ -129,6 +133,7 @@ export class EnhancedCodeGenerator {
 		private workspaceRoot: vscode.Uri,
 		private postMessageToWebview: (message: ExtensionToWebviewMessages) => void,
 		private changeLogger: ProjectChangeLogger, // MODIFIED: Add changeLogger parameter
+		private contextService: ContextService, // NEW: Add contextService parameter
 		private config: {
 			enableRealTimeFeedback?: boolean;
 			maxFeedbackIterations?: number;
@@ -1534,7 +1539,7 @@ Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE C
 		}
 
 		// Safety net: check for markdown code blocks that explicitly contain error-like text.
-		// This is for cases where markdown stripping might fail or AI incorrectly wraps an error in a code block.
+		// This is for cases where markdown stripping might fail or AI incorrectly wraps an an error in a code block.
 		const markdownErrorPattern =
 			/(?:[a-zA-Z0-9]+)?\s*(error|fail|exception|apology|i am sorry)[\s\S]*?/i;
 		if (markdownErrorPattern.test(content)) {
@@ -1928,6 +1933,17 @@ ${formattedDiff}
 						this.changeLogger.getCompletedPlanChangeSets()
 					);
 
+				// NEW: Refresh error-focused context if there are issues BEFORE applying corrections
+				if (currentIssues > 0) {
+					currentContext = await this._refreshErrorFocusedContext(
+						filePath,
+						currentContent,
+						validation.issues,
+						currentContext,
+						token
+					);
+				}
+
 				if (currentIssues === 0) {
 					this._sendFeedback(feedbackCallback, {
 						stage: "completion",
@@ -1971,7 +1987,7 @@ ${formattedDiff}
 					filePath,
 					currentContent,
 					validation.issues,
-					currentContext, // Pass updated context
+					currentContext, // Pass updated context (potentially refreshed)
 					modelName,
 					streamId,
 					token,
@@ -2059,6 +2075,16 @@ ${formattedDiff}
 						correctedIssues
 					);
 
+					// NEW: Refresh error-focused context again before alternative corrections
+					const contextForAlternative = await this._refreshErrorFocusedContext(
+						filePath,
+						correctedContent, // Use correctedContent for refreshing context as it's the current state
+						correctedValidation.issues, // Use the issues after the correction attempt
+						currentContext, // Pass the currentContext which now includes oscillation status and recent outcomes
+						token
+					);
+					currentContext = contextForAlternative; // Crucially update currentContext
+
 					// Generate AI failure analysis, passing current context details including oscillation status
 					const aiFailureAnalysis = await this._generateAIFailureAnalysis(
 						filePath,
@@ -2069,8 +2095,8 @@ ${formattedDiff}
 						this._getLanguageId(path.extname(filePath)),
 						iteration,
 						streamId,
-						currentContext.recentCorrectionAttemptOutcomes, // Pass the recent outcomes
-						currentContext.isOscillating, // Pass the oscillation status
+						currentContext.recentCorrectionAttemptOutcomes, // Pass the recent outcomes from the now updated currentContext
+						currentContext.isOscillating, // Pass the oscillation status from the now updated currentContext
 						token
 					);
 
@@ -2094,9 +2120,9 @@ ${formattedDiff}
 
 					const alternativeContent = await this._applyAlternativeCorrections(
 						filePath,
-						currentContent, // Pass original content for alternative strategy if previous attempt was bad
-						validation.issues,
-						currentContext, // Pass updated context with failed diff, outcome, recent outcomes, and oscillation status
+						correctedContent, // Pass the content AFTER the failed attempt
+						correctedValidation.issues, // Pass the issues AFTER the failed attempt
+						currentContext, // Pass the updated currentContext
 						modelName,
 						streamId,
 						token,
@@ -2892,6 +2918,84 @@ Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE C
 			} catch (error) {
 				console.warn("Error in feedback callback:", error);
 			}
+		}
+	}
+
+	/**
+	 * Refreshes the EnhancedGenerationContext with an error-focused perspective,
+	 * rebuilding project context primarily based on current issues.
+	 * @param filePath The path of the file currently being processed.
+	 * @param currentContent The current content of the file.
+	 * @param currentIssues A list of code issues reported for the current content.
+	 * @param currentContext The existing EnhancedGenerationContext.
+	 * @param token An optional cancellation token.
+	 * @returns A new, refreshed EnhancedGenerationContext focused on the errors, or the original context if no issues or an error occurs.
+	 */
+	private async _refreshErrorFocusedContext(
+		filePath: string,
+		currentContent: string,
+		currentIssues: CodeIssue[],
+		currentContext: EnhancedGenerationContext,
+		token?: vscode.CancellationToken
+	): Promise<EnhancedGenerationContext> {
+		if (currentIssues.length === 0) {
+			return currentContext;
+		}
+
+		try {
+			const languageId = this._getLanguageId(path.extname(filePath));
+			const documentUri = vscode.Uri.file(filePath);
+
+			// Construct a minimal editor context for refresh, assuming no specific selection is needed
+			// as we are focusing on general file-level issues.
+			const editorContextForRefresh = {
+				filePath: filePath,
+				fullText: currentContent,
+				languageId: languageId,
+				documentUri: documentUri,
+				// A minimal range to satisfy the type, as no specific selection is tied to all issues
+				selection: new vscode.Range(0, 0, 0, 0),
+				instruction: "", // FIX 1: Add missing property
+				selectedText: "", // FIX 1: Add missing property
+			};
+
+			// Format currentIssues into a focused diagnostic string for context building
+			const formattedDiagnosticsString = this._formatGroupedIssuesForPrompt(
+				this._groupAndPrioritizeIssues(currentIssues),
+				languageId,
+				currentContent
+			);
+
+			// Call contextService.buildProjectContext with the formatted diagnostics
+			const refreshResult = await this.contextService.buildProjectContext(
+				token,
+				undefined, // userRequest is not applicable for error-focused refresh
+				editorContextForRefresh,
+				formattedDiagnosticsString,
+				{ useAISelectionCache: false, enablePerformanceMonitoring: false }
+			);
+
+			// Create newEnhancedGenerationContext inheriting from currentContext
+			// and updating relevant parts from refreshResult.
+			const newEnhancedGenerationContext: EnhancedGenerationContext = {
+				...currentContext,
+				projectContext: refreshResult.contextString,
+				relevantFiles: refreshResult.relevantFiles.join("\n"), // relevantFiles is string[] in BuildProjectContextResult
+				activeSymbolInfo: refreshResult.activeSymbolDetailedInfo, // MODIFIED: Changed property key from activeSymbolDetailedInfo to activeSymbolInfo
+				// Ensure successfulChangeHistory is also updated if necessary
+				successfulChangeHistory: this._formatSuccessfulChangesForPrompt(
+					this.changeLogger.getCompletedPlanChangeSets()
+				),
+			};
+
+			return newEnhancedGenerationContext;
+		} catch (error: any) {
+			console.error(
+				`[EnhancedCodeGenerator] Error refreshing error-focused context for ${filePath}:`,
+				error
+			);
+			// Log the issue and return the original context to prevent interruption
+			return currentContext;
 		}
 	}
 }

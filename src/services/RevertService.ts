@@ -52,6 +52,8 @@ export class RevertService {
 				const totalChanges = changes.length;
 				let processedChanges = 0;
 
+				changes.reverse(); // Process changes in reverse chronological order
+
 				for (const change of changes) {
 					if (token.isCancellationRequested) {
 						showErrorNotification(
