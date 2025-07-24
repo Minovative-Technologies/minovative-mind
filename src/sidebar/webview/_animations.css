@@ -1,0 +1,19 @@
+@keyframes blink {
+	0%,
+	80%,
+	100% {
+		opacity: 0;
+	} /* Dot is invisible at the start, for a period, and at the end of the cycle */
+	40% {
+		opacity: 1; /* Dot is visible in the middle of the cycle */
+	}
+}
+
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}

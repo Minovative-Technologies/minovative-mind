@@ -1,0 +1,54 @@
+body {
+	font-family: var(
+		--vscode-font-family,
+		-apple-system,
+		BlinkMacSystemFont,
+		"Segoe UI",
+		Roboto,
+		Helvetica,
+		Arial,
+		sans-serif,
+		"Apple Color Emoji",
+		"Segoe UI Emoji",
+		"Segoe UI Symbol"
+	);
+	font-size: var(--vscode-font-size);
+	padding: 0 var(--container-padding) var(--container-padding)
+		var(--container-padding);
+	color: var(--vscode-editor-foreground);
+	background-color: var(--vscode-sideBar-background);
+	display: flex;
+	flex-direction: column;
+	height: 100vh; /* Ensure body takes full height */
+	box-sizing: border-box;
+	overflow-y: auto; /* The body should scroll */
+}
+
+::-webkit-scrollbar {
+	width: 6px; /* Width for vertical scrollbars */
+	height: 6px; /* Height for horizontal scrollbars */
+}
+
+::-webkit-scrollbar-track {
+	background: transparent; /* Make track transparent */
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(
+		--vscode-scrollbarSlider-background
+	); /* Background color from theme */
+	border-radius: 3px; /* Rounded corners */
+	border: none; /* No border */
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(
+		--vscode-scrollbarSlider-hoverBackground
+	); /* Hover background color from theme */
+}
+
+::-webkit-scrollbar-thumb:active {
+	background: var(
+		--vscode-scrollbarSlider-activeBackground
+	); /* Active background color from theme */
+}

@@ -1,0 +1,279 @@
+#empty-chat-placeholder {
+	display: flex;
+	position: relative;
+	flex-direction: column; /* For vertical stacking of image and text */
+	justify-content: center; /* Center content vertically */
+	align-items: center; /* Center content horizontally */
+	text-align: center; /* Center text within its own line */
+	padding: 20px;
+	box-sizing: border-box; /* Ensures padding is included in the element's total width and height */
+	margin: var(--element-spacing) 0;
+	background-color: var(
+		--vscode-editorWidget-background
+	); /* Match chat container background */
+	border-radius: var(--border-radius); /* Match chat container border radius */
+	flex-grow: 1; /* Allow it to take up available space, like chat-container */
+	height: 100%; /* Ensures it fills the parent container's height */
+}
+
+.empty-chat-logo {
+	width: 70px; /* Example size */
+	height: auto; /* Maintain aspect ratio */
+	opacity: 0.5; /* Subtle appearance */
+	filter: grayscale(100%); /* Make it monochrome to fit theme */
+}
+
+.empty-chat-text {
+	font-size: 0.9em;
+	color: var(--vscode-descriptionForeground); /* A subtle text color */
+	max-width: 80%; /* Prevent text from stretching too wide */
+	line-height: 1.5;
+}
+
+.message {
+	border-radius: var(--border-radius);
+	word-wrap: break-word;
+	line-height: 1.5;
+	width: 100%;
+	max-width: 95%; /* Keep slightly off edge */
+	border: 1px solid transparent; /* Base border */
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	margin-bottom: 35px;
+}
+
+.message > strong {
+	display: block; /* Ensure the sender label (e.g., "User:", "Model:") takes its own line */
+	margin-bottom: 5px;
+	font-weight: 600;
+	font-size: 0.9em;
+	opacity: 0.8;
+}
+
+.message-text-content {
+	display: block;
+	flex-grow: 1;
+	width: 100%;
+}
+
+.user-message {
+	padding: var(--message-padding);
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
+	align-self: flex-end;
+	margin-left: auto;
+	min-height: fit-content;
+	border-color: var(--vscode-list-activeSelectionBackground);
+}
+
+.user-message strong {
+	color: var(--vscode-list-activeSelectionForeground);
+}
+
+.ai-message {
+	background-color: transparent;
+	align-self: flex-start;
+	margin-right: auto;
+	min-height: fit-content;
+	position: relative; /* Ensure .message-actions is positioned relative to this */
+}
+
+.ai-message.error-message {
+	background-color: var(--vscode-inputValidation-errorBackground);
+	color: var(--vscode-errorForeground);
+	border-color: var(--vscode-inputValidation-errorBorder);
+	border-left-width: 4px;
+	padding-left: calc(
+		var(--message-padding) * 1.2
+	); /* Adjust padding due to left border */
+}
+
+.ai-message.error-message strong {
+	color: var(--vscode-errorForeground);
+}
+
+.message-actions {
+	display: flex; /* Use flexbox to arrange buttons horizontally */
+	gap: 4px; /* Space between action buttons */
+	opacity: 0; /* Initially hidden */
+	pointer-events: auto; /* Enable pointer events by default, opacity controls visibility */
+	transition: opacity 0.3s ease-in-out; /* Smooth transition for visibility */
+	position: absolute;
+	bottom: -30px;
+	left: 0px;
+	z-index: 10;
+	width: 100%; /* Added as per instruction */
+	overflow-x: auto; /* Added as per instruction */
+	white-space: nowrap; /* Added as per instruction */
+	-webkit-overflow-scrolling: touch; /* Added as per instruction */
+	padding-right: 8px; /* Added as per instruction */
+	box-sizing: border-box; /* Added for robustness based on plan context */
+}
+
+.ai-message:hover .message-actions,
+.user-message:hover .message-actions,
+.message-actions:hover {
+	opacity: 1; /* Fully opaque on hover */
+}
+
+.ai-message .message-actions {
+	left: 0px;
+	right: auto;
+}
+
+.user-message .message-actions {
+	left: 0px;
+	right: auto;
+}
+
+.system-message,
+.loading-message {
+	color: var(--vscode-focusBorder);
+	font-style: italic;
+	text-align: center;
+	background: none;
+	padding: 5px 0;
+	margin: var(--element-spacing) auto;
+	align-self: center;
+	width: 90%;
+	box-shadow: none;
+	border: none;
+}
+
+.loading-message {
+	font-weight: 500;
+}
+
+.plan-step-message {
+	background-color: var(
+		--vscode-editorGroup-emptyBackground
+	); /* A subtle background */
+	color: var(--vscode-descriptionForeground); /* Soft text color */
+	font-style: italic;
+	text-align: center;
+	align-self: center; /* Center horizontally in flex container */
+	max-width: 80%; /* Make it narrower */
+	margin-left: auto; /* For centering with auto margins */
+	margin-right: auto; /* For centering with auto margins */
+	padding: 8px 15px; /* Adjust padding */
+	border: none;
+	box-shadow: none;
+	word-wrap: normal; /* Prevent aggressive word wrapping if not needed */
+}
+.plan-step-message .message-actions,
+.plan-step-message .copy-button,
+.plan-step-message .delete-button,
+.plan-step-message .edit-button,
+.plan-step-message .generate-plan-button {
+	display: none !important; /* Use !important to ensure override */
+}
+
+.ai-context-files {
+	display: flex;
+	flex-direction: column;
+	/* Visual appearance */
+	background-color: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-editorGroupHeader-tabsBorder); /* A subtle border */
+	border-radius: var(--border-radius);
+	padding: var(--message-padding); /* Similar to message padding */
+	margin-top: 5px; /* Space above */
+	margin-bottom: var(--element-spacing); /* Space below */
+	/* Collapsible behavior */
+	max-height: 500px; /* Default max height when expanded */
+	overflow: hidden; /* Hide overflow initially, list itself will scroll if needed */
+	transition: max-height 0.3s ease-out, padding 0.3s ease-out,
+		margin 0.3s ease-out; /* Smooth collapse/expand */
+}
+.ai-context-files.collapsed {
+	max-height: 2.5em;
+	padding-bottom: 0;
+	margin-bottom: 5px; /* to be tighter when collapsed */
+	overflow: hidden;
+}
+
+.context-files-header {
+	display: flex;
+	justify-content: flex-start;
+	align-items: center;
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--vscode-editor-paneBorder); /* A separator */
+	background-color: transparent; /* Keep transparent */
+	cursor: pointer; /* Indicates it's clickable to toggle */
+	user-select: none;
+	font-weight: 600;
+}
+.context-files-header::before {
+	content: "→"; /* default collapsed arrow */
+	margin-right: 8px;
+	display: inline-block;
+	transition: transform 0.2s ease-in-out;
+	font-weight: bold;
+	font-size: 1.1em;
+	min-width: 1em;
+	text-align: center;
+}
+.ai-context-files:not(.collapsed) .context-files-header::before {
+	content: "↓";
+	transform: rotate(0deg);
+}
+.context-files-header h4 {
+	margin: 0; /* Remove default margin */
+	font-size: 0.95em;
+	color: var(--vscode-editor-foreground); /* Main text color */
+	font-weight: 600;
+}
+
+.context-file-list {
+	display: flex;
+	gap: 6px; /* Space between file items */
+	flex-direction: column;
+	padding: 0; /* Remove default padding */
+	margin: 0; /* Remove default margin */
+	max-height: 150px; /* Default max height for scrollable list when expanded */
+	overflow-y: auto; /* Scroll if too many files */
+	transition: max-height 0.3s ease-out, padding 0.3s ease-out,
+		margin 0.3s ease-out; /* Smooth collapse/expand */
+}
+
+.context-file-item {
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Subtle background */
+	border: 1px solid var(--vscode-button-border); /* Subtle border */
+	padding: 4px 8px;
+	border-radius: var(--border-radius);
+	font-size: 0.85em;
+	color: var(--vscode-editor-foreground); /* Text color */
+	white-space: nowrap; /* Prevent file path from wrapping */
+	text-overflow: ellipsis; /* Add ellipsis if path is too long */
+	overflow: hidden; /* Hide overflowed text */
+	max-width: 100%; /* Ensure it doesn't exceed parent width */
+	flex-shrink: 0; /* Don't shrink when wrapped */
+	cursor: pointer; /* Now directly clickable */
+	text-decoration: none; /* No underline */
+	transition: background-color 0.1s ease, border-color 0.1s ease;
+}
+.context-file-item:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+.context-file-item.selected {
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
+	border-color: var(
+		--vscode-list-activeSelectionBorder,
+		var(--vscode-focusBorder)
+	);
+}
+
+/* Placeholder comment from original file, can be ignored as content is moved. */
+/* Clear Chat Confirmation Dialog Styling */
+/* The .confirmation-buttons-wrapper class (already existing in styles.css) will handle
+   display: flex, gap, and justify-content for the button group. */
+
+/* --- AI Context Files Section --- */
+/* Header for the context files list */
+/* List of context files */
+/* Individual file item */

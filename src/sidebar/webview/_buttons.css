@@ -1,0 +1,184 @@
+#save-chat-button,
+#load-chat-button,
+#clear-chat-button {
+	background-color: var(--vscode-input-background); /* Dark background */
+	border-color: var(--border-color); /* Add a subtle border */
+	color: var(--vscode-button-secondaryForeground); /* Ensure contrast */
+}
+#save-chat-button:hover,
+#load-chat-button:hover,
+#clear-chat-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder); /* Highlight border on hover */
+	color: var(--vscode-button-hoverForeground); /* Change icon color on hover */
+}
+#save-chat-button:disabled,
+#load-chat-button:disabled,
+#clear-chat-button:disabled {
+	background-color: var(--vscode-input-background); /* Keep dark background */
+	border-color: var(--border-color);
+	color: var(--vscode-button-secondaryForeground);
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.copy-button {
+	padding: var(--copy-button-padding); /* Padding inside the button */
+	width: var(--copy-button-size); /* Fixed width */
+	min-width: var(--copy-button-size);
+	height: var(--copy-button-size); /* Fixed height */
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Subtle background */
+	border: 1px solid var(--vscode-button-border); /* Subtle border */
+	color: var(--copy-button-color); /* Icon color */
+	border-radius: var(--border-radius); /* Match parent border radius */
+	cursor: pointer;
+	display: inline-flex; /* Use flexbox to center icon */
+	align-items: center; /* Vertically center icon */
+	justify-content: center;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Smooth transitions */
+	user-select: none; /* Prevent text selection interference */
+	font-size: 0.8em; /* Make icon slightly smaller if needed */
+}
+.copy-button:hover {
+	background-color: var(--copy-button-hover-bg);
+	border-color: var(--copy-button-hover-border);
+}
+.copy-button:active {
+	background-color: var(--copy-button-active-bg);
+	border-color: var(--vscode-focusBorder); /* Highlight border on click */
+}
+
+.delete-button {
+	/* Copy most styles from .copy-button for visual consistency */
+	padding: var(--copy-button-padding);
+	width: var(--copy-button-size);
+	min-width: var(--copy-button-size);
+	height: var(--copy-button-size);
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Added color to transition */
+	user-select: none;
+	font-size: 0.8em;
+	/* Adjust colors for a subtle delete appearance */
+	background-color: var(--vscode-inputValidation-errorBackground);
+	border: 1px solid var(--vscode-inputValidation-errorBorder);
+	color: var(--vscode-errorForeground);
+}
+.delete-button:hover {
+	background-color: var(
+		--vscode-button-secondaryHoverBackground
+	); /* Use secondary hover background for consistency */
+	border-color: var(
+		--vscode-errorForeground
+	); /* Keep error border for visual cue */
+	color: var(--vscode-errorForeground); /* Ensure error color remains */
+}
+.delete-button:active {
+	background-color: rgba(
+		var(--vscode-errorForeground),
+		0.25
+	); /* Revert to a subtle active state */
+	border-color: var(--vscode-errorForeground);
+}
+
+.edit-button {
+	padding: var(--copy-button-padding);
+	width: var(--copy-button-size);
+	min-width: var(--copy-button-size);
+	height: var(--copy-button-size);
+	background-color: var(--vscode-button-secondaryBackground);
+	border: 1px solid var(--vscode-button-border);
+	color: var(--vscode-icon-foreground);
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+	user-select: none;
+	font-size: 0.8em;
+}
+.edit-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+.edit-button:active {
+	background-color: rgba(128, 128, 128, 0.3); /* Subtle active state */
+	border-color: var(--vscode-focusBorder);
+}
+
+.generate-plan-button {
+	padding: var(--copy-button-padding); /* MODIFIED */
+	width: var(--copy-button-size); /* ADDED */
+	min-width: var(--copy-button-size); /* MODIFIED */
+	height: var(--copy-button-size); /* ADDED */
+	min-height: var(--copy-button-size); /* MODIFIED */
+	background-color: var(--vscode-button-secondaryBackground);
+	border: 1px solid var(--vscode-button-border);
+	color: var(--copy-button-color); /* MODIFIED */
+	border-radius: var(--border-radius);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	/* font-size: 0.85em; REMOVED */
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+	user-select: none;
+}
+.generate-plan-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+.generate-plan-button:active {
+	background-color: rgba(128, 128, 128, 0.3);
+	border-color: var(--vscode-focusBorder);
+}
+.generate-plan-button:disabled {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.copy-button .fa-icon,
+.delete-button .fa-icon,
+.generate-plan-button .fa-icon {
+	/* ADDED .generate-plan-button .fa-icon */
+	font-size: 1em; /* Icon size relative to button font size */
+}
+
+.auth-button-group {
+	display: flex;
+	gap: 10px;
+	justify-content: center;
+	width: 100%;
+}
+
+#signUpButton,
+#signInButton {
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: none;
+	padding: 8px 16px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: var(--vscode-font-size);
+	font-weight: 500;
+	margin-top: 15px;
+	transition: background-color 0.2s ease;
+}
+#signUpButton:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+#signUpButton:active {
+	transform: translateY(1px);
+}

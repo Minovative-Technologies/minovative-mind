@@ -1,0 +1,36 @@
+.fa-icon {
+	display: inline-block; /* Allows setting width/height and alignment */
+	width: 1em; /* Ensure consistent width based on parent font size */
+	height: 1em; /* Ensure consistent height based on parent font size */
+	vertical-align: -0.125em; /* Adjust alignment slightly to center with text */
+}
+
+.loading-text {
+	display: inline-block; /* Ensures the text "Generating" and dots are on the same line if used together */
+	font-style: italic; /* Matches style of system-message */
+	color: var(
+		--vscode-descriptionForeground
+	); /* Matches color of system-message */
+}
+.loading-text .dot {
+	animation: blink 1.4s infinite both; /* Apply blink animation */
+	display: inline-block; /* Ensure dots are on the same line */
+}
+.loading-text .dot:nth-child(1) {
+	animation-delay: 0s;
+}
+.loading-text .dot:nth-child(2) {
+	animation-delay: 0.2s;
+}
+.loading-text .dot:nth-child(3) {
+	animation-delay: 0.4s;
+}
+
+/* Hide action buttons for plan step messages */
+.plan-step-message .message-actions,
+.plan-step-message .copy-button,
+.plan-step-message .delete-button,
+.plan-step-message .edit-button,
+.plan-step-message .generate-plan-button {
+	display: none !important; /* Use !important to ensure override */
+}

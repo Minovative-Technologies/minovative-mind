@@ -1,0 +1,38 @@
+:root {
+	/* Define common spacings based on VS Code variables if possible, or sensible defaults */
+	--container-padding: 10px;
+	--element-spacing: 8px;
+	--message-padding: 8px 12px; /* Adjusted padding */
+	--border-radius: 4px; /* Slightly more rounded */
+	--input-height: 28px; /* Slightly taller inputs/buttons */
+	--icon-button-size: 28px; /* Square icon buttons */
+	--border-color: var(--vscode-contrastBorder, #44444433); /* Softer border */
+
+	/* Copy button specific variables */
+	--copy-button-size: 24px; /* Smaller size for copy button */
+	--copy-button-padding: 4px; /* Padding inside the button */
+	--copy-button-bg: rgba(128, 128, 128, 0.1); /* Subtle background */
+	--copy-button-border: 1px solid rgba(128, 128, 128, 0.2); /* Subtle border */
+	--copy-button-color: var(--vscode-icon-foreground); /* Icon color */
+	--copy-button-hover-bg: var(
+		--vscode-toolbar-hoverBackground
+	); /* Hover background from theme */
+	--copy-button-hover-border: 1px solid var(--vscode-focusBorder); /* Highlight border on hover */
+	--copy-button-active-bg: rgba(128, 128, 128, 0.3); /* Active background */
+
+	/* Toggle switch variables */
+	--toggle-width: 40px;
+	--toggle-height: 20px;
+	--toggle-thumb-size: calc(
+		var(--toggle-height) - 4px
+	); /* 16px for 20px height, allowing 2px padding */
+	--toggle-track-background-unchecked: var(--vscode-input-background);
+	--toggle-track-border-unchecked: var(--vscode-editorWidget-border);
+	--toggle-thumb-background: var(
+		--vscode-input-foreground
+	); /* Default thumb color */
+	--toggle-track-background-checked: var(
+		--vscode-button-background
+	); /* Background when checked */
+	--toggle-focus-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}

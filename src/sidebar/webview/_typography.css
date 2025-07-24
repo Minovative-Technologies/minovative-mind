@@ -1,0 +1,261 @@
+h1,
+h2 {
+	color: var(--vscode-sideBar-titleForeground);
+	font-weight: 600;
+	margin: 0; /* Reset default margin */
+	padding-bottom: 5px;
+	border-bottom: 1px solid var(--border-color);
+}
+
+h1 {
+	font-size: 1.2em;
+	margin-bottom: var(
+		--element-spacing
+	); /* Consistent bottom margin for main title */
+	/* padding-bottom is inherited and correct */
+}
+
+h2 {
+	font-size: 1.05em;
+	margin-top: calc(
+		var(--container-padding) * 1.5
+	); /* Top margin for section separation */
+	margin-bottom: var(
+		--element-spacing
+	); /* Bottom margin for section separation */
+}
+
+div#commit-message-display h1, div#commit-message-display h2, div#commit-message-display h3, div#commit-message-display h4, div#commit-message-display h5, div#commit-message-display h6, #chat-container .message h1,
+#chat-container .message h2,
+#chat-container .message h3,
+#chat-container .message h4, /* Added h4, h5, h6 for completeness */
+#chat-container .message h5,
+#chat-container .message h6 {
+	font-weight: 600;
+	margin-top: 1em;
+	margin-bottom: 0.5em;
+	line-height: 1.3;
+	color: inherit; /* Inherit color from parent message */
+	border-bottom: none; /* Override global header style */
+	padding-bottom: 0; /* Override global header style */
+	white-space: normal; /* Ensure headings wrap and don't inherit pre-like behavior */
+	word-wrap: break-word; /* Ensure headings wrap */
+	overflow-wrap: break-word; /* Ensure headings wrap */
+}
+
+div#commit-message-display h1,
+#chat-container .message h1 {
+	font-size: 1.1em; /* Slightly larger than body */
+	border-bottom: 1px solid
+		var(--vscode-editorWidget-border, var(--border-color)); /* Add a subtle separator for top-level headings */
+	padding-bottom: 0.3em;
+}
+
+div#commit-message-display h2,
+#chat-container .message h2 {
+	font-size: 1.05em; /* Slightly larger than body */
+}
+
+div#commit-message-display h3,
+#chat-container .message h3 {
+	font-size: 1em; /* Same size as body, but bold */
+}
+
+div#commit-message-display h4,
+#chat-container .message h4 {
+	font-size: 0.95em;
+	font-weight: 600;
+}
+
+div#commit-message-display h5,
+#chat-container .message h5 {
+	font-size: 0.9em;
+	font-weight: 600;
+}
+
+div#commit-message-display h6,
+#chat-container .message h6 {
+	font-size: 0.85em;
+	font-weight: 600;
+	color: var(
+		--vscode-descriptionForeground,
+		inherit
+	); /* Subtler color for h6 */
+}
+
+div#commit-message-display *:first-child > h1,
+div#commit-message-display *:first-child > h2,
+div#commit-message-display *:first-child > h3,
+div#commit-message-display *:first-child > h4,
+div#commit-message-display *:first-child > h5,
+div#commit-message-display *:first-child > h6,
+#chat-container .message *:first-child > h1,
+#chat-container .message *:first-child > h2,
+#chat-container .message *:first-child > h3,
+#chat-container .message *:first-child > h4,
+#chat-container .message *:first-child > h5,
+#chat-container .message *:first-child > h6 {
+	margin-top: 0;
+}
+
+div#commit-message-display p,
+#chat-container .message p {
+	white-space: normal; /* Ensure paragraphs wrap */
+	word-wrap: break-word; /* Allow wrapping within paragraphs */
+	overflow-wrap: break-word; /* Allow wrapping within paragraphs */
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+div#commit-message-display p:first-child,
+#chat-container .message p:first-child {
+	margin-top: 0; /* Remove top margin for first paragraph */
+}
+
+div#commit-message-display p:last-child,
+#chat-container .message p:last-child {
+	margin-bottom: 0; /* Remove bottom margin for last paragraph */
+}
+
+div#commit-message-display ul,
+div#commit-message-display ol,
+#chat-container .message ul,
+#chat-container .message ol {
+	margin-top: 0.5em;
+	margin-bottom: 0.8em;
+	padding-left: 2em; /* Standard list indentation */
+	white-space: normal; /* Ensure lists wrap */
+	list-style-position: outside; /* Place markers outside the text flow */
+	word-wrap: break-word; /* Ensure list items wrap */
+	overflow-wrap: break-word; /* Ensure list items wrap */
+}
+
+div#commit-message-display ul,
+#chat-container .message ul {
+	list-style-type: disc; /* Standard bullet points */
+}
+
+div#commit-message-display ol,
+#chat-container .message ol {
+	list-style-type: decimal; /* Standard numbering */
+}
+
+div#commit-message-display li,
+#chat-container .message li {
+	margin-bottom: 0.3em; /* Spacing between list items */
+}
+
+div#commit-message-display li::marker,
+#chat-container .message li::marker {
+	/* Style list markers to match text color, if needed and supported */
+	color: var(--vscode-editor-foreground);
+}
+
+div#commit-message-display ul ul,
+div#commit-message-display ul ol,
+div#commit-message-display ol ol,
+div#commit-message-display ol ul,
+#chat-container .message ul ul,
+#chat-container .message ul ol,
+#chat-container .message ol ol,
+#chat-container .message ol ul {
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+}
+
+div#commit-message-display ul ul,
+#chat-container .message ul ul {
+	list-style-type: circle;
+}
+
+div#commit-message-display ul ul ul,
+#chat-container .message ul ul ul {
+	list-style-type: square;
+}
+
+div#commit-message-display blockquote,
+#chat-container .message blockquote {
+	margin: 0.8em 0;
+	padding: 0.4em 1em;
+	border-left: 3px solid var(--vscode-focusBorder, #007fd4); /* Use focus border color for highlight */
+	background-color: var(
+		--vscode-editorWidget-background
+	); /* Use theme variable for background */
+	color: var(
+		--vscode-descriptionForeground,
+		inherit
+	); /* Use description color or inherit */
+	white-space: normal; /* Ensure blockquotes wrap */
+}
+
+div#commit-message-display blockquote p,
+#chat-container .message blockquote p {
+	margin-bottom: 0.3em;
+}
+
+div#commit-message-display blockquote p:last-child,
+#chat-container .message blockquote p:last-child {
+	margin-bottom: 0;
+}
+
+div#commit-message-display hr,
+#chat-container .message hr {
+	border: 0;
+	border-top: 1px solid var(--vscode-editorWidget-border, var(--border-color)); /* A subtle line */
+	margin: 1.5em 0; /* Provide ample spacing around HR */
+}
+
+div#commit-message-display a,
+#chat-container .message a {
+	color: var(--vscode-textLink-foreground); /* Standard VS Code link color */
+	text-decoration: underline;
+	white-space: normal; /* Allow links to wrap if they are long */
+}
+
+div#commit-message-display a:hover,
+#chat-container .message a:hover {
+	color: var(
+		--vscode-textLink-activeForeground
+	); /* Standard VS Code active/hover link color */
+	text-decoration: underline;
+}
+
+div#commit-message-display table,
+#chat-container .message table {
+	border-collapse: collapse; /* Standard table border model */
+	margin: 1em 0; /* Spacing around tables */
+	width: auto; /* Let table determine its width based on content, up to 100% */
+	max-width: 100%; /* Prevent table from overflowing message width without scroll */
+	font-size: 0.95em; /* Slightly smaller text in tables */
+	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
+	white-space: normal; /* Ensure content within table cells wraps */
+	word-wrap: break-word; /* Ensure content within table cells wraps */
+	overflow-wrap: break-word; /* Ensure content within table cells wraps */
+	/* If table itself is too wide, .ai-message overflow-x:auto will handle scrolling */
+}
+
+div#commit-message-display th,
+div#commit-message-display td,
+#chat-container .message th,
+#chat-container .message td {
+	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
+	padding: 0.5em 0.75em; /* Padding within cells */
+	text-align: left; /* Align text to the left by default */
+	word-wrap: break-word; /* Allow long words in cells to break and wrap */
+}
+
+div#commit-message-display th,
+#chat-container .message th {
+	background-color: var(
+		--vscode-editorWidget-background
+	); /* Use theme variable for table header background */
+	font-weight: 600; /* Bold header text */
+	color: inherit; /* Inherit text color */
+}
+
+div#commit-message-display tr:nth-child(even),
+#chat-container .message tr:nth-child(even) {
+	background-color: var(
+		--vscode-list-hoverBackground
+	); /* Use subtle striping for even rows */
+}

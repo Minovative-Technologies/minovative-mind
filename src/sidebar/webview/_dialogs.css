@@ -1,0 +1,292 @@
+#plan-confirmation-container {
+	border: 1px solid
+		var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder)); /* Border color from theme */
+	background-color: var(
+		--vscode-inputOption-activeBackground
+	); /* Background color from theme */
+	padding: var(--container-padding);
+	margin: var(--element-spacing) 0; /* Spacing above and below the container */
+	text-align: center; /* Center align text and inline children like buttons */
+	border-radius: var(--border-radius);
+	flex-shrink: 0; /* Prevent container from shrinking in flex layouts */
+	display: flex; /* Use flexbox for centering content */
+	flex-direction: column; /* Stack children vertically */
+	align-items: center; /* Center children horizontally */
+	gap: 5px; /* Space between header, text, and buttons */
+}
+
+#plan-confirmation-container p {
+	margin-top: 0; /* Remove top margin if it's the first element */
+	margin-bottom: var(--element-spacing); /* Spacing below the text */
+	color: var(
+		--vscode-inputOption-activeForeground
+	); /* Text color from theme, contrasts with background */
+	font-weight: 500; /* Slightly bolder text */
+	text-align: center; /* Ensure text is centered */
+}
+
+#plan-confirmation-container .button-group {
+	display: flex; /* Use flexbox for button alignment */
+	gap: 10px; /* Space between confirm and cancel buttons */
+	justify-content: center; /* Center the button group */
+}
+
+#plan-confirmation-container button {
+	margin: 0; /* Remove default margin as gap is handled by wrapper */
+	padding: 5px 12px; /* Padding inside buttons */
+	height: var(--input-height); /* Consistent height */
+	width: 100%;
+	background-color: var(
+		--vscode-button-background
+	); /* Default primary button background */
+	color: var(
+		--vscode-button-foreground
+	); /* Default primary button text color */
+	border: 1px solid var(--vscode-button-border, transparent); /* Standard button border (can be transparent) */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Smooth transitions */
+	display: inline-flex; /* Use flexbox for content alignment (especially icons) */
+	align-items: center; /* Vertically align icon/text */
+	justify-content: center;
+	font-size: inherit; /* Inherit font size from parent */
+	outline: none; /* Remove default outline */
+}
+#plan-confirmation-container button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+#plan-confirmation-container button:focus {
+	border-color: var(--vscode-focusBorder); /* Use focus border color */
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder); /* Add an outline shadow */
+}
+#plan-confirmation-container button#cancel-plan-button {
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Use secondary background color */
+	color: var(
+		--vscode-button-secondaryForeground
+	); /* Use secondary text color */
+	/* Border is inherited from the general button style, which is appropriate. */
+}
+#plan-confirmation-container button#cancel-plan-button:hover {
+	background-color: var(
+		--vscode-button-secondaryHoverBackground
+	); /* Use secondary hover background color */
+}
+#plan-confirmation-container button .fa-icon {
+	margin-right: 6px; /* Spacing between icon and text */
+	font-size: 0.9em; /* Icon size relative to button font size */
+	/* Alignment is handled by parent button's flex properties and global .fa-icon styles. */
+	/* Visibility is ensured by color inherited from button. */
+}
+
+#plan-parse-error-container {
+	/* Styled similar to #plan-confirmation-container for visual consistency in UI sections. */
+	/* Use error colors instead of active/focus colors for better visual distinction */
+	border: 1px solid var(--vscode-inputValidation-errorBorder); /* Border color from theme */
+	background-color: var(
+		--vscode-inputValidation-errorBackground
+	); /* Background color from theme */
+	padding: var(--container-padding);
+	margin: var(--element-spacing) 0;
+	text-align: center; /* Center align contents (like buttons) */
+	border-radius: var(--border-radius);
+	flex-shrink: 0; /* Prevent container from shrinking in flex layouts */
+}
+
+#plan-parse-error-container h3 {
+	color: var(--vscode-errorForeground); /* Red color for error header */
+	font-size: 1.1em;
+	margin-top: 0;
+	margin-bottom: var(--element-spacing);
+	border-bottom: none; /* Remove border */
+}
+
+#plan-parse-error-display {
+	color: var(
+		--vscode-errorForeground
+	); /* Standard VS Code error text color for high visibility. */
+	font-weight: 500; /* Slightly bolder text for emphasis. */
+	margin-bottom: var(--element-spacing); /* Spacing below the error message. */
+	text-align: left; /* Left-align text for better readability of potentially multi-line error messages. */
+	white-space: pre-wrap; /* Allow wrapping of long error messages while preserving line breaks. */
+}
+
+pre:has(> code#failed-json-display) {
+	max-height: 200px; /* Limit the height to prevent the block from becoming too large. */
+	overflow-y: auto; /* Add a vertical scrollbar if the JSON content exceeds max-height. */
+	overflow-x: auto; /* Add a horizontal scrollbar if the JSON content exceeds available width. */
+	background-color: var(
+		--vscode-textCodeBlock-background,
+		rgba(0, 0, 0, 0.1)
+	); /* Use standard code block background. */
+	border: 1px solid var(--vscode-editorWidget-border, var(--border-color)); /* Standard border for code blocks. */
+	border-radius: var(--border-radius);
+	padding: 10px; /* Padding inside the <pre> block. */
+	margin-top: var(--element-spacing); /* Space above this block. */
+	margin-bottom: var(--element-spacing); /* Space below this block. */
+	text-align: left; /* Ensure JSON content is left-aligned. */
+	/* Text-specific styles like font-family and white-space (for the pre itself) are generally handled by browser defaults for <pre> or inherited. */
+}
+code#failed-json-display {
+	display: block; /* Ensure the code block fills the parent <pre> for proper layout of its content. */
+	font-family: var(
+		--vscode-editor-font-family,
+		"SF Mono",
+		"Cascadia Code",
+		"Fira Code",
+		monospace
+	); /* Monospace font for code. */
+	font-size: 0.9em; /* Slightly smaller font size for code. */
+	color: var(--vscode-editor-foreground); /* Standard editor text color. */
+	white-space: pre-wrap; /* Wrap lines within the code block for readability, but preserve spaces and line breaks. */
+	overflow-wrap: break-word; /* Break long strings/words to prevent horizontal overflow and fit within the pre. */
+
+	/* Explicitly reset/remove block-level styles that are now handled by the parent <pre> element. */
+	padding: 0;
+	background: none;
+	border: none;
+	margin: 0;
+	max-height: none; /* The code element itself should not have a max-height. */
+	overflow: visible; /* Let the parent <pre> handle scrolling. */
+}
+
+#plan-parse-error-buttons-wrapper {
+	display: flex;
+	justify-content: center; /* Center the button group horizontally */
+	gap: 10px; /* Space between buttons */
+	margin-top: var(--element-spacing); /* Space above the button group */
+}
+#plan-parse-error-buttons-wrapper button {
+	padding: 0; /* No internal padding, size is controlled by width/height */
+	width: var(--icon-button-size); /* Fixed size for square buttons */
+	height: var(--icon-button-size); /* Fixed size for square buttons */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Smooth transitions */
+	display: inline-flex; /* Use flexbox for content alignment (especially icons) */
+	align-items: center; /* Vertically align icon */
+	justify-content: center; /* Center icon horizontally */
+	font-size: inherit; /* Inherit font size */
+	outline: none; /* Remove default outline */
+}
+#plan-parse-error-buttons-wrapper #retry-generation-button {
+	background-color: var(
+		--vscode-button-background
+	); /* Primary background color */
+	color: var(--vscode-button-foreground); /* Primary text color */
+	border: 1px solid var(--vscode-button-border, transparent); /* Standard primary button border */
+}
+#plan-parse-error-buttons-wrapper #retry-generation-button:hover {
+	background-color: var(
+		--vscode-button-hoverBackground
+	); /* Primary hover background */
+}
+#plan-parse-error-buttons-wrapper #cancel-parse-error-button {
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Secondary background color */
+	color: var(--vscode-button-secondaryForeground); /* Secondary text color */
+	border: 1px solid var(--vscode-button-border, var(--border-color)); /* Add a border for better distinction */
+}
+#plan-parse-error-buttons-wrapper #cancel-parse-error-button:hover {
+	background-color: var(
+		--vscode-button-secondaryHoverBackground
+	); /* Secondary hover background color */
+}
+#plan-parse-error-buttons-wrapper button:focus {
+	border-color: var(--vscode-focusBorder); /* Highlight border on focus */
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder); /* Add an outline shadow */
+}
+#plan-parse-error-buttons-wrapper button .fa-icon {
+	font-size: 1em; /* Icon size relative to button font size */
+}
+
+#chat-clear-confirmation-container {
+	border: 1px solid var(--vscode-editorWidget-border, var(--border-color));
+	background-color: var(--vscode-editorWidget-background);
+	padding: var(--container-padding);
+	margin: var(--element-spacing) 0;
+	text-align: center;
+	border-radius: var(--border-radius);
+	flex-shrink: 0;
+	display: flex; /* Ensure it uses flex for inner alignment */
+	flex-direction: row; /* Stack children vertically */
+	align-items: center; /* Center children horizontally */
+	gap: 5px; /* Space between header, text, and buttons */
+}
+#chat-clear-confirmation-container h3 {
+	color: var(
+		--vscode-sideBar-titleForeground
+	); /* Consistent with other headers */
+	font-size: 1.1em;
+	margin-top: 0;
+	margin-bottom: var(--element-spacing);
+	border-bottom: none; /* No border for H3 in this context */
+}
+#chat-clear-confirmation-container p {
+	color: var(
+		--vscode-descriptionForeground
+	); /* A softer text color for description */
+	font-weight: 400; /* Regular weight */
+	text-align: start;
+}
+#chat-clear-confirmation-container strong {
+	color: var(
+		--vscode-errorForeground
+	); /* Highlight the "permanently clear" warning */
+}
+#confirm-clear-chat-button {
+	padding: 8px 15px; /* Consistent padding with other primary buttons */
+	background-color: var(
+		--vscode-button-background
+	); /* Primary action background */
+	color: var(--vscode-button-foreground); /* Primary action text color */
+	border: 1px solid transparent; /* No visible border for primary buttons */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: inherit;
+	outline: none;
+	min-width: fit-content; /* Ensure a minimum width for better usability */
+}
+#confirm-clear-chat-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+#confirm-clear-chat-button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+#cancel-clear-chat-button {
+	padding: 8px 15px; /* Consistent padding with other secondary buttons */
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Secondary action background */
+	color: var(
+		--vscode-button-secondaryForeground
+	); /* Secondary action text color */
+	border: 1px solid var(--vscode-button-border, var(--border-color)); /* Subtle border for secondary buttons */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: inherit;
+	outline: none;
+	min-width: fit-content; /* Ensure a minimum width for better usability */
+}
+#cancel-clear-chat-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+#cancel-clear-chat-button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}

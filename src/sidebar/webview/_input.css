@@ -1,0 +1,270 @@
+.chat-controls .button-group {
+	display: flex;
+	gap: 4px; /* Space between icon buttons */
+}
+
+.chat-controls .button-group button {
+	padding: 0;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
+	background-color: transparent; /* Default transparent background */
+	border: 1px solid transparent;
+	color: var(--vscode-icon-foreground); /* Default icon color */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Ensured color transition */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.chat-controls .button-group button:hover {
+	background-color: var(--vscode-toolbar-hoverBackground);
+	color: var(--vscode-button-hoverForeground);
+}
+.chat-controls .button-group button:disabled {
+	background-color: transparent;
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.chat-controls .button-group button .fa-icon {
+	font-size: 0.9em;
+	vertical-align: middle;
+}
+
+#input-container {
+	display: flex;
+	align-items: flex-end; /* Align items to the bottom */
+	/*: margin-bottom: var(--element-spacing); */
+	flex-shrink: 0;
+	border: 1px solid var(--vscode-input-border); /* Changed border color */
+	border-radius: var(--border-radius);
+	background-color: var(--vscode-input-background);
+	transition: border-color 0.1s ease-in-out;
+	padding: 2px; /* Small padding around */
+}
+#input-container:focus-within {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+#chat-input {
+	flex-grow: 1;
+	background-color: transparent; /* Keep transparent as container has background */
+	border: none;
+	color: var(--vscode-input-foreground);
+	padding: 6px 8px; /* Adjusted padding */
+	font-family: inherit;
+	font-size: inherit;
+	resize: none;
+	outline: none;
+	min-height: calc(var(--input-height));
+	max-height: 150px;
+	line-height: 1.4;
+	/* Remove default margin or padding that might affect flex layout */
+	margin: 0;
+	padding-top: 6px; /* Re-add specific padding if needed */
+	padding-bottom: 6px;
+	padding-left: 8px;
+	padding-right: 8px;
+}
+#chat-input::placeholder {
+	color: var(--vscode-input-placeholderForeground);
+}
+
+.input-action-buttons {
+	display: flex;
+	gap: 7px;
+	margin-left: auto; /* Push buttons to the right */
+	align-items: end; /* Align buttons to the bottom */
+}
+.input-action-buttons button {
+	height: var(--input-height);
+	width: var(--input-height);
+	padding: 0;
+	border-radius: var(--border-radius);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+}
+
+#input-container button#send-button {
+	flex-shrink: 0;
+	width: calc(var(--input-height) + 10px);
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: none;
+	margin: 0; /* Ensure no extra margin */
+}
+#input-container button#send-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+#input-container button#send-button:disabled {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	opacity: 0.7;
+	cursor: not-allowed;
+}
+#input-container button#send-button .fa-icon {
+	/* Send Icon */
+	font-size: 1.1em;
+}
+
+#input-container button#cancel-generation-button {
+	flex-shrink: 0;
+	display: none; /* Initially hidden */
+	padding: 0;
+	height: var(--input-height);
+	width: calc(var(--input-height) + 10px); /* Match size of send button */
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Secondary style background */
+	color: var(
+		--vscode-button-secondaryForeground
+	); /* Secondary style text color */
+	border: 1px solid var(--vscode-button-border, var(--border-color)); /* Add border for secondary style */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Ensured color transition */
+	/* When visible, it should be display: inline-flex; */
+	align-items: center;
+	justify-content: center;
+	margin: 0; /* Ensure no extra margin */
+}
+#input-container button#cancel-generation-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+#input-container button#cancel-generation-button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+#input-container button#cancel-generation-button .fa-icon {
+	/* Cancel Icon */
+	font-size: 1.1em; /* Match size of send icon */
+}
+
+#image-upload-input {
+	display: none;
+}
+
+#image-previews-area {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+	padding: var(--element-spacing);
+	background-color: var(--vscode-input-background);
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius);
+	margin-bottom: var(--element-spacing);
+	min-height: 80px;
+	max-height: 120px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	transition: all 0.2s ease-in-out;
+	display: none; /* Default display as per instruction */
+}
+
+#image-previews-container {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 10px; /* Space between image previews and buttons */
+}
+
+.input-action-buttons #clear-images-button {
+	flex-shrink: 0; /* Keep flex-shrink, as it's not a common button property */
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-button-border, var(--border-color));
+	width: calc(var(--input-height) + 10px);
+	margin: 0; /* Ensure no extra margin */
+}
+.input-action-buttons #clear-images-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+.input-action-buttons #clear-images-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	/* Colors inherited from parent selector, per instruction */
+}
+
+.image-input-action-buttons-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 5px; /* Space between buttons */
+}
+
+.input-action-buttons #attach-image-button {
+	flex-shrink: 0; /* Keep flex-shrink, as it's not a common button property */
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-button-border, var(--border-color));
+	width: calc(var(--input-height) + 10px);
+	margin: 0; /* Ensure no extra margin */
+}
+.input-action-buttons #attach-image-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+.input-action-buttons #attach-image-button:disabled {
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Keep explicit background for disabled state */
+	color: var(
+		--vscode-button-secondaryForeground
+	); /* Keep explicit color for disabled state */
+	opacity: 0.5;
+	cursor: not-allowed;
+	border-color: var(
+		--vscode-button-border,
+		var(--border-color)
+	); /* Keep explicit border for disabled state */
+}
+.input-action-buttons #attach-image-button .fa-icon {
+	font-size: 1.1em;
+}
+
+/* New Rules for Command Suggestions */
+#command-suggestions-container {
+	position: absolute;
+	bottom: calc(100% + 5px); /* Position above the input container */
+	left: 0;
+	right: 0;
+	max-height: 200px;
+	overflow-y: auto;
+	background-color: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-editorWidget-border);
+	border-radius: var(--border-radius);
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+	display: none; /* Hidden by default, shown by JS */
+	z-index: 100; /* Ensure it appears on top */
+	padding: 5px;
+	display: flex; /* Added for gap and flex-direction to work */
+	flex-direction: column;
+}
+.command-item {
+	padding: 8px 10px;
+	cursor: pointer;
+	border-radius: var(--border-radius);
+	font-size: 0.9em;
+	color: var(--vscode-editor-foreground);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	transition: background-color 0.1s ease, color 0.1s ease;
+}
+.command-item:hover {
+	background-color: var(--vscode-list-hoverBackground);
+}
+.command-item.active {
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
+}

@@ -1,0 +1,217 @@
+.model-select-container {
+	display: flex;
+	align-items: center;
+	gap: var(--element-spacing);
+	width: 100%;
+}
+
+.model-select-container label {
+	/* Optional Label */
+	flex-shrink: 0;
+	font-size: 0.95em;
+	color: var(--vscode-foreground);
+}
+
+#model-select {
+	flex-grow: 1;
+	background-color: var(--vscode-dropdown-background);
+	color: var(--vscode-dropdown-foreground);
+	border: 1px solid var(--vscode-dropdown-border);
+	padding: 4px 8px; /* Adjust padding */
+	height: var(--input-height); /* Match height */
+	border-radius: var(--border-radius);
+	font-family: inherit;
+	font-size: inherit;
+	width: 100%;
+	box-sizing: border-box;
+	outline: none;
+}
+#model-select:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+#model-select:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+	background-color: var(--vscode-input-background);
+}
+
+.key-management-controls {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: var(--element-spacing);
+	gap: 5px;
+}
+.key-management-controls span#current-key-display {
+	font-size: 0.9em;
+	color: var(--vscode-input-foreground);
+	text-align: center;
+	flex-grow: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	padding: 0 8px; /* Only horizontal padding */
+	background-color: var(--vscode-input-background);
+	border-radius: var(--border-radius);
+	border: 1px solid var(--border-color);
+	height: var(--input-height);
+	line-height: var(--input-height); /* Vertically center */
+}
+.key-management-controls button {
+	padding: 0;
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--border-color);
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Ensured color transition */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.key-management-controls button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+.key-management-controls button:disabled {
+	background-color: var(--vscode-input-background);
+	opacity: 0.6;
+	cursor: not-allowed;
+	border-color: var(--border-color);
+}
+.key-management-controls button .fa-icon {
+	/* Key Icons */
+	font-size: 0.9em;
+}
+
+.add-key-container {
+	display: flex;
+	margin-top: var(--element-spacing);
+	align-items: stretch;
+}
+#add-key-input {
+	flex-grow: 1;
+	margin-right: 5px;
+	background-color: var(--vscode-input-background);
+	border: 1px solid var(--vscode-input-border); /* Changed border color */
+	color: var(--vscode-input-foreground);
+	padding: 0 8px;
+	border-radius: var(--border-radius);
+	height: calc(var(--input-height)); /* Align height */
+	outline: none;
+	box-sizing: border-box;
+}
+#add-key-input:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+#add-key-button {
+	padding: 0;
+	height: calc(var(--input-height));
+	width: calc(var(--input-height) + 10px);
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: none;
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Ensured color transition */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+#add-key-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+#add-key-button:disabled {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	opacity: 0.7;
+}
+#add-key-button .fa-icon {
+	/* Add Key Icon */
+	font-size: 1.1em;
+}
+
+#api-key-status {
+	font-size: 0.9em;
+	margin-top: 5px;
+	color: var(--vscode-descriptionForeground);
+	min-height: 1.5em;
+	text-align: center;
+	transition: color 0.2s ease-in-out;
+}
+
+.api-key-section p small {
+	/* Key storage notice */
+	font-size: 0.85em;
+	color: var(--vscode-descriptionForeground);
+	display: block;
+	text-align: center;
+	margin-top: var(--element-spacing);
+}
+
+.checkbox-toggle-container {
+	display: flex;
+	align-items: center;
+	cursor: pointer;
+	font-size: 0.98em; /* Inherit from old label inline style */
+	margin-bottom: 6px; /* Inherit from old #grounding-toggle-container inline style */
+	user-select: none; /* Prevent text selection when clicking toggle */
+}
+
+.hidden-checkbox {
+	position: absolute;
+	opacity: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none; /* Allows clicks to pass through to the label */
+}
+
+.toggle-switch {
+	width: var(--toggle-width);
+	height: var(--toggle-height);
+	background-color: var(--toggle-track-background-unchecked);
+	border: 1px solid var(--toggle-track-border-unchecked);
+	border-radius: var(
+		--toggle-height
+	); /* Makes it a pill shape based on height */
+	position: relative;
+	flex-shrink: 0; /* Prevent the toggle from shrinking */
+	transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+	margin-right: 8px; /* Space between toggle and text, replicating old label's style */
+}
+.toggle-switch::before {
+	content: "";
+	position: absolute;
+	width: var(--toggle-thumb-size);
+	height: var(--toggle-thumb-size);
+	background-color: var(--toggle-thumb-background);
+	border-radius: 50%;
+	top: 2px; /* Centering vertically: (20 - 16) / 2 = 2px */
+	left: 2px; /* Initial position on the left side (2px padding) */
+	transition: transform 0.2s ease-in-out;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); /* Subtle shadow for depth */
+}
+.hidden-checkbox:checked + .toggle-switch {
+	background-color: var(--toggle-track-background-checked);
+	border-color: var(
+		--toggle-track-background-checked
+	); /* Border matches background when checked */
+}
+.hidden-checkbox:checked + .toggle-switch::before {
+	transform: translateX(
+		calc(var(--toggle-width) - var(--toggle-thumb-size) - 4px)
+	); /* Move thumb to the right, accounting for 2px padding on each side (total 4px) */
+}
+.checkbox-toggle-container:hover .toggle-switch {
+	/* A subtle visual cue on hover, e.g., a slight border or shadow */
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+.hidden-checkbox:focus-visible + .toggle-switch {
+	box-shadow: var(--toggle-focus-shadow); /* VS Code's focus indicator */
+	outline: none; /* Remove default outline if any */
+}
