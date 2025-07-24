@@ -9,9 +9,9 @@ import {
 	HistoryEntryPart, // Ensure HistoryEntryPart is imported for type safety
 } from "../sidebar/common/sidebarTypes";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
-import { generateLightweightPlanPrompt } from "../sidebar/services/aiInteractionService";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini"; // CRITICAL: Added import for ERROR_OPERATION_CANCELLED
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
+import { generateLightweightPlanPrompt } from "../ai/prompts/lightweightPrompts";
 
 export async function handleWebviewMessage(
 	data: any,

@@ -348,16 +348,14 @@ export class EnhancedCodeGenerator {
 		languageId: string
 	): string {
 		const fileAnalysis = this._analyzeFilePath(filePath);
-		const styleGuide = this._getStyleGuide(languageId);
 
-		return `You are an expert software engineer specializing in ${languageId} development. Your task is to generate production-ready, accurate code.
+		return `You are an expert software engineer specializing in ${languageId} development. Your task is to generate production-ready, accurate code. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
 1. **Accuracy First**: Ensure all imports, types, and dependencies are *absolutely* correct and precisely specified. Verify module paths, type definitions, and API usage.
 2. **Style Consistency**: Adhere *rigorously* to the project's existing coding patterns, conventions, and formatting. Maintain current indentation, naming, and structural choices.
-3. **Error Prevention**: Generate code that will compile and run *without any errors or warnings*. Proactively anticipate and guard against common pitfalls beyond just the immediate task, such as null/undefined checks, input validations, edge cases, and off-by-one errors.
+3. **Error Prevention**: Generate code that will compile and run *without any errors or warnings*. Proactively anticipate and guard against common pitfalls beyond just the immediate task, such as null/undefined checks, any types in typescript, input validations, edge cases, or off-by-one errors.
 4. **Best Practices**: Employ modern language features, established design patterns, and industry best practices to ensure high-quality, efficient, and robust code that is production-ready, maintainable, and clean.
-5. **Surgical Precision & Minimal Changes**: DO NOT introduce extraneous refactoring, reformatting, or cosmetic alterations. Generate only the necessary new code.
 6. **Security**: Implement secure coding practices meticulously, identifying and addressing potential vulnerabilities relevant to the language and context.
 
 ${
@@ -391,10 +389,6 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 - Framework: ${fileAnalysis.framework}
 - Project Structure: ${fileAnalysis.projectStructure}
 - Expected Patterns: ${fileAnalysis.expectedPatterns}
-
-**Style Guide:**
-${styleGuide}
-**Strict Adherence**: Rigorously follow all guidelines within this style guide to ensure seamless integration and absolute code consistency. Any deviation is considered a critical error.
 
 **Instructions:**
 ${generatePrompt}
@@ -602,19 +596,14 @@ ${content}
 \`\`\`
 
 **Refinement Instructions:**
-- **PRIORITY: ZERO ERRORS/WARNINGS**: Your primary objective is to resolve ALL reported issues in this single refinement attempt. The resulting code MUST compile and run without any errors or warnings.
--   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
 - **Comprehensive Issue Resolution:** Fix *every single identified issue* meticulously, ensuring perfectly valid, error-free code.
 - **Imports Correctness:** Verify and correct all imports. Ensure all necessary imports are present, and eliminate any unused or redundant ones.
 - **Variable/Type Usage:** Reinforce correct variable declarations, scope, and accurate TypeScript types.
-- **Functionality Preservation:** Ensure original or intended new functionality is perfectly maintained.
-- **Compile/Runtime Errors:** Demand code that compiles and runs *without any errors or warnings*, proactively identifying and mitigating potential runtime issues, logical flaws, and edge cases (e.g., empty arrays, zero values), null/undefined checks, and off-by-one errors.
 - **Code Style/Formatting:** Stricter adherence to existing project coding style and formatting conventions (indentation, spacing, line breaks, bracket placement, naming conventions), ensuring seamless integration.
-- **Efficiency/Performance:** Instruct to review for code efficiency, optimizing loops, eliminating redundant computations, and choosing appropriate data structures/algorithms.
 - **Modularity/Maintainability:** Ensure code is modular with clear separation of concerns, easy to read, understand, and maintain.
-- **Production Readiness:** Demand the final code be production-ready, robust, and clean.
+- **Production Readiness:** Make sure the final code is production-ready, robust, and clean.
 
 **Context:**
 ${context.projectContext}
@@ -741,49 +730,6 @@ Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE C
 			fileName,
 			extension,
 		};
-	}
-
-	/**
-	 * Get language-specific style guide
-	 */
-	private _getStyleGuide(languageId: string): string {
-		const guides: Record<string, string> = {
-			typescript: `
-- Use TypeScript strict mode
-- Prefer interfaces over types for object shapes
-- Use async/await over Promises
-- Use const assertions where appropriate
-- Prefer arrow functions for callbacks
-- Use optional chaining and nullish coalescing
-- Export named exports over default exports
-- Use proper type annotations`,
-			javascript: `
-- Use ES6+ features (const, let, arrow functions)
-- Prefer async/await over Promises
-- Use optional chaining and nullish coalescing
-- Use template literals over string concatenation
-- Prefer arrow functions for callbacks
-- Use proper JSDoc comments for documentation`,
-			python: `
-- Follow PEP 8 style guide
-- Use type hints where appropriate
-- Use f-strings over .format()
-- Use list/dict comprehensions
-- Prefer pathlib over os.path
-- Use proper docstrings`,
-			java: `
-- Follow Java naming conventions
-- Use proper access modifiers
-- Implement equals() and hashCode() together
-- Use try-with-resources for resource management
-- Prefer Optional over null
-- Use proper JavaDoc comments`,
-		};
-
-		return (
-			guides[languageId] ||
-			"Follow standard coding conventions for the language"
-		);
 	}
 
 	/**
@@ -1145,17 +1091,14 @@ Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE C
 		// MODIFIED: Get fileAnalysis from context
 		const fileAnalysis = context.fileStructureAnalysis;
 
-		return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions.
+		return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
 1. **Preserve Existing Structure**: Maintain the current file organization, structural patterns, and architectural design without unrelated refactoring. This is paramount for seamless integration.
-2. **Surgical Precision & Minimal Changes**: Make *only* the exact, most targeted and minimal changes required by the 'Modification Instructions'. Do not introduce extraneous refactoring, reformatting, or stylistic changes (e.g., whitespace-only changes, reordering unrelated code blocks) unless explicitly requested and essential for the modification.
-3. **No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*, strictly avoiding changes that are solely whitespace, comments, or minor formatting, unless explicitly requested.
+3. **No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*, strictly avoiding changes that are solely whitespace, comments, or minor formatting.
 4. **Maintain Imports**: Maintain all *necessary* existing imports and add *only* strictly required new ones. Ensure import order is preserved unless a new logical grouping is absolutely essential for the requested modification.
 5. **Consistent Style**: Strictly follow the existing code style, formatting, and conventions of the current file.
-6. **Error Prevention**: Ensure the modified code compiles and runs *without any errors or warnings* and proactively address potential runtime issues, logical flaws, and edge cases (e.g., null/undefined checks, off-by-one errors, input validations).
 7. **Production Readiness**: Stress robustness, maintainability, and adherence to best practices for all modifications.
-**PRIORITY: ZERO ERRORS/WARNINGS**: Your generated modification MUST compile and run without any VS Code reported errors or warnings in this single attempt.
 
 Path: ${filePath}
 Language: ${languageId}
@@ -1379,15 +1322,11 @@ Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE C
 				"\n"
 			)}\n\n**Original Content:**\n\`\`\`${languageId}\n${originalContent}\n\`\`\`\n\n**Current Modification:**\n\`\`\`${languageId}\n${modifiedContent}\n\`\`\`\n\n**Refinement Instructions:**
 - **PRIORITY: ZERO ERRORS/WARNINGS**: Your primary objective is to resolve ALL reported issues in this single refinement attempt. The resulting code MUST compile and run without any errors or warnings.
-- **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 - **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 - **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
-- **Revert Unintended Structural Changes**: If the modification drastically altered the file's inherent structure (e.g., deleted major components or refactored unrelated sections), revert those unintended changes.
 - **Maintain Import Integrity**: Ensure all necessary imports are present and correct. Do not remove existing imports unless they are explicitly unused by the new, correct code. Add only strictly required new imports.
-- **Targeted Changes**: For small functional changes, ensure the modification is highly localized and does not affect unrelated parts of the codebase.
-- **Minimize Diff Size:** Strive to make the diff (changes between 'Original Content' and 'Current Modification') as small and focused as possible. Avoid unnecessary line additions or deletions.
 - **Strict Style Adherence:** Strictly adhere to the original file's existing code style, formatting (indentation, spacing, line breaks, bracket placement), and naming conventions.
-- **Functionality and Correctness:** Ensure the modified code maintains all original functionality and is fully functional and error-free after correction. Specifically address any **VS Code-reported compilation/linting issues**.
+- **Functionality and Correctness:** Ensure the modified code maintains all original functionality and is fully functional and error-free after correction.
 
 **Context:**
 ${context.projectContext}
@@ -1819,6 +1758,7 @@ ${recentCorrectionAttemptOutcomes
 		}
 
 		const analysisPrompt = `You are an expert software engineer performing a root cause analysis on a failed code correction attempt.
+
 Your primary goal is to diagnose WHY the previous attempt did not resolve issues or introduced new ones, and to provide actionable insights for the *next* correction.
 
 **CRITICAL CONSTRAINT**: Your response MUST be ONLY plain text, summarizing the failure and strategy. ABSOLUTELY NO CODE BLOCKS (e.g., \`\`\`typescript), NO MARKDOWN FORMATTING (except basic bullet points if essential), NO CONVERSATIONAL FILLER (e.g., "I apologize", "Here is my analysis"), NO HEADERS, NO FOOTERS, NO GREETINGS, NO SIGNATURES. Start directly with the analysis.
@@ -2372,14 +2312,13 @@ ${content}
 
 **Alternative Correction Strategy:**
 - **PRIORITY: ZERO ERRORS/WARNINGS**: Your primary objective is to resolve ALL reported issues in this single refinement attempt. The resulting code MUST compile and run without any errors or warnings.
--   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
 - Implement a genuinely different problem-solving approach to fix these issues, strictly avoiding re-attempting similar fixes that have failed or were unproductive.
 - Consider architectural changes if needed
 - Focus on the root cause rather than symptoms
 - Ensure the solution is more robust and maintainable
-- **Proactive Error Mitigation**: Anticipate and guard against common pitfalls, such as null/undefined checks, input validations, edge cases, and off-by-one errors.
+- **Proactive Error Mitigation**: Anticipate and guard against common pitfalls, such as null/undefined checks, input validations, any types in typescript, edge cases, or off-by-one errors.
 - **Production Readiness**: Ensure the solution is robust, maintainable, secure, clean, and efficient, adhering to industry best practices for production-ready code.
 
 **Context:**
@@ -2497,7 +2436,6 @@ ${content}
 **Correction Instructions:**
 - **PRIORITY: ZERO ERRORS/WARNINGS**: Your primary objective is to resolve ALL reported issues in this single refinement attempt. The resulting code MUST compile and run without any errors or warnings.
 - **Learn from History**: Analyze and learn from the provided Successful Change History to replicate effective solutions, and from the Failed Correction Diff to understand past failures and avoid repeating unproductive strategies.
--   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
 - **Proactive Error Mitigation**: Beyond fixing the immediate issues, proactively prevent future occurrences where applicable, such as robust type usage, proper import organization, secure data handling, and comprehensive null/undefined checks.
@@ -2621,14 +2559,9 @@ ${content}
 **Correction Instructions:**
 - **PRIORITY: ZERO ERRORS/WARNINGS**: Your primary objective is to resolve ALL reported issues in this single refinement attempt. The resulting code MUST compile and run without any errors or warnings.
 - **Learn from History**: Analyze and learn from the provided Successful Change History to replicate effective solutions, and from the Failed Correction Diff to understand past failures and avoid repeating unproductive strategies.
--   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
 - **Proactive Error Mitigation**: Beyond fixing the immediate issues, proactively prevent future occurrences where applicable, such as robust type usage, proper import organization, secure data handling, and comprehensive null/undefined checks.
-- Remove unused imports
-- Add missing imports
-- Fix import paths
-- Ensure all imports are necessary and correct
 
 **Context:**
 ${context.projectContext}
@@ -2744,16 +2677,9 @@ ${content}
 **Correction Instructions:**
 - **PRIORITY: ZERO ERRORS/WARNINGS**: Your primary objective is to resolve ALL reported issues in this single refinement attempt. The resulting code MUST compile and run without any errors or warnings.
 - **Learn from History**: Analyze and learn from the provided Successful Change History to replicate effective solutions, and from the Failed Correction Diff to understand past failures and avoid repeating unproductive strategies.
--   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
 - **Proactive Error Mitigation**: Beyond fixing the immediate issues, proactively prevent future occurrences where applicable, such as robust type usage, proper import organization, secure data handling, and comprehensive null/undefined checks.
-- Follow coding best practices
-- Improve code readability
-- Use proper naming conventions
-- Apply design patterns where appropriate
-- Ensure code is maintainable
-- Address any other identified issues that are not syntax or import related.
 
 **Context:**
 ${context.projectContext}
@@ -2868,17 +2794,10 @@ ${content}
 \`\`\`
 
 **Correction Instructions:**
-- **PRIORITY: ZERO ERRORS/WARNINGS**: Your primary objective is to resolve ALL reported issues in this single refinement attempt. The resulting code MUST compile and run without any errors or warnings.
 - **Learn from History**: Analyze and learn from the provided Successful Change History to replicate effective solutions, and from the Failed Correction Diff to understand past failures and avoid repeating unproductive strategies.
--   **Surgical Precision**: Apply *only* the most targeted and minimal changes necessary to resolve the *exact* reported issues. Do not introduce any unrelated refactoring, reformatting, or cosmetic alterations.
 -   **Preserve Surrounding Code**: Leave all code lines and blocks untouched if they are not directly involved in resolving an identified diagnostic.
 -   **Maintain Indentation/Formatting**: Strictly adhere to the existing indentation, spacing, and formatting conventions of the original code.
 - **Proactive Error Mitigation**: Beyond fixing the immediate issues, proactively prevent future occurrences where applicable, such as robust type usage, proper import organization, secure data handling, and comprehensive null/undefined checks.
-- Fix all security vulnerabilities
-- Use secure coding practices
-- Validate inputs properly
-- Handle sensitive data correctly
-- Follow security best practices
 
 **Context:**
 ${context.projectContext}

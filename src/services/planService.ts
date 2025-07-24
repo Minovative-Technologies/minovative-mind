@@ -5,11 +5,6 @@ import { SidebarProvider } from "../sidebar/SidebarProvider";
 import * as sidebarTypes from "../sidebar/common/sidebarTypes";
 import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes";
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
-import {
-	createInitialPlanningExplanationPrompt,
-	createPlanningPrompt,
-	createCorrectionPlanPrompt,
-} from "../sidebar/services/aiInteractionService";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import {
 	ExecutionPlan,
@@ -27,12 +22,17 @@ import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
 import { GitConflictResolutionService } from "./gitConflictResolutionService";
 import { applyAITextEdits } from "../utils/codeUtils";
-import { DiagnosticService } from "../utils/diagnosticUtils"; // MODIFIED: Added waitForDiagnosticsToClear
+import { DiagnosticService } from "../utils/diagnosticUtils";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { showErrorNotification } from "../utils/notificationUtils";
 import { UrlContextService } from "./urlContextService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 import { executeCommand, CommandResult } from "../utils/commandExecution";
+import {
+	createInitialPlanningExplanationPrompt,
+	createPlanningPrompt,
+} from "../ai/prompts/planningPrompts";
+import { createCorrectionPlanPrompt } from "../ai/prompts/correctionPrompts";
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;

@@ -3,7 +3,6 @@ import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
 import { cleanCodeOutput } from "./utils/codeUtils";
 import * as sidebarTypes from "./sidebar/common/sidebarTypes";
-import { HistoryEntryPart } from "./sidebar/common/sidebarTypes"; // Added import for HistoryEntryPart
 import { hasMergeConflicts } from "./utils/mergeUtils"; // Added import for mergeUtils
 import { CodeSelectionService } from "./services/codeSelectionService";
 import { getSymbolsInDocument } from "./services/symbolService";
@@ -149,8 +148,8 @@ async function executeDocsAction(
 		};
 	}
 
-	const userInstruction = `Generate comprehensive documentation for the selected code block. The documentation should explain its purpose, functionality, parameters (if any), return values (if any), and any significant side effects or dependencies. Structure the documentation clearly using the native comment syntax for ${languageId} (e.g., JSDoc for TypeScript/JavaScript, Python doc strings for Python). Provide ONLY the raw documentation block. ABSOLUTELY DO NOT include any markdown language fences (e.g., \`\`\`javascript), code examples within fences, conversational text, or explanations. Provide only the raw documentation comments ready for direct insertion into the code.`;
-	const systemPrompt = `You are an expert AI programmer and technical writer assisting within VS Code using the ${selectedModel} model. Generate documentation for the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
+	const userInstruction = `Generate comprehensive documentation for the selected code block. The documentation should explain its purpose, functionality, parameters (if any), return values (if any), and any significant side effects or dependencies. Structure the documentation clearly using the native comment syntax for ${languageId} (e.g., JSDoc for TypeScript/JavaScript, Python doc strings for Python, and other docs for other languages). Provide ONLY the raw documentation block. ABSOLUTELY DO NOT include any markdown language fences (e.g., \`\`\`language), code examples within fences, conversational text, or explanations. Provide only the raw documentation comments ready for direct insertion into the code.`;
+	const systemPrompt = `You are an expert AI programmer and technical writer assisting within VS Code. Generate documentation for the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
 
 	const prompt = `
 	${systemPrompt}
@@ -282,25 +281,24 @@ export async function activate(context: vscode.ExtensionContext) {
 			const quickPickItems: vscode.QuickPickItem[] = [
 				{
 					label: "/fix",
-					description:
-						"Apply AI suggestions to fix code issues (whole file if no selection)",
+					description: "Fix bugs",
 				},
 				{
 					label: "/docs",
-					description: "Generate documentation for the selected code",
+					description: "Generate documentations",
 				},
 				{
 					label: "/merge",
-					description:
-						"Use AI to help resolve merge conflicts in the current file",
+					description: "Resolve merge conflicts",
 				},
 				{
 					label: "chat",
-					description: "Send selected code to chat for general conversation",
+					description: "General conversations",
 				},
 				{
 					label: "custom prompt",
-					description: "Enter a custom instruction for Minovative Mind",
+					description:
+						"Custom instructions (e.g. refactor, optimize, fix, etc...)",
 				},
 			];
 
@@ -388,7 +386,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					codeContextDescription = "the following code snippet";
 				}
 
-				const selectedModel = DEFAULT_FLASH_MODEL; // Use default model for chat
+				const selectedModel = DEFAULT_FLASH_LITE_MODEL; // Use default model for chat
 				if (!selectedModel) {
 					vscode.window.showErrorMessage(
 						"Minovative Mind: No AI model selected. Please check the sidebar."
@@ -414,14 +412,15 @@ export async function activate(context: vscode.ExtensionContext) {
 				if (trimmedInput.length > 0) {
 					finalUserMessageContent = trimmedInput;
 				} else {
-					finalUserMessageContent =
-						"Can you help me understand this code, or can we discuss it further?";
+					finalUserMessageContent = "Lets chat about my code.";
 				}
 
 				// Construct Prompt: Create userChatPrompt using a template string
 				const userChatPrompt =
+					`You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and don't provide code to user's requests, just be concise and informative to there prompts and request. You can't code but you can talk about it.\n\n` +
 					`${finalUserMessageContent}\n\n` +
-					`I've provided ${codeContextDescription} from file \`${fileName}\` (Language: ${codeContextLanguageId}). Please consider this code when responding to my message:\n\n\`\`\`${codeContextLanguageId}\n${codeContentForAI}\n\`\`\``;
+					`From this file \`${fileName}\`, I've provided ${codeContextDescription}. Lets chat about my code.\n\n` +
+					`(Language: ${codeContextLanguageId}):\n\n\`\`\`${codeContextLanguageId}\n${codeContentForAI}\n\`\`\``;
 
 				// Show Progress: Wrap the core logic in vscode.window.withProgress
 				await vscode.window.withProgress(
