@@ -268,12 +268,28 @@
 	);
 }
 
-/* Placeholder comment from original file, can be ignored as content is moved. */
-/* Clear Chat Confirmation Dialog Styling */
-/* The .confirmation-buttons-wrapper class (already existing in styles.css) will handle
-   display: flex, gap, and justify-content for the button group. */
+/* Styles for the textarea when message is in edit mode */
+.message-text-content.editing-textarea {
+	width: 100%;
+	height: 100px; /* Minimum height for usability */
+	min-height: 100px; /* Minimum height for usability */
+	max-height: 300px; /* Minimum height for usability */
+	resize: vertical; /* Allow vertical resizing */
+	background-color: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	border: 1px solid var(--vscode-input-border);
+	border-radius: var(--border-radius);
+	padding: var(--message-padding);
+	font-family: inherit;
+	font-size: inherit;
+	line-height: 1.5;
+	box-sizing: border-box; /* Include padding and border in width/height */
+	outline: none !important;
+	overflow-y: scroll;
+	overflow-x: hidden;
+}
 
-/* --- AI Context Files Section --- */
-/* Header for the context files list */
-/* List of context files */
-/* Individual file item */
+.message-text-content.editing-textarea:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}

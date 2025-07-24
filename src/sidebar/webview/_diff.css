@@ -155,3 +155,95 @@
 	border-bottom: none;
 	text-align: center;
 }
+
+.commit-message-section {
+	width: 100%;
+	background-color: var(--vscode-textCodeBlock-background);
+	border-top: 1px solid var(--vscode-editorWidget-border);
+	border-bottom: 1px solid var(--vscode-editorWidget-border);
+	padding: 10px;
+}
+
+/* --- Commit Review UI Enhancements --- */
+/* Styling for the editable commit message textarea */
+.commit-message-editor {
+	width: 100%; /* Ensure the textarea takes full width of its container */
+	background-color: var(
+		--vscode-input-background
+	); /* Use VS Code's theme variable for input background */
+	color: var(
+		--vscode-input-foreground
+	); /* Use VS Code's theme variable for input text color */
+	border: 1px solid var(--vscode-input-border); /* Standard input border from the VS Code theme */
+	border-radius: var(
+		--border-radius
+	); /* Use the common border-radius defined in :root */
+	padding: 8px 10px; /* Apply consistent padding around the text */
+	font-family: var(--vscode-font-family); /* Inherit the VS Code font family */
+	font-size: var(--vscode-font-size); /* Inherit the VS Code font size */
+	line-height: 1.5; /* Improve readability for multi-line text */
+	resize: vertical; /* Allow the user to vertically resize the textarea */
+	outline: none; /* Remove the default browser outline on focus */
+	box-sizing: border-box; /* Ensure padding and border are included in the element's total width and height */
+	min-height: 150px; /* Set a minimum height for visibility and usability */
+	overflow-y: auto; /* Add a vertical scrollbar if content overflows */
+}
+
+/* Focus state for the commit message textarea, matching VS Code's focus style */
+.commit-message-editor:focus {
+	border-color: var(
+		--vscode-focusBorder
+	); /* Highlight border with theme's focus color */
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder); /* Add a subtle outline shadow on focus */
+}
+
+.commit-review-buttons-wrapper {
+	display: flex;
+	gap: 10px;
+	justify-content: center;
+	width: 100%;
+}
+
+#confirm-commit-button {
+	padding: 8px 15px;
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: 1px solid transparent;
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Add transition */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: inherit; /* Inherit font size */
+}
+#confirm-commit-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+#confirm-commit-button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+#cancel-commit-button {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-button-border, var(--border-color));
+	padding: 8px 15px; /* Match padding of confirm button */
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Add transition */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: inherit; /* Inherit font size */
+}
+#cancel-commit-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+#cancel-commit-button:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
