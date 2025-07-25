@@ -6,17 +6,31 @@ export function cleanCodeOutput(codeString: string): string {
 		return "";
 	}
 
-	// Step 1: Globally remove all Markdown code block fences (, , etc.) and trim whitespace.
-	const cleanedStringInitial = codeString.replace(/(?:\w+)?\n?/g, "").trim();
+	// Step 1: Extract content from Markdown fenced code blocks, preserving file header logic.
+	// Define regex to find Markdown fenced code blocks (e.g., ```typescript\ncode\n```)
+	const fencedCodeRegex = /(?:```(?:\w+)?\n|```\n)([\s\S]*?)(?:\n```)/g;
+	let extractedCodeContent = "";
+	let foundFences = false;
+	let match;
+
+	// Iterate through all fenced code blocks
+	while ((match = fencedCodeRegex.exec(codeString)) !== null) {
+		// Append the captured code content (group 1)
+		extractedCodeContent += match[1];
+		foundFences = true;
+	}
+
+	// Determine the content to process: extracted code if fences found, otherwise original string
+	const contentToProcess = foundFences ? extractedCodeContent : codeString;
 
 	// Step 2: Define a regular expression constant fileHeaderRegex
-	// This regex matches patterns like "--- Relevant File: ... ---", "--- File: ... ---", or "--- Path: ... ---".
+	// This regex matches patterns like "---\\s*(?:Relevant\\s+)?(?:File|Path):\\s*[^-\\n]+\\s*---"$
 	// The 'i' flag makes it case-insensitive, and 'm' makes '^' and '$' match start/end of lines.
 	const fileHeaderRegex =
 		/^---\s*(?:Relevant\s+)?(?:File|Path):\s*[^-\n]+\s*---$/im;
 
-	// Step 3: Split the cleanedStringInitial into individual lines.
-	const lines = cleanedStringInitial.split("\n");
+	// Step 3: Split the content to process into individual lines.
+	const lines = contentToProcess.split("\n");
 
 	// Step 4: Initialize an empty array filteredLines and a boolean flag inContentBlock.
 	const filteredLines: string[] = [];
