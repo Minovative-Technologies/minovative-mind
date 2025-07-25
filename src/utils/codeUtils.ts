@@ -6,8 +6,8 @@ export function cleanCodeOutput(codeString: string): string {
 		return "";
 	}
 
-	// Step 1: Globally remove all Markdown code block fences (```, ```lang, etc.) and trim whitespace.
-	const cleanedStringInitial = codeString.replace(/```(?:\w+)?\n?/g, "").trim();
+	// Step 1: Globally remove all Markdown code block fences (, , etc.) and trim whitespace.
+	const cleanedStringInitial = codeString.replace(/(?:\w+)?\n?/g, "").trim();
 
 	// Step 2: Define a regular expression constant fileHeaderRegex
 	// This regex matches patterns like "--- Relevant File: ... ---", "--- File: ... ---", or "--- Path: ... ---".
@@ -49,7 +49,10 @@ export function cleanCodeOutput(codeString: string): string {
 
 	// Step 6: Join filteredLines back into a single string using newline characters (\n)
 	// and apply a final trim() to remove any remaining leading/trailing empty lines.
-	return filteredLines.join("\n").trim();
+	return filteredLines
+		.join("\n")
+		.replace(/<ctrl63>/g, "")
+		.trim();
 }
 
 export async function applyAITextEdits(

@@ -1684,6 +1684,22 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 
 		let currentCorrectionAttempt = 1;
 		while (currentCorrectionAttempt <= this.MAX_CORRECTION_PLAN_ATTEMPTS) {
+			// Inform the user about the waiting process
+			this._postChatUpdateForPlanExecution({
+				type: "appendRealtimeModelMessage",
+				value: {
+					text: "Waiting for diagnostics to stabilize for affected files...",
+				},
+				isPlanStepUpdate: true,
+			});
+
+			// Iterate through each affected file and wait for its diagnostics to stabilize
+			for (const fileUri of affectedFileUris) {
+				// The DiagnosticService.waitForDiagnosticsToStabilize utility handles
+				// internal logging and checks for cancellation via the provided token.
+				await DiagnosticService.waitForDiagnosticsToStabilize(fileUri, token);
+			}
+
 			if (token.isCancellationRequested) {
 				console.log(
 					`[MinovativeMind] Final validation and correction cancelled.`
