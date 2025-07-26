@@ -1,10 +1,8 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { AIRequestService } from "../../services/aiRequestService";
 import { ActiveSymbolDetailedInfo } from "../../services/contextService";
 import { HistoryEntryPart } from "../../sidebar/common/sidebarTypes";
 import * as sidebarTypes from "../../sidebar/common/sidebarTypes";
-import { ERROR_OPERATION_CANCELLED } from "../gemini";
 
 const MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT = 1000;
 const MAX_REFERENCED_TYPES_TO_INCLUDE_PROMPT = 3;
@@ -405,6 +403,7 @@ ${formatCallHierarchy(
         *   **Valid File Operations**: Use 'modify_file', 'create_file', 'create_directory', or 'run_command'. Ensure 'path' is non-empty, relative to workspace root, and safe (no '..' or absolute paths).
         *   **Detailed Descriptions**: Provide clear, concise 'description' for each step, explaining *why* it's necessary and *how* it specifically addresses diagnostics.
         *   **Single Modify Per File**: For any given file path, at most **one** \`modify_file\` step. Combine all logical changes for that file into a single, comprehensive \`modification_prompt\`.
+        *   **modification_prompt Content**: The \`modification_prompt\` field within each \`PlanStep\` MUST contain plain text instructions ONLY. Do NOT include any Markdown formatting (e.g., code blocks like \`\`\`typescript\`, bold, italics, or lists) within this string. It should be a direct instruction for code modification.
 
         --- Json Escaping Instructions ---
         ${jsonEscapingInstructions}

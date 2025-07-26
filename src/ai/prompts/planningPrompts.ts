@@ -544,6 +544,7 @@ export function createPlanningPrompt(
         *   **Properties**: Provide \`path\` (relative, safe, non-empty), \`description\` (required, detailed, explains *why* and *how*). Use \`content\`/\`generate_prompt\` for \`create_file\`, \`modification_prompt\` for \`modify_file\`, \`command\` for \`run_command\` (infer package manager).
         *   **Single Modify Per File**: At most one \`modify_file\` step per file path. Consolidate all changes for a file into its \`modification_prompt\`.
         *   **JSON Escaping**: Escape \`\\n\`, \`\\r\`, \`\\\`, \`\"\` within JSON string values.
+        *   **modification_prompt Content**: When generating the JSON plan, ensure the \`modification_prompt\` field within each \`PlanStep\` contains plain text instructions ONLY. Do NOT include any Markdown formatting (e.g., code blocks like \`\`\`\`typescript\`, bold, italics, or lists) within this string. It should be a direct instruction for code modification.
         *   **Output**: Strictly adhere to the JSON structure below and examples.
 
     --- Specific Context Prompt ---
