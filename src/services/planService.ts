@@ -1664,14 +1664,18 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 
 	// Add new _performFinalValidationAndCorrection method
 	private async _performFinalValidationAndCorrection(
-		affectedFileUris: Set<vscode.Uri>,
+		affectedFileUris: Set<vscode.Uri>, // This will be the initial set
 		rootUri: vscode.Uri,
 		token: vscode.CancellationToken,
 		planContext: sidebarTypes.PlanGenerationContext,
 		progress: vscode.Progress<{ message?: string; increment?: number }>,
 		originalUserInstruction: string
 	): Promise<boolean> {
-		if (affectedFileUris.size === 0) {
+		// Phase 1: Initialize filesNeedingCorrection Set
+		// This set will track files that still contain errors and require correction.
+		let filesNeedingCorrection = new Set<vscode.Uri>(affectedFileUris);
+
+		if (filesNeedingCorrection.size === 0) {
 			this._postChatUpdateForPlanExecution({
 				type: "appendRealtimeModelMessage",
 				value: {
@@ -1683,41 +1687,58 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		}
 
 		let currentCorrectionAttempt = 1;
+		// Phase 2: Maintain Outer Correction Attempts Loop
 		while (currentCorrectionAttempt <= this.MAX_CORRECTION_PLAN_ATTEMPTS) {
-			if (token.isCancellationRequested) {
+			// Phase 3: Add Early Exit Condition
+			// If no files need correction, we can exit successfully.
+			if (filesNeedingCorrection.size === 0) {
 				console.log(
-					`[MinovativeMind] Final validation and correction cancelled.`
+					`[MinovativeMind] All files corrected. Exiting validation loop.`
 				);
-				this._postChatUpdateForPlanExecution({
-					type: "appendRealtimeModelMessage",
-					value: { text: `Final code validation cancelled.` },
-					isPlanStepUpdate: true,
-				});
-				return false;
+				return true; // All files successfully corrected
 			}
 
-			let allErrors: vscode.Diagnostic[] = [];
-			let aggregatedFormattedDiagnostics = "";
-			const filesWithErrors = new Set<vscode.Uri>();
+			// Phase 4: Initialize nextFilesNeedingCorrection Set
+			// This set will store files that still have errors after the current attempt.
+			const nextFilesNeedingCorrection = new Set<vscode.Uri>();
+			// Flag to track if any file in this attempt resulted in a failure (e.g., plan generation, execution, or persistent errors).
+			let overallSuccessForThisAttempt = true;
 
-			// Collect diagnostics from all affected files
-			for (const fileUri of affectedFileUris) {
+			// Phase 5: Iterate Through filesNeedingCorrection
+			for (const currentFileUri of filesNeedingCorrection) {
+				if (token.isCancellationRequested) {
+					console.log(
+						`[MinovativeMind] Final validation and correction cancelled during file processing.`
+					);
+					this._postChatUpdateForPlanExecution({
+						type: "appendRealtimeModelMessage",
+						value: { text: `Final code validation cancelled.` },
+						isPlanStepUpdate: true,
+					});
+					return false; // Cancellation during processing means overall failure
+				}
+
+				let errorsFoundInCurrentFile = false;
+				let aggregatedFormattedDiagnosticsForFile = "";
+
+				// Phase 6: Isolate Diagnostics for the Current File
 				const diagnosticsForFile =
-					DiagnosticService.getDiagnosticsForUri(fileUri);
+					DiagnosticService.getDiagnosticsForUri(currentFileUri);
 				const errorsForFile = diagnosticsForFile.filter(
 					(d: vscode.Diagnostic) =>
 						d.severity === vscode.DiagnosticSeverity.Error
 				);
 
 				if (errorsForFile.length > 0) {
-					// Only proceed if actual errors are found
-					allErrors.push(...errorsForFile); // This array will now ONLY contain errors
-					filesWithErrors.add(fileUri); // filesWithErrors will now ONLY contain files with errors
+					errorsFoundInCurrentFile = true;
+					const fileRelativePath = path
+						.relative(rootUri.fsPath, currentFileUri.fsPath)
+						.replace(/\\/g, "/");
 
-					// Call formatContextualDiagnostics with the new `includeSeverities` parameter
+					// Format diagnostics specifically for this file, focusing only on errors.
 					const formattedForFile =
 						await DiagnosticService.formatContextualDiagnostics(
-							fileUri,
+							currentFileUri,
 							rootUri,
 							undefined, // No selection
 							5000, // Max total chars
@@ -1725,211 +1746,250 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							token,
 							[vscode.DiagnosticSeverity.Error] // EXPLICITLY request ONLY Error diagnostics
 						);
+
 					if (formattedForFile) {
-						aggregatedFormattedDiagnostics += formattedForFile + "\n";
+						aggregatedFormattedDiagnosticsForFile = formattedForFile;
 					}
-				}
-			}
 
-			if (allErrors.length === 0) {
-				const fileNames = Array.from(affectedFileUris)
-					.map((uri) => path.relative(rootUri.fsPath, uri.fsPath))
-					.join(", ");
-				this._postChatUpdateForPlanExecution({
-					type: "appendRealtimeModelMessage",
-					value: {
-						text: `All modifications validated successfully for: \`${fileNames}\`. No errors found.`,
-					},
-					isPlanStepUpdate: true,
-				});
-				return true; // Success! All diagnostics resolved.
-			} else {
-				const fileNames = Array.from(filesWithErrors)
-					.map((uri) => path.relative(rootUri.fsPath, uri.fsPath))
-					.join(", ");
-				this._postChatUpdateForPlanExecution({
-					type: "appendRealtimeModelMessage",
-					value: {
-						text: `Final validation failed for files: \`${fileNames}\` (found ${allErrors.length} errors). Attempting AI self-correction (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
-						isError: true,
-					},
-					isPlanStepUpdate: true,
-				});
-
-				try {
-					const jsonGenerationConfig: GenerationConfig = {
-						responseMimeType: "application/json",
-						temperature: sidebarConstants.TEMPERATURE,
-					};
-
-					// 1. Create a new array `filesForCorrectionSnippets` by mapping `filesWithErrors` to relative string paths.
-					const filesForCorrectionSnippets = Array.from(filesWithErrors).map(
-						(uri) =>
-							path.relative(rootUri.fsPath, uri.fsPath).replace(/\\/g, "/")
-					);
-
-					// 2. Call `this._formatRelevantFilesForPrompt` to generate `dynamicallyGeneratedRelevantSnippets`.
-					const dynamicallyGeneratedRelevantSnippets =
-						await this._formatRelevantFilesForPrompt(
-							filesForCorrectionSnippets,
-							rootUri,
-							token
-						);
-
-					const recentChanges = this.provider.changeLogger.getChangeLog();
-					const formattedRecentChanges =
-						this._formatRecentChangesForPrompt(recentChanges);
-
-					// 3. Retrieve the `activeSymbolInfoForCorrection` by accessing `planContext.activeSymbolDetailedInfo`.
-					//    This information is already embedded within planContext.projectContext if available,
-					//    so no explicit separate argument is passed to createCorrectionPlanPrompt for this.
-					const activeSymbolInfoForCorrection =
-						planContext.activeSymbolDetailedInfo;
-
-					// Create a modified project context that includes JSON escaping instructions.
-					// This is done to pass JSON_ESCAPING_INSTRUCTIONS to the AI through an existing argument,
-					// as modifying createCorrectionPlanPrompt's signature is outside the scope of this file.
-					let modifiedProjectContextForCorrection = planContext.projectContext;
-					if (activeSymbolInfoForCorrection) {
-						modifiedProjectContextForCorrection += `\n\n--- Active Symbol Detailed Information For Correction ---\n${JSON.stringify(
-							activeSymbolInfoForCorrection,
-							null,
-							2
-						)}\n--- End Active Symbol Detailed Information For Correction ---`;
-					}
-					modifiedProjectContextForCorrection += `\n\n--- JSON Escaping Instructions --- \n${this.JSON_ESCAPING_INSTRUCTIONS}\n--- End JSON Escaping Instructions ---`;
-
-					// Declare and initialize originalContextString
-					const originalContextString =
-						planContext.originalUserRequest ||
-						planContext.editorContext?.instruction ||
-						"";
-					// 4. Modify the `createCorrectionPlanPrompt` function call.
-					const correctionPlanPrompt = createCorrectionPlanPrompt(
-						originalContextString,
-						"",
-						undefined,
-						[],
-						dynamicallyGeneratedRelevantSnippets, // Pass dynamically generated relevant snippets
-						aggregatedFormattedDiagnostics,
-						formattedRecentChanges,
-						currentCorrectionAttempt > 1
-							? `Previous correction attempt (${
-									currentCorrectionAttempt - 1
-							  }) failed to resolve all diagnostics.`
-							: undefined
-					);
-
-					progress.report({
-						message: `AI generating overall correction plan (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
+					this._postChatUpdateForPlanExecution({
+						type: "appendRealtimeModelMessage",
+						value: {
+							text: `File '${fileRelativePath}' has ${errorsForFile.length} errors. Attempting AI correction (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
+							isError: true,
+						},
+						isPlanStepUpdate: true,
 					});
 
-					// Modify first argument to wrap string prompt in HistoryEntryPart array
-					let correctionPlanJsonString =
-						await this.provider.aiRequestService.generateWithRetry(
-							[{ text: correctionPlanPrompt }], // MODIFIED
-							sidebarConstants.DEFAULT_FLASH_LITE_MODEL, // Use default model for correction plans
-							undefined,
-							`final correction plan generation (attempt ${currentCorrectionAttempt})`,
-							jsonGenerationConfig,
-							undefined,
-							token
+					try {
+						const jsonGenerationConfig: GenerationConfig = {
+							responseMimeType: "application/json",
+							temperature: sidebarConstants.TEMPERATURE,
+						};
+
+						// Phase 7: Generate File-Specific Correction Plan
+						// Format only the current file as relevant for the prompt.
+						const dynamicallyGeneratedRelevantSnippets =
+							await this._formatRelevantFilesForPrompt(
+								[fileRelativePath], // Only include the current file
+								rootUri,
+								token
+							);
+
+						const recentChanges = this.provider.changeLogger.getChangeLog();
+						const formattedRecentChanges =
+							this._formatRecentChangesForPrompt(recentChanges);
+
+						const originalContextString =
+							planContext.originalUserRequest ||
+							planContext.editorContext?.instruction ||
+							"";
+
+						// Prepare editorContext specific to the current file for the prompt.
+						let fileSpecificEditorContext:
+							| sidebarTypes.EditorContext
+							| undefined;
+						if (planContext.type === "editor" && planContext.editorContext) {
+							fileSpecificEditorContext = {
+								...planContext.editorContext,
+								filePath: fileRelativePath, // Update path
+								documentUri: currentFileUri, // Update URI
+								// `selectedText` and `fullText` are usually captured at plan initiation.
+								// For correction, relying on diagnostics and the file path is often sufficient.
+							};
+						}
+
+						// Construct the prompt, ensuring it focuses ONLY on the current file.
+						const correctionPlanPrompt = createCorrectionPlanPrompt(
+							originalContextString,
+							"", // Project context is less critical when focusing on a single file.
+							fileSpecificEditorContext, // Pass the file-specific editor context
+							[], // Pass empty chat history as it might not be relevant per file
+							dynamicallyGeneratedRelevantSnippets, // Pass dynamically generated relevant snippets for the single file
+							aggregatedFormattedDiagnosticsForFile, // Pass file-specific diagnostics
+							formattedRecentChanges,
+							currentCorrectionAttempt > 1
+								? `Previous correction attempt (${
+										currentCorrectionAttempt - 1
+								  }) failed to resolve all diagnostics for this file.`
+								: undefined,
+							planContext.activeSymbolDetailedInfo // Pass activeSymbolInfo if available
 						);
 
-					correctionPlanJsonString = correctionPlanJsonString
-						.replace(/^\s*/im, "")
-						.replace(/\s*$/im, "")
-						.trim();
-
-					const parsedPlanResult: ParsedPlanResult = await parseAndValidatePlan(
-						correctionPlanJsonString,
-						rootUri
-					);
-
-					if (token.isCancellationRequested) {
-						throw new Error(ERROR_OPERATION_CANCELLED);
-					}
-
-					if (parsedPlanResult.plan) {
-						this._postChatUpdateForPlanExecution({
-							type: "appendRealtimeModelMessage",
-							value: {
-								text: `Applying final correction plan for diagnostics.`,
-							},
-							isPlanStepUpdate: true,
+						progress.report({
+							message: `AI generating correction plan for '${fileRelativePath}' (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
 						});
 
-						// Execute the generated correction plan.
-						// The `_executePlanSteps` function will log its changes and ensure the `changeLogger` is updated.
-						// We pass `affectedFileUris` to `_executePlanSteps` but it will just ignore it and generate its own affectedFileUris internally.
-						const subPlanAffectedFiles = await this._executePlanSteps(
-							parsedPlanResult.plan.steps!,
-							rootUri,
-							planContext,
-							token,
-							progress, // FIXED: Passing progress to `_executePlanSteps`
-							this.postMessageToWebview, // ADDED: Passing postMessageToWebview
-							originalUserInstruction // ADDED: Pass originalRootInstruction
-						);
-						// Add any new files or modifications from the sub-plan to the overall set for re-validation
-						subPlanAffectedFiles.forEach((uri) => affectedFileUris.add(uri));
+						// Execute AI request for the correction plan
+						let correctionPlanJsonString =
+							await this.provider.aiRequestService.generateWithRetry(
+								[{ text: correctionPlanPrompt }], // MODIFIED
+								sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
+								undefined,
+								`correction plan for ${fileRelativePath} (attempt ${currentCorrectionAttempt})`,
+								jsonGenerationConfig,
+								undefined,
+								token
+							);
 
-						// If the sub-plan execution itself failed (e.g. user cancelled a command in it), treat as failure
-						// Note: _executePlanSteps now returns affectedFileUris, so we need to check if the overall
-						// execution of the sub-plan was successful or not. This requires a small adjustment if it can fail
-						// silently. Given current _executePlanSteps returns Set<Uri>, it relies on caught exceptions.
-						// For simplicity, we assume if no exception, sub-plan *execution* was successful, then re-validate.
-						// If `_executePlanSteps` throws, it will be caught by the outer `try/catch` and stop the overall plan.
-					} else {
-						console.error(
-							`[MinovativeMind] Failed to parse/validate AI final correction plan (Attempt ${currentCorrectionAttempt}): ${parsedPlanResult.error}`
-						);
+						correctionPlanJsonString = correctionPlanJsonString
+							.replace(/^\s*/im, "")
+							.replace(/\s*$/im, "")
+							.trim();
+
+						const parsedPlanResult: ParsedPlanResult =
+							await parseAndValidatePlan(correctionPlanJsonString, rootUri);
+
+						if (token.isCancellationRequested) {
+							throw new Error(ERROR_OPERATION_CANCELLED);
+						}
+
+						if (parsedPlanResult.plan) {
+							this._postChatUpdateForPlanExecution({
+								type: "appendRealtimeModelMessage",
+								value: {
+									text: `Applying correction plan for '${fileRelativePath}'.`,
+								},
+								isPlanStepUpdate: true,
+							});
+
+							// Phase 8: Execute the Generated Plan
+							// The _executePlanSteps method processes the plan's steps.
+							// We expect the AI to generate a plan targeting only the currentFileUri.
+							// The return value `subPlanAffectedFiles` is tracked by the main `_executePlan` method.
+							const subPlanAffectedFiles = await this._executePlanSteps(
+								parsedPlanResult.plan.steps!,
+								rootUri,
+								planContext, // Pass the original planContext for broader context if needed by steps
+								token,
+								progress,
+								this.postMessageToWebview,
+								originalUserInstruction
+							);
+							// Update the overall set of affected files from main _executePlan tracking.
+							// This isn't directly used for `filesNeedingCorrection` logic here, but maintains consistency.
+							subPlanAffectedFiles.forEach((uri) => affectedFileUris.add(uri));
+						} else {
+							// Failed to parse plan for this file
+							console.error(
+								`[MinovativeMind] Failed to parse AI correction plan for '${fileRelativePath}' (Attempt ${currentCorrectionAttempt}): ${parsedPlanResult.error}`
+							);
+							this._postChatUpdateForPlanExecution({
+								type: "appendRealtimeModelMessage",
+								value: {
+									text: formatUserFacingErrorMessage(
+										new Error(
+											parsedPlanResult.error ||
+												"Failed to parse the correction plan."
+										),
+										`The AI generated an invalid final correction plan for '${fileRelativePath}'. Please check the Developer Tools console for more details.`,
+										"AI correction error: ",
+										rootUri
+									),
+									isError: true,
+								},
+								isPlanStepUpdate: true,
+							});
+							overallSuccessForThisAttempt = false; // Mark attempt as failed for this file
+						}
+					} catch (correctionError: any) {
 						this._postChatUpdateForPlanExecution({
 							type: "appendRealtimeModelMessage",
 							value: {
 								text: formatUserFacingErrorMessage(
-									new Error(
-										parsedPlanResult.error ||
-											"Failed to parse the correction plan."
-									),
-									"The AI generated an invalid final correction plan. Please check the Developer Tools console for more details.",
-									"AI correction error: ",
+									correctionError,
+									`AI final self-correction failed for '${fileRelativePath}' due to an unexpected issue. Retry with /fix. Manual review may be required.`,
+									"AI self-correction failed: ",
 									rootUri
 								),
 								isError: true,
 							},
 							isPlanStepUpdate: true,
 						});
+						overallSuccessForThisAttempt = false; // Mark attempt as failed for this file
 					}
-				} catch (correctionError: any) {
-					this._postChatUpdateForPlanExecution({
-						type: "appendRealtimeModelMessage",
-						value: {
-							text: formatUserFacingErrorMessage(
-								correctionError,
-								"AI final self-correction failed due to an unexpected issue. Retry with /fix. Manual review may be required.",
-								"AI self-correction failed: ",
-								rootUri
-							),
-							isError: true,
-						},
-						isPlanStepUpdate: true,
-					});
+				} else {
+					// No errors found in this file for this attempt, or it was already resolved.
+					// File does not need correction in this round.
+					// It will naturally be excluded from nextFilesNeedingCorrection.
+					// We still need to update the overall success flag if this was the only file with issues.
 				}
-			}
-			currentCorrectionAttempt++; // Increment for the next validation/correction attempt
-		}
 
-		// If loop finishes (all attempts exhausted) and diagnostics are still present
-		this._postChatUpdateForPlanExecution({
-			type: "appendRealtimeModelMessage",
-			value: {
-				text: `Overall validation failed after ${this.MAX_CORRECTION_PLAN_ATTEMPTS} attempts to auto-correct errors. Please review the affected files manually.`,
-				isError: true,
-			},
-			isPlanStepUpdate: true,
-		});
-		return false; // All attempts exhausted, still errors
+				// Phase 9: Re-validate the Corrected File
+				// Only re-validate if we actually attempted a correction in this iteration for this file.
+				if (errorsFoundInCurrentFile) {
+					await DiagnosticService.waitForDiagnosticsToStabilize(
+						currentFileUri,
+						token
+					);
+					const diagnosticsAfterCorrection =
+						DiagnosticService.getDiagnosticsForUri(currentFileUri);
+					const errorsAfterCorrection = diagnosticsAfterCorrection.filter(
+						(d: vscode.Diagnostic) =>
+							d.severity === vscode.DiagnosticSeverity.Error
+					);
+
+					// Phase 10: Update nextFilesNeedingCorrection
+					// If errors still exist after correction, OR if any failure occurred during the process for this file,
+					// add it back to the set for the next attempt.
+					if (
+						errorsAfterCorrection.length > 0 ||
+						!overallSuccessForThisAttempt
+					) {
+						nextFilesNeedingCorrection.add(currentFileUri);
+						console.log(
+							`[MinovativeMind] Errors still present in '${path.relative(
+								rootUri.fsPath,
+								currentFileUri.fsPath
+							)}' after correction attempt ${currentCorrectionAttempt}. Adding back for next round.`
+						);
+					} else {
+						// No errors found after correction for this file, and the attempt was considered successful for this file.
+						console.log(
+							`[MinovativeMind] Errors resolved for '${path.relative(
+								rootUri.fsPath,
+								currentFileUri.fsPath
+							)}' after correction attempt ${currentCorrectionAttempt}.`
+						);
+						this._postChatUpdateForPlanExecution({
+							type: "appendRealtimeModelMessage",
+							value: {
+								text: `Correction successful for '${path.relative(
+									rootUri.fsPath,
+									currentFileUri.fsPath
+								)}'.`,
+								isError: false,
+							},
+							isPlanStepUpdate: true,
+						});
+					}
+				}
+				// Phase 11: Handle Files Without Errors - implicitly handled as they are not added to nextFilesNeedingCorrection.
+			} // End of for...of loop iterating through filesNeedingCorrection
+
+			// Phase 12: Update filesNeedingCorrection for the next iteration.
+			filesNeedingCorrection = nextFilesNeedingCorrection;
+			currentCorrectionAttempt++;
+
+			// The early exit condition at the start of the `while` loop handles the case where `filesNeedingCorrection.size` becomes 0.
+		} // End of while loop for MAX_CORRECTION_PLAN_ATTEMPTS
+
+		// Phase 14: Final Method Outcome
+		// If the loop finishes (all attempts exhausted) and there are still files needing correction, it's a failure.
+		if (filesNeedingCorrection.size > 0) {
+			this._postChatUpdateForPlanExecution({
+				type: "appendRealtimeModelMessage",
+				value: {
+					text: `Overall validation failed after ${this.MAX_CORRECTION_PLAN_ATTEMPTS} attempts to auto-correct errors in ${filesNeedingCorrection.size} file(s). Please review the affected files manually.`,
+					isError: true,
+				},
+				isPlanStepUpdate: true,
+			});
+			return false; // Still files with errors after all attempts.
+		} else {
+			// If the loop completed and `filesNeedingCorrection` is empty, it implies all files were resolved.
+			// This path is typically handled by the early exit condition inside the loop, but this serves as a final check.
+			return true;
+		}
 	}
 
 	private async _performCommandCorrection(
