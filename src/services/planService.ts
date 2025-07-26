@@ -576,7 +576,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 	): Promise<void> {
 		this._postChatUpdateForPlanExecution({
 			type: "appendRealtimeModelMessage",
-			value: { text: `Generating detailed execution plan (JSON)...` },
+			value: { text: `Generating plan...` },
 			isPlanStepUpdate: true,
 		});
 
