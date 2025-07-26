@@ -41,21 +41,6 @@ export class PlanService {
 	private urlContextService: UrlContextService;
 	private enhancedCodeGenerator: EnhancedCodeGenerator;
 
-	// CRITICAL ADDITION: JSON escaping instructions for the AI model
-	private readonly JSON_ESCAPING_INSTRUCTIONS = `When generating the JSON for the \`ExecutionPlan\`, it is **CRITICAL** to ensure that all string values are valid JSON strings, with particular attention to proper escaping:
-
--   **Backslash (\`\\\`) Escaping**: Any literal backslash character (\`\\\`) that appears in the content you are embedding into a JSON string (e.g., in file paths like \`C:\\Users\\file.js\`, or regex patterns like \`\\d+\`, or even the literal \`\\n\` sequence) **MUST** be escaped by using *double backslashes* (\`\\\\\`) in the final JSON string. This means:
-    -   A file path like \`C:\\path\\to\\file.js\` must appear as \`C:\\\\path\\\\to\\\\file.js\` in the JSON string.
-    -   A regex part like \`\\w+\` must appear as \`\\\\w+\` in the JSON string.
-    -   If your code snippet content literally includes the two characters \`\\n\` (\`\\n\`), that sequence itself must be escaped for JSON as \`\\\\n\` (e.g., \`const newline = "\\n";\` becomes \`"const newline = \\"\\\\n\\";"\` in the JSON).
-
--   **Newline (\`\\n\`) Characters**: To represent a standard newline *character* (line feed) in JSON, use the standard JSON escape sequence \`\\n\`. This applies to multiline strings or when you explicitly need a newline character in text.
-
-Adherence to these precise JSON escaping rules is paramount for the \`ExecutionPlan\` to be parsed successfully. Mis-escaped backslashes are a common cause of \`Bad escaped character in JSON\` errors. Review your generated strings carefully to ensure all backslashes that are part of the content are correctly doubled for the JSON format.
---- CRITICAL INSTRUCTION FOR FILE MODIFICATIONS ---
-**Consolidate File Changes**: When the plan involves multiple modifications to the *same file*, you **MUST** consolidate all these modifications into a *single* \`modifyFile\` step for that file. Do not create separate \`modifyFile\` steps for the same file if all changes can be logically combined into one comprehensive modification operation. The system will then generate the entire new content for that file in one go and apply it atomically, ensuring a single, unified change per file. For example, if a file needs a new function and an import fix, these should be handled in one \`modifyFile\` step. This applies to both initial plan generation and correction plans.
---- END CRITICAL INSTRUCTION FOR FILE MODIFICATIONS ---`;
-
 	constructor(
 		private provider: SidebarProvider,
 		private workspaceRootUri: vscode.Uri | undefined, // Add workspaceRootUri
@@ -624,14 +609,14 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 			let currentJsonPlanningPrompt = createPlanningPrompt(
 				planContext.type === "chat"
 					? planContext.originalUserRequest
-					: undefined,
-				planContext.projectContext,
-				planContext.type === "editor" ? planContext.editorContext : undefined,
-				this.JSON_ESCAPING_INSTRUCTIONS, // Inject the JSON escaping instructions here
-				planContext.chatHistory,
-				planContext.textualPlanExplanation,
-				formattedRecentChanges,
-				urlContextString
+					: undefined, //1.userRequest
+				planContext.projectContext, //2.projectContext
+				planContext.type === "editor" ? planContext.editorContext : undefined, //3.editorContext
+				undefined, //4.combinedDiagnosticsAndRetryString(passundefinedaspercorrectedmapping)
+				planContext.chatHistory, //5.chatHistory
+				planContext.textualPlanExplanation, //6.textualPlanExplanation
+				formattedRecentChanges, //7.recentChanges
+				urlContextString //8.urlContextString
 			);
 
 			// Start of the retry loop
@@ -714,7 +699,6 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 						const retryFeedbackString = `CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${lastParsingError}". You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. Do not include markdown fences. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct JSON)`;
 
 						// Combine the fixed JSON escaping instructions with the dynamic retry feedback
-						const combinedFeedbackString = `${this.JSON_ESCAPING_INSTRUCTIONS}\n\n${retryFeedbackString}`;
 
 						// Update the prompt for the next iteration
 						currentJsonPlanningPrompt = createPlanningPrompt(
@@ -725,7 +709,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							planContext.type === "editor"
 								? planContext.editorContext
 								: undefined,
-							combinedFeedbackString, // Pass the combined string here for next AI call
+							undefined,
 							planContext.chatHistory,
 							planContext.textualPlanExplanation,
 							formattedRecentChanges,
@@ -2055,7 +2039,9 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 						2
 					)}\n--- End Active Symbol Detailed Information For Correction ---`;
 				}
-				modifiedProjectContextForCorrection += `\n\n--- JSON Escaping Instructions --- \n${this.JSON_ESCAPING_INSTRUCTIONS}\n--- End JSON Escaping Instructions ---`;
+				// Note: this.JSON_ESCAPING_INSTRUCTIONS is not a class property and does not exist.
+				// Removing this line as it will cause a compilation error.
+				// modifiedProjectContextForCorrection += `\n\n--- JSON Escaping Instructions --- \n${this.JSON_ESCAPING_INSTRUCTIONS}\n--- End JSON Escaping Instructions ---`;
 
 				const correctionPlanPrompt = createCorrectionPlanPrompt(
 					originalUserInstruction,
