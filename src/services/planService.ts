@@ -1,4 +1,3 @@
-// src/services/planService.ts
 import * as vscode from "vscode";
 import * as path from "path";
 import { GenerationConfig } from "@google/generative-ai";
@@ -22,7 +21,7 @@ import { typeContentIntoEditor } from "../sidebar/services/planExecutionService"
 import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
 import { GitConflictResolutionService } from "./gitConflictResolutionService";
-import { applyAITextEdits } from "../utils/codeUtils";
+import { applyAITextEdits, cleanCodeOutput } from "../utils/codeUtils";
 import { DiagnosticService } from "../utils/diagnosticUtils";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { showErrorNotification } from "../utils/notificationUtils";
@@ -687,8 +686,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 				}
 
 				// AI Request
-				// Line 660: Modify first argument to wrap string prompt in HistoryEntryPart array
-				structuredPlanJsonString =
+				let rawAiResponse =
 					await this.provider.aiRequestService.generateWithRetry(
 						[{ text: currentJsonPlanningPrompt }], // MODIFIED
 						sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
@@ -702,10 +700,10 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 				if (token?.isCancellationRequested) {
 					throw new Error(ERROR_OPERATION_CANCELLED);
 				}
-				if (structuredPlanJsonString.toLowerCase().startsWith("error:")) {
+				if (rawAiResponse.toLowerCase().startsWith("error:")) {
 					throw new Error(
 						formatUserFacingErrorMessage(
-							new Error(structuredPlanJsonString),
+							new Error(rawAiResponse),
 							"The AI failed to generate a valid structured plan. This might be a model issue.",
 							"AI response error: ",
 							planContext.workspaceRootUri
@@ -713,11 +711,8 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 					);
 				}
 
-				// Markdown stripping
-				structuredPlanJsonString = structuredPlanJsonString
-					.replace(/^\s*/im, "")
-					.replace(/\s*$/im, "")
-					.trim();
+				// Clean the response to extract the pure JSON string
+				structuredPlanJsonString = cleanCodeOutput(rawAiResponse);
 
 				// JSON Parsing and Validation
 				const parsedPlanResult: ParsedPlanResult = await parseAndValidatePlan(
