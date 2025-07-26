@@ -1,3 +1,4 @@
+// src/extension.ts
 import * as vscode from "vscode";
 import { SidebarProvider } from "./sidebar/SidebarProvider";
 import { ERROR_QUOTA_EXCEEDED, resetClient } from "./ai/gemini"; // Import necessary items
