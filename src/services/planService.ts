@@ -71,6 +71,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 	 * Triggers the UI to display the textual plan for review.
 	 * This public method acts as a wrapper for the private _handlePostTextualPlanGenerationUI.
 	 * @param planContext The context containing the generated plan and associated data.
+	 * @returns A Promise that resolves when the UI is updated.
 	 */
 	public async triggerPostTextualPlanUI(
 		planContext: sidebarTypes.PlanGenerationContext
@@ -78,9 +79,15 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		return this._handlePostTextualPlanGenerationUI(planContext);
 	}
 
-	// --- CHAT-INITIATED PLAN ---
+	/**
+	 * Handles an initial plan request initiated from the chat input.
+	 * This method orchestrates the generation of a textual plan explanation
+	 * and prepares the context for structured plan generation.
+	 * @param userRequest The initial request provided by the user in natural language.
+	 * @returns A Promise that resolves when the initial plan explanation has been processed and posted to the webview.
+	 */
 	public async handleInitialPlanRequest(userRequest: string): Promise<void> {
-		const { settingsManager, apiKeyManager, changeLogger } = this.provider;
+		const { apiKeyManager, changeLogger } = this.provider;
 		const modelName = sidebarConstants.DEFAULT_FLASH_LITE_MODEL; // Use default model for initial plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
@@ -304,7 +311,22 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		}
 	}
 
-	// --- EDITOR-INITIATED PLAN ---
+	/**
+	 * Initiates a plan generation process based on an action triggered from the editor,
+	 * such as selecting text and invoking a command. It generates a textual plan explanation
+	 * and returns the context for potential structured plan generation.
+	 * @param instruction The instruction provided by the user for the editor action.
+	 * @param selectedText The text currently selected in the active editor.
+	 * @param fullText The full content of the active editor document.
+	 * @param languageId The language identifier of the active editor document (e.g., 'typescript', 'python').
+	 * @param documentUri The URI of the active editor document.
+	 * @param selection The VS Code Range object representing the current selection in the editor.
+	 * @param initialProgress Optional progress reporter for initial UI updates.
+	 * @param initialToken Optional cancellation token to cancel the operation.
+	 * @param diagnosticsString Optional string containing formatted diagnostics for the current file.
+	 * @param isMergeOperation Boolean indicating if this is part of a merge conflict resolution flow.
+	 * @returns A Promise resolving to a PlanGenerationResult indicating success/failure and relevant data.
+	 */
 	public async initiatePlanFromEditorAction(
 		instruction: string,
 		selectedText: string,
@@ -317,7 +339,7 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		diagnosticsString?: string,
 		isMergeOperation: boolean = false // Added isMergeOperation parameter
 	): Promise<sidebarTypes.PlanGenerationResult> {
-		const { settingsManager, apiKeyManager, changeLogger } = this.provider;
+		const { apiKeyManager, changeLogger } = this.provider;
 		const modelName = sidebarConstants.DEFAULT_FLASH_LITE_MODEL; // Use default model for editor-initiated plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
@@ -570,7 +592,13 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		}
 	}
 
-	// --- PLAN GENERATION & EXECUTION ---
+	/**
+	 * Generates a structured execution plan (JSON) based on a previously explained textual plan
+	 * and then proceeds to execute it. This method includes a retry mechanism for plan parsing.
+	 * @param planContext The context for plan generation, typically containing the original user request,
+	 *                    project context, relevant files, chat history, and the textual plan explanation.
+	 * @returns A Promise that resolves when the structured plan has been executed or failed.
+	 */
 	public async generateStructuredPlanAndExecute(
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {
@@ -868,7 +896,6 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							planContext,
 							combinedToken,
 							progress, // FIXED: Passing progress from `withProgress` callback
-							this.postMessageToWebview, // ADDED: Pass this.postMessageToWebview
 							originalRootInstruction // ADDED: Pass originalRootInstruction
 						);
 
@@ -981,13 +1008,25 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		}
 	}
 
+	/**
+	 * Executes a series of predefined plan steps sequentially. It manages the state of affected files,
+	 * handles transient errors with auto-retries, and provides user intervention points for critical failures.
+	 * Each step's execution is logged in the chat history.
+	 * @param steps An array of PlanStep objects to be executed.
+	 * @param rootUri The root URI of the workspace.
+	 * @param context The overall plan generation context.
+	 * @param combinedToken A CancellationToken to observe cancellation requests from various sources.
+	 * @param progress A progress reporter for VS Code notifications.
+	 * @param originalRootInstruction The original instruction that initiated the overall plan.
+	 * @returns A Promise that resolves with a Set of vscode.Uri objects representing all files affected (created/modified) during the execution of these steps.
+	 * @throws {Error} If the operation is cancelled by the user.
+	 */
 	private async _executePlanSteps(
 		steps: PlanStep[],
 		rootUri: vscode.Uri,
 		context: sidebarTypes.PlanGenerationContext, // Renamed to context for clarity
 		combinedToken: vscode.CancellationToken,
 		progress: vscode.Progress<{ message?: string; increment?: number }>, // ADDED: progress parameter
-		postMessageToWebview: (message: ExtensionToWebviewMessages) => void, // ADDED: postMessageToWebview parameter
 		originalRootInstruction: string // ADDED: originalRootInstruction parameter
 	): Promise<Set<vscode.Uri>> {
 		const affectedFileUris = new Set<vscode.Uri>();
@@ -1626,6 +1665,12 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 	}
 
+	/**
+	 * Formats a list of recent file changes into a string suitable for inclusion in an AI prompt.
+	 * Each change includes its type, file path, summary, and a diff.
+	 * @param changes An array of FileChangeEntry objects representing recent modifications.
+	 * @returns A formatted string detailing recent project changes, or an empty string if no changes are provided.
+	 */
 	private _formatRecentChangesForPrompt(changes: FileChangeEntry[]): string {
 		if (!changes || changes.length === 0) {
 			return "";
@@ -1645,24 +1690,18 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		return formattedString + "--- End Recent Project Changes ---\n";
 	}
 
-	private _formatChatHistoryForPrompt(
-		chatHistory: sidebarTypes.HistoryEntry[] | undefined
-	): string {
-		if (!chatHistory || chatHistory.length === 0) {
-			return "";
-		}
-		return `\n--- Recent Chat History (for additional context on user's train of thought and previous conversations with a AI model) ---\n${chatHistory
-			.map(
-				(entry) =>
-					`Role: ${entry.role}\nContent:\n${entry.parts
-						.filter((p): p is { text: string } => "text" in p) // MODIFIED: Change type guard here
-						.map((p) => p.text)
-						.join("\n")}`
-			)
-			.join("\n---\n")}\n--- End Recent Chat History ---`;
-	}
-
-	// Add new _performFinalValidationAndCorrection method
+	/**
+	 * Performs a final validation of all affected files by checking for diagnostic errors
+	 * after the initial plan execution. If errors are found, it attempts to generate
+	 * and execute an AI-driven correction plan in multiple attempts.
+	 * @param affectedFileUris A Set of URIs of files that were modified or created by the plan, which need validation.
+	 * @param rootUri The root URI of the workspace.
+	 * @param token A CancellationToken to observe cancellation requests.
+	 * @param planContext The overall context of the plan generation.
+	 * @param progress A progress reporter for VS Code notifications.
+	 * @param originalUserInstruction The original instruction that initiated the overall plan.
+	 * @returns A Promise that resolves to `true` if all diagnostics are resolved successfully after validation/correction, `false` otherwise (or if cancelled).
+	 */
 	private async _performFinalValidationAndCorrection(
 		affectedFileUris: Set<vscode.Uri>,
 		rootUri: vscode.Uri,
@@ -1884,7 +1923,6 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 							planContext,
 							token,
 							progress, // FIXED: Passing progress to `_executePlanSteps`
-							this.postMessageToWebview, // ADDED: Passing postMessageToWebview
 							originalUserInstruction // ADDED: Pass originalRootInstruction
 						);
 						// Add any new files or modifications from the sub-plan to the overall set for re-validation
@@ -1948,6 +1986,20 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 		return false; // All attempts exhausted, still errors
 	}
 
+	/**
+	 * Handles correction attempts for a failed command execution during plan steps.
+	 * It provides the AI with details of the command failure (stdout/stderr) and prompts
+	 * for a correction plan. It retries generation and execution of this correction plan.
+	 * @param failedCommand The command string that failed.
+	 * @param stdout The standard output from the failed command execution.
+	 * @param stderr The standard error from the failed command execution.
+	 * @param rootUri The root URI of the workspace.
+	 * @param token A CancellationToken to observe cancellation requests.
+	 * @param planContext The overall context of the plan generation.
+	 * @param progress A progress reporter for VS Code notifications.
+	 * @param originalUserInstruction The original instruction that initiated the overall plan.
+	 * @returns A Promise that resolves to `true` if a correction plan was successfully generated and executed, `false` otherwise (or if cancelled).
+	 */
 	private async _performCommandCorrection(
 		failedCommand: string,
 		stdout: string,
@@ -2072,7 +2124,6 @@ Adherence to these precise JSON escaping rules is paramount for the \`ExecutionP
 						planContext,
 						token,
 						progress,
-						this.postMessageToWebview,
 						originalUserInstruction // Pass the new parameter here
 					);
 					// After correction, consider the command issue resolved if the plan ran without immediate error.
