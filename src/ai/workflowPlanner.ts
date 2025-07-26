@@ -128,11 +128,15 @@ export async function parseAndValidatePlan(
 	console.log("Attempting to parse and validate plan JSON:", jsonString);
 
 	try {
-		// 1. Aggressively remove markdown code block fences and surrounding whitespace
-		const cleanedString = jsonString.replace(
-			/(?:json|typescript|text|[\w\d]+)?\s*[\r\n]|\s*/g,
+		let cleanedString = jsonString;
+		// while preserving all internal JSON whitespace.
+		cleanedString = cleanedString.replace(
+			/^(json|typescript|text|[\w\d]+)?\s*[\r\n]?/m,
 			""
-		);
+		); // Remove leading fence and any preceding keywords like 'json', 'typescript', etc.`
+		cleanedString = cleanedString.replace(/\s*\s*$/m, ""); // Remove trailing fence
+		// Trim any remaining leading/trailing whitespace from the whole string after fence removal.
+		cleanedString = cleanedString.trim();
 
 		// 2. Find the indices of the first opening brace `{` and the last closing brace `}`.
 		const firstBraceIndex = cleanedString.indexOf("{");
