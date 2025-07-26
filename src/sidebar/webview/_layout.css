@@ -128,3 +128,32 @@
 .diff-hunk-container:hover {
 	border-color: var(--vscode-focusBorder, #007acc);
 }
+
+.staged-files-section {
+	width: 100%;
+	list-style: decimal;
+	flex-direction: column;
+	overflow-wrap: break-word; /* Ensure long lines and words wrap correctly within the code */
+}
+
+.staged-files-section ol#staged-files-list {
+	padding-left: 1.5em;
+	list-style-type: decimal;
+	list-style-position: outside;
+}
+
+.staged-files-section ol#staged-files-list li {
+	margin-bottom: 0.5em; /* Add space below each list item */
+}
+
+.staged-files-section ol#staged-files-list li:last-child {
+	margin-bottom: 0; /* Remove space from the last item */
+}
+
+ul#staged-files-list li {
+	color: var(--vscode-descriptionForeground);
+}
+
+ul#staged-files-list li.empty-state {
+	font-style: italic;
+}

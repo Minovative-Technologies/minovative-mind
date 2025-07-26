@@ -2,14 +2,14 @@ import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import * as path from "path";
 import {
-	ToggleRelevantFilesDisplayMessage,
-	EditChatMessage,
-	ImageInlineData, // NEW: Added import for ImageInlineData
-	WebviewToExtensionChatMessageType, // NEW: Added import for WebviewToExtensionChatMessageType
-	HistoryEntryPart, // Ensure HistoryEntryPart is imported for type safety
+	ImageInlineData,
+	HistoryEntryPart,
 } from "../sidebar/common/sidebarTypes";
+// Zod imports
+import { z } from "zod";
+import { allMessageSchemas } from "./messageSchemas";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
-import { ERROR_OPERATION_CANCELLED } from "../ai/gemini"; // CRITICAL: Added import for ERROR_OPERATION_CANCELLED
+import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 import { generateLightweightPlanPrompt } from "../ai/prompts/lightweightPrompts";
 
@@ -18,6 +18,25 @@ export async function handleWebviewMessage(
 	provider: SidebarProvider
 ): Promise<void> {
 	console.log(`[MessageHandler] Message received: ${data.type}`);
+
+	// --- Zod Validation Block ---
+	const parseResult = allMessageSchemas.safeParse(data);
+
+	if (!parseResult.success) {
+		console.error(
+			`[MessageHandler] Zod validation failed for incoming message:`,
+			parseResult.error.flatten()
+		);
+		provider.postMessageToWebview({
+			type: "statusUpdate",
+			value:
+				"Invalid message format received from webview. Please check the data sent.",
+			isError: true,
+		});
+		return; // Stop processing invalid message
+	}
+
+	const validatedData = parseResult.data; // Use validated data from now on
 
 	// Prevent new operations if one is ongoing
 	const allowedDuringBackground = [
@@ -50,10 +69,10 @@ export async function handleWebviewMessage(
 
 	if (
 		provider.isOperationInProgress() &&
-		!allowedDuringBackground.includes(data.type)
+		!allowedDuringBackground.includes(validatedData.type)
 	) {
 		console.warn(
-			`Message type "${data.type}" blocked because an operation is in progress.`
+			`Message type "${validatedData.type}" blocked because an operation is in progress.`
 		);
 		provider.postMessageToWebview({
 			type: "statusUpdate",
@@ -64,7 +83,7 @@ export async function handleWebviewMessage(
 		return;
 	}
 
-	switch (data.type) {
+	switch (validatedData.type) {
 		case "universalCancel":
 			console.log("[MessageHandler] Received universal cancellation request.");
 			await provider.triggerUniversalCancellation();
@@ -76,7 +95,7 @@ export async function handleWebviewMessage(
 			break;
 
 		case "planRequest": {
-			const userRequest = data.value;
+			const userRequest = validatedData.value;
 			// This addHistoryEntry call might need to be updated to support HistoryEntryPart[] if userRequest is changed to such.
 			// For now, it remains as a string because /plan is a command, not multi-modal input.
 			provider.chatHistoryManager.addHistoryEntry(
@@ -157,11 +176,10 @@ export async function handleWebviewMessage(
 			break;
 
 		case "chatMessage": {
-			// Cast incoming data to the specific message type
-			const chatMessageData = data as WebviewToExtensionChatMessageType;
-			const userMessageText = chatMessageData.value;
-			const groundingEnabled = !!chatMessageData.groundingEnabled;
-			const incomingImageParts = chatMessageData.imageParts; // Array of ImageInlineData | undefined
+			// Type assertion 'data as WebviewToExtensionChatMessageType' removed due to Zod validation
+			const userMessageText = validatedData.value;
+			const groundingEnabled = validatedData.groundingEnabled ?? false;
+			const incomingImageParts = validatedData.imageParts; // Array of ImageInlineData | undefined
 
 			// Handle /commit command first (existing logic)
 			if (userMessageText.trim().toLowerCase() === "/commit") {
@@ -188,8 +206,22 @@ export async function handleWebviewMessage(
 
 			// If incomingImageParts exist, iterate and push them as inlineData parts
 			if (incomingImageParts && incomingImageParts.length > 0) {
-				for (const img of incomingImageParts) {
-					userHistoryParts.push({ inlineData: img });
+				for (const imgWrapper of incomingImageParts) {
+					if (imgWrapper && imgWrapper.inlineData) {
+						// Ensure 'imgWrapper.inlineData' is correctly typed as ImageInlineData
+						const imageDataPart: ImageInlineData = {
+							mimeType: imgWrapper.inlineData.mimeType,
+							data: imgWrapper.inlineData.data,
+						};
+						// Push the structured HistoryEntryPart containing the typed inlineData
+						userHistoryParts.push({ inlineData: imageDataPart });
+					} else {
+						console.warn(
+							"[MessageHandler] Skipping invalid or malformed image part: ",
+							imgWrapper
+						);
+						continue;
+					}
 				}
 			}
 
@@ -234,21 +266,10 @@ export async function handleWebviewMessage(
 			break;
 
 		case "confirmCommit":
-			const editedCommitMessage = data.value; // Retrieve the edited message
-			if (typeof editedCommitMessage === "string") {
-				// No explicit provider.endUserOperation() here; CommitService will handle it
-				await provider.commitService.confirmCommit(editedCommitMessage);
-			} else {
-				console.error(
-					"[MessageHandler] Invalid commit message received for confirmCommit."
-				);
-				provider.postMessageToWebview({
-					type: "statusUpdate",
-					value: "Error: Invalid commit message received. Please try again.",
-					isError: true,
-				});
-				provider.postMessageToWebview({ type: "reenableInput" }); // Re-enable if error
-			}
+			// `validatedData` is now inferred to have `value: string`
+			const editedCommitMessage = validatedData.value; // Retrieve the edited message
+			// No explicit provider.endUserOperation() here; CommitService will handle it
+			await provider.commitService.confirmCommit(editedCommitMessage);
 			break;
 
 		case "cancelCommit":
@@ -266,8 +287,8 @@ export async function handleWebviewMessage(
 			break;
 
 		case "getCurrentTokenEstimates":
-			// Send current token estimates for streaming responses
-			const { inputText, outputText } = data.value;
+			// `validatedData.value` is now inferred to have `inputText` and `outputText`
+			const { inputText, outputText } = validatedData.value;
 			const currentEstimates =
 				provider.tokenTrackingService.getCurrentStreamingEstimates(
 					inputText || "",
@@ -294,9 +315,8 @@ export async function handleWebviewMessage(
 			break;
 
 		case "addApiKey":
-			if (typeof data.value === "string") {
-				await provider.apiKeyManager.addApiKey(data.value.trim());
-			}
+			// `validatedData.value` is now inferred to be string
+			await provider.apiKeyManager.addApiKey(validatedData.value.trim());
 			break;
 
 		case "requestDeleteConfirmation":
@@ -404,26 +424,29 @@ export async function handleWebviewMessage(
 			break;
 
 		case "deleteSpecificMessage":
-			provider.chatHistoryManager.deleteHistoryEntry(data.messageIndex);
+			// `validatedData` is now inferred to have `messageIndex: number`
+			provider.chatHistoryManager.deleteHistoryEntry(
+				validatedData.messageIndex
+			);
 			break;
 
 		case "toggleRelevantFilesDisplay": {
-			const toggleMessage = data as ToggleRelevantFilesDisplayMessage;
+			// Type assertion 'data as ToggleRelevantFilesDisplayMessage' removed due to Zod validation
 			provider.chatHistoryManager.updateMessageRelevantFilesExpandedState(
-				toggleMessage.messageIndex,
-				toggleMessage.isExpanded
+				validatedData.messageIndex,
+				validatedData.isExpanded
 			);
 			break;
 		}
 
 		case "selectModel":
-			if (typeof data.value === "string") {
-				await provider.settingsManager.handleModelSelection(data.value);
-			}
+			// `validatedData.value` is now inferred to be string
+			await provider.settingsManager.handleModelSelection(validatedData.value);
 			break;
 
 		case "openExternalLink": {
-			const url = data.url as string;
+			// Type assertion 'data.url as string' removed due to Zod validation
+			const url = validatedData.url;
 			if (url) {
 				await vscode.env.openExternal(vscode.Uri.parse(url, true));
 			}
@@ -431,7 +454,8 @@ export async function handleWebviewMessage(
 		}
 
 		case "openSettingsPanel": {
-			const panelId = data.panelId as string;
+			// Type assertion 'data.panelId as string' removed due to Zod validation
+			const panelId = validatedData.panelId;
 			if (panelId) {
 				try {
 					await vscode.commands.executeCommand(
@@ -466,14 +490,11 @@ export async function handleWebviewMessage(
 		}
 
 		case "openFile": {
-			const relativeFilePathFromWebview = data.value; // Rename for clarity
+			const relativeFilePathFromWebview = validatedData.value; // Renamed for clarity, now directly from validatedData
 
 			// Crucial Security Check:
-			// 1. Verify filePath is a string.
-			if (
-				typeof relativeFilePathFromWebview !== "string" ||
-				relativeFilePathFromWebview.trim() === ""
-			) {
+			// 1. Verify filePath is a string. (Zod ensures type, but still check for empty string for functional/security reasons)
+			if (relativeFilePathFromWebview.trim() === "") {
 				console.warn(
 					`[MessageHandler] Security Alert: Invalid filePath received for openFile: "${relativeFilePathFromWebview}"`
 				);
@@ -609,30 +630,10 @@ export async function handleWebviewMessage(
 		}
 
 		case "editChatMessage": {
-			// 2. Add a new case for "editChatMessage"
-			const { messageIndex, newContent } = data as EditChatMessage; // 3.a. Destructure data
+			// Type assertion 'data as EditChatMessage' removed due to Zod validation
+			const { messageIndex, newContent } = validatedData; // Destructure directly from validatedData
 
-			// 3.b. Add basic type and content validation
-			if (
-				typeof messageIndex !== "number" ||
-				!Number.isInteger(messageIndex) ||
-				messageIndex < 0 ||
-				typeof newContent !== "string" ||
-				newContent.trim() === ""
-			) {
-				console.error(
-					"[MessageHandler] Invalid data for editChatMessage: messageIndex must be a non-negative integer and newContent a non-empty string.",
-					data
-				);
-				provider.postMessageToWebview({
-					type: "statusUpdate",
-					value:
-						"Error: Invalid message edit request. Please provide a valid message index and non-empty content.",
-					isError: true,
-				});
-				return;
-			}
-
+			// Removed redundant manual type and content validation as Zod handles this
 			console.log(
 				`[MessageHandler] Received editChatMessage for index ${messageIndex}: "${newContent.substring(
 					0,
@@ -700,7 +701,8 @@ export async function handleWebviewMessage(
 		}
 
 		case "generatePlanPromptFromAIMessage": {
-			const messageIndex = data.payload.messageIndex;
+			// `validatedData.payload.messageIndex` is now inferred to be number
+			const messageIndex = validatedData.payload.messageIndex;
 
 			const historyEntry =
 				provider.chatHistoryManager.getChatHistory()[messageIndex];
@@ -814,13 +816,15 @@ export async function handleWebviewMessage(
 		}
 
 		case "aiResponseEnd": {
+			// `validatedData` is now inferred to have `success: boolean`, `isPlanResponse: boolean`, `requiresConfirmation: boolean`
 			// Stop typing animation is handled in webview's messageBusHandler.ts for this message.
-			// This is just marking the end of generic generation from the extension's side.
-			// Removed explicit isGeneratingUserRequest reset as per instructions.
-			// Replaced with conditional calls to provider.endUserOperation
-			if (data.success && data.isPlanResponse && data.requiresConfirmation) {
+			if (
+				validatedData.success &&
+				validatedData.isPlanResponse &&
+				validatedData.requiresConfirmation
+			) {
 				await provider.endUserOperation("review");
-			} else if (data.success) {
+			} else if (validatedData.success) {
 				await provider.endUserOperation("success");
 			} else {
 				await provider.endUserOperation("failed");
@@ -829,9 +833,10 @@ export async function handleWebviewMessage(
 		}
 
 		case "structuredPlanParseFailed": {
+			// `validatedData.value` is now inferred to have `error` and `failedJson`
 			// This case indicates that AI generation for the plan has completed, but parsing failed.
 			// Removed explicit isGeneratingUserRequest reset as per instructions.
-			const { error, failedJson } = data.value; // Keep extracting error/failedJson for potential logging/debugging
+			const { error, failedJson } = validatedData.value; // Keep extracting error/failedJson for potential logging/debugging
 			console.log("Received structuredPlanParseFailed.");
 			await provider.endUserOperation("failed"); // Add this call as per instructions
 			// The webview's messageBusHandler.ts will show the error UI based on this message.
@@ -839,27 +844,21 @@ export async function handleWebviewMessage(
 		}
 
 		case "commitReview": {
+			// `validatedData.value` is now inferred to have `commitMessage` and `stagedFiles`
 			// This case indicates that AI generation for the commit message has completed and is ready for review.
 			// Removed explicit isGeneratingUserRequest reset as per instructions.
-			console.log("Received commitReview message:", data.value);
-			if (
-				!data.value ||
-				typeof data.value.commitMessage !== "string" ||
-				!Array.isArray(data.value.stagedFiles)
-			) {
-				console.error(
-					"[MessageHandler] Invalid 'commitReview' message value:",
-					data.value
-				);
-				await provider.endUserOperation("failed"); // Signal failure if data is bad
-				return; // Stop processing this case if data is invalid
-			}
+			console.log("Received commitReview message:", validatedData.value);
+			// Removed the manual validation check as Zod guarantees the structure here.
 			await provider.endUserOperation("review"); // Add this call as per instructions
 			// The webview's messageBusHandler.ts will show the commit review UI based on this message.
 			break;
 		}
 
 		default:
-			console.warn(`Unknown message type received: ${data.type}`);
+			console.warn(
+				`Unknown message type received: ${
+					(validatedData as { type: unknown }).type
+				}`
+			);
 	}
 }
