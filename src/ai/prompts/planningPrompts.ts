@@ -520,9 +520,10 @@ export function createPlanningPrompt(
     `;
 
 	return `
-    You are an expert software engineer. Your ONLY task is to create a step-by-step execution plan in JSON format.
+    **CRITICAL**: You MUST generate ONLY a valid JSON object.
+    **ABSOLUTELY ESSENTIAL**: The JSON object MUST contain a top-level string field named \`planDescription\` and a top-level array field named \`steps\`.
 
-    **Goal:** Generate ONLY a valid JSON object representing the plan. Do NOT include any introductory text, explanations, apologies, or markdown formatting like \`\`\`json ... \`\`\`. The entire response must be the JSON plan itself, starting with { and ending with }.
+    **Goal:** The entire response MUST be ONLY a valid JSON object representing the step-by-step plan, starting with { and ending with }. Do NOT include any introductory text, explanations, apologies, or markdown formatting.
 
     ${
 			extractedRetryInstruction
@@ -536,7 +537,7 @@ export function createPlanningPrompt(
         *   Preserve existing code structure, indentation, and formatting.
         *   Maintain code style.
         *   Ensure modifications are substantial, functional changes.
-        *   Generate production-ready, robust, maintainable, secure, clean, efficient code adhering to best practices.
+        *   Generate production-ready, robust, maintainability, secure, clean, efficient code adhering to best practices.
     *   **Guidelines**:
         *   **Context & Completeness**: ${mainInstructions} Consult "Broader Project Context" (especially symbol info for '/fix' targeting and impact analysis) and "Recent Chat History". Address the *entirety* of the request.
         *   **Recent Changes**: Build upon "Recent Project Changes". Avoid redundant steps. Combine all logical changes for a single file into one \`modify_file\`'s \`modification_prompt\`.

@@ -128,7 +128,42 @@ export async function parseAndValidatePlan(
 	console.log("Attempting to parse and validate plan JSON:", jsonString);
 
 	try {
-		const potentialPlan = JSON.parse(jsonString);
+		// 1. Aggressively remove markdown code block fences and surrounding whitespace
+		const cleanedString = jsonString.replace(
+			/(?:json|typescript|text|[\w\d]+)?\s*[\r\n]|\s*/g,
+			""
+		);
+
+		// 2. Find the indices of the first opening brace `{` and the last closing brace `}`.
+		const firstBraceIndex = cleanedString.indexOf("{");
+		const lastBraceIndex = cleanedString.lastIndexOf("}");
+
+		let extractedJsonString: string;
+
+		// 3. Extract the substring between these braces (inclusive).
+		// 4. Ensure error handling for cases where braces are missing or misplaced.
+		if (
+			firstBraceIndex === -1 ||
+			lastBraceIndex === -1 ||
+			lastBraceIndex < firstBraceIndex
+		) {
+			const errorMsg =
+				"Error parsing plan JSON: Could not find a valid JSON object (missing or misplaced braces). Please Retry.";
+			console.error(errorMsg, jsonString); // Log original string for debugging
+			return { plan: null, error: errorMsg };
+		} else {
+			extractedJsonString = cleanedString.substring(
+				firstBraceIndex,
+				lastBraceIndex + 1
+			);
+		}
+
+		// 5. Optionally, add logic to clean residual keywords (e.g., `json`) preceding the extracted JSON object.
+		// The aggressive regex applied initially should handle most such cases if they are part of markdown block formatting.
+		// After extracting based on brace indices, the `extractedJsonString` should ideally be pure JSON.
+		// No further explicit keyword cleaning is added here as it's covered by previous steps.
+
+		const potentialPlan = JSON.parse(extractedJsonString);
 
 		// Basic structure validation
 		if (
