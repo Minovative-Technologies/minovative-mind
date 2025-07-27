@@ -289,25 +289,26 @@ export class DiagnosticService {
 	 * Diagnostics are considered stable if they don't change for a specified duration.
 	 * @param uri The URI of the document to monitor.
 	 * @param token A CancellationToken to abort the waiting.
-	 * @param timeoutMs The maximum time to wait in milliseconds. Defaults to 5000ms (5 seconds).
-	 * @param checkIntervalMs The interval between checks in milliseconds. Defaults to 50ms.
+	 * @param timeoutMs The maximum time to wait in milliseconds. Defaults to 10000ms (10 seconds).
+	 * @param checkIntervalMs The interval between checks in milliseconds. Defaults to 500ms.
+	 * @param requiredStableChecks The number of consecutive checks without change required for stability. Defaults to 10.
 	 * @returns A Promise that resolves when diagnostics stabilize or timeout/cancellation occurs.
 	 */
 	public static async waitForDiagnosticsToStabilize(
 		uri: vscode.Uri,
 		token?: vscode.CancellationToken,
-		timeoutMs: number = 5000,
-		checkIntervalMs: number = 500
+		timeoutMs: number = 10000,
+		checkIntervalMs: number = 500,
+		requiredStableChecks: number = 10
 	): Promise<void> {
+		console.log(
+			`[DiagnosticService] Waiting for diagnostics to stabilize for ${uri.fsPath} ` +
+				`with timeoutMs=${timeoutMs}, checkIntervalMs=${checkIntervalMs}, ` +
+				`requiredStableChecks=${requiredStableChecks}...`
+		);
 		const startTime = Date.now();
 		let lastDiagnosticsString: string | undefined;
 		let stableCount = 0;
-		// Number of consecutive checks without change required for stability
-		const requiredStableChecks = 3;
-
-		console.log(
-			`[DiagnosticService] Waiting for diagnostics to stabilize for ${uri.fsPath}...`
-		);
 
 		while (Date.now() - startTime < timeoutMs) {
 			// Check for cancellation request
