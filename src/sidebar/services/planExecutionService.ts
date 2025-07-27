@@ -361,8 +361,8 @@ export async function executePlanStep(
 
 					await applyAITextEdits(
 						editorToUpdate,
-						contentToProcess, // Use cleaned content
-						"Update existing file content",
+						existingContent,
+						contentToProcess,
 						token
 					);
 
