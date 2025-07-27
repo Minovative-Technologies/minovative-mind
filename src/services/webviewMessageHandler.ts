@@ -338,14 +338,6 @@ export async function handleWebviewMessage(
 			}
 			break;
 
-		case "switchToNextKey":
-			await provider.apiKeyManager.switchToNextApiKey();
-			break;
-
-		case "switchToPrevKey":
-			await provider.apiKeyManager.switchToPreviousApiKey();
-			break;
-
 		// New cases for clear chat confirmation flow
 		case "requestClearChatConfirmation":
 			console.log("[MessageHandler] Received requestClearChatConfirmation.");

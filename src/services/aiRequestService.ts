@@ -80,10 +80,11 @@ export class AIRequestService {
 		token?: vscode.CancellationToken,
 		isMergeOperation: boolean = false
 	): Promise<string> {
-		await this.apiKeyManager.switchToNextApiKey();
 		let currentApiKey = this.apiKeyManager.getActiveApiKey();
-		const triedKeys = new Set<string>();
-		const apiKeyList = this.apiKeyManager.getApiKeyList();
+
+		if (!currentApiKey) {
+			return `Error: No API Key available. Please add an API key in the settings.`;
+		}
 
 		let consecutiveTransientErrorCount = 0;
 		const baseDelayMs = 60000;
@@ -92,20 +93,6 @@ export class AIRequestService {
 		// Initialize these variables at the top of generateWithRetry
 		let finalInputTokens = 0;
 		let finalOutputTokens = 0; // Initialize here for broader scope
-
-		if (!currentApiKey) {
-			if (apiKeyList.length > 0) {
-				this.apiKeyManager.setActiveKeyIndex(0);
-				await this.apiKeyManager.saveKeysToStorage();
-				currentApiKey = this.apiKeyManager.getActiveApiKey();
-			} else {
-				return `Error: No API Key available. Please add an API key.`;
-			}
-		}
-
-		if (!currentApiKey) {
-			return `Error: Unable to obtain a valid API key.`;
-		}
 
 		let result = ""; // Stores the last error type or the successful generation result
 
@@ -303,7 +290,7 @@ export class AIRequestService {
 						type: "statusUpdate",
 						value: `API quota limit hit. Pausing for ${(
 							currentDelay / 60000
-						).toFixed(0)} minutes before retrying.`,
+						).toFixed(0)} minutes before retrying with the same key.`,
 						isError: true,
 					});
 					await new Promise((resolve) => setTimeout(resolve, currentDelay));
@@ -311,40 +298,6 @@ export class AIRequestService {
 						throw new Error(ERROR_OPERATION_CANCELLED);
 					}
 					consecutiveTransientErrorCount++;
-					triedKeys.add(currentApiKey);
-					const availableKeys = this.apiKeyManager.getApiKeyList();
-
-					if (triedKeys.size < availableKeys.length) {
-						const nextKey = await this.apiKeyManager.switchToNextApiKey(
-							triedKeys
-						);
-						if (nextKey) {
-							currentApiKey = nextKey;
-							this.postMessageToWebview({
-								type: "statusUpdate",
-								value: `Quota limit hit. Retrying with next key...`,
-							});
-							this.postMessageToWebview({
-								type: "apiKeyStatus",
-								value: `Switched to key ...${currentApiKey.slice(
-									-4
-								)} for retry.`,
-							});
-						} else {
-							// Should not happen if triedKeys.size < availableKeys.length is true
-							this.postMessageToWebview({
-								type: "statusUpdate",
-								value: `No new API keys available. Retrying with the last key after pause.`,
-								isError: true,
-							});
-						}
-					} else {
-						this.postMessageToWebview({
-							type: "statusUpdate",
-							value: `All available API keys exhausted for quota. Retrying with the last key after pause.`,
-							isError: true,
-						});
-					}
 					continue;
 				} else if (errorMessage === ERROR_SERVICE_UNAVAILABLE) {
 					const currentDelay = Math.min(
@@ -377,7 +330,6 @@ export class AIRequestService {
 				}
 			}
 		}
-		// Removed final `if (result === ERROR_QUOTA_EXCEEDED) { ... } else if ...` block as it's now unreachable.
 	}
 
 	/**

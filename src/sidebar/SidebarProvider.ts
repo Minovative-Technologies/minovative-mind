@@ -199,10 +199,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		// Listen for secret changes to reload API keys
 		context.secrets.onDidChange((e) => {
-			if (
-				e.key === sidebarConstants.GEMINI_API_KEYS_LIST_SECRET_KEY ||
-				e.key === sidebarConstants.GEMINI_ACTIVE_API_KEY_INDEX_SECRET_KEY
-			) {
+			if (e.key === sidebarConstants.GEMINI_API_KEY_SECRET_KEY) {
 				this.apiKeyManager.loadKeysFromStorage();
 			}
 		});
