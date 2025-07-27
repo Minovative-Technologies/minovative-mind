@@ -559,6 +559,7 @@ export class PlanService {
 	public async generateStructuredPlanAndExecute(
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {
+		await this.provider.setPlanExecutionActive(true);
 		this._postChatUpdateForPlanExecution({
 			type: "appendRealtimeModelMessage",
 			value: { text: `Generating detailed execution plan (JSON)...` },
@@ -901,6 +902,7 @@ export class PlanService {
 		} finally {
 			this.provider.activeChildProcesses.forEach((cp) => cp.kill());
 			this.provider.activeChildProcesses = [];
+			await this.provider.setPlanExecutionActive(false);
 
 			// 1. Determine the final outcome, defaulting to 'failed' if undefined.
 			let outcome: sidebarTypes.ExecutionOutcome;

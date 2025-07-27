@@ -63,6 +63,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	private _persistedPendingPlanData: sidebarTypes.PersistedPlanData | null =
 		null; // New private property
 	public completedPlanChangeSets: RevertibleChangeSet[] = []; // New public property
+	public isPlanExecutionActive: boolean = false; // New public property
 
 	// --- MANAGERS & SERVICES ---
 	public apiKeyManager: ApiKeyManager;
@@ -102,6 +103,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.completedPlanChangeSets = context.workspaceState.get<
 			RevertibleChangeSet[]
 		>("minovativeMind.completedPlanChangeSets", []);
+
+		// Initialize isPlanExecutionActive from workspace state
+		this.isPlanExecutionActive = context.workspaceState.get<boolean>(
+			"minovativeMind.isPlanExecutionActive",
+			false
+		);
+		console.log(
+			`[SidebarProvider] isPlanExecutionActive initialized to: ${this.isPlanExecutionActive}`
+		);
 
 		// Instantiate managers
 		this.apiKeyManager = new ApiKeyManager(
@@ -278,7 +288,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 	}
 
+	public async setPlanExecutionActive(isActive: boolean): Promise<void> {
+		this.isPlanExecutionActive = isActive;
+		await this.workspaceState.update(
+			"minovativeMind.isPlanExecutionActive",
+			isActive
+		);
+		console.log(`[SidebarProvider] isPlanExecutionActive set to: ${isActive}`);
+	}
+
 	public async handleWebviewReady(): Promise<void> {
+		// Prioritize checking for active plan execution at the very beginning
+		if (this.isPlanExecutionActive) {
+			console.log(
+				"[SidebarProvider] Detected active plan execution. Restoring UI state."
+			);
+			this.postMessageToWebview({ type: "updateLoadingState", value: true });
+			this.postMessageToWebview({ type: "planExecutionStarted" });
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: "A plan execution is currently in progress. Please wait.",
+			});
+			return; // Exit early if a plan execution is active
+		}
+
 		this.apiKeyManager.loadKeysFromStorage();
 		this.settingsManager.updateWebviewModelList();
 		this.chatHistoryManager.restoreChatHistoryToWebview();
@@ -495,6 +528,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			cp.kill();
 		});
 		this.activeChildProcesses = [];
+
+		// Set plan execution to inactive as part of cancellation
+		await this.setPlanExecutionActive(false);
 
 		// Clear all pending state immediately
 		this.pendingPlanGenerationContext = null;
