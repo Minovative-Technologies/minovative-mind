@@ -1706,6 +1706,13 @@ export class PlanService {
 				let aggregatedFormattedDiagnosticsForFile = "";
 
 				// Phase 6: Isolate Diagnostics for the Current File
+				await DiagnosticService.waitForDiagnosticsToStabilize(
+					currentFileUri,
+					token,
+					5000,
+					100
+				);
+
 				const diagnosticsForFile =
 					DiagnosticService.getDiagnosticsForUri(currentFileUri);
 				const errorsForFile = diagnosticsForFile.filter(

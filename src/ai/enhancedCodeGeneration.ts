@@ -1527,7 +1527,7 @@ Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE C
 			return true;
 		}
 
-		// Heuristic for very short content that looks like an error
+		// Heuristic for very short content that looks like an "error"
 		// E.g., if it's less than 200 characters and contains keywords like "error", "fail", "issue"
 		if (
 			content.length < 200 &&
@@ -1900,6 +1900,13 @@ ${formattedDiff}
 				onCodeChunkCallback
 			);
 
+			await DiagnosticService.waitForDiagnosticsToStabilize(
+				vscode.Uri.file(filePath),
+				token,
+				5000,
+				100
+			);
+
 			while (iteration < this.config.maxFeedbackIterations!) {
 				if (token?.isCancellationRequested) {
 					throw new Error("Operation cancelled");
@@ -1992,6 +1999,13 @@ ${formattedDiff}
 					streamId,
 					token,
 					onCodeChunkCallback
+				);
+
+				await DiagnosticService.waitForDiagnosticsToStabilize(
+					vscode.Uri.file(filePath),
+					token,
+					5000,
+					100
 				);
 
 				const correctedValidation = await this._validateCode(
@@ -2127,6 +2141,13 @@ ${formattedDiff}
 						streamId,
 						token,
 						onCodeChunkCallback
+					);
+
+					await DiagnosticService.waitForDiagnosticsToStabilize(
+						vscode.Uri.file(filePath),
+						token,
+						5000,
+						100
 					);
 
 					const alternativeValidation = await this._validateCode(
