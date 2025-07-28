@@ -295,6 +295,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	public async handleWebviewReady(): Promise<void> {
+		let isAnyOperationBeingRestored = false;
+
 		// Prioritize checking for active plan execution at the very beginning
 		if (this.isPlanExecutionActive) {
 			console.log(
@@ -306,7 +308,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "statusUpdate",
 				value: "A plan execution is currently in progress. Please wait.",
 			});
-			return; // Exit early if a plan execution is active
+			// return; // Exit early if a plan execution is active
 		}
 
 		this.apiKeyManager.loadKeysFromStorage();
@@ -339,6 +341,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"minovativeMind.isGeneratingUserRequest",
 				false
 			);
+			isAnyOperationBeingRestored = true;
 		}
 		// 2. Then, check for active AI streaming progress (e.g., for long chat responses)
 		else if (
@@ -353,6 +356,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				value: this.currentAiStreamingState,
 			});
 			this.postMessageToWebview({ type: "updateLoadingState", value: true }); // Ensure inputs are disabled
+			isAnyOperationBeingRestored = true;
 		}
 		// 3. Then, check for pending commit review (generation *complete*, awaiting review)
 		else if (this.pendingCommitReviewData) {
@@ -369,6 +373,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				"minovativeMind.isGeneratingUserRequest",
 				false
 			);
+			isAnyOperationBeingRestored = true;
 		}
 		// 4. Check for a stale generic AI generation in progress (isGeneratingUserRequest is true but no other specific state is active)
 		else if (this.isGeneratingUserRequest) {
@@ -386,6 +391,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		else {
 			this.postMessageToWebview({ type: "reenableInput" });
 			this.clearActiveOperationState();
+		}
+
+		if (!isAnyOperationBeingRestored) {
+			if (this.isPlanExecutionActive) {
+				console.log(
+					"[SidebarProvider] No specific operation restored. Resetting stale isPlanExecutionActive flag."
+				);
+				await this.setPlanExecutionActive(false);
+				this.postMessageToWebview({ type: "updateLoadingState", value: false });
+				this.postMessageToWebview({ type: "reenableInput" });
+				this.postMessageToWebview({ type: "statusUpdate", value: "" });
+			}
 		}
 
 		const hasRevertibleChanges = this.completedPlanChangeSets.length > 0;
