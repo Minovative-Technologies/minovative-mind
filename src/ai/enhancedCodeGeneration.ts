@@ -99,6 +99,7 @@ export interface EnhancedGenerationContext {
 	recentCorrectionAttemptOutcomes?: CorrectionAttemptOutcome[]; // NEW: Added property
 	isOscillating?: boolean; // NEW: Added property
 	relevantFiles?: string; // NEW: Added property as per instructions
+	isRewriteOperation?: boolean; // NEW: Added property to indicate rewrite intent
 }
 
 /**
@@ -166,11 +167,21 @@ export class EnhancedCodeGenerator {
 		});
 
 		try {
+			// Determine rewrite intent early
+			const isRewriteOperation = this._isRewriteIntentDetected(
+				generatePrompt,
+				filePath
+			);
+			const contextForGeneration: EnhancedGenerationContext = {
+				...context,
+				isRewriteOperation: isRewriteOperation,
+			};
+
 			if (this.config.enableRealTimeFeedback) {
 				const result = await this._generateWithRealTimeFeedback(
 					filePath,
 					generatePrompt,
-					context,
+					contextForGeneration,
 					modelName,
 					streamId,
 					token,
@@ -193,7 +204,7 @@ export class EnhancedCodeGenerator {
 					this.changeLogger.getCompletedPlanChangeSets()
 				);
 				const initialGenerationContext: EnhancedGenerationContext = {
-					...context,
+					...contextForGeneration, // Use context with isRewriteOperation
 					fileStructureAnalysis: fileStructureAnalysis,
 					successfulChangeHistory: successfulChangeHistory,
 					lastFailedCorrectionDiff: undefined, // No failed diff yet
@@ -264,11 +275,21 @@ export class EnhancedCodeGenerator {
 		});
 
 		try {
+			// Determine rewrite intent early
+			const isRewriteOperation = this._isRewriteIntentDetected(
+				modificationPrompt,
+				filePath
+			);
+			const contextForModification: EnhancedGenerationContext = {
+				...context,
+				isRewriteOperation: isRewriteOperation,
+			};
+
 			const result = await this._modifyFileContentFull(
 				filePath,
 				modificationPrompt,
 				currentContent,
-				context,
+				contextForModification, // Pass context with isRewriteOperation
 				modelName,
 				streamId,
 				token,
@@ -353,15 +374,43 @@ export class EnhancedCodeGenerator {
 		languageId: string
 	): string {
 		const fileAnalysis = this._analyzeFilePath(filePath);
+		const isRewrite = context.isRewriteOperation ?? false; // Get rewrite intent from context
+
+		const requirementsList: string[] = [];
+
+		if (isRewrite) {
+			requirementsList.push(
+				"**Prioritize New Structure/Content**: You are tasked with generating the new code as specified in the instructions. Prioritize generating the new code structure and content precisely as specified, even if it requires significant deviations from typical patterns or implies a complete overhaul of an existing conceptual file. You have full autonomy to innovate and introduce new patterns/structures if they best fulfill the request."
+			);
+		}
+
+		requirementsList.push(
+			"**Accuracy First**: Ensure all imports, types, and dependencies are *absolutely* correct and precisely specified. Verify module paths, type definitions, and API usage."
+		);
+		requirementsList.push(
+			"**Style Consistency**: Adhere *rigorously* to the project's existing coding patterns, conventions, and formatting. Maintain current indentation, naming, and structural choices."
+		);
+		requirementsList.push(
+			"**Error Prevention**: Generate code that will compile and run *without any errors or warnings*. Proactively anticipate and guard against common pitfalls beyond just the immediate task, such as null/undefined checks, any types in typescript, input validations, edge cases, or off-by-one errors."
+		);
+		requirementsList.push(
+			"**Best Practices**: Employ modern language features, established design patterns, and industry best practices to ensure high-quality, efficient, and robust code that is production-ready, maintainable, and clean."
+		);
+		requirementsList.push(
+			"**Production Readiness**: Stress robustness, maintainability, and adherence to best practices for the generated code."
+		);
+		requirementsList.push(
+			"**Security**: Implement secure coding practices meticulously, identifying and addressing potential vulnerabilities relevant to the language and context."
+		);
+
+		const formattedRequirements = requirementsList
+			.map((req, idx) => `${idx + 1}. ${req}`)
+			.join("\n");
 
 		return `You are an expert software engineer specializing in ${languageId} development. Your task is to generate production-ready, accurate code. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
-1. **Accuracy First**: Ensure all imports, types, and dependencies are *absolutely* correct and precisely specified. Verify module paths, type definitions, and API usage.
-2. **Style Consistency**: Adhere *rigorously* to the project's existing coding patterns, conventions, and formatting. Maintain current indentation, naming, and structural choices.
-3. **Error Prevention**: Generate code that will compile and run *without any errors or warnings*. Proactively anticipate and guard against common pitfalls beyond just the immediate task, such as null/undefined checks, any types in typescript, input validations, edge cases, or off-by-one errors.
-4. **Best Practices**: Employ modern language features, established design patterns, and industry best practices to ensure high-quality, efficient, and robust code that is production-ready, maintainable, and clean.
-6. **Security**: Implement secure coding practices meticulously, identifying and addressing potential vulnerabilities relevant to the language and context.
+${formattedRequirements}
 
 ${
 	context.isOscillating
@@ -1095,15 +1144,63 @@ Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE C
 		const languageId = this._getLanguageId(path.extname(filePath));
 		// MODIFIED: Get fileAnalysis from context
 		const fileAnalysis = context.fileStructureAnalysis;
+		const isRewrite = context.isRewriteOperation ?? false; // Get rewrite intent from context
+
+		const requirementsList: string[] = [];
+
+		if (isRewrite) {
+			requirementsList.push(
+				"**Prioritize New Structure/Content**: You are tasked with a significant rewrite or overhaul of the existing file. Prioritize generating the new code structure and content precisely as specified in the instructions, even if it requires significant deviations from the existing structure or content. Treat the 'Current Content' as a reference to be completely overhauled, not strictly adhered to for incremental changes. You have full autonomy to innovate and introduce new patterns/structures if they best fulfill the request."
+			);
+			requirementsList.push(
+				"**Drastic Changes Allowed**: This request implies a major overhaul. You are explicitly permitted to make substantial changes to the existing structure, organization, and content. Extensive refactoring or re-implementation is permissible if it supports the requested overhaul."
+			);
+			requirementsList.push(
+				"**Flexible Imports**: You may update, remove, or add imports as necessary to support the new structure and content, prioritizing correctness and functionality over strict preservation of existing import order or exact set."
+			);
+			requirementsList.push(
+				"**Consistent Style (New Code)**: Maintain internal code style (indentation, naming, formatting) for consistency within the *newly generated* sections, following modern best practices for the language."
+			);
+		} else {
+			requirementsList.push(
+				"**Preserve Existing Structure**: Maintain the current file organization, structural patterns, and architectural design without unrelated refactoring. This is paramount for seamless integration."
+			);
+			requirementsList.push(
+				"**No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*, strictly avoiding changes that are solely whitespace, comments, or minor formatting."
+			);
+			requirementsList.push(
+				"**Maintain Imports**: Maintain all *necessary* existing imports and add *only* strictly required new ones. Ensure import order is preserved unless a new logical grouping is absolutely essential for the requested modification."
+			);
+			requirementsList.push(
+				"**Consistent Style (Existing Code)**: Strictly follow the existing code style, formatting, and conventions of the current file."
+			);
+		}
+
+		// Universal critical requirements (always strictly enforced, regardless of rewrite intent)
+		requirementsList.push(
+			"**Accuracy First**: Ensure all imports, types, and dependencies are *absolutely* correct and precisely specified. Verify module paths, type definitions, and API usage."
+		);
+		requirementsList.push(
+			"**Error Prevention**: Generate code that will compile and run *without any errors or warnings*. Proactively anticipate and guard against common pitfalls beyond just the immediate task, such as null/undefined checks, any types in typescript, input validations, edge cases, or off-by-one errors."
+		);
+		requirementsList.push(
+			"**Best Practices**: Employ modern language features, established design patterns, and industry best practices to ensure high-quality, efficient, and robust code that is production-ready, maintainable, and clean."
+		);
+		requirementsList.push(
+			"**Security**: Implement secure coding practices meticulously, identifying and addressing potential vulnerabilities relevant to the language and context."
+		);
+		requirementsList.push(
+			"**Production Readiness**: Stress robustness, maintainability, and adherence to best practices for all modifications."
+		);
+
+		const formattedRequirements = requirementsList
+			.map((req, idx) => `${idx + 1}. ${req}`)
+			.join("\n");
 
 		return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
-1. **Preserve Existing Structure**: Maintain the current file organization, structural patterns, and architectural design without unrelated refactoring. This is paramount for seamless integration.
-3. **No Cosmetic-Only Changes**: Your output must represent a *functional or structural change*, strictly avoiding changes that are solely whitespace, comments, or minor formatting.
-4. **Maintain Imports**: Maintain all *necessary* existing imports and add *only* strictly required new ones. Ensure import order is preserved unless a new logical grouping is absolutely essential for the requested modification.
-5. **Consistent Style**: Strictly follow the existing code style, formatting, and conventions of the current file.
-7. **Production Readiness**: Stress robustness, maintainability, and adherence to best practices for all modifications.
+${formattedRequirements}
 
 Path: ${filePath}
 Language: ${languageId}
@@ -2940,6 +3037,49 @@ Your response MUST contain **ONLY** the modified file content. **ONLY ADD PURE C
 				console.warn("Error in feedback callback:", error);
 			}
 		}
+	}
+
+	/**
+	 * Heuristically determines if the user's prompt indicates an intent for a major rewrite or overhaul.
+	 * @param prompt The user's input prompt string.
+	 * @param filePath The path of the file being generated/modified (optional, for file-specific keywords).
+	 * @returns True if rewrite intent is detected, false otherwise.
+	 */
+	private _isRewriteIntentDetected(prompt: string, filePath?: string): boolean {
+		const lowerPrompt = prompt.toLowerCase();
+		const rewriteKeywords = [
+			"rewrite",
+			"replace entirely",
+			"generate from scratch",
+			"completely change",
+			"full overhaul",
+			"start fresh",
+			"reimplement",
+			"rebuild",
+			"design from scratch",
+			"new implementation",
+			"complete refactor",
+		];
+
+		// Check for general rewrite keywords
+		if (rewriteKeywords.some((keyword) => lowerPrompt.includes(keyword))) {
+			return true;
+		}
+
+		// Check for specific "completely change file X" pattern
+		if (filePath) {
+			const fileBaseName = path.basename(filePath).toLowerCase();
+			if (
+				lowerPrompt.includes(`completely change file ${fileBaseName}`) ||
+				lowerPrompt.includes(`completely change this file`) ||
+				lowerPrompt.includes(`rewrite file ${fileBaseName}`) ||
+				lowerPrompt.includes(`rewrite this file`)
+			) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
