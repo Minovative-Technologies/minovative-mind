@@ -3,5 +3,6 @@ dist
 node_modules
 .vscode-test/
 *.vsix
-todo.md
+NOTES.md
+TODO.md
 chats/
