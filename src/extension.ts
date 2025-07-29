@@ -368,7 +368,6 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 				selectedText = editor.document.getText(originalSelection);
 				effectiveRange = originalSelection;
-				// diagnosticsString calculation REMOVED from here per centralization instructions
 			}
 			// NEW ELSE IF BLOCK FOR "chat" COMMAND
 			else if (instruction === "chat") {
@@ -478,55 +477,156 @@ export async function activate(context: vscode.ExtensionContext) {
 				selectedText = editor.document.getText(originalSelection);
 				effectiveRange = originalSelection;
 				selectionMethodUsed = "explicit-user-selection";
-				// diagnosticsString calculation REMOVED from here per centralization instructions
 			} else {
-				// No user selection: Attempt automatic semantic selection for /fix, /merge, or custom.
+				// originalSelection.isEmpty
 				console.log(
 					"[Minovative Mind] No explicit user selection. Attempting automatic selection cascade."
 				);
-				let selectionSuccessfullyDetermined = false;
+
+				let selectionSuccessfullyDetermined = false; // Local flag to track if a selection was made by auto-logic
 				const cursorPosition = editor.selection.active;
 
-				// Intelligent selection for /fix
 				if (instruction === "/fix") {
-					console.log(
-						"[Minovative Mind] Attempting intelligent selection for /fix."
+					// PHASE 1: Implement automatic selection of all errors for /fix command.
+					const errorDiagnostics = allDiagnostics.filter(
+						(d) => d.severity === vscode.DiagnosticSeverity.Error
 					);
-					const relevantSymbol =
-						await CodeSelectionService.findRelevantSymbolForFix(
-							editor.document,
-							cursorPosition,
-							allDiagnostics,
-							symbols
-						);
-					if (relevantSymbol) {
-						selectedText = editor.document.getText(relevantSymbol.range);
-						effectiveRange = relevantSymbol.range;
-						selectionMethodUsed = "intelligent-fix-selection";
-						selectionSuccessfullyDetermined = true;
-						vscode.window.showInformationMessage(
-							"Minovative Mind: Automatically selected relevant code block for /fix."
-						);
-						console.log(
-							"[Minovative Mind] Auto-selected using intelligent-fix-selection."
-						);
-					} else {
-						console.log(
-							"[Minovative Mind] intelligent-fix-selection did not find a relevant symbol."
-						);
+
+					if (errorDiagnostics.length > 0) {
+						let minStartLine = Infinity;
+						let minStartChar = Infinity;
+						let maxEndLine = -Infinity;
+						let maxEndChar = -Infinity;
+
+						// Calculate the aggregate range encompassing all errors.
+						for (const diagnostic of errorDiagnostics) {
+							const start = diagnostic.range.start;
+							const end = diagnostic.range.end;
+
+							// Update minimum start position
+							if (
+								start.line < minStartLine ||
+								(start.line === minStartLine && start.character < minStartChar)
+							) {
+								minStartLine = start.line;
+								minStartChar = start.character;
+							}
+							// Update maximum end position
+							if (
+								end.line > maxEndLine ||
+								(end.line === maxEndLine && end.character > maxEndChar)
+							) {
+								maxEndLine = end.line;
+								maxEndChar = end.character;
+							}
+						}
+
+						// If a valid range was found, apply it.
+						if (isFinite(minStartLine) && isFinite(maxEndLine)) {
+							const allErrorsRange = new vscode.Range(
+								new vscode.Position(minStartLine, minStartChar),
+								new vscode.Position(maxEndLine, maxEndChar)
+							);
+							selectedText = editor.document.getText(allErrorsRange);
+							effectiveRange = allErrorsRange;
+							selectionMethodUsed = "auto-all-errors-selection";
+							selectionSuccessfullyDetermined = true;
+							vscode.window.showInformationMessage(
+								"Minovative Mind: Automatically selected the range of all errors."
+							);
+							console.log(
+								"[Minovative Mind] Auto-selected all error ranges for /fix."
+							);
+						} else {
+							console.warn(
+								"[Minovative Mind] Could not determine valid range for all errors. Falling back to original /fix logic."
+							);
+							// If range calculation failed, fall through to original fallback logic.
+						}
 					}
-				}
-				// Intelligent selection for custom prompt
-				else if (instruction === "custom prompt") {
-					console.log(
-						"[Minovative Mind] Attempting intelligent selection for custom prompt."
-					);
-					const logicalUnitSymbol =
-						await CodeSelectionService.findLogicalCodeUnitForPrompt(
-							editor.document,
-							cursorPosition,
-							symbols
+
+					// Fallback logic: If automatic selection of all errors didn't occur (either no errors, or calculation failed),
+					// use the original intelligent selection logic for /fix.
+					if (!selectionSuccessfullyDetermined) {
+						console.log(
+							"Falling back to original intelligent selection logic for /fix."
 						);
+						// --- Start of original fallback logic for /fix from the extension.ts file ---
+						const relevantSymbol =
+							await CodeSelectionService.findRelevantSymbolForFix(
+								editor.document,
+								cursorPosition,
+								allDiagnostics,
+								symbols
+							);
+						if (relevantSymbol) {
+							selectedText = editor.document.getText(relevantSymbol.range);
+							effectiveRange = relevantSymbol.range;
+							selectionMethodUsed = "intelligent-fix-selection";
+							selectionSuccessfullyDetermined = true;
+							vscode.window.showInformationMessage(
+								"Minovative Mind: Automatically selected relevant code block for /fix."
+							);
+							console.log(
+								"[Minovative Mind] Auto-selected using intelligent-fix-selection."
+							);
+						} else {
+							console.log(
+								"[Minovative Mind] intelligent-fix-selection did not find a relevant symbol."
+							);
+							// Further fallback to selecting the full file if no specific symbol is found for /fix.
+							console.log(
+								`[Minovative Mind] Intelligent selection for '/fix' failed. Falling back to full file selection.`
+							);
+							selectedText = fullText;
+							effectiveRange = new vscode.Range(
+								editor.document.positionAt(0),
+								editor.document.positionAt(fullText.length)
+							);
+							selectionMethodUsed = "full-file-fallback";
+							vscode.window.showInformationMessage(
+								"Minovative Mind: Falling back to full file selection as no specific code unit was found."
+							);
+						}
+						// --- End of original fallback logic for /fix ---
+					}
+				} else if (instruction === "/merge") {
+					// --- Original /merge logic from the extension.ts file ---
+					if (!hasMergeConflicts(fullText)) {
+						// Assuming hasMergeConflicts is imported and available
+						vscode.window.showInformationMessage(
+							`No active merge conflicts detected in '${fileName}'.`
+						);
+						return; // Exit command if no conflicts
+					}
+					selectedText = fullText;
+					effectiveRange = new vscode.Range(
+						editor.document.positionAt(0),
+						editor.document.positionAt(fullText.length)
+					);
+					selectionMethodUsed = "full-file-for-merge";
+					vscode.window.showInformationMessage(
+						"Minovative Mind: Selected full file for merge operation."
+					);
+					// --- End of original /merge logic ---
+				}
+				// --- Original fallback for custom prompt and any other unhandled instructions ---
+				else {
+					console.log(
+						`Attempting intelligent selection for custom prompt or fallback.`
+					);
+					let logicalUnitSymbol;
+					if (instruction === "custom prompt") {
+						// Ensure editor.document, editor.selection.active, symbols, and CodeSelectionService are available in scope
+						logicalUnitSymbol =
+							await CodeSelectionService.findLogicalCodeUnitForPrompt(
+								editor.document,
+								cursorPosition,
+								symbols
+							);
+					}
+
+					// Use selected logical unit or fall back to full file selection.
 					if (logicalUnitSymbol) {
 						selectedText = editor.document.getText(logicalUnitSymbol.range);
 						effectiveRange = logicalUnitSymbol.range;
@@ -540,51 +640,7 @@ export async function activate(context: vscode.ExtensionContext) {
 						);
 					} else {
 						console.log(
-							"[Minovative Mind] intelligent-custom-prompt-selection did not find a logical unit."
-						);
-					}
-				}
-
-				// Layer 4 (Full-File Fallback):
-				if (!selectionSuccessfullyDetermined) {
-					if (instruction === "/merge") {
-						if (!hasMergeConflicts(fullText)) {
-							vscode.window.showInformationMessage(
-								`No active merge conflicts detected in '${fileName}'.`
-							);
-							return;
-						}
-						selectedText = fullText;
-						effectiveRange = new vscode.Range(
-							editor.document.positionAt(0),
-							editor.document.positionAt(fullText.length)
-						);
-						selectionMethodUsed = "full-file-for-merge";
-						vscode.window.showInformationMessage(
-							"Minovative Mind: Selected full file for merge operation."
-						);
-						diagnosticsString = undefined;
-					}
-					// If intelligent selection failed for /fix or custom prompt, fall back to full file.
-					else if (instruction === "/fix" || instruction === "custom prompt") {
-						console.log(
-							`[Minovative Mind] Intelligent selection for '${instruction}' failed. Falling back to full file selection.`
-						);
-						selectedText = fullText;
-						effectiveRange = new vscode.Range(
-							editor.document.positionAt(0),
-							editor.document.positionAt(fullText.length)
-						);
-						selectionMethodUsed = "full-file-fallback";
-						vscode.window.showInformationMessage(
-							"Minovative Mind: Falling back to full file selection as no specific code unit was found."
-						);
-						// diagnosticsString calculation REMOVED from here per centralization instructions
-					}
-					// Generic fallback for any other unhandled case (should not be hit if /docs, /fix, /custom, /merge are exhaustive)
-					else {
-						console.log(
-							"[Minovative Mind] No specific selection logic applied. Falling back to full file selection."
+							"[Minovative Mind] Intelligent selection did not find a logical unit for prompt/fallback. Falling back to full file."
 						);
 						selectedText = fullText;
 						effectiveRange = new vscode.Range(
@@ -595,37 +651,29 @@ export async function activate(context: vscode.ExtensionContext) {
 						vscode.window.showInformationMessage(
 							"Minovative Mind: Falling back to full file selection."
 						);
-						// diagnosticsString calculation REMOVED from here per centralization instructions
 					}
 				}
-				// Visual update of the active editor's selection for auto-determined ranges
-				if (effectiveRange && editor) {
-					// Ensure an effectiveRange was actually determined and editor is active
-					// Only visually update if the command is /fix or custom prompt
-					if (instruction === "/fix" || instruction === "custom prompt") {
-						const newSelection = new vscode.Selection(
-							effectiveRange.start,
-							effectiveRange.end
-						);
-						editor.selection = newSelection;
-						// Reveal the selected range to the user, ensuring it's visible in the viewport
-						editor.revealRange(
-							effectiveRange,
-							vscode.TextEditorRevealType.InCenterIfOutsideViewport
-						);
-					}
-				}
-			} // End of else (no explicit user selection)
+				// --- End of original fallback for custom prompt and any other unhandled instructions ---
 
-			// Centralize Diagnostics String Calculation:
-			// Calculate diagnostics based on the determined effectiveRange, unless it's a /merge operation
-			if (instruction !== "/merge") {
-				diagnosticsString = await DiagnosticService.formatContextualDiagnostics(
-					documentUri,
-					sidebarProvider.workspaceRootUri!,
-					effectiveRange
-				);
-			}
+				// Apply visual update for auto-selected ranges that were successfully determined,
+				// specifically for /fix (new logic) and custom prompt commands.
+				if (
+					selectionSuccessfullyDetermined &&
+					(instruction === "/fix" || instruction === "custom prompt")
+				) {
+					const newSelection = new vscode.Selection(
+						effectiveRange.start,
+						effectiveRange.end
+					);
+					editor.selection = newSelection;
+					editor.revealRange(
+						effectiveRange,
+						vscode.TextEditorRevealType.InCenterIfOutsideViewport
+					);
+				}
+			} // End of the replaced else block (when originalSelection.isEmpty)
+
+			// The original diagnosticsString calculation block that was here is now moved into the withProgress block.
 
 			// New /docs instruction handling (now using the upfront logic, this block still handles execution)
 			if (instruction === "/docs") {
@@ -717,8 +765,30 @@ export async function activate(context: vscode.ExtensionContext) {
 					cancellable: true, // Allow cancellation
 				},
 				async (progress, token) => {
-					// The existing logic in your OCR shows SidebarProvider handles progress updates
-					// and token linking internally for initiatePlanFromEditorAction.
+					// Centralize Diagnostics String Calculation:
+					if (instruction === "/fix") {
+						// PHASE 2: For /fix, always send ALL file-level ERROR diagnostics, not just within selection.
+						diagnosticsString =
+							await DiagnosticService.formatContextualDiagnostics(
+								documentUri,
+								sidebarProvider.workspaceRootUri!,
+								undefined, // Set selection to undefined to get diagnostics for the entire file.
+								undefined, // Use default maxTotalChars
+								undefined, // Use default maxPerSeverity
+								token, // Pass cancellation token if available, otherwise undefined
+								[vscode.DiagnosticSeverity.Error] // Explicitly filter for only Error severity.
+							);
+					} else {
+						// For other commands (/docs, /merge, custom prompt), use the determined effectiveRange.
+						// The existing logic for other commands is preserved.
+						diagnosticsString =
+							await DiagnosticService.formatContextualDiagnostics(
+								documentUri,
+								sidebarProvider.workspaceRootUri!,
+								effectiveRange // Use the effectiveRange determined by selection logic.
+							);
+					}
+
 					result =
 						await sidebarProvider.planService.initiatePlanFromEditorAction(
 							instruction,
@@ -752,7 +822,7 @@ export async function activate(context: vscode.ExtensionContext) {
 						"An unknown error occurred during textual plan generation."
 					}`
 				);
-				sidebarProvider.postMessageToWebview({ type: "reenableInput" }); // Ensure input is re-enabled if an error occurred
+				sidebarProvider.postMessageToWebview({ type: "reenableInput" }); // Ensure input is re-enabled if anC error occurred
 			}
 		}
 	);
