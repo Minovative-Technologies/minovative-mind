@@ -26,13 +26,17 @@ import { DiagnosticService } from "../utils/diagnosticUtils";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { showErrorNotification } from "../utils/notificationUtils";
 import { UrlContextService } from "./urlContextService";
-import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
+import { EnhancedCodeGenerator, CodeIssue } from "../ai/enhancedCodeGeneration";
 import { executeCommand, CommandResult } from "../utils/commandExecution";
 import {
 	createInitialPlanningExplanationPrompt,
 	createPlanningPrompt,
 } from "../ai/prompts/planningPrompts";
-import { createCorrectionPlanPrompt } from "../ai/prompts/correctionPrompts";
+import {
+	createCorrectionPlanPrompt,
+	CorrectionFeedback,
+} from "../ai/prompts/correctionPrompts";
+import { areIssuesSimilar } from "../utils/aiUtils";
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
@@ -40,13 +44,23 @@ export class PlanService {
 	private readonly MAX_CORRECTION_PLAN_ATTEMPTS = 3; // Max attempts for AI to generate a valid correction *plan*
 	private urlContextService: UrlContextService;
 	private enhancedCodeGenerator: EnhancedCodeGenerator;
+	// New private member to store correction attempt history per file
+	private fileCorrectionAttemptHistory: Map<
+		string,
+		{
+			iteration: number;
+			issuesRemaining: CodeIssue[];
+			success: boolean;
+			feedbackUsed?: CorrectionFeedback;
+		}[]
+	> = new Map();
 
 	constructor(
 		private provider: SidebarProvider,
-		private workspaceRootUri: vscode.Uri | undefined, // Add workspaceRootUri
-		private gitConflictResolutionService: GitConflictResolutionService, // Add GitConflictResolutionService
+		private workspaceRootUri: vscode.Uri | undefined,
+		private gitConflictResolutionService: GitConflictResolutionService,
 		enhancedCodeGenerator: EnhancedCodeGenerator,
-		private postMessageToWebview: (message: ExtensionToWebviewMessages) => void // ADDED PARAMETER
+		private postMessageToWebview: (message: ExtensionToWebviewMessages) => void
 	) {
 		this.urlContextService = new UrlContextService();
 		this.enhancedCodeGenerator = enhancedCodeGenerator;
@@ -65,7 +79,7 @@ export class PlanService {
 
 	// --- CHAT-INITIATED PLAN ---
 	public async handleInitialPlanRequest(userRequest: string): Promise<void> {
-		const { settingsManager, apiKeyManager, changeLogger } = this.provider;
+		const { apiKeyManager, changeLogger } = this.provider;
 		const modelName = sidebarConstants.DEFAULT_FLASH_LITE_MODEL; // Use default model for initial plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
@@ -89,7 +103,7 @@ export class PlanService {
 		if (!rootFolder) {
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
-				success: false, // Explicitly added as per instruction
+				success: false,
 				error:
 					"Action blocked: No VS Code workspace folder is currently open. Please open a project folder to proceed.",
 			});
@@ -106,7 +120,12 @@ export class PlanService {
 			const buildContextResult =
 				await this.provider.contextService.buildProjectContext(
 					token,
-					userRequest
+					userRequest,
+					undefined, // Pass undefined for editorContext
+					undefined, // Pass undefined for initialDiagnosticsString
+					undefined, // Pass undefined for options
+					false, // CRITICAL: Pass false to exclude the AI persona
+					false // Add false for includeVerboseHeaders
 				);
 			const { contextString, relevantFiles } = buildContextResult;
 
@@ -150,7 +169,7 @@ export class PlanService {
 			// Line 164: Modify first argument to wrap string prompt in HistoryEntryPart array
 			textualPlanResponse =
 				await this.provider.aiRequestService.generateWithRetry(
-					[{ text: textualPlanPrompt }], // MODIFIED
+					[{ text: textualPlanPrompt }],
 					modelName,
 					undefined,
 					"initial plan explanation",
@@ -199,7 +218,7 @@ export class PlanService {
 				originalUserRequest: userRequest,
 				projectContext: contextString,
 				relevantFiles,
-				activeSymbolDetailedInfo: buildContextResult.activeSymbolDetailedInfo, // MODIFIED
+				activeSymbolDetailedInfo: buildContextResult.activeSymbolDetailedInfo,
 				initialApiKey: apiKey,
 				modelName,
 				chatHistory: [...this.provider.chatHistoryManager.getChatHistory()],
@@ -300,9 +319,9 @@ export class PlanService {
 		initialProgress?: vscode.Progress<{ message?: string; increment?: number }>,
 		initialToken?: vscode.CancellationToken,
 		diagnosticsString?: string,
-		isMergeOperation: boolean = false // Added isMergeOperation parameter
+		isMergeOperation: boolean = false
 	): Promise<sidebarTypes.PlanGenerationResult> {
-		const { settingsManager, apiKeyManager, changeLogger } = this.provider;
+		const { apiKeyManager, changeLogger } = this.provider;
 		const modelName = sidebarConstants.DEFAULT_FLASH_LITE_MODEL; // Use default model for editor-initiated plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
@@ -366,7 +385,10 @@ export class PlanService {
 					activeOpToken,
 					editorCtx.instruction,
 					editorCtx,
-					diagnosticsString
+					diagnosticsString,
+					undefined, // Pass undefined for options
+					false, // CRITICAL: Pass false to exclude the AI persona
+					false // Add false for includeVerboseHeaders
 				);
 			const { contextString, relevantFiles } = buildContextResult;
 
@@ -408,7 +430,7 @@ export class PlanService {
 			// Line 421: Modify first argument to wrap string prompt in HistoryEntryPart array
 			textualPlanResponse =
 				await this.provider.aiRequestService.generateWithRetry(
-					[{ text: textualPlanPrompt }], // MODIFIED
+					[{ text: textualPlanPrompt }],
 					modelName,
 					undefined,
 					"editor action plan explanation",
@@ -438,7 +460,7 @@ export class PlanService {
 				undefined,
 				relevantFiles,
 				relevantFiles && relevantFiles.length <= 3,
-				true // Added: Mark as plan explanation
+				true
 			);
 			initialProgress?.report({
 				message: "Textual plan generated.",
@@ -450,7 +472,7 @@ export class PlanService {
 				editorContext: editorCtx,
 				projectContext: contextString,
 				relevantFiles,
-				activeSymbolDetailedInfo: buildContextResult.activeSymbolDetailedInfo, // MODIFIED
+				activeSymbolDetailedInfo: buildContextResult.activeSymbolDetailedInfo,
 				diagnosticsString,
 				initialApiKey: apiKey!,
 				modelName,
@@ -466,10 +488,10 @@ export class PlanService {
 
 			// ADDED: Persist the pending plan data here for editor-initiated plans
 			const dataToPersist: sidebarTypes.PersistedPlanData = {
-				type: "editor", // Explicitly "editor"
+				type: "editor",
 				originalInstruction: editorCtx.instruction,
 				relevantFiles: relevantFiles,
-				textualPlanExplanation: textualPlanResponse, // crucial for re-display
+				textualPlanExplanation: textualPlanResponse,
 			};
 			await this.provider.updatePersistedPendingPlanData(dataToPersist);
 
@@ -528,7 +550,7 @@ export class PlanService {
 						isPlanResponse: true,
 						requiresConfirmation: true,
 						planData: {
-							type: "textualPlanPending", // Use "textualPlanPending" for webview message
+							type: "textualPlanPending",
 							originalRequest:
 								this.provider.pendingPlanGenerationContext.type === "chat"
 									? this.provider.pendingPlanGenerationContext
@@ -549,7 +571,7 @@ export class PlanService {
 			});
 			disposable?.dispose();
 			this.provider.activeOperationCancellationTokenSource?.dispose();
-			this.provider.chatHistoryManager.restoreChatHistoryToWebview(); // CRITICAL CHANGE: Ensure chat history is restored to webview after completion/cancellation
+			this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 			this.provider.activeOperationCancellationTokenSource = undefined;
 			return finalResult;
 		}
@@ -610,14 +632,14 @@ export class PlanService {
 			let currentJsonPlanningPrompt = createPlanningPrompt(
 				planContext.type === "chat"
 					? planContext.originalUserRequest
-					: undefined, //1.userRequest
-				planContext.projectContext, //2.projectContext
-				planContext.type === "editor" ? planContext.editorContext : undefined, //3.editorContext
-				undefined, //4.combinedDiagnosticsAndRetryString(passundefinedaspercorrectedmapping)
-				planContext.chatHistory, //5.chatHistory
-				planContext.textualPlanExplanation, //6.textualPlanExplanation
-				formattedRecentChanges, //7.recentChanges
-				urlContextString //8.urlContextString
+					: undefined,
+				planContext.projectContext,
+				planContext.type === "editor" ? planContext.editorContext : undefined,
+				undefined,
+				planContext.chatHistory,
+				planContext.textualPlanExplanation,
+				formattedRecentChanges,
+				urlContextString
 			);
 
 			// Start of the retry loop
@@ -647,7 +669,7 @@ export class PlanService {
 				// Line 660: Modify first argument to wrap string prompt in HistoryEntryPart array
 				structuredPlanJsonString =
 					await this.provider.aiRequestService.generateWithRetry(
-						[{ text: currentJsonPlanningPrompt }], // MODIFIED
+						[{ text: currentJsonPlanningPrompt }],
 						sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
 						undefined,
 						"structured plan generation",
@@ -697,9 +719,9 @@ export class PlanService {
 					// If more retries are available, prepare for the next attempt
 					if (retryAttempt <= this.MAX_PLAN_PARSE_RETRIES) {
 						// Create feedback string for the AI
-						const retryFeedbackString = `CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${lastParsingError}". You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. Do not include markdown fences. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct JSON)`;
-
-						// Combine the fixed JSON escaping instructions with the dynamic retry feedback
+						// This feedback string is directly built into the prompt for general planning retries.
+						// For correction plans, a structured CorrectionFeedback is used.
+						// No change needed here for this instruction.
 
 						// Update the prompt for the next iteration
 						currentJsonPlanningPrompt = createPlanningPrompt(
@@ -710,7 +732,9 @@ export class PlanService {
 							planContext.type === "editor"
 								? planContext.editorContext
 								: undefined,
-							undefined,
+							// Pass the error message as diagnostics/retry string for this general plan generation retry.
+							// This is not using CorrectionFeedback type, but a direct string to the prompt.
+							`CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${lastParsingError}". You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. Do not include markdown fences. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct JSON)`,
 							planContext.chatHistory,
 							planContext.textualPlanExplanation,
 							formattedRecentChanges,
@@ -852,9 +876,8 @@ export class PlanService {
 							rootUri,
 							planContext,
 							combinedToken,
-							progress, // FIXED: Passing progress from `withProgress` callback
-							this.postMessageToWebview, // ADDED: Pass this.postMessageToWebview
-							originalRootInstruction // ADDED: Pass originalRootInstruction
+							progress,
+							originalRootInstruction
 						);
 
 						let overallPlanExecutionSuccess = true; // Represents if steps executed without user cancellation/fatal errors
@@ -970,11 +993,10 @@ export class PlanService {
 	private async _executePlanSteps(
 		steps: PlanStep[],
 		rootUri: vscode.Uri,
-		context: sidebarTypes.PlanGenerationContext, // Renamed to context for clarity
+		context: sidebarTypes.PlanGenerationContext,
 		combinedToken: vscode.CancellationToken,
-		progress: vscode.Progress<{ message?: string; increment?: number }>, // ADDED: progress parameter
-		postMessageToWebview: (message: ExtensionToWebviewMessages) => void, // ADDED: postMessageToWebview parameter
-		originalRootInstruction: string // ADDED: originalRootInstruction parameter
+		progress: vscode.Progress<{ message?: string; increment?: number }>,
+		originalRootInstruction: string
 	): Promise<Set<vscode.Uri>> {
 		const affectedFileUris = new Set<vscode.Uri>();
 		const totalSteps = steps.length;
@@ -987,17 +1009,17 @@ export class PlanService {
 			combinedToken
 		);
 
-		let index = 0; // Initialize index for while loop
+		let index = 0;
 		while (index < totalSteps) {
 			// Outer while loop
 			const step = steps[index];
-			let currentStepCompletedSuccessfullyOrSkipped = false; // Flag for current step's success/skip
-			let currentTransientAttempt = 0; // Auto-retry counter for the current step
+			let currentStepCompletedSuccessfullyOrSkipped = false;
+			let currentTransientAttempt = 0;
 
 			// Inner loop for auto-retries and user intervention for the *current* step
 			while (!currentStepCompletedSuccessfullyOrSkipped) {
 				if (combinedToken.isCancellationRequested) {
-					throw new Error(ERROR_OPERATION_CANCELLED); // Plan cancelled
+					throw new Error(ERROR_OPERATION_CANCELLED);
 				}
 
 				// Start of detailedStepDescription logic
@@ -1090,7 +1112,7 @@ export class PlanService {
 								projectContext: context.projectContext,
 								relevantSnippets: relevantSnippets,
 								editorContext: context.editorContext,
-								activeSymbolInfo: undefined, // Or populate if available
+								activeSymbolInfo: undefined,
 							};
 
 							content = (
@@ -1105,7 +1127,7 @@ export class PlanService {
 						}
 						await typeContentIntoEditor(editor, content ?? "", combinedToken);
 
-						affectedFileUris.add(fileUri); // ADDED: Track affected file
+						affectedFileUris.add(fileUri);
 
 						const { formattedDiff, summary } = await generateFileChangeSummary(
 							"",
@@ -1129,8 +1151,8 @@ export class PlanService {
 							summary,
 							diffContent: formattedDiff,
 							timestamp: Date.now(),
-							originalContent: "", // Added as per instructions 1.b
-							newContent: content ?? "", // Added as per instructions 1.b
+							originalContent: "",
+							newContent: content ?? "",
 						});
 						currentStepCompletedSuccessfullyOrSkipped = true;
 					} else if (isModifyFileStep(step)) {
@@ -1143,7 +1165,7 @@ export class PlanService {
 							projectContext: context.projectContext,
 							relevantSnippets: relevantSnippets,
 							editorContext: context.editorContext,
-							activeSymbolInfo: undefined, // Or populate if available
+							activeSymbolInfo: undefined,
 						};
 
 						let modifiedContent = (
@@ -1173,16 +1195,15 @@ export class PlanService {
 						// Apply precise text edits using the utility function
 						await applyAITextEdits(
 							editor,
-							editor.document.getText(), // CRITICAL CHANGE: Use current live content from editor for diffing
+							editor.document.getText(),
 							modifiedContent,
 							combinedToken
 						);
 
-						const newContentAfterApply = editor.document.getText(); // ADDED
+						const newContentAfterApply = editor.document.getText();
 
 						const { formattedDiff, summary, addedLines, removedLines } =
 							await generateFileChangeSummary(
-								// MODIFIED to use newContentAfterApply
 								existingContent,
 								newContentAfterApply,
 								step.path
@@ -1190,7 +1211,7 @@ export class PlanService {
 
 						// New if condition: check for actual line changes reported by diffing utility
 						if (addedLines.length > 0 || removedLines.length > 0) {
-							affectedFileUris.add(fileUri); // Moved from old 'if (hasSubstantialChanges)' block
+							affectedFileUris.add(fileUri);
 
 							// Post-application logic, now unconditional after applyAITextEdits
 							if (
@@ -1221,8 +1242,8 @@ export class PlanService {
 								summary,
 								diffContent: formattedDiff,
 								timestamp: Date.now(),
-								originalContent: existingContent, // Set to existingContent
-								newContent: newContentAfterApply, // Set to newContentAfterApply
+								originalContent: existingContent,
+								newContent: newContentAfterApply,
 							});
 						} else {
 							// If content is identical or only cosmetic changes, still count as success, but no diff/change log
@@ -1267,7 +1288,7 @@ export class PlanService {
 											} FAILED: Command execution error.`,
 											isError: true,
 										},
-										diffContent: errorMessage, // Display stdout/stderr as diff content
+										diffContent: errorMessage,
 										isPlanStepUpdate: true,
 									});
 
@@ -1288,17 +1309,17 @@ export class PlanService {
 											`Command execution failed and AI correction failed. Command: ${step.command}`
 										);
 									}
-									currentStepCompletedSuccessfullyOrSkipped = true; // Correction successful
+									currentStepCompletedSuccessfullyOrSkipped = true;
 								} else {
 									// Success scenario (exitCode === 0, potentially with warnings in stderr)
 									const successMessage = `Command \`${step.command}\` executed successfully.
                                     \n--- STDOUT ---\n${commandResult.stdout}
-                                    \n--- STDERR ---\n${commandResult.stderr}`; // stderr here implies warnings/non-critical output
+                                    \n--- STDERR ---\n${commandResult.stderr}`;
 
 									this._postChatUpdateForPlanExecution({
 										type: "appendRealtimeModelMessage",
 										value: { text: `Step ${index + 1} OK: Command executed.` },
-										diffContent: successMessage, // Display output as diff content
+										diffContent: successMessage,
 										isPlanStepUpdate: true,
 									});
 									currentStepCompletedSuccessfullyOrSkipped = true;
@@ -1306,7 +1327,7 @@ export class PlanService {
 							} catch (commandExecError: any) {
 								// Handle cancellation or other unexpected errors during executeCommand itself
 								if (commandExecError.message === ERROR_OPERATION_CANCELLED) {
-									throw commandExecError; // Propagate cancellation
+									throw commandExecError;
 								}
 								// Treat other errors during execution as a failure of the step
 								let detailedError = `Error executing command \`${step.command}\`: ${commandExecError.message}`;
@@ -1318,12 +1339,9 @@ export class PlanService {
 									},
 									isPlanStepUpdate: true,
 								});
-								// This will fall through to the general catch block of the outer while loop for user intervention
-								// No need to set currentStepCompletedSuccessfullyOrSkipped = true here, as we want to trigger user intervention.
-								// The existing general error handling for the step should take over.
 							}
 						} else {
-							currentStepCompletedSuccessfullyOrSkipped = true; // User chose to skip the command
+							currentStepCompletedSuccessfullyOrSkipped = true;
 							this._postChatUpdateForPlanExecution({
 								type: "appendRealtimeModelMessage",
 								value: { text: `Step ${index + 1} SKIPPED by user.` },
@@ -1331,7 +1349,6 @@ export class PlanService {
 							});
 						}
 					}
-					// currentStepCompletedSuccessfullyOrSkipped = true; // This line was moved inside each successful step branch
 				} catch (error: any) {
 					let errorMsg = formatUserFacingErrorMessage(
 						error,
@@ -1343,15 +1360,15 @@ export class PlanService {
 					let isRetryableTransientError = false;
 
 					if (errorMsg.includes(ERROR_OPERATION_CANCELLED)) {
-						throw error; // Propagate cancellation to outer handler
+						throw error;
 					}
 
 					// Implement transient error identification
 					if (
 						errorMsg.includes("quota exceeded") ||
 						errorMsg.includes("rate limit exceeded") ||
-						errorMsg.includes("network issue") || // Updated to match formatted message
-						errorMsg.includes("AI service unavailable") || // Updated to match formatted message
+						errorMsg.includes("network issue") ||
+						errorMsg.includes("AI service unavailable") ||
 						errorMsg.includes("timeout")
 					) {
 						isRetryableTransientError = true;
@@ -1379,12 +1396,9 @@ export class PlanService {
 						);
 						await new Promise((resolve) =>
 							setTimeout(resolve, 10000 + currentTransientAttempt * 5000)
-						); // Exponential back-off
+						);
 						currentTransientAttempt++;
-						// currentStepCompletedSuccessfullyOrSkipped remains false, so inner loop will continue
-					}
-					// User Intervention Prompt Logic
-					else {
+					} else {
 						// Fatal error, or transient retries exhausted, or user chose to skip command
 						this._postChatUpdateForPlanExecution({
 							type: "appendRealtimeModelMessage",
@@ -1397,25 +1411,21 @@ export class PlanService {
 							isPlanStepUpdate: true,
 						});
 						const userChoice = await showErrorNotification(
-							error, // Pass the original error for better formatting context
+							error,
 							`Step ${
 								index + 1
-							}/${totalSteps} failed. What would you like to do?`, // Default message for notification
-							`Plan Step Failed for '${step.description}': `, // Context prefix for notification
-							rootUri, // Pass workspace root for path sanitization
+							}/${totalSteps} failed. What would you like to do?`,
+							`Plan Step Failed for '${step.description}': `,
+							rootUri,
 							"Retry Step",
 							"Skip Step",
 							"Cancel Plan"
 						);
 
 						if (userChoice === "Retry Step") {
-							currentTransientAttempt = 0; // Reset auto-retry count for manual retry
-							// currentStepCompletedSuccessfullyOrSkipped remains false, so inner loop will re-execute this step
-							console.log(
-								`Minovative Mind: User chose to retry Step ${index + 1}.`
-							);
+							currentTransientAttempt = 0;
 						} else if (userChoice === "Skip Step") {
-							currentStepCompletedSuccessfullyOrSkipped = true; // Mark step as handled (skipped)
+							currentStepCompletedSuccessfullyOrSkipped = true;
 							this._postChatUpdateForPlanExecution({
 								type: "appendRealtimeModelMessage",
 								value: { text: `Step ${index + 1} SKIPPED by user.` },
@@ -1426,13 +1436,13 @@ export class PlanService {
 							);
 						} else {
 							// Cancel Plan or dialog was dismissed/closed
-							throw new Error(ERROR_OPERATION_CANCELLED); // Abort the entire plan execution
+							throw new Error(ERROR_OPERATION_CANCELLED);
 						}
 					}
 				}
 			} // End of inner `while (!currentStepCompletedSuccessfullyOrSkipped)` loop
 
-			index++; // Increment outer loop index after current step is fully handled (succeeded or skipped).
+			index++;
 		} // End of outer `while (index < totalSteps)` loop
 		return affectedFileUris;
 	}
@@ -1459,7 +1469,7 @@ export class PlanService {
 
 		for (const relativePath of relevantFiles) {
 			if (token.isCancellationRequested) {
-				return formattedSnippets.join("\n"); // Return what's processed so far
+				return formattedSnippets.join("\n");
 			}
 
 			const fileUri = vscode.Uri.joinPath(workspaceRootUri, relativePath);
@@ -1484,7 +1494,7 @@ export class PlanService {
 				languageId = "ignore";
 			} else if (languageId === "license") {
 				languageId = "plaintext";
-			} // License is usually just text
+			}
 
 			try {
 				const fileStat = await vscode.workspace.fs.stat(fileUri);
@@ -1510,7 +1520,7 @@ export class PlanService {
 				}
 
 				const contentBuffer = await vscode.workspace.fs.readFile(fileUri);
-				const content = Buffer.from(contentBuffer).toString("utf8"); // Corrected conversion
+				const content = Buffer.from(contentBuffer).toString("utf8");
 
 				// Basic heuristic for binary files: check for null characters
 				if (content.includes("\0")) {
@@ -1546,7 +1556,7 @@ export class PlanService {
 				formattedSnippets.push(
 					`--- Relevant File: ${relativePath} ---\n\`\`\`plaintext\n[File skipped: could not be read or is inaccessible: ${error.message}]\n\`\`\`\n`
 				);
-				continue; // Skip to next file
+				continue;
 			}
 
 			if (fileContent !== null) {
@@ -1559,7 +1569,7 @@ export class PlanService {
 		return formattedSnippets.join("\n");
 	}
 
-	private async _handlePostTextualPlanGenerationUI(
+	private _handlePostTextualPlanGenerationUI(
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {
 		if (this.provider.isSidebarVisible) {
@@ -1588,12 +1598,13 @@ export class PlanService {
 			});
 		} else {
 			// Automatically open the sidebar when a plan is completed
-			await vscode.commands.executeCommand("minovative-mind.activitybar.focus");
+			void vscode.commands.executeCommand("minovative-mind.activitybar.focus");
 			this.provider.postMessageToWebview({
 				type: "statusUpdate",
 				value: "Plan generated and sidebar opened for review.",
 			});
 		}
+		return Promise.resolve();
 	}
 
 	private _postChatUpdateForPlanExecution(
@@ -1603,9 +1614,9 @@ export class PlanService {
 			"model",
 			message.value.text,
 			message.diffContent,
-			undefined, // relevantFiles
-			undefined, // isRelevantFilesExpanded
-			message.isPlanStepUpdate // isPlanExplanation
+			undefined,
+			undefined,
+			message.isPlanStepUpdate
 		);
 		// This call is intentional to ensure the UI is fully consistent with the updated chat history after each step/status update during plan execution.
 		this.provider.postMessageToWebview(message);
@@ -1631,26 +1642,104 @@ export class PlanService {
 		return formattedString + "--- End Recent Project Changes ---\n";
 	}
 
-	private _formatChatHistoryForPrompt(
-		chatHistory: sidebarTypes.HistoryEntry[] | undefined
-	): string {
-		if (!chatHistory || chatHistory.length === 0) {
-			return "";
+	// Helper to format CorrectionFeedback into a string for the prompt's retryReason
+	private _formatCorrectionFeedbackForPrompt(
+		feedback: CorrectionFeedback | undefined
+	): string | undefined {
+		if (!feedback) {
+			return undefined;
 		}
-		return `\n--- Recent Chat History (for additional context on user's train of thought and previous conversations with a AI model) ---\n${chatHistory
-			.map(
-				(entry) =>
-					`Role: ${entry.role}\nContent:\n${entry.parts
-						.filter((p): p is { text: string } => "text" in p) // MODIFIED: Change type guard here
-						.map((p) => p.text)
-						.join("\n")}`
-			)
-			.join("\n---\n")}\n--- End Recent Chat History ---`;
+
+		let message = `CRITICAL ERROR: Your previous attempt had a issue of type '${feedback.type}'. Message: "${feedback.message}".`;
+		if (feedback.details) {
+			if (feedback.details.parsingError) {
+				message += ` Parsing Error: "${feedback.details.parsingError}".`;
+			}
+			if (feedback.details.failedJson) {
+				// Truncate failed JSON to prevent excessively long prompts
+				let failedJsonPreview = feedback.details.failedJson.substring(0, 500);
+				if (feedback.details.failedJson.length > 500) {
+					failedJsonPreview += "\n// ... (truncated)";
+				}
+				message += ` Failed JSON output: \`\`\`json\n${failedJsonPreview}\n\`\`\`.`;
+			}
+			if (feedback.details.stdout) {
+				let stdoutPreview = feedback.details.stdout.substring(0, 500);
+				if (feedback.details.stdout.length > 500) {
+					stdoutPreview += "\n// ... (truncated)";
+				}
+				message += ` STDOUT: \`\`\`\n${stdoutPreview}\n\`\`\`.`;
+			}
+			if (feedback.details.stderr) {
+				let stderrPreview = feedback.details.stderr.substring(0, 500);
+				if (feedback.details.stderr.length > 500) {
+					stderrPreview += "\n// ... (truncated)";
+				}
+				message += ` STDERR: \`\`\`\n${stderrPreview}\n\`\`\`.`;
+			}
+			if (feedback.details.previousIssues && feedback.details.currentIssues) {
+				// Summarize issues, don't include full objects
+				const prevIssueCount = feedback.details.previousIssues.length;
+				const currIssueCount = feedback.details.currentIssues.length;
+				message += ` Previous errors count: ${prevIssueCount}. Current errors count: ${currIssueCount}.`;
+			}
+		}
+		return message;
+	}
+
+	// Helper to convert vscode.Diagnostic to CodeIssue
+	// This function is based on assumptions about CodeIssue's structure,
+	// as its definition is not available in the provided context.
+	// It aims to extract common properties useful for AI feedback.
+	private _diagnosticToCodeIssue(diagnostic: vscode.Diagnostic): CodeIssue {
+		let severityString =
+			vscode.DiagnosticSeverity[diagnostic.severity].toLowerCase();
+
+		// Map VS Code severity levels to the expected CodeIssue severity levels
+		if (severityString === "information" || severityString === "hint") {
+			severityString = "info";
+		}
+
+		const messageLower = diagnostic.message.toLowerCase();
+		let codeIssueType: CodeIssue["type"];
+
+		if (messageLower.includes("unused import")) {
+			codeIssueType = "unused_import";
+		} else if (
+			severityString === "error" ||
+			severityString === "warning" ||
+			messageLower.includes("syntax") ||
+			messageLower.includes("compilation") ||
+			messageLower.includes("lint")
+		) {
+			codeIssueType = "syntax";
+		} else if (messageLower.includes("security")) {
+			codeIssueType = "security";
+		} else if (messageLower.includes("best practice")) {
+			codeIssueType = "best_practice";
+		} else {
+			codeIssueType = "other";
+		}
+
+		return {
+			message: diagnostic.message,
+			// Assert to the type expected by CodeIssue, which does not include "hint".
+			severity: severityString as "error" | "warning" | "info",
+			line: diagnostic.range.start.line,
+			code:
+				typeof diagnostic.code === "string"
+					? diagnostic.code
+					: diagnostic.code
+					? diagnostic.code.toString()
+					: undefined,
+			source: diagnostic.source,
+			type: codeIssueType,
+		};
 	}
 
 	// Add new _performFinalValidationAndCorrection method
 	private async _performFinalValidationAndCorrection(
-		affectedFileUris: Set<vscode.Uri>, // This will be the initial set
+		affectedFileUris: Set<vscode.Uri>,
 		rootUri: vscode.Uri,
 		token: vscode.CancellationToken,
 		planContext: sidebarTypes.PlanGenerationContext,
@@ -1669,6 +1758,8 @@ export class PlanService {
 				},
 				isPlanStepUpdate: true,
 			});
+			// Clear history if no files needed correction from the start.
+			this.fileCorrectionAttemptHistory.clear();
 			return true;
 		}
 
@@ -1681,14 +1772,13 @@ export class PlanService {
 				console.log(
 					`[MinovativeMind] All files corrected. Exiting validation loop.`
 				);
-				return true; // All files successfully corrected
+				this.fileCorrectionAttemptHistory.clear();
+				return true;
 			}
 
 			// Phase 4: Initialize nextFilesNeedingCorrection Set
 			// This set will store files that still have errors after the current attempt.
 			const nextFilesNeedingCorrection = new Set<vscode.Uri>();
-			// Flag to track if any file in this attempt resulted in a failure (e.g., plan generation, execution, or persistent errors).
-			let overallSuccessForThisAttempt = true;
 
 			// Phase 5: Iterate Through filesNeedingCorrection
 			for (const currentFileUri of filesNeedingCorrection) {
@@ -1701,11 +1791,78 @@ export class PlanService {
 						value: { text: `Final code validation cancelled.` },
 						isPlanStepUpdate: true,
 					});
-					return false; // Cancellation during processing means overall failure
+					this.fileCorrectionAttemptHistory.clear();
+					return false;
 				}
 
-				let errorsFoundInCurrentFile = false;
+				let errorsFoundInCurrentFileBeforeAttempt = false;
 				let aggregatedFormattedDiagnosticsForFile = "";
+
+				const fileRelativePath = path
+					.relative(rootUri.fsPath, currentFileUri.fsPath)
+					.replace(/\\/g, "/");
+
+				// Retrieve previous attempt history for the current file
+				const previousAttemptsForFile =
+					this.fileCorrectionAttemptHistory.get(fileRelativePath) || [];
+
+				let lastAttemptForFile:
+					| (typeof previousAttemptsForFile)[number]
+					| undefined;
+				let secondLastAttemptForFile:
+					| (typeof previousAttemptsForFile)[number]
+					| undefined;
+
+				if (previousAttemptsForFile.length > 0) {
+					lastAttemptForFile =
+						previousAttemptsForFile[previousAttemptsForFile.length - 1];
+					if (previousAttemptsForFile.length > 1) {
+						secondLastAttemptForFile =
+							previousAttemptsForFile[previousAttemptsForFile.length - 2];
+					}
+				}
+
+				let feedbackForPrompt: CorrectionFeedback | undefined = undefined;
+
+				// Check for specific feedback from the *last* attempt on this file
+				if (lastAttemptForFile?.feedbackUsed?.type === "parsing_failed") {
+					feedbackForPrompt = lastAttemptForFile.feedbackUsed;
+					this._postChatUpdateForPlanExecution({
+						type: "appendRealtimeModelMessage",
+						value: {
+							text: `Previous attempt for '${fileRelativePath}' failed parsing. Providing feedback for AI.`,
+							isError: true,
+						},
+						isPlanStepUpdate: true,
+					});
+				} else if (lastAttemptForFile && secondLastAttemptForFile) {
+					// Check for oscillation if there are at least two previous attempts
+					if (
+						!lastAttemptForFile.success &&
+						!secondLastAttemptForFile.success &&
+						areIssuesSimilar(
+							lastAttemptForFile.issuesRemaining,
+							secondLastAttemptForFile.issuesRemaining
+						)
+					) {
+						feedbackForPrompt = {
+							type: "no_improvement",
+							message: `AI is oscillating, previous attempts (${lastAttemptForFile.iteration}, ${secondLastAttemptForFile.iteration}) for '${fileRelativePath}' resulted in similar unresolved issues.`,
+							details: {
+								previousIssues: lastAttemptForFile.issuesRemaining,
+								currentIssues: lastAttemptForFile.issuesRemaining,
+							},
+						};
+						this._postChatUpdateForPlanExecution({
+							type: "appendRealtimeModelMessage",
+							value: {
+								text: `Detected oscillation for '${fileRelativePath}'. Providing feedback for AI.`,
+								isError: true,
+							},
+							isPlanStepUpdate: true,
+						});
+					}
+				}
 
 				// Phase 6: Isolate Diagnostics for the Current File
 				await DiagnosticService.waitForDiagnosticsToStabilize(
@@ -1722,22 +1879,23 @@ export class PlanService {
 						d.severity === vscode.DiagnosticSeverity.Error
 				);
 
+				let currentAIPlanGenerationSuccessful = false;
+				let correctionFeedbackForHistory: CorrectionFeedback | undefined =
+					undefined;
+
 				if (errorsForFile.length > 0) {
-					errorsFoundInCurrentFile = true;
-					const fileRelativePath = path
-						.relative(rootUri.fsPath, currentFileUri.fsPath)
-						.replace(/\\/g, "/");
+					errorsFoundInCurrentFileBeforeAttempt = true;
 
 					// Format diagnostics specifically for this file, focusing only on errors.
 					const formattedForFile =
 						await DiagnosticService.formatContextualDiagnostics(
 							currentFileUri,
 							rootUri,
-							undefined, // No selection
-							5000, // Max total chars
-							undefined, // Use default maxPerSeverity for errors
+							undefined,
+							5000,
+							undefined,
 							token,
-							[vscode.DiagnosticSeverity.Error] // EXPLICITLY request ONLY Error diagnostics
+							[vscode.DiagnosticSeverity.Error]
 						);
 
 					if (formattedForFile) {
@@ -1763,7 +1921,7 @@ export class PlanService {
 						// Format only the current file as relevant for the prompt.
 						const dynamicallyGeneratedRelevantSnippets =
 							await this._formatRelevantFilesForPrompt(
-								[fileRelativePath], // Only include the current file
+								[fileRelativePath],
 								rootUri,
 								token
 							);
@@ -1784,28 +1942,40 @@ export class PlanService {
 						if (planContext.type === "editor" && planContext.editorContext) {
 							fileSpecificEditorContext = {
 								...planContext.editorContext,
-								filePath: fileRelativePath, // Update path
-								documentUri: currentFileUri, // Update URI
-								// `selectedText` and `fullText` are usually captured at plan initiation.
-								// For correction, relying on diagnostics and the file path is often sufficient.
+								filePath: fileRelativePath,
+								documentUri: currentFileUri,
 							};
+						}
+
+						// Add logic to construct jsonEscapingInstructionsForPrompt
+						let jsonEscapingInstructionsForPrompt = "";
+						// Add explicit checks to ensure correctionFeedbackForHistory and its details are defined
+						// Add logic to construct jsonEscapingInstructionsForPrompt
+						// FIX: Use `feedbackForPrompt`, which holds the results from the *previous* attempt.
+						if (
+							feedbackForPrompt &&
+							feedbackForPrompt.type === "parsing_failed" &&
+							feedbackForPrompt.details &&
+							feedbackForPrompt.details.parsingError &&
+							feedbackForPrompt.details.failedJson
+						) {
+							const failedJsonPreview =
+								feedbackForPrompt.details.failedJson.substring(0, 500);
+							jsonEscapingInstructionsForPrompt = `CRITICAL: Your previous output was NOT valid JSON due to "${feedbackForPrompt.details.parsingError}". You MUST provide ONLY a valid JSON object that strictly adheres to the schema. Do NOT include markdown fences (e.g., \`\\\`json) or any additional text, comments, or explanations outside the JSON object itself. Your previous invalid JSON was (truncated): \`\\\`json\n${failedJsonPreview}\n\`\\\`. You MUST correct this.`;
 						}
 
 						// Construct the prompt, ensuring it focuses ONLY on the current file.
 						const correctionPlanPrompt = createCorrectionPlanPrompt(
 							originalContextString,
-							"", // Project context is less critical when focusing on a single file.
-							fileSpecificEditorContext, // Pass the file-specific editor context
-							[], // Pass empty chat history as it might not be relevant per file
-							dynamicallyGeneratedRelevantSnippets, // Pass dynamically generated relevant snippets for the single file
-							aggregatedFormattedDiagnosticsForFile, // Pass file-specific diagnostics
+							"",
+							fileSpecificEditorContext,
+							[],
+							dynamicallyGeneratedRelevantSnippets,
+							aggregatedFormattedDiagnosticsForFile,
 							formattedRecentChanges,
-							currentCorrectionAttempt > 1
-								? `Previous correction attempt (${
-										currentCorrectionAttempt - 1
-								  }) failed to resolve all diagnostics for this file.`
-								: undefined,
-							planContext.activeSymbolDetailedInfo // Pass activeSymbolInfo if available
+							feedbackForPrompt,
+							planContext.activeSymbolDetailedInfo,
+							jsonEscapingInstructionsForPrompt // Pass as the last argument
 						);
 
 						progress.report({
@@ -1815,7 +1985,7 @@ export class PlanService {
 						// Execute AI request for the correction plan
 						let correctionPlanJsonString =
 							await this.provider.aiRequestService.generateWithRetry(
-								[{ text: correctionPlanPrompt }], // MODIFIED
+								[{ text: correctionPlanPrompt }],
 								sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
 								undefined,
 								`correction plan for ${fileRelativePath} (attempt ${currentCorrectionAttempt})`,
@@ -1837,6 +2007,7 @@ export class PlanService {
 						}
 
 						if (parsedPlanResult.plan) {
+							currentAIPlanGenerationSuccessful = true;
 							this._postChatUpdateForPlanExecution({
 								type: "appendRealtimeModelMessage",
 								value: {
@@ -1849,20 +2020,30 @@ export class PlanService {
 							// The _executePlanSteps method processes the plan's steps.
 							// We expect the AI to generate a plan targeting only the currentFileUri.
 							// The return value `subPlanAffectedFiles` is tracked by the main `_executePlan` method.
-							const subPlanAffectedFiles = await this._executePlanSteps(
+							await this._executePlanSteps(
 								parsedPlanResult.plan.steps!,
 								rootUri,
-								planContext, // Pass the original planContext for broader context if needed by steps
+								planContext,
 								token,
 								progress,
-								this.postMessageToWebview,
 								originalUserInstruction
 							);
 							// Update the overall set of affected files from main _executePlan tracking.
 							// This isn't directly used for `filesNeedingCorrection` logic here, but maintains consistency.
-							subPlanAffectedFiles.forEach((uri) => affectedFileUris.add(uri));
+							// subPlanAffectedFiles.forEach((uri) => affectedFileUris.add(uri)); // This line was removed as subPlanAffectedFiles is not declared.
 						} else {
 							// Failed to parse plan for this file
+							currentAIPlanGenerationSuccessful = false;
+							correctionFeedbackForHistory = {
+								type: "parsing_failed",
+								message:
+									parsedPlanResult.error ||
+									"Failed to parse the correction plan generated by AI.",
+								details: {
+									parsingError: parsedPlanResult.error,
+									failedJson: correctionPlanJsonString,
+								},
+							};
 							console.error(
 								`[MinovativeMind] Failed to parse AI correction plan for '${fileRelativePath}' (Attempt ${currentCorrectionAttempt}): ${parsedPlanResult.error}`
 							);
@@ -1882,9 +2063,15 @@ export class PlanService {
 								},
 								isPlanStepUpdate: true,
 							});
-							overallSuccessForThisAttempt = false; // Mark attempt as failed for this file
+							nextFilesNeedingCorrection.add(currentFileUri);
 						}
 					} catch (correctionError: any) {
+						nextFilesNeedingCorrection.add(currentFileUri);
+
+						if (correctionError.message === ERROR_OPERATION_CANCELLED) {
+							throw correctionError;
+						}
+
 						this._postChatUpdateForPlanExecution({
 							type: "appendRealtimeModelMessage",
 							value: {
@@ -1898,7 +2085,6 @@ export class PlanService {
 							},
 							isPlanStepUpdate: true,
 						});
-						overallSuccessForThisAttempt = false; // Mark attempt as failed for this file
 					}
 				} else {
 					// No errors found in this file for this attempt, or it was already resolved.
@@ -1907,9 +2093,9 @@ export class PlanService {
 					// We still need to update the overall success flag if this was the only file with issues.
 				}
 
-				// Phase 9: Re-validate the Corrected File
-				// Only re-validate if we actually attempted a correction in this iteration for this file.
-				if (errorsFoundInCurrentFile) {
+				// Phase 9: Re-validate the Corrected File and Record Outcome
+				// Only re-validate if we actually attempted a correction in this iteration for this file (had errors initially and proceeded with correction).
+				if (errorsFoundInCurrentFileBeforeAttempt) {
 					await DiagnosticService.waitForDiagnosticsToStabilize(
 						currentFileUri,
 						token
@@ -1921,12 +2107,35 @@ export class PlanService {
 							d.severity === vscode.DiagnosticSeverity.Error
 					);
 
+					// Convert vscode.Diagnostic[] to CodeIssue[]
+					const codeIssuesAfterCorrection: CodeIssue[] =
+						errorsAfterCorrection.map((d) => this._diagnosticToCodeIssue(d));
+
+					// Determine overall success for this file within this attempt (including AI generation/parsing)
+					const currentFileAttemptSuccessful =
+						codeIssuesAfterCorrection.length === 0 &&
+						currentAIPlanGenerationSuccessful;
+
+					// Record the outcome for the current file
+					const currentFileOutcome = {
+						iteration: currentCorrectionAttempt,
+						issuesRemaining: codeIssuesAfterCorrection,
+						success: currentFileAttemptSuccessful,
+						feedbackUsed: correctionFeedbackForHistory,
+					};
+
+					// Initialize history entry if it doesn't exist
+					if (!this.fileCorrectionAttemptHistory.has(fileRelativePath)) {
+						this.fileCorrectionAttemptHistory.set(fileRelativePath, []);
+					}
+					this.fileCorrectionAttemptHistory
+						.get(fileRelativePath)!
+						.push(currentFileOutcome);
+
 					// Phase 10: Update nextFilesNeedingCorrection
-					// If errors still exist after correction, OR if any failure occurred during the process for this file,
-					// add it back to the set for the next attempt.
 					if (
-						errorsAfterCorrection.length > 0 ||
-						!overallSuccessForThisAttempt
+						codeIssuesAfterCorrection.length > 0 ||
+						!currentFileAttemptSuccessful
 					) {
 						nextFilesNeedingCorrection.add(currentFileUri);
 						console.log(
@@ -1941,7 +2150,7 @@ export class PlanService {
 							`[MinovativeMind] Errors resolved for '${path.relative(
 								rootUri.fsPath,
 								currentFileUri.fsPath
-							)}' after correction attempt ${currentCorrectionAttempt}.`
+							)}' after correction attempt ${currentCorrectionAttempt}. Clearing history for this file.`
 						);
 						this._postChatUpdateForPlanExecution({
 							type: "appendRealtimeModelMessage",
@@ -1954,6 +2163,7 @@ export class PlanService {
 							},
 							isPlanStepUpdate: true,
 						});
+						this.fileCorrectionAttemptHistory.delete(fileRelativePath);
 					}
 				}
 				// Phase 11: Handle Files Without Errors - implicitly handled as they are not added to nextFilesNeedingCorrection.
@@ -1977,10 +2187,12 @@ export class PlanService {
 				},
 				isPlanStepUpdate: true,
 			});
-			return false; // Still files with errors after all attempts.
+			// Do not clear history here, as the files are still uncorrected.
+			return false;
 		} else {
 			// If the loop completed and `filesNeedingCorrection` is empty, it implies all files were resolved.
 			// This path is typically handled by the early exit condition inside the loop, but this serves as a final check.
+			this.fileCorrectionAttemptHistory.clear();
 			return true;
 		}
 	}
@@ -1996,6 +2208,9 @@ export class PlanService {
 		originalUserInstruction: string
 	): Promise<boolean> {
 		let currentCorrectionAttempt = 1;
+		let lastCorrectionFeedbackForPrompt: CorrectionFeedback | undefined =
+			undefined;
+
 		while (currentCorrectionAttempt <= this.MAX_CORRECTION_PLAN_ATTEMPTS) {
 			if (token.isCancellationRequested) {
 				this._postChatUpdateForPlanExecution({
@@ -2006,17 +2221,39 @@ export class PlanService {
 				return false;
 			}
 
-			const correctionContext = `The command \`${failedCommand}\` failed with exit code ${
+			// The core context for the AI is the command failure output
+			const commandFailureDetailsForPrompt = `The command \`${failedCommand}\` failed with exit code ${
 				stdout === "" && stderr === "" ? "unknown" : "non-zero"
 			}. Here's its output:\n\nSTDOUT:\n\`\`\`\n${stdout}\n\`\`\`\n\nSTDERR:\n\`\`\`\n${stderr}\n\`\`\`\n\nAnalyze this failure and generate a plan to correct the issue in the codebase. This might involve modifying files, creating new ones, or even running different commands. If the problem is environmental, suggest a fix by modifying files.`;
+
+			// For the first attempt, the specific 'command_failure' feedback is the primary prompt content.
+			// For subsequent attempts, `lastCorrectionFeedbackForPrompt` holds the parsing error from the previous attempt.
+			let correctionPromptRetryReason: string | undefined;
+			if (currentCorrectionAttempt === 1) {
+				// For the first attempt, we use the command failure details directly as the "reason".
+				// We also initialize `lastCorrectionFeedbackForPrompt` so it can be used in subsequent retries if parsing fails.
+				correctionPromptRetryReason = `Previous Command Execution Failure:\n${commandFailureDetailsForPrompt}`;
+				lastCorrectionFeedbackForPrompt = {
+					type: "command_failed",
+					message: `Command execution failed: ${failedCommand}`,
+					details: {
+						stdout: stdout,
+						stderr: stderr,
+					},
+				};
+			} else {
+				correctionPromptRetryReason = this._formatCorrectionFeedbackForPrompt(
+					lastCorrectionFeedbackForPrompt
+				);
+			}
 
 			this._postChatUpdateForPlanExecution({
 				type: "appendRealtimeModelMessage",
 				value: {
 					text: `Attempting AI correction for failed command (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
-					isError: true, // Mark as error related for chat history styling
+					isError: true,
 				},
-				diffContent: correctionContext, // Show context for AI to debug
+				diffContent: correctionPromptRetryReason,
 				isPlanStepUpdate: true,
 			});
 
@@ -2040,42 +2277,42 @@ export class PlanService {
 				const formattedRecentChanges =
 					this._formatRecentChangesForPrompt(recentChanges);
 
-				let modifiedProjectContextForCorrection = planContext.projectContext;
-				if (planContext.activeSymbolDetailedInfo) {
-					modifiedProjectContextForCorrection += `\n\n--- Active Symbol Detailed Information For Correction ---\n${JSON.stringify(
-						planContext.activeSymbolDetailedInfo,
-						null,
-						2
-					)}\n--- End Active Symbol Detailed Information For Correction ---`;
+				// Add logic to construct jsonEscapingInstructionsForPrompt
+				let jsonEscapingInstructionsForPrompt = "";
+				if (
+					lastCorrectionFeedbackForPrompt?.type === "parsing_failed" &&
+					lastCorrectionFeedbackForPrompt.details?.parsingError &&
+					lastCorrectionFeedbackForPrompt.details.failedJson
+				) {
+					const failedJsonPreview =
+						lastCorrectionFeedbackForPrompt.details.failedJson.substring(
+							0,
+							500
+						);
+					jsonEscapingInstructionsForPrompt = `CRITICAL: Your previous output was NOT valid JSON due to "${lastCorrectionFeedbackForPrompt.details.parsingError}". You MUST provide ONLY a valid JSON object that strictly adheres to the schema. Do NOT include markdown fences (e.g., \`\\\`json) or any additional text, comments, or explanations outside the JSON object itself. Your previous invalid JSON was (truncated): \`\\\`json\n${failedJsonPreview}\n\`\\\`. You MUST correct this.`;
 				}
-				// Note: this.JSON_ESCAPING_INSTRUCTIONS is not a class property and does not exist.
-				// Removing this line as it will cause a compilation error.
-				// modifiedProjectContextForCorrection += `\n\n--- JSON Escaping Instructions --- \n${this.JSON_ESCAPING_INSTRUCTIONS}\n--- End JSON Escaping Instructions ---`;
 
 				const correctionPlanPrompt = createCorrectionPlanPrompt(
 					originalUserInstruction,
-					"",
+					planContext.projectContext,
 					undefined,
 					[],
 					dynamicallyGeneratedRelevantSnippets,
-					correctionContext, // Pass the command failure context as diagnostics string
+					commandFailureDetailsForPrompt,
 					formattedRecentChanges,
-					currentCorrectionAttempt > 1
-						? `Previous command correction attempt (${
-								currentCorrectionAttempt - 1
-						  }) failed.`
-						: undefined
+					lastCorrectionFeedbackForPrompt,
+					planContext.activeSymbolDetailedInfo,
+					jsonEscapingInstructionsForPrompt // Pass as the last argument
 				);
 
 				progress.report({
 					message: `AI generating command correction plan (Attempt ${currentCorrectionAttempt}/${this.MAX_CORRECTION_PLAN_ATTEMPTS})...`,
 				});
 
-				// Line 1971: Modify first argument to wrap string prompt in HistoryEntryPart array
 				let correctionPlanJsonString =
 					await this.provider.aiRequestService.generateWithRetry(
-						[{ text: correctionPlanPrompt }], // MODIFIED
-						sidebarConstants.DEFAULT_FLASH_LITE_MODEL, // Use default model for correction plans
+						[{ text: correctionPlanPrompt }],
+						sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
 						undefined,
 						`command correction plan generation (attempt ${currentCorrectionAttempt})`,
 						jsonGenerationConfig,
@@ -2104,15 +2341,17 @@ export class PlanService {
 						isPlanStepUpdate: true,
 					});
 
+					// Clear feedback for next attempt as this one was successful
+					lastCorrectionFeedbackForPrompt = undefined;
+
 					// Execute the generated correction plan.
-					const subPlanAffectedFiles = await this._executePlanSteps(
+					await this._executePlanSteps(
 						parsedPlanResult.plan.steps!,
 						rootUri,
 						planContext,
 						token,
 						progress,
-						this.postMessageToWebview,
-						originalUserInstruction // Pass the new parameter here
+						originalUserInstruction
 					);
 					// After correction, consider the command issue resolved if the plan ran without immediate error.
 					this._postChatUpdateForPlanExecution({
@@ -2120,8 +2359,9 @@ export class PlanService {
 						value: { text: `Command correction plan applied.`, isError: false },
 						isPlanStepUpdate: true,
 					});
-					return true; // Correction plan was generated and executed
+					return true;
 				} else {
+					// Plan parsing failed for the generated correction plan
 					console.error(
 						`[MinovativeMind] Failed to parse/validate AI command correction plan (Attempt ${currentCorrectionAttempt}): ${parsedPlanResult.error}`
 					);
@@ -2141,8 +2381,22 @@ export class PlanService {
 						},
 						isPlanStepUpdate: true,
 					});
+					// Store this parsing error feedback for the next attempt
+					lastCorrectionFeedbackForPrompt = {
+						type: "parsing_failed",
+						message:
+							parsedPlanResult.error ||
+							"Failed to parse command correction plan.",
+						details: {
+							parsingError: parsedPlanResult.error,
+							failedJson: correctionPlanJsonString,
+						},
+					};
 				}
 			} catch (correctionError: any) {
+				if (correctionError.message === ERROR_OPERATION_CANCELLED) {
+					throw correctionError;
+				}
 				this._postChatUpdateForPlanExecution({
 					type: "appendRealtimeModelMessage",
 					value: {
@@ -2156,6 +2410,11 @@ export class PlanService {
 					},
 					isPlanStepUpdate: true,
 				});
+				// Store a generic "unknown" feedback for the next attempt if an exception occurs
+				lastCorrectionFeedbackForPrompt = {
+					type: "unknown",
+					message: `An unexpected error occurred during command correction: ${correctionError.message}`,
+				};
 			}
 			currentCorrectionAttempt++;
 		}
@@ -2168,6 +2427,6 @@ export class PlanService {
 			},
 			isPlanStepUpdate: true,
 		});
-		return false; // All attempts exhausted, still errors
+		return false;
 	}
 }

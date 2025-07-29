@@ -9,6 +9,7 @@ import {
 import { cleanCodeOutput } from "../utils/codeUtils";
 import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils";
 import { generateFileChangeSummary } from "../utils/diffingUtils";
+import { getIssueIdentifier, areIssuesSimilar } from "../utils/aiUtils";
 import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes";
 import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
 import { RevertibleChangeSet } from "../types/workflow";
@@ -25,6 +26,7 @@ import {
 	createPracticeCorrectionPrompt,
 	createSecurityCorrectionPrompt,
 	createAIFailureAnalysisPrompt,
+	createPureCodeFormatCorrectionPrompt,
 } from "./prompts/enhancedCodeGenerationPrompts";
 
 /**
@@ -49,11 +51,18 @@ export interface CodeValidationResult {
 }
 
 export interface CodeIssue {
-	type: "syntax" | "unused_import" | "best_practice" | "security" | "other";
+	type:
+		| "syntax"
+		| "unused_import"
+		| "best_practice"
+		| "security"
+		| "other"
+		| "format_error"; // NEW: Add format_error type
 	message: string;
 	line: number;
 	severity: "error" | "warning" | "info";
 	code?: string | number;
+	source?: string;
 }
 
 export interface FileAnalysis {
@@ -317,6 +326,10 @@ function formatGroupedIssuesForPrompt(
 		} else if (groupKey.includes("TYPE: OTHER")) {
 			suggestedStrategy =
 				"Suggested Strategy: This group contains general or uncategorized issues. While not falling into specific categories, they still require attention. Your specific action should be: 1. **Analyze Message**: Carefully read the diagnostic message and examine the problematic code snippet. 2. **Precise Fix**: Apply a targeted and precise fix that directly resolves the issue without introducing unnecessary changes or side effects.";
+		} else if (groupKey.includes("TYPE: FORMAT_ERROR")) {
+			// NEW: Strategy for format errors
+			suggestedStrategy =
+				"Suggested Strategy: The AI's response format was incorrect. It likely did not provide code within BEGIN_CODE/END_CODE delimiters or included significant conversational text. Your specific action should be: 1. **Strictly adhere to delimiters**: Ensure all generated code is ONLY between `BEGIN_CODE` and `END_CODE`. 2. **Remove extraneous text**: Eliminate all conversational filler, explanations, markdown formatting (triple backticks), or meta-headers outside the delimiters. 3. **Deliver pure code**: Focus solely on generating valid, executable code.";
 		}
 		formattedString += `Suggested Strategy: ${suggestedStrategy}\n`;
 
@@ -354,6 +367,7 @@ function formatGroupedIssuesForPrompt(
 export class EnhancedCodeGenerator {
 	// NEW: Define issue ordering constants
 	private readonly issueTypeOrder: CodeIssue["type"][] = [
+		"format_error", // Prioritize format errors
 		"syntax",
 		"unused_import",
 		"security",
@@ -449,7 +463,8 @@ export class EnhancedCodeGenerator {
 					lastFailedCorrectionDiff: undefined, // No failed diff yet
 				};
 
-				const initialContent = await this._generateInitialContent(
+				const initialGenerationResult = await this._generateInitialContent(
+					// MODIFIED: Get CodeValidationResult
 					filePath,
 					generatePrompt,
 					initialGenerationContext,
@@ -459,9 +474,26 @@ export class EnhancedCodeGenerator {
 					onCodeChunkCallback
 				);
 
+				// MODIFIED: If initial content generation results in a format error, propagate it
+				if (!initialGenerationResult.isValid) {
+					this.postMessageToWebview({
+						type: "codeFileStreamEnd",
+						value: {
+							streamId: streamId,
+							filePath: filePath,
+							success: false,
+							error: `Initial generation format error: ${initialGenerationResult.issues[0]?.message}`,
+						},
+					});
+					return {
+						content: initialGenerationResult.finalContent, // Return the problematic content for inspection
+						validation: initialGenerationResult,
+					};
+				}
+
 				const validation = await this._validateAndRefineContent(
 					filePath,
-					initialContent,
+					initialGenerationResult.finalContent, // Use the cleaned content
 					initialGenerationContext, // Pass context with structured analysis
 					modelName,
 					streamId,
@@ -554,6 +586,65 @@ export class EnhancedCodeGenerator {
 	}
 
 	/**
+	 * Create a new private method _checkPureCodeFormat within the EnhancedCodeGenerator class.
+	 * This method will accept the raw AI response string and perform the heuristic checks
+	 * described for cleanCodeOutput (specifically, for BEGIN_CODE/END_CODE delimiters).
+	 * If garbled or non-code output is detected, it should return a CodeValidationResult
+	 * object with isValid: false, and a CodeIssue of type "format_error".
+	 */
+	private _checkPureCodeFormat(rawAIResponse: string): CodeValidationResult {
+		const issues: CodeIssue[] = [];
+		const suggestions: string[] = [];
+		let isValidFormat = true;
+		let finalContent: string;
+
+		const BEGIN_CODE_REGEX = /BEGIN_CODE\n?([\s\S]*?)\n?END_CODE/i;
+		const delimiterMatch = rawAIResponse.match(BEGIN_CODE_REGEX);
+
+		if (delimiterMatch && delimiterMatch[1] !== undefined) {
+			// Delimiters found, extract content within them.
+			finalContent = delimiterMatch[1].trim();
+			if (finalContent.length === 0) {
+				isValidFormat = false;
+				issues.push({
+					type: "format_error",
+					message:
+						"AI response contained BEGIN_CODE/END_CODE delimiters but no code within them.",
+					line: 1,
+					severity: "error",
+					source: "PureCodeFormatCheck",
+				});
+				suggestions.push("AI generated empty code block inside delimiters.");
+			}
+		} else {
+			// Delimiters not found. This is a format error.
+			isValidFormat = false;
+			issues.push({
+				type: "format_error",
+				message:
+					"AI response did not contain the required BEGIN_CODE/END_CODE delimiters.",
+				line: 1,
+				severity: "error",
+				source: "PureCodeFormatCheck",
+			});
+			suggestions.push(
+				"Instruct the AI to strictly enclose all generated code within BEGIN_CODE and END_CODE markers."
+			);
+
+			// As a fallback for content extraction, attempt to clean anyway,
+			// even though the format is considered problematic.
+			finalContent = cleanCodeOutput(rawAIResponse);
+		}
+
+		return {
+			isValid: isValidFormat,
+			finalContent: finalContent,
+			issues: issues,
+			suggestions: suggestions,
+		};
+	}
+
+	/**
 	 * Generate initial content with enhanced context analysis
 	 */
 	private async _generateInitialContent(
@@ -564,13 +655,14 @@ export class EnhancedCodeGenerator {
 		streamId: string,
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
-	): Promise<string> {
+	): Promise<CodeValidationResult> {
+		// MODIFIED: Return CodeValidationResult
 		const fileExtension = path.extname(filePath);
-		const languageId = getLanguageId(fileExtension);
+		// languageId not strictly needed for _checkPureCodeFormat, but kept for context if needed later
+		// const languageId = getLanguageId(fileExtension);
 
 		// Enhanced prompt with better context analysis
 		const enhancedPrompt = createEnhancedGenerationPrompt(
-			// Replaced `this._createEnhancedGenerationPrompt`
 			filePath,
 			generatePrompt,
 			context
@@ -597,9 +689,27 @@ export class EnhancedCodeGenerator {
 				token
 			);
 
-			return cleanCodeOutput(rawContent);
+			// NEW: Immediately call _checkPureCodeFormat on the raw AI response
+			const formatValidation = this._checkPureCodeFormat(rawContent);
+			return formatValidation; // Return the validation result directly
 		} catch (error: any) {
-			throw error;
+			// If generation itself fails, wrap it in a CodeValidationResult for consistent return type
+			return {
+				isValid: false,
+				finalContent: "", // No content on generation error
+				issues: [
+					{
+						type: "other",
+						message: `AI generation failed: ${
+							error instanceof Error ? error.message : String(error)
+						}`,
+						line: 1,
+						severity: "error",
+						source: "AIGeneration",
+					},
+				],
+				suggestions: ["Check AI service status or prompt clarity."],
+			};
 		}
 	}
 
@@ -627,13 +737,34 @@ export class EnhancedCodeGenerator {
 		}
 
 		// Refine content if validation failed
-		const refinedContent = await createRefinementPrompt(
-			// Replaced `await this._refineContent(...)`
+		const refinementPromptString = createRefinementPrompt(
 			filePath,
 			content,
 			validation.issues,
 			context
 		);
+
+		const rawRefinedContent = await this.aiRequestService.generateWithRetry(
+			[{ text: refinementPromptString }],
+			modelName,
+			undefined,
+			"refine content",
+			undefined,
+			{
+				onChunk: async (chunk: string) => {
+					this.postMessageToWebview({
+						type: "codeFileStreamChunk",
+						value: { streamId: streamId, filePath: filePath, chunk: chunk },
+					});
+					if (onCodeChunkCallback) {
+						await onCodeChunkCallback(chunk);
+					}
+				},
+			},
+			token
+		);
+
+		const refinedContent = cleanCodeOutput(rawRefinedContent);
 
 		const finalValidation = await this._validateCode(filePath, refinedContent);
 
@@ -836,7 +967,6 @@ export class EnhancedCodeGenerator {
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<string> {
 		const enhancedPrompt = createEnhancedModificationPrompt(
-			// Replaced `this._createEnhancedModificationPrompt`
 			filePath,
 			modificationPrompt,
 			currentContent,
@@ -882,7 +1012,71 @@ export class EnhancedCodeGenerator {
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<CodeValidationResult> {
-		// Check if the modification is reasonable
+		const { addedLines, removedLines } = await generateFileChangeSummary(
+			originalContent,
+			modifiedContent,
+			filePath // filePath is needed by generateFileChangeSummary for context
+		);
+
+		const noSubstantialChange =
+			addedLines.length === 0 && removedLines.length === 0;
+
+		if (noSubstantialChange) {
+			// Generate a prompt specifically for this scenario
+			const refineModificationPromptString = createRefinementPrompt(
+				filePath,
+				originalContent, // The content to refine, as modifiedContent yielded no changes.
+				// Synthesize a CodeIssue object to represent the 'no substantial change' feedback.
+				[
+					{
+						type: "other",
+						message:
+							"AI generated no substantial change. The proposed content is identical to the original or contains only cosmetic differences. A meaningful modification was expected.",
+						line: 1, // A generic line number for a file-level issue.
+						severity: "warning",
+					},
+				],
+				context
+			);
+
+			// Call the AI service to get a refined output
+			const rawRefinedContent = await this.aiRequestService.generateWithRetry(
+				[{ text: refineModificationPromptString }], // Wrap prompt string in HistoryEntryPart array
+				modelName,
+				undefined, // history
+				"refine modification (no substantial change)", // requestType label for monitoring
+				undefined, // generationConfig
+				{
+					onChunk: async (chunk: string) => {
+						// Handle streaming feedback
+						this.postMessageToWebview({
+							type: "codeFileStreamChunk",
+							value: { streamId: streamId, filePath: filePath, chunk: chunk },
+						});
+						if (onCodeChunkCallback) {
+							await onCodeChunkCallback(chunk);
+						}
+					},
+				},
+				token
+			);
+
+			const refinedContent = cleanCodeOutput(rawRefinedContent);
+
+			// Re-validate the content produced by the refinement process
+			const finalValidation = await this._validateCode(
+				filePath,
+				refinedContent
+			);
+
+			// Return the result of the re-validation
+			return {
+				isValid: finalValidation.isValid,
+				finalContent: refinedContent,
+				issues: finalValidation.issues,
+				suggestions: finalValidation.suggestions,
+			};
+		}
 		const diffAnalysis = this._analyzeDiff(originalContent, modifiedContent);
 
 		if (diffAnalysis.isReasonable) {
@@ -896,14 +1090,35 @@ export class EnhancedCodeGenerator {
 		}
 
 		// If the modification seems unreasonable, try to refine it
-		const refinedContent = await createRefineModificationPrompt(
-			// Replaced `await this._refineModification(...)`
+		const refineModificationPromptString = createRefineModificationPrompt(
 			filePath,
 			originalContent,
 			modifiedContent,
 			diffAnalysis.issues,
 			context
 		);
+
+		const rawRefinedContent = await this.aiRequestService.generateWithRetry(
+			[{ text: refineModificationPromptString }],
+			modelName,
+			undefined,
+			"refine modification",
+			undefined,
+			{
+				onChunk: async (chunk: string) => {
+					this.postMessageToWebview({
+						type: "codeFileStreamChunk",
+						value: { streamId: streamId, filePath: filePath, chunk: chunk },
+					});
+					if (onCodeChunkCallback) {
+						await onCodeChunkCallback(chunk);
+					}
+				},
+			},
+			token
+		);
+
+		const refinedContent = cleanCodeOutput(rawRefinedContent);
 
 		const finalValidation = await this._validateCode(filePath, refinedContent);
 
@@ -1097,16 +1312,6 @@ export class EnhancedCodeGenerator {
 	}
 
 	/**
-	 * Creates a unique string identifier for a CodeIssue.
-	 * Used to compare issues and find newly introduced ones.
-	 */
-	private _getIssueIdentifier(issue: CodeIssue): string {
-		return `${issue.message}|${issue.line}|${issue.type}|${issue.severity}|${
-			issue.code ?? ""
-		}`;
-	}
-
-	/**
 	 * Identifies issues present in `newIssues` that were not in `originalIssues`.
 	 */
 	private _getIssuesIntroduced(
@@ -1114,43 +1319,11 @@ export class EnhancedCodeGenerator {
 		newIssues: CodeIssue[]
 	): CodeIssue[] {
 		const originalIssueSet = new Set<string>(
-			originalIssues.map(this._getIssueIdentifier)
+			originalIssues.map(getIssueIdentifier)
 		);
 		return newIssues.filter(
-			(issue) => !originalIssueSet.has(this._getIssueIdentifier(issue))
+			(issue) => !originalIssueSet.has(getIssueIdentifier(issue))
 		);
-	}
-
-	/**
-	 * Compares two lists of `CodeIssue` objects by checking issue message, type, and line number similarity.
-	 * Returns `true` if they are substantially similar, indicating a potential cycle, and `false` otherwise.
-	 */
-	private _areIssuesSimilar(
-		issues1: CodeIssue[],
-		issues2: CodeIssue[]
-	): boolean {
-		if (issues1.length !== issues2.length) {
-			return false;
-		}
-
-		if (issues1.length === 0 && issues2.length === 0) {
-			return true; // Both empty, considered similar
-		}
-
-		const set1 = new Set<string>(issues1.map(this._getIssueIdentifier));
-		const set2 = new Set<string>(issues2.map(this._getIssueIdentifier));
-
-		if (set1.size !== set2.size) {
-			return false;
-		}
-
-		for (const id of set1) {
-			if (!set2.has(id)) {
-				return false;
-			}
-		}
-
-		return true;
 	}
 
 	/**
@@ -1179,7 +1352,7 @@ export class EnhancedCodeGenerator {
 		if (
 			!lastOutcome.success &&
 			!secondLastOutcome.success &&
-			this._areIssuesSimilar(
+			areIssuesSimilar(
 				lastOutcome.issuesRemaining,
 				secondLastOutcome.issuesRemaining
 			)
@@ -1211,6 +1384,7 @@ export class EnhancedCodeGenerator {
 		let iteration = 0;
 		let totalIssues = 0;
 		let resolvedIssues = 0;
+		let currentValidation: CodeValidationResult; // This will hold the result of the last validation/correction attempt
 
 		// Initialize context properties that will be updated in the loop
 		let currentContext: EnhancedGenerationContext = {
@@ -1250,7 +1424,8 @@ export class EnhancedCodeGenerator {
 				"" // Initial content is empty, so analysis is based on surrounding context/empty file.
 			);
 
-			currentContent = await this._generateInitialContent(
+			// NEW: Get CodeValidationResult from _generateInitialContent
+			currentValidation = await this._generateInitialContent(
 				filePath,
 				generatePrompt,
 				currentContext, // Use updated context for initial generation
@@ -1259,6 +1434,7 @@ export class EnhancedCodeGenerator {
 				token,
 				onCodeChunkCallback
 			);
+			currentContent = currentValidation.finalContent;
 
 			await DiagnosticService.waitForDiagnosticsToStabilize(
 				vscode.Uri.file(filePath),
@@ -1287,8 +1463,39 @@ export class EnhancedCodeGenerator {
 
 				const currentContentBeforeCorrectionAttempt = currentContent;
 
-				const validation = await this._validateCode(filePath, currentContent);
-				const currentIssues = validation.issues.length;
+				// Always re-validate VS Code diagnostics for currentContent at the start of each loop iteration
+				const diagnosticValidation = await this._validateCode(
+					filePath,
+					currentContent
+				);
+
+				// Combine current VS Code diagnostics with any format errors from the *previous* AI output
+				let currentIssuesCombined: CodeIssue[] = [
+					...diagnosticValidation.issues,
+				];
+				const prevFormatIssues = currentValidation.issues.filter(
+					(i) => i.type === "format_error"
+				);
+				if (prevFormatIssues.length > 0) {
+					// Add format issues to the front to prioritize them
+					currentIssuesCombined.unshift(...prevFormatIssues);
+				}
+
+				// Update overall currentValidation for this iteration's starting state
+				let hasCriticalError = currentIssuesCombined.some(
+					(i) => i.severity === "error" || i.type === "format_error"
+				);
+				currentValidation = {
+					isValid: !hasCriticalError,
+					finalContent: currentContent,
+					issues: currentIssuesCombined,
+					suggestions: diagnosticValidation.suggestions,
+				};
+
+				const currentIssuesCount = currentValidation.issues.length;
+				const formatErrorPresent = currentValidation.issues.some(
+					(i) => i.type === "format_error"
+				);
 
 				// Always update file structure and successful change history for current context within the loop
 				currentContext.fileStructureAnalysis = await this._analyzeFileStructure(
@@ -1300,34 +1507,34 @@ export class EnhancedCodeGenerator {
 						this.changeLogger.getCompletedPlanChangeSets()
 					);
 
-				// NEW: Refresh error-focused context if there are issues BEFORE applying corrections
-				if (currentIssues > 0) {
+				// Refresh error-focused context if there are issues
+				if (currentIssuesCount > 0) {
 					currentContext = await this._refreshErrorFocusedContext(
 						filePath,
 						currentContent,
-						validation.issues,
+						currentValidation.issues, // Pass combined issues for context refresh
 						currentContext,
 						token
 					);
 				}
 
-				if (currentIssues === 0) {
+				if (currentIssuesCount === 0) {
 					this._sendFeedback(feedbackCallback, {
 						stage: "completion",
 						message: "Code generation completed successfully!",
 						issues: [],
-						suggestions: validation.suggestions,
+						suggestions: currentValidation.suggestions,
 						progress: 100,
 					});
 
 					currentContext.lastFailedCorrectionDiff = undefined; // Clear diff on success
 					currentContext.lastCorrectionAttemptOutcome = undefined; // NEW: Clear outcome on success
-					currentContext.recentCorrectionAttemptOutcomes = undefined; // NEW: Clear recent outcomes on success
-					currentContext.isOscillating = undefined; // NEW: Clear oscillation status on success
+					currentContext.recentCorrectionAttemptOutcomes = []; // NEW: Clear recent outcomes on success
+					currentContext.isOscillating = false; // NEW: Clear oscillation status on success
 					return {
 						content: currentContent,
 						validation: {
-							...validation,
+							...currentValidation,
 							finalContent: currentContent,
 							iterations: iteration,
 							totalIssues: totalIssues,
@@ -1336,30 +1543,87 @@ export class EnhancedCodeGenerator {
 					};
 				}
 
-				totalIssues += currentIssues;
+				totalIssues += currentIssuesCount;
 
-				this._sendFeedback(feedbackCallback, {
-					stage: "correction",
-					message: `Found ${currentIssues} VS Code-reported compilation/linting issues, applying corrections...`,
-					issues: validation.issues,
-					suggestions: [
-						"Fixing syntax errors",
-						"Correcting imports",
-						"Improving structure",
-					],
-					progress: 20 + iteration * 15,
-				});
+				let correctionResult: CodeValidationResult;
 
-				const correctedContent = await this._applyRealTimeCorrections(
-					filePath,
-					currentContent,
-					validation.issues,
-					currentContext, // Pass updated context (potentially refreshed)
-					modelName,
-					streamId,
-					token,
-					onCodeChunkCallback
-				);
+				// NEW: Format error correction takes precedence
+				if (formatErrorPresent) {
+					this._sendFeedback(feedbackCallback, {
+						stage: "format_correction",
+						message: `Detected critical format error, attempting to enforce pure code output within delimiters...`,
+						issues: currentValidation.issues,
+						suggestions: [
+							"Ensuring BEGIN_CODE/END_CODE delimiters",
+							"Removing conversational text",
+						],
+						progress: 20 + iteration * 15,
+					});
+
+					const pureCodePromptString = createPureCodeFormatCorrectionPrompt(
+						filePath,
+						currentContent, // The current problematic content
+						currentContext // Pass current context
+					);
+
+					const rawFormatCorrectedContent =
+						await this.aiRequestService.generateWithRetry(
+							[{ text: pureCodePromptString }],
+							modelName,
+							undefined,
+							"pure code format correction",
+							undefined,
+							{
+								onChunk: async (chunk: string) => {
+									this.postMessageToWebview({
+										type: "codeFileStreamChunk",
+										value: {
+											streamId: streamId,
+											filePath: filePath,
+											chunk: chunk,
+										},
+									});
+									if (onCodeChunkCallback) {
+										await onCodeChunkCallback(chunk);
+									}
+								},
+							},
+							token
+						);
+
+					// Immediately validate the *format* of this new response
+					correctionResult = this._checkPureCodeFormat(
+						rawFormatCorrectedContent
+					);
+				} else {
+					// No format error, proceed with regular corrections
+					this._sendFeedback(feedbackCallback, {
+						stage: "correction",
+						message: `Found ${currentIssuesCount} VS Code-reported compilation/linting issues, applying corrections...`,
+						issues: currentValidation.issues,
+						suggestions: [
+							"Fixing syntax errors",
+							"Correcting imports",
+							"Improving structure",
+						],
+						progress: 20 + iteration * 15,
+					});
+
+					// MODIFIED: _applyRealTimeCorrections now returns CodeValidationResult
+					correctionResult = await this._applyRealTimeCorrections(
+						filePath,
+						currentContent,
+						currentValidation.issues, // Pass combined issues from previous validation
+						currentContext, // Pass updated context (potentially refreshed)
+						modelName,
+						streamId,
+						token,
+						onCodeChunkCallback
+					);
+				}
+
+				// Update currentContent for subsequent validation/iteration
+				currentContent = correctionResult.finalContent;
 
 				await DiagnosticService.waitForDiagnosticsToStabilize(
 					vscode.Uri.file(filePath),
@@ -1368,40 +1632,71 @@ export class EnhancedCodeGenerator {
 					100
 				);
 
-				const correctedValidation = await this._validateCode(
+				// Re-validate the content after the current correction attempt (either format or regular)
+				const correctedDiagnosticValidation = await this._validateCode(
 					filePath,
-					correctedContent
+					currentContent
 				);
-				const correctedIssues = correctedValidation.issues.length;
 
-				if (correctedIssues < currentIssues) {
-					resolvedIssues += currentIssues - correctedIssues;
-					currentContent = correctedContent;
-					currentContext.lastFailedCorrectionDiff = undefined; // Clear diff on improvement
-					currentContext.lastCorrectionAttemptOutcome = undefined; // NEW: Clear outcome on improvement
-					currentContext.recentCorrectionAttemptOutcomes = undefined; // NEW: Clear recent outcomes on improvement
-					currentContext.isOscillating = undefined; // NEW: Clear oscillation status on improvement
+				// Merge format issues from the `correctionResult` with the new diagnostic issues
+				const issuesAfterAttemptCombined: CodeIssue[] = [
+					...correctedDiagnosticValidation.issues,
+				];
+				const newFormatIssues = correctionResult.issues.filter(
+					(i) => i.type === "format_error"
+				);
+				if (newFormatIssues.length > 0) {
+					issuesAfterAttemptCombined.unshift(...newFormatIssues); // Add to front
+				}
+
+				const issuesAfterAttemptCount = issuesAfterAttemptCombined.length;
+
+				// Determine if there was an improvement (fewer issues overall)
+				// An improvement also means fixing a format error, even if diagnostic issues remain the same.
+				const wasImprovement =
+					issuesAfterAttemptCount < currentIssuesCount ||
+					(issuesAfterAttemptCount === 0 && currentIssuesCount > 0);
+
+				if (wasImprovement) {
+					resolvedIssues += currentIssuesCount - issuesAfterAttemptCount;
+					// Clear all oscillation/failure tracking as there was an improvement
+					currentContext.lastFailedCorrectionDiff = undefined;
+					currentContext.lastCorrectionAttemptOutcome = undefined;
+					currentContext.recentCorrectionAttemptOutcomes = [];
+					currentContext.isOscillating = false;
 
 					this._sendFeedback(feedbackCallback, {
 						stage: "improvement",
 						message: `Resolved ${
-							currentIssues - correctedIssues
-						} issues (${correctedIssues} remaining)...`,
-						issues: correctedValidation.issues,
-						suggestions: correctedValidation.suggestions,
+							currentIssuesCount - issuesAfterAttemptCount
+						} issues (${issuesAfterAttemptCount} remaining)...`,
+						issues: issuesAfterAttemptCombined,
+						suggestions: correctedDiagnosticValidation.suggestions,
 						progress: 20 + iteration * 15,
 					});
-				} else if (correctedIssues >= currentIssues) {
+					// Update currentValidation for the next loop iteration (important!)
+					currentValidation = {
+						isValid: !issuesAfterAttemptCombined.some(
+							(i) => i.severity === "error" || i.type === "format_error"
+						),
+						finalContent: currentContent,
+						issues: issuesAfterAttemptCombined,
+						suggestions: correctedDiagnosticValidation.suggestions,
+					};
+				} else {
 					// No improvement or made things worse, capture diff and try alternative approach
 					// Determine issues introduced by this specific attempt
 					const issuesIntroduced = this._getIssuesIntroduced(
-						validation.issues,
-						correctedValidation.issues
+						currentValidation.issues, // issues before this attempt (including format errors if any)
+						issuesAfterAttemptCombined // issues after this attempt (including format errors if any)
 					);
 
-					// Determine failure type based on issue counts
+					// Determine failure type based on issue counts and format status
 					let failureType: CorrectionAttemptOutcome["failureType"];
-					if (correctedIssues > currentIssues) {
+					if (newFormatIssues.length > 0) {
+						// If format error was introduced or persists
+						failureType = "parsing_failed"; // Signifies inability to parse/extract pure code
+					} else if (issuesAfterAttemptCount > currentIssuesCount) {
 						failureType = "new_errors_introduced";
 					} else {
 						failureType = "no_improvement";
@@ -1411,9 +1706,9 @@ export class EnhancedCodeGenerator {
 					const currentFailedOutcome: CorrectionAttemptOutcome = {
 						success: false, // Since no improvement or worse
 						iteration: iteration,
-						originalIssuesCount: currentIssues,
-						issuesAfterAttemptCount: correctedIssues,
-						issuesRemaining: correctedValidation.issues,
+						originalIssuesCount: currentIssuesCount,
+						issuesAfterAttemptCount: issuesAfterAttemptCount,
+						issuesRemaining: issuesAfterAttemptCombined,
 						issuesIntroduced: issuesIntroduced,
 						relevantDiff: "", // Will be populated by createAIFailureAnalysisPrompt
 						aiFailureAnalysis: "", // Will be filled below
@@ -1439,39 +1734,50 @@ export class EnhancedCodeGenerator {
 					// Detect oscillation based on the updated history
 					currentContext.isOscillating = await this._detectOscillation(
 						currentContext,
-						currentIssues,
-						correctedIssues
+						currentIssuesCount,
+						issuesAfterAttemptCount
 					);
 
 					// NEW: Refresh error-focused context again before alternative corrections
 					const contextForAlternative = await this._refreshErrorFocusedContext(
 						filePath,
-						correctedContent, // Use correctedContent for refreshing context as it's the current state
-						correctedValidation.issues, // Use the issues after the correction attempt
+						currentContent, // Use currentContent for refreshing context as it's the current state
+						issuesAfterAttemptCombined, // Use the combined issues after the correction attempt
 						currentContext, // Pass the currentContext which now includes oscillation status and recent outcomes
 						token
 					);
 					currentContext = contextForAlternative; // Crucially update currentContext
 
 					// Generate AI failure analysis, passing current context details including oscillation status
-					const aiFailureAnalysis = await createAIFailureAnalysisPrompt(
-						// Replaced `await this._generateAIFailureAnalysis(...)`
+					const aiFailureAnalysisPromptString = createAIFailureAnalysisPrompt(
 						filePath,
 						currentContentBeforeCorrectionAttempt,
-						correctedContent,
-						validation.issues,
-						correctedValidation.issues,
+						currentContent, // Pass the content *after* the failed correction
+						currentValidation.issues, // Issues before this attempt (including format)
+						issuesAfterAttemptCombined, // Issues after this attempt (including format)
 						iteration,
 						currentContext.recentCorrectionAttemptOutcomes,
 						currentContext.isOscillating
 					);
+
+					const rawAiFailureAnalysis: string =
+						await this.aiRequestService.generateWithRetry(
+							[{ text: await aiFailureAnalysisPromptString }],
+							modelName,
+							undefined,
+							"AI failure analysis",
+							undefined,
+							undefined, // No streaming expected for this specific prompt type
+							token
+						);
+					const aiFailureAnalysis = cleanCodeOutput(rawAiFailureAnalysis); // Clean AI response
 
 					// Update the currentFailedOutcome with the generated analysis
 					currentFailedOutcome.aiFailureAnalysis = aiFailureAnalysis;
 					// Update relevant diff in outcome object. The prompt now uses generateFileChangeSummary internally.
 					const { formattedDiff } = await generateFileChangeSummary(
 						currentContentBeforeCorrectionAttempt,
-						correctedContent,
+						currentContent,
 						filePath
 					);
 					currentFailedOutcome.relevantDiff = formattedDiff;
@@ -1486,18 +1792,49 @@ export class EnhancedCodeGenerator {
 						stage: "alternative",
 						message:
 							"Correction did not improve the situation, trying alternative approach...",
-						issues: validation.issues,
+						issues: issuesAfterAttemptCombined,
 						suggestions: ["Using different strategy", "Analyzing patterns"],
 						progress: 20 + iteration * 15,
 					});
 
-					const alternativeContent = await createAlternativeCorrectionPrompt(
-						// Replaced `await this._applyAlternativeCorrections(...)`
-						filePath,
-						correctedContent, // Pass the content AFTER the failed attempt
-						correctedValidation.issues, // Pass the issues AFTER the failed attempt
-						currentContext // Pass the updated currentContext
+					const alternativeCorrectionPromptString =
+						createAlternativeCorrectionPrompt(
+							filePath,
+							currentContent,
+							issuesAfterAttemptCombined, // Issues that remain
+							currentContext
+						);
+
+					const rawAlternativeContent =
+						await this.aiRequestService.generateWithRetry(
+							[{ text: alternativeCorrectionPromptString }],
+							modelName,
+							undefined,
+							"alternative correction",
+							undefined,
+							{
+								onChunk: async (chunk: string) => {
+									this.postMessageToWebview({
+										type: "codeFileStreamChunk",
+										value: {
+											streamId: streamId,
+											filePath: filePath,
+											chunk: chunk,
+										},
+									});
+									if (onCodeChunkCallback) {
+										await onCodeChunkCallback(chunk);
+									}
+								},
+							},
+							token
+						);
+
+					// Validate the alternative content's format
+					const alternativeFormatValidation = this._checkPureCodeFormat(
+						rawAlternativeContent
 					);
+					currentContent = alternativeFormatValidation.finalContent; // Use the formatted content
 
 					await DiagnosticService.waitForDiagnosticsToStabilize(
 						vscode.Uri.file(filePath),
@@ -1506,26 +1843,51 @@ export class EnhancedCodeGenerator {
 						100
 					);
 
-					const alternativeValidation = await this._validateCode(
+					// Re-validate for diagnostics after alternative
+					const alternativeDiagnosticValidation = await this._validateCode(
 						filePath,
-						alternativeContent
+						currentContent
 					);
 
-					if (alternativeValidation.issues.length < currentIssues) {
-						currentContent = alternativeContent;
+					// Combine alternative diagnostic validation with any format issues from alternative attempt
+					const alternativeIssuesCombined: CodeIssue[] = [
+						...alternativeDiagnosticValidation.issues,
+					];
+					if (!alternativeFormatValidation.isValid) {
+						alternativeIssuesCombined.unshift(
+							...alternativeFormatValidation.issues
+						);
+					}
+
+					// Check if alternative attempt provided improvement
+					if (
+						alternativeIssuesCombined.length < issuesAfterAttemptCount ||
+						(alternativeIssuesCombined.length === 0 &&
+							issuesAfterAttemptCount > 0)
+					) {
+						// Improvement occurred
+						currentValidation = {
+							// Update currentValidation for next iteration
+							isValid: !alternativeIssuesCombined.some(
+								(i) => i.severity === "error" || i.type === "format_error"
+							),
+							finalContent: currentContent,
+							issues: alternativeIssuesCombined,
+							suggestions: alternativeDiagnosticValidation.suggestions,
+						};
 						resolvedIssues +=
-							currentIssues - alternativeValidation.issues.length;
-						currentContext.lastFailedCorrectionDiff = undefined; // Clear diff on successful alternative
-						currentContext.lastCorrectionAttemptOutcome = undefined; // NEW: Clear outcome on successful alternative
-						currentContext.recentCorrectionAttemptOutcomes = undefined; // NEW: Clear recent outcomes on successful alternative
-						currentContext.isOscillating = undefined; // NEW: Clear oscillation status on successful alternative
+							issuesAfterAttemptCount - alternativeIssuesCombined.length;
+						currentContext.lastFailedCorrectionDiff = undefined;
+						currentContext.lastCorrectionAttemptOutcome = undefined;
+						currentContext.recentCorrectionAttemptOutcomes = [];
+						currentContext.isOscillating = false;
 					} else {
 						// Still no improvement with alternative approach, break loop
 						this._sendFeedback(feedbackCallback, {
 							stage: "revert",
 							message:
 								"Alternative correction failed or made issues worse. Stopping automatic corrections.",
-							issues: validation.issues,
+							issues: alternativeIssuesCombined, // Show current issues
 							suggestions: [
 								"Manual review recommended",
 								"Consider providing more context",
@@ -1538,28 +1900,23 @@ export class EnhancedCodeGenerator {
 			}
 
 			// Final validation after loop exits
-			const finalValidation = await this._validateCode(
-				filePath,
-				currentContent
-			);
+			// `currentValidation` already holds the final state from the last iteration.
+			// Ensure all counts are updated.
+			currentValidation.iterations = iteration;
+			currentValidation.totalIssues = totalIssues;
+			currentValidation.resolvedIssues = resolvedIssues;
 
 			this._sendFeedback(feedbackCallback, {
 				stage: "final",
-				message: `Code generation completed with ${finalValidation.issues.length} remaining issues`,
-				issues: finalValidation.issues,
-				suggestions: finalValidation.suggestions,
+				message: `Code generation completed with ${currentValidation.issues.length} remaining issues`,
+				issues: currentValidation.issues,
+				suggestions: currentValidation.suggestions,
 				progress: 100,
 			});
 
 			return {
 				content: currentContent,
-				validation: {
-					...finalValidation,
-					finalContent: currentContent,
-					iterations: iteration,
-					totalIssues: totalIssues,
-					resolvedIssues: resolvedIssues,
-				},
+				validation: currentValidation,
 			};
 		} catch (error) {
 			this._sendFeedback(feedbackCallback, {
@@ -1591,43 +1948,120 @@ export class EnhancedCodeGenerator {
 		streamId: string,
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
-	): Promise<string> {
+	): Promise<CodeValidationResult> {
+		// MODIFIED: Return CodeValidationResult
 		const syntaxIssues = issues.filter((i) => i.type === "syntax");
 		const importIssues = issues.filter((i) => i.type === "unused_import");
 		const bestPracticeIssues = issues.filter((i) => i.type === "best_practice");
 		const securityIssues = issues.filter((i) => i.type === "security");
 		const otherIssues = issues.filter((i) => i.type === "other");
 
-		let correctedContent = content;
-		const languageId = getLanguageId(path.extname(filePath)); // Get languageId once
+		let currentCorrectedContent = content; // Start with the current content
+		// const languageId = getLanguageId(path.extname(filePath)); // Get languageId once, not used directly here
 
 		// Apply corrections in order of priority
 		if (syntaxIssues.length > 0) {
-			correctedContent = await createSyntaxCorrectionPrompt(
-				// Replaced `await this._correctSyntaxIssues(...)`
+			const syntaxCorrectionPromptString = createSyntaxCorrectionPrompt(
 				filePath,
-				correctedContent,
+				currentCorrectedContent,
 				syntaxIssues,
 				context
 			);
+
+			const rawSyntaxCorrection = await this.aiRequestService.generateWithRetry(
+				[{ text: syntaxCorrectionPromptString }],
+				modelName,
+				undefined,
+				"syntax correction",
+				undefined,
+				{
+					onChunk: async (chunk: string) => {
+						this.postMessageToWebview({
+							type: "codeFileStreamChunk",
+							value: { streamId: streamId, filePath: filePath, chunk: chunk },
+						});
+						if (onCodeChunkCallback) {
+							await onCodeChunkCallback(chunk);
+						}
+					},
+				},
+				token
+			);
+			// NEW: Call _checkPureCodeFormat on the raw response
+			const syntaxFormatValidation =
+				this._checkPureCodeFormat(rawSyntaxCorrection);
+			if (!syntaxFormatValidation.isValid) {
+				return syntaxFormatValidation; // Critical format error, propagate immediately
+			}
+			currentCorrectedContent = syntaxFormatValidation.finalContent;
 		}
 
 		if (token?.isCancellationRequested) {
-			throw new Error("Operation cancelled");
+			return {
+				isValid: false,
+				finalContent: currentCorrectedContent,
+				issues: [
+					{
+						type: "other",
+						message: "Operation cancelled",
+						line: 1,
+						severity: "info",
+					},
+				],
+				suggestions: [],
+			};
 		}
 
 		if (importIssues.length > 0) {
-			correctedContent = await createImportCorrectionPrompt(
-				// Replaced `await this._correctImportIssues(...)`
+			const importCorrectionPromptString = createImportCorrectionPrompt(
 				filePath,
-				correctedContent,
+				currentCorrectedContent,
 				importIssues,
 				context
 			);
+
+			const rawImportCorrection = await this.aiRequestService.generateWithRetry(
+				[{ text: importCorrectionPromptString }],
+				modelName,
+				undefined,
+				"import correction",
+				undefined,
+				{
+					onChunk: async (chunk: string) => {
+						this.postMessageToWebview({
+							type: "codeFileStreamChunk",
+							value: { streamId: streamId, filePath: filePath, chunk: chunk },
+						});
+						if (onCodeChunkCallback) {
+							await onCodeChunkCallback(chunk);
+						}
+					},
+				},
+				token
+			);
+			// NEW: Call _checkPureCodeFormat on the raw response
+			const importFormatValidation =
+				this._checkPureCodeFormat(rawImportCorrection);
+			if (!importFormatValidation.isValid) {
+				return importFormatValidation; // Critical format error, propagate immediately
+			}
+			currentCorrectedContent = importFormatValidation.finalContent;
 		}
 
 		if (token?.isCancellationRequested) {
-			throw new Error("Operation cancelled");
+			return {
+				isValid: false,
+				finalContent: currentCorrectedContent,
+				issues: [
+					{
+						type: "other",
+						message: "Operation cancelled",
+						line: 1,
+						severity: "info",
+					},
+				],
+				suggestions: [],
+			};
 		}
 
 		// Combine best_practice and general 'other' issues, as they might stem from general diagnostics
@@ -1636,38 +2070,117 @@ export class EnhancedCodeGenerator {
 			...otherIssues,
 		];
 		if (combinedPracticeAndOtherIssues.length > 0) {
-			correctedContent = await createPracticeCorrectionPrompt(
-				// Replaced `await this._correctPracticeIssues(...)`
+			const practiceCorrectionPromptString = createPracticeCorrectionPrompt(
 				filePath,
-				correctedContent,
-				combinedPracticeAndOtherIssues, // Pass combined issues
+				currentCorrectedContent,
+				combinedPracticeAndOtherIssues,
 				context
 			);
+
+			const rawPracticeCorrection =
+				await this.aiRequestService.generateWithRetry(
+					[{ text: practiceCorrectionPromptString }],
+					modelName,
+					undefined,
+					"practice correction",
+					undefined,
+					{
+						onChunk: async (chunk: string) => {
+							this.postMessageToWebview({
+								type: "codeFileStreamChunk",
+								value: { streamId: streamId, filePath: filePath, chunk: chunk },
+							});
+							if (onCodeChunkCallback) {
+								await onCodeChunkCallback(chunk);
+							}
+						},
+					},
+					token
+				);
+			// NEW: Call _checkPureCodeFormat on the raw response
+			const practiceFormatValidation = this._checkPureCodeFormat(
+				rawPracticeCorrection
+			);
+			if (!practiceFormatValidation.isValid) {
+				return practiceFormatValidation; // Critical format error, propagate immediately
+			}
+			currentCorrectedContent = practiceFormatValidation.finalContent;
 		}
 
 		if (token?.isCancellationRequested) {
-			throw new Error("Operation cancelled");
+			return {
+				isValid: false,
+				finalContent: currentCorrectedContent,
+				issues: [
+					{
+						type: "other",
+						message: "Operation cancelled",
+						line: 1,
+						severity: "info",
+					},
+				],
+				suggestions: [],
+			};
 		}
 
 		// Explicitly call _correctSecurityIssues, even if securityIssues array is empty based on current _validateCode mapping
 		if (securityIssues.length > 0) {
 			// Keep this check, though it might be empty
-			correctedContent = await createSecurityCorrectionPrompt(
-				// Replaced `await this._correctSecurityIssues(...)`
+			const securityCorrectionPromptString = createSecurityCorrectionPrompt(
 				filePath,
-				correctedContent,
-				securityIssues, // Will be empty unless `_validateCode` explicitly maps to "security"
+				currentCorrectedContent,
+				securityIssues,
 				context
 			);
+
+			const rawSecurityCorrection =
+				await this.aiRequestService.generateWithRetry(
+					[{ text: securityCorrectionPromptString }],
+					modelName,
+					undefined,
+					"security correction",
+					undefined,
+					{
+						onChunk: async (chunk: string) => {
+							this.postMessageToWebview({
+								type: "codeFileStreamChunk",
+								value: { streamId: streamId, filePath: filePath, chunk: chunk },
+							});
+							if (onCodeChunkCallback) {
+								await onCodeChunkCallback(chunk);
+							}
+						},
+					},
+					token
+				);
+			// NEW: Call _checkPureCodeFormat on the raw response
+			const securityFormatValidation = this._checkPureCodeFormat(
+				rawSecurityCorrection
+			);
+			if (!securityFormatValidation.isValid) {
+				return securityFormatValidation; // Critical format error, propagate immediately
+			}
+			currentCorrectedContent = securityFormatValidation.finalContent;
 		}
 
 		if (token?.isCancellationRequested) {
-			throw new Error("Operation cancelled");
+			return {
+				isValid: false,
+				finalContent: currentCorrectedContent,
+				issues: [
+					{
+						type: "other",
+						message: "Operation cancelled",
+						line: 1,
+						severity: "info",
+					},
+				],
+				suggestions: [],
+			};
 		}
 
-		// Re-validate after primary corrections, if issues persist, then _applyAlternativeCorrections will be called
-		// by _generateWithRealTimeFeedback. No need to call it here directly.
-		return correctedContent;
+		// Re-validate after all primary corrections, then return the result
+		return await this._validateCode(filePath, currentCorrectedContent);
 	}
 
 	/**
@@ -1730,6 +2243,130 @@ export class EnhancedCodeGenerator {
 	}
 
 	/**
+	 * Formats contents of selected file URIs into Markdown fenced code blocks.
+	 * Includes error handling for unreadable or binary files and checks for cancellation.
+	 * @param fileUris Nested arrays of vscode.Uri objects for the files to format.
+	 * @param token A CancellationToken to observe cancellation requests.
+	 * @returns A single concatenated string of all formatted snippets.
+	 */
+	private async _formatSelectedFilesIntoSnippets(
+		fileUris: vscode.Uri[],
+		token: vscode.CancellationToken
+	): Promise<string> {
+		if (!fileUris || fileUris.length === 0) {
+			return "";
+		}
+
+		const formattedSnippets: string[] = [];
+		// 1MB limit per file to prevent prompt overflow
+		const maxFileSizeForSnippet = 1024 * 1024 * 1;
+
+		for (const fileUri of fileUris) {
+			if (token.isCancellationRequested) {
+				return formattedSnippets.join("\n"); // Return what's processed so far
+			}
+
+			const relativePath = path
+				.relative(this.workspaceRoot.fsPath, fileUri.fsPath)
+				.replace(/\\/g, "/");
+			let fileContent: string | null = null;
+			let languageId = path.extname(fileUri.fsPath).substring(1);
+
+			if (!languageId) {
+				// Fallback for files without extension (e.g., Dockerfile, LICENSE)
+				languageId = path.basename(fileUri.fsPath).toLowerCase();
+			}
+			// Special handling for common files without extensions where syntax highlighting is helpful
+			if (languageId === "makefile") {
+				languageId = "makefile";
+			} else if (languageId === "dockerfile") {
+				languageId = "dockerfile";
+			} else if (languageId === "jsonc") {
+				languageId = "json";
+			} else if (languageId === "eslintignore") {
+				languageId = "ignore";
+			} else if (languageId === "prettierignore") {
+				languageId = "ignore";
+			} else if (languageId === "gitignore") {
+				languageId = "ignore";
+			} else if (languageId === "license") {
+				languageId = "plaintext";
+			}
+
+			try {
+				const fileStat = await vscode.workspace.fs.stat(fileUri);
+
+				// Skip directories
+				if (fileStat.type === vscode.FileType.Directory) {
+					continue;
+				}
+
+				// Skip files larger than maxFileSizeForSnippet
+				if (fileStat.size > maxFileSizeForSnippet) {
+					console.warn(
+						`[MinovativeMind] Skipping relevant file '${relativePath}' (size: ${fileStat.size} bytes) due to size limit for prompt inclusion.`
+					);
+					formattedSnippets.push(
+						`--- Relevant File: ${relativePath} ---\n\`\`\`plaintext\n[File skipped: too large for context (${(
+							fileStat.size / 1024
+						).toFixed(2)}KB > ${(maxFileSizeForSnippet / 1024).toFixed(
+							2
+						)}KB)]\n\`\`\`\n`
+					);
+					continue;
+				}
+
+				const contentBuffer = await vscode.workspace.fs.readFile(fileUri);
+				const content = Buffer.from(contentBuffer).toString("utf8");
+
+				// Basic heuristic for binary files: check for null characters
+				if (content.includes("\0")) {
+					console.warn(
+						`[MinovativeMind] Skipping relevant file '${relativePath}' as it appears to be binary.`
+					);
+					formattedSnippets.push(
+						`--- Relevant File: ${relativePath} ---\n\`\`\`plaintext\n[File skipped: appears to be binary]\n\`\`\`\n`
+					);
+					continue;
+				}
+
+				fileContent = content;
+			} catch (error: any) {
+				if (
+					error instanceof vscode.FileSystemError &&
+					(error.code === "FileNotFound" || error.code === "EntryNotFound")
+				) {
+					console.warn(
+						`[MinovativeMind] Relevant file not found: '${relativePath}'. Skipping.`
+					);
+				} else if (error.message.includes("is not a file")) {
+					// This can happen if fileUri points to a directory
+					console.warn(
+						`[MinovativeMind] Skipping directory '${relativePath}' as a relevant file.`
+					);
+				} else {
+					console.error(
+						`[MinovativeMind] Error reading relevant file '${relativePath}': ${error.message}. Skipping.`,
+						error
+					);
+				}
+				formattedSnippets.push(
+					`--- Relevant File: ${relativePath} ---\n\`\`\`plaintext\n[File skipped: could not be read or is inaccessible: ${error.message}]\n\`\`\`\n`
+				);
+				continue; // Skip to next file
+			}
+
+			if (fileContent !== null) {
+				formattedSnippets.push(
+					`--- Relevant File: ${relativePath} ---\n\`\`\`${languageId}\n${fileContent}\n\`\`\`\n`
+				);
+			}
+		}
+
+		return formattedSnippets.join("\n");
+	}
+
+	/**
 	 * Refreshes the EnhancedGenerationContext with an error-focused perspective,
 	 * rebuilding project context primarily based on current issues.
 	 * @param filePath The path of the file currently being processed.
@@ -1787,8 +2424,26 @@ export class EnhancedCodeGenerator {
 				undefined, // userRequest is not applicable for error-focused refresh
 				editorContextForRefresh,
 				formattedDiagnosticsString,
-				{ useAISelectionCache: false, enablePerformanceMonitoring: false }
+				{ useAISelectionCache: false, enablePerformanceMonitoring: false },
+				false, // explicitly disable persona for code generation tasks
+				false // includeVerboseHeaders
 			);
+
+			// Convert relevant file paths (strings) to URIs
+			const relevantFileUris = refreshResult.relevantFiles.map((rfPath) =>
+				vscode.Uri.joinPath(this.workspaceRoot, rfPath)
+			);
+
+			// Declare effectiveToken
+			const effectiveToken =
+				token ?? new vscode.CancellationTokenSource().token;
+
+			// Format the contents of relevant files into snippets
+			const relevantSnippetsContent =
+				await this._formatSelectedFilesIntoSnippets(
+					relevantFileUris,
+					effectiveToken
+				);
 
 			// Create newEnhancedGenerationContext inheriting from currentContext
 			// and updating relevant parts from refreshResult.
@@ -1796,6 +2451,7 @@ export class EnhancedCodeGenerator {
 				...currentContext,
 				projectContext: refreshResult.contextString,
 				relevantFiles: refreshResult.relevantFiles.join("\n"), // relevantFiles is string[] in BuildProjectContextResult
+				relevantSnippets: relevantSnippetsContent, // Assign the formatted snippets
 				activeSymbolInfo: refreshResult.activeSymbolDetailedInfo,
 				// Ensure successfulChangeHistory is also updated if necessary
 				successfulChangeHistory: this._formatSuccessfulChangesForPrompt(

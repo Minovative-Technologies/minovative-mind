@@ -28,6 +28,14 @@ export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
 };
 
 /**
+ * Interface for files considered during prioritization, including a relevance score.
+ */
+interface PrioritizedFile {
+	uri: vscode.Uri;
+	score: number;
+}
+
+/**
  * Formats a list of file change entries into a string section for AI context,
  * listing only the paths of created or modified files.
  * @param changeLog An array of FileChangeEntry objects representing recent changes.
@@ -81,6 +89,7 @@ function _formatFileChangePathsForContext(
  * @param dependencyGraph Optional map representing file import/dependency relations.
  * @param documentSymbols Optional map containing document symbols for relevant files.
  * @param activeSymbolDetailedInfo Optional detailed information about the active symbol.
+ * @param reverseDependencyGraph Optional map representing reverse file import/dependency relations.
  * @returns A promise that resolves to the generated context string.
  */
 export async function buildContextString(
@@ -90,7 +99,8 @@ export async function buildContextString(
 	recentChanges?: FileChangeEntry[],
 	dependencyGraph?: Map<string, string[]>,
 	documentSymbols?: Map<string, vscode.DocumentSymbol[] | undefined>,
-	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo,
+	reverseDependencyGraph?: Map<string, string[]> // NEW parameter for prioritization
 ): Promise<string> {
 	let context = `Project Context (Workspace: ${path.basename(
 		workspaceRoot.fsPath
@@ -110,14 +120,14 @@ export async function buildContextString(
 
 	// Check if the generated tree itself exceeds the total limit
 	const treeHeaderLength = "File Structure:\n".length + "\n\n".length; // Account for header and spacing
-	const treeStringLength = fileStructureString.length;
+	const treeStringInitialLength = fileStructureString.length;
 
 	if (
-		currentTotalLength + treeHeaderLength + treeStringLength >
+		currentTotalLength + treeHeaderLength + treeStringInitialLength >
 		config.maxTotalLength
 	) {
 		console.warn(
-			`Generated file structure tree (${treeStringLength} chars) exceeds total context limit (${config.maxTotalLength} chars). Truncating structure.`
+			`Generated file structure tree (${treeStringInitialLength} chars) exceeds total context limit (${config.maxTotalLength} chars). Truncating structure.`
 		);
 		const availableLength =
 			config.maxTotalLength - currentTotalLength - treeHeaderLength - 50; // Reserve space for headers/footers/truncation message
@@ -125,7 +135,11 @@ export async function buildContextString(
 			fileStructureString.substring(
 				0,
 				availableLength > 0 ? availableLength : 0
-			) + "\n... (File structure truncated due to size limit)";
+			) +
+			`\n... (File structure truncated from ${treeStringInitialLength} chars to ${Math.max(
+				0,
+				availableLength
+			)} chars due to total context limit)`;
 		context += fileStructureString + "\n\n";
 		currentTotalLength = config.maxTotalLength; // Maxed out after adding truncated structure
 		console.log(
@@ -133,7 +147,7 @@ export async function buildContextString(
 		);
 	} else {
 		context += fileStructureString + "\n\n";
-		currentTotalLength += treeHeaderLength + treeStringLength; // Update length
+		currentTotalLength += treeHeaderLength + treeStringInitialLength; // Update length
 		console.log(
 			`Context size after adding structure: ${currentTotalLength} chars.`
 		);
@@ -198,11 +212,16 @@ export async function buildContextString(
 			`Existing paths list exceeds total context limit. Truncating.`
 		);
 		const availableLength = config.maxTotalLength - currentTotalLength - 50; // Reserve space for truncation message
+		const originalLength = existingPathsSection.length;
 		existingPathsSection =
 			existingPathsSection.substring(
 				0,
 				availableLength > 0 ? availableLength : 0
-			) + "\n... (Existing paths list truncated due to size limit)\n\n";
+			) +
+			`\n... (Existing paths list truncated from ${originalLength} chars to ${Math.max(
+				0,
+				availableLength
+			)} chars due to total size limit)\n\n`;
 		context += existingPathsSection;
 		currentTotalLength = config.maxTotalLength; // Maxed out after adding truncated structure
 	} else {
@@ -230,10 +249,12 @@ export async function buildContextString(
 			);
 			const availableLength = config.maxTotalLength - currentTotalLength - 50; // Reserve space for truncation message
 			let truncatedSection = fileChangePathsSection;
+			const originalLength = fileChangePathsSection.length; // Capture original length
+
 			if (availableLength > 0) {
 				truncatedSection =
 					truncatedSection.substring(0, availableLength) +
-					"\n... (Modified/Created paths truncated due to total size limit)";
+					`\n... (Modified/Created paths truncated from ${originalLength} chars to ${availableLength} chars due to total size limit)`;
 			} else {
 				truncatedSection =
 					"\n... (Modified/Created paths section omitted due to total size limit)";
@@ -339,11 +360,16 @@ export async function buildContextString(
 				`Symbol information section exceeds total context limit. Truncating.`
 			);
 			const availableLength = config.maxTotalLength - currentTotalLength - 50; // Reserve space for truncation message
+			const originalLength = symbolInfoSection.length;
 			symbolInfoSection =
 				symbolInfoSection.substring(
 					0,
 					availableLength > 0 ? availableLength : 0
-				) + "\n... (Symbol information truncated due to size limit)\n\n";
+				) +
+				`\n... (Symbol information truncated from ${originalLength} chars to ${Math.max(
+					0,
+					availableLength
+				)} chars due to size limit)\n\n`;
 		}
 		context += symbolInfoSection;
 		currentTotalLength += symbolInfoSection.length;
@@ -487,14 +513,17 @@ export async function buildContextString(
 					break;
 				}
 
-				let contentPreview = content;
-				if (contentPreview.length > MAX_REFERENCED_TYPE_CONTENT_CHARS) {
-					contentPreview =
-						contentPreview.substring(0, MAX_REFERENCED_TYPE_CONTENT_CHARS) +
+				const joinedContent = content.join("\n"); // Add this line
+				const fullFileContent = joinedContent; // Change this line
+				let processedContent = fullFileContent;
+				if (processedContent.length > MAX_REFERENCED_TYPE_CONTENT_CHARS) {
+					processedContent =
+						processedContent.substring(0, MAX_REFERENCED_TYPE_CONTENT_CHARS) +
 						"\n... (content truncated)";
 				}
+				let contentPreview: string[] = [processedContent];
 				activeSymbolDetailSection += `    File: ${filePath}\n`;
-				activeSymbolDetailSection += `    Content:\n\`\`\`\n${contentPreview}\n\`\`\`\n`;
+				activeSymbolDetailSection += `    Content:\n\`\`\`\n${contentPreview[0]}\n\`\`\`\n`;
 				count++;
 			}
 		}
@@ -531,13 +560,18 @@ export async function buildContextString(
 				console.warn(
 					`Active symbol detail section exceeds total context limit. Truncating.`
 				);
-				const availableLength = config.maxTotalLength - currentTotalLength - 50; // Reserve space for truncation message
+				const availableLength =
+					currentTotalLength - activeSymbolDetailSection.length - 50; // Reserve space for truncation message
+				const originalLength = activeSymbolDetailSection.length;
 				activeSymbolDetailSection =
 					activeSymbolDetailSection.substring(
 						0,
 						availableLength > 0 ? availableLength : 0
 					) +
-					"\n... (Active symbol detail truncated due to total size limit)\n\n";
+					`\n... (Active symbol detail truncated from ${originalLength} chars to ${Math.max(
+						0,
+						availableLength
+					)} chars due to total size limit)\n\n`;
 			}
 			context += activeSymbolDetailSection;
 			currentTotalLength += activeSymbolDetailSection.length;
@@ -554,11 +588,144 @@ export async function buildContextString(
 
 	let contentAdded = false; // Track if any content was added
 
-	for (const fileUri of relevantFiles) {
+	// --- Dynamic File Prioritization for Content Inclusion ---
+	let prioritizedFiles: PrioritizedFile[] = relevantFiles.map((uri) => ({
+		uri,
+		score: 0,
+	}));
+
+	// Assign scores based on relevance
+	for (const pf of prioritizedFiles) {
+		const relativePath = path
+			.relative(workspaceRoot.fsPath, pf.uri.fsPath)
+			.replace(/\\/g, "/");
+
+		// Highest priority: Active file
+		if (activeSymbolDetailedInfo?.filePath === relativePath) {
+			pf.score += 1000;
+			// Even higher if its definition is the active symbol's full range
+			if (
+				activeSymbolDetailedInfo.fullRange &&
+				activeSymbolDetailedInfo.filePath === relativePath
+			) {
+				pf.score += 200;
+			}
+		}
+
+		// High priority: Files related to active symbol (definitions, implementations, references, call hierarchy)
+		const activeSymbolRelatedPaths: Set<string> = new Set();
+		if (activeSymbolDetailedInfo) {
+			if (activeSymbolDetailedInfo.definition) {
+				const definitionLoc = Array.isArray(activeSymbolDetailedInfo.definition)
+					? activeSymbolDetailedInfo.definition[0]
+					: activeSymbolDetailedInfo.definition;
+				if (definitionLoc?.uri) {
+					activeSymbolRelatedPaths.add(
+						path
+							.relative(workspaceRoot.fsPath, definitionLoc.uri.fsPath)
+							.replace(/\\/g, "/")
+					);
+				}
+			}
+			if (activeSymbolDetailedInfo.typeDefinition) {
+				const typeDefLoc = Array.isArray(
+					activeSymbolDetailedInfo.typeDefinition
+				)
+					? activeSymbolDetailedInfo.typeDefinition[0]
+					: activeSymbolDetailedInfo.typeDefinition;
+				if (typeDefLoc?.uri) {
+					activeSymbolRelatedPaths.add(
+						path
+							.relative(workspaceRoot.fsPath, typeDefLoc.uri.fsPath)
+							.replace(/\\/g, "/")
+					);
+				}
+			}
+			activeSymbolDetailedInfo.implementations?.forEach((loc) =>
+				activeSymbolRelatedPaths.add(
+					path
+						.relative(workspaceRoot.fsPath, loc.uri.fsPath)
+						.replace(/\\/g, "/")
+				)
+			);
+			activeSymbolDetailedInfo.referencedTypeDefinitions?.forEach((_, fp) =>
+				activeSymbolRelatedPaths.add(fp)
+			);
+			activeSymbolDetailedInfo.incomingCalls?.forEach((call) =>
+				activeSymbolRelatedPaths.add(
+					path
+						.relative(workspaceRoot.fsPath, call.from.uri.fsPath)
+						.replace(/\\/g, "/")
+				)
+			);
+			activeSymbolDetailedInfo.outgoingCalls?.forEach((call) =>
+				activeSymbolRelatedPaths.add(
+					path
+						.relative(workspaceRoot.fsPath, call.to.uri.fsPath)
+						.replace(/\\/g, "/")
+				)
+			);
+		}
+		if (activeSymbolRelatedPaths.has(relativePath)) {
+			pf.score += 500;
+		}
+
+		// Medium-high priority: Direct dependencies of other highly-scored files or the active file
+		const directDependencies = dependencyGraph?.get(relativePath);
+		if (directDependencies && directDependencies.length > 0) {
+			pf.score += 100; // Bonus for files that import others
+		}
+
+		// Medium priority: Files that import the active file (reverse dependencies) or are imported by other relevant files
+		const reverseDependencies = reverseDependencyGraph?.get(relativePath);
+		if (reverseDependencies && reverseDependencies.length > 0) {
+			pf.score += 80; // Bonus for files that are imported by others
+		}
+
+		// Low-medium priority: Files with significant symbols, even if not directly related to active symbol
+		if (
+			documentSymbols?.get(relativePath)?.length &&
+			documentSymbols.get(relativePath)!.length >
+				config.maxSymbolEntriesPerFile / 2
+		) {
+			pf.score += 50;
+		}
+	}
+
+	// Sort files: active file first, then by score (descending), then by path for tie-breaking
+	prioritizedFiles.sort((a, b) => {
+		// Keep active file absolutely first if it's present and highly scored
+		const aIsActiveFile =
+			activeSymbolDetailedInfo?.filePath &&
+			path.relative(workspaceRoot.fsPath, a.uri.fsPath).replace(/\\/g, "/") ===
+				activeSymbolDetailedInfo.filePath;
+		const bIsActiveFile =
+			activeSymbolDetailedInfo?.filePath &&
+			path.relative(workspaceRoot.fsPath, b.uri.fsPath).replace(/\\/g, "/") ===
+				activeSymbolDetailedInfo.filePath;
+
+		if (aIsActiveFile && !bIsActiveFile) {
+			return -1;
+		}
+		if (!aIsActiveFile && bIsActiveFile) {
+			return 1;
+		}
+
+		if (b.score !== a.score) {
+			return b.score - a.score; // Higher score comes first
+		}
+		return a.uri.fsPath.localeCompare(b.uri.fsPath); // Alphabetical for tie-breaking
+	});
+
+	// Update relevantFiles to be the newly sorted list for content processing
+	const sortedRelevantFiles = prioritizedFiles.map((pf) => pf.uri);
+	// --- END Dynamic File Prioritization for Content Inclusion ---
+
+	for (const fileUri of sortedRelevantFiles) {
 		// Check if we have *any* space left for content after the structure and recent changes
 		if (currentTotalLength >= config.maxTotalLength) {
 			filesSkippedForTotalSize =
-				relevantFiles.length - relevantFiles.indexOf(fileUri);
+				sortedRelevantFiles.length - sortedRelevantFiles.indexOf(fileUri);
 			console.log(
 				`Skipping remaining ${filesSkippedForTotalSize} file contents as total limit reached.`
 			);
@@ -672,7 +839,7 @@ export async function buildContextString(
 			}
 			// Calculate remaining skipped files after this potentially truncated one
 			filesSkippedForTotalSize =
-				relevantFiles.length - relevantFiles.indexOf(fileUri);
+				sortedRelevantFiles.length - sortedRelevantFiles.indexOf(fileUri);
 			console.log(
 				`Skipping remaining ${filesSkippedForTotalSize} file contents as total limit reached.`
 			);

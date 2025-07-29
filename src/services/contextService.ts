@@ -44,7 +44,7 @@ import {
 
 // Constants for symbol processing
 const MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT = 6; // Example depth for symbol hierarchy serialization
-const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 5000;
+export const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 5000;
 
 // Performance monitoring constants
 const PERFORMANCE_THRESHOLDS = {
@@ -76,7 +76,7 @@ export interface ActiveSymbolDetailedInfo {
 	definition?: vscode.Location | vscode.Location[];
 	implementations?: vscode.Location[];
 	typeDefinition?: vscode.Location | vscode.Location[];
-	referencedTypeDefinitions?: Map<string, string>;
+	referencedTypeDefinitions?: Map<string, string[]>;
 	incomingCalls?: vscode.CallHierarchyIncomingCall[];
 	outgoingCalls?: vscode.CallHierarchyOutgoingCall[];
 }
@@ -142,7 +142,9 @@ export class ContextService {
 		userRequest?: string,
 		editorContext?: PlanGenerationContext["editorContext"],
 		initialDiagnosticsString?: string, // Renamed parameter for clarity
-		options?: ContextBuildOptions // Options parameter
+		options?: ContextBuildOptions, // Options parameter
+		includePersona: boolean = true, // New optional parameter with default true
+		includeVerboseHeaders: boolean = true // ADDED: New optional parameter with default true
 	): Promise<BuildProjectContextResult> {
 		const startTime = Date.now();
 		const enablePerformanceMonitoring =
@@ -339,7 +341,7 @@ export class ContextService {
 						if (symbolAtCursor) {
 							// 2b.v. Initialize activeSymbolDetailedInfo
 							activeSymbolDetailedInfo = {
-								referencedTypeDefinitions: new Map<string, string>(),
+								referencedTypeDefinitions: new Map<string, string[]>(),
 							};
 
 							// 2b.vi. Asynchronously call SymbolService functions, wrapping each in a try-catch
@@ -389,7 +391,7 @@ export class ContextService {
 								(async () => {
 									try {
 										// Get referenced type definitions
-										const referencedTypeContents = new Map<string, string>();
+										const referencedTypeContents = new Map<string, string[]>();
 										const referencedTypeDefinitions =
 											await SymbolService.getTypeDefinition(
 												activeFileUri,
@@ -418,13 +420,12 @@ export class ContextService {
 																	typeDef.uri.fsPath
 																)
 																.replace(/\\/g, "/");
-															referencedTypeContents.set(
-																relativePath,
+															referencedTypeContents.set(relativePath, [
 																content.substring(
 																	0,
 																	MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT
-																)
-															);
+																),
+															]);
 														}
 													} catch (e: any) {
 														console.warn(
@@ -551,7 +552,7 @@ export class ContextService {
 
 			const fileSummariesForAI = new Map<string, string>();
 			const summaryGenerationPromises = filesToSummarizeForSelectionPrompt.map(
-				async (fileUri) => {
+				async (fileUri: vscode.Uri) => {
 					if (cancellationToken?.isCancellationRequested) {
 						return;
 					}
@@ -604,6 +605,16 @@ export class ContextService {
 						projectRoot: rootFolder.uri,
 						activeEditorContext: editorContext,
 						diagnostics: effectiveDiagnosticsString, // UPDATED: Use effectiveDiagnosticsString
+						activeEditorSymbols: editorContext?.documentUri
+							? documentSymbolsMap.get(
+									path
+										.relative(
+											rootFolder.uri.fsPath,
+											editorContext.documentUri.fsPath
+										)
+										.replace(/\\/g, "/")
+							  )
+							: undefined,
 						// Modified to adapt prompt from string to HistoryEntryPart[]
 						aiModelCall: async (
 							prompt: string,
@@ -718,6 +729,12 @@ export class ContextService {
 			// Context building with performance monitoring
 			const contextBuildStartTime = Date.now();
 
+			// Define verboseHeaderMarker before preamble logic
+			let verboseHeaderMarker = "";
+			if (includeVerboseHeaders) {
+				verboseHeaderMarker = "/* VERBOSE_HEADERS_ENABLED */";
+			}
+
 			// 3. Update the final call to buildContextString to pass activeSymbolDetailedInfo
 			const rawContextString = await buildContextString(
 				filesForContextBuilding, // Still pass URIs to buildContextString for content reading
@@ -726,7 +743,8 @@ export class ContextService {
 				this.changeLogger.getChangeLog(),
 				fileDependencies,
 				documentSymbolsMap,
-				activeSymbolDetailedInfo // Pass the new argument
+				activeSymbolDetailedInfo, // Pass the new argument
+				activeSymbolDetailedInfo?.referencedTypeDefinitions ?? undefined // Corrected argument
 			);
 
 			// --- New logic to prepend project type preamble ---
@@ -749,10 +767,15 @@ export class ContextService {
 			}
 
 			let finalContextString = rawContextString; // Initialize with the originally built context string
+			// Prepend verboseHeaderMarker if present
+			if (verboseHeaderMarker) {
+				finalContextString = `${verboseHeaderMarker}\n${rawContextString}`;
+			}
 
-			if (preamble) {
+			// Wrap the persona/preamble logic within the includePersona condition
+			if (includePersona && preamble) {
 				// Prepend the detected project type information
-				finalContextString = `${preamble}\n\nProject Context:\n${rawContextString}`;
+				finalContextString = `${preamble}\n\nProject Context:\n${finalContextString}`;
 			}
 			// --- End new logic ---
 

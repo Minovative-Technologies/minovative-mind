@@ -5,6 +5,7 @@ import { ActiveSymbolDetailedInfo } from "../../services/contextService";
 import { HistoryEntryPart } from "../../sidebar/common/sidebarTypes";
 import * as sidebarTypes from "../../sidebar/common/sidebarTypes";
 import { ERROR_OPERATION_CANCELLED } from "../gemini";
+import { CodeIssue } from "../../ai/enhancedCodeGeneration"; // NEW: Import CodeIssue
 
 const MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT = 1000;
 const MAX_REFERENCED_TYPES_TO_INCLUDE_PROMPT = 3;
@@ -89,6 +90,33 @@ const fewShotCorrectionExamples = `
         }
         --- End Valid Correction Plan Examples ---
     `;
+
+/**
+ * Encapsulates feedback from a previous failed correction attempt,
+ * used to guide the AI in generating a better correction plan.
+ */
+export interface CorrectionFeedback {
+	type:
+		| "no_improvement" // Correction attempt made no improvement in issue count
+		| "new_errors_introduced" // New errors were introduced by the correction
+		| "parsing_failed" // AI's JSON output for the plan was malformed/invalid
+		| "unreasonable_diff" // The generated diff was too drastic or illogical
+		| "command_failed" // A command executed as part of the plan failed
+		| "unknown"; // Other or uncategorized failure
+	message: string; // A concise summary of the failure reason
+	details?: {
+		parsingError?: string;
+		failedJson?: string;
+		stdout?: string;
+		stderr?: string;
+		previousIssues?: CodeIssue[];
+		currentIssues?: CodeIssue[];
+	}; // More elaborate details, e.g., stack trace, specific error message
+	failedJson?: string; // The malformed JSON output if parsing failed
+	issuesRemaining?: CodeIssue[]; // List of issues that still persist after the attempt
+	issuesIntroduced?: CodeIssue[]; // List of *new* issues introduced by the attempt
+	relevantDiff?: string; // The diff that caused the issues or was part of the failed attempt
+}
 
 // Helper for formatting location (single or array of vscode.Location objects).
 // Attempts to make path relative using a heuristic based on editor context if available.
@@ -262,6 +290,28 @@ const formatCallHierarchy = (
 	return `    - ${formatted}${more}`;
 };
 
+// Helper for formatting CodeIssue arrays.
+const formatCodeIssues = (
+	issues: CodeIssue[] | undefined,
+	limit: number = 3
+): string => {
+	if (!issues || issues.length === 0) {
+		return "None";
+	}
+	const limited = issues.slice(0, limit);
+	const formatted = limited
+		.map(
+			(issue) =>
+				`  - [${issue.severity.toUpperCase()}] ${issue.type}: "${
+					issue.message
+				}" at line ${issue.line}${issue.code ? ` (Code: ${issue.code})` : ""}`
+		)
+		.join("\n");
+	return issues.length > limit
+		? `${formatted}\n  ... (${issues.length - limit} more issues)`
+		: formatted;
+};
+
 export function createCorrectionPlanPrompt(
 	originalUserInstruction: string,
 	projectContext: string,
@@ -270,7 +320,7 @@ export function createCorrectionPlanPrompt(
 	relevantSnippets: string,
 	aggregatedFormattedDiagnostics: string,
 	formattedRecentChanges: string,
-	retryReason?: string,
+	correctionFeedback?: CorrectionFeedback, // MODIFIED: Replaced retryReason with correctionFeedback
 	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo,
 	jsonEscapingInstructions: string = ""
 ): string {
@@ -308,12 +358,40 @@ export function createCorrectionPlanPrompt(
     --- End Editor Context ---`
 		: "";
 
-	const retryReasonSection = retryReason
+	// MODIFIED: Replaced retryReasonSection with correctionFeedbackSection
+	const correctionFeedbackSection = correctionFeedback
 		? `
-    --- Previous Plan Parsing Error ---
-    CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${retryReason}".
-    You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. Do not include markdown fences.
-    --- End Previous Plan Parsing Error ---`
+    --- Previous Correction Attempt Feedback ---
+    Correction Type: ${correctionFeedback.type}
+    Feedback Message: ${correctionFeedback.message}
+    ${
+			correctionFeedback.details?.parsingError
+				? `Parsing Error: ${correctionFeedback.details.parsingError}\n`
+				: ""
+		}${
+				correctionFeedback.details?.failedJson
+					? `Failed JSON Output (if applicable):\n\`\`\`json\n${correctionFeedback.details.failedJson}\n\`\`\`\n`
+					: ""
+		  }${
+				correctionFeedback.details?.stdout
+					? `STDOUT:\n\`\`\`\n${correctionFeedback.details.stdout}\n\`\`\`\n`
+					: ""
+		  }${
+				correctionFeedback.details?.stderr
+					? `STDERR:\n\`\`\`\n${correctionFeedback.details.stderr}\n\`\`\`\n`
+					: ""
+		  }Issues Remaining (after previous attempt):\n${formatCodeIssues(
+				correctionFeedback.issuesRemaining
+		  )}
+    Issues Introduced (by previous attempt):\n${formatCodeIssues(
+			correctionFeedback.issuesIntroduced
+		)}
+    ${
+			correctionFeedback.relevantDiff
+				? `Relevant Diff (from previous attempt):\n\`\`\`diff\n${correctionFeedback.relevantDiff}\n\`\`\`\n`
+				: ""
+		}
+    --- End Previous Correction Attempt Feedback ---`
 		: "";
 
 	const activeSymbolInfoSection = activeSymbolDetailedInfo
@@ -353,18 +431,19 @@ ${
 	activeSymbolDetailedInfo.referencedTypeDefinitions.size > 0
 		? Array.from(activeSymbolDetailedInfo.referencedTypeDefinitions.entries())
 				.slice(0, MAX_REFERENCED_TYPES_TO_INCLUDE_PROMPT)
-				.map(([filePath, content]) => {
-					let contentPreview = content;
-					if (
-						contentPreview.length > MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT
-					) {
-						contentPreview =
-							contentPreview.substring(
+				.map(([filePath, originalContentLines]) => {
+					const joinedContent = originalContentLines.join("\n");
+					let processedContent: string;
+					if (joinedContent.length > MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT) {
+						processedContent =
+							joinedContent.substring(
 								0,
 								MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT
 							) + "\n// ... (content truncated)";
+					} else {
+						processedContent = joinedContent;
 					}
-					return `  - File: ${filePath}\n    Content:\n\`\`\`\n${contentPreview}\n\`\`\``;
+					return `  - File: ${filePath}\n    Content:\n\`\`\`\n${processedContent}\n\`\`\``;
 				})
 				.join("\n") +
 		  (activeSymbolDetailedInfo.referencedTypeDefinitions.size >
@@ -436,9 +515,9 @@ ${formatCallHierarchy(
         ${aggregatedFormattedDiagnostics}
         --- End Diagnostics to Address ---
         
-        --- Retry Reason Section ---
-        ${retryReasonSection}
-        --- End Retry Reason Section ---
+        --- Previous Correction Attempt Feedback ---
+        ${correctionFeedbackSection}
+        --- End Previous Correction Attempt Feedback ---
 
         ${jsonSchemaReference}
         --- End Required JSON Schema Reference ---

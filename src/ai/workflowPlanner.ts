@@ -14,50 +14,70 @@ export enum PlanStepAction {
 
 /**
  * Base interface for a single step in the execution plan.
+ * This interface defines common properties for all steps. Specific step types
+ * will extend this and define their required and exclusive properties.
  */
 export interface PlanStep {
 	step: number;
 	action: PlanStepAction;
 	description: string;
-	path?: string; // Relevant for file/dir actions
-	command?: string; // Relevant for run_command
+	path?: string; // Optional: Relevant for file/directory actions (relative path from workspace root)
+	command?: string; // Optional: Relevant for run_command action (command line string)
 }
 
 // --- Specific Step Interfaces (Keep/Update existing ones) ---
+
+/**
+ * Interface for a 'create_directory' step.
+ * Requires a 'path' property indicating the relative path of the directory to create.
+ */
 export interface CreateDirectoryStep extends PlanStep {
 	action: PlanStepAction.CreateDirectory;
-	path: string;
-	command?: undefined; // Ensure command is not expected
+	path: string; // The relative path of the directory to create, e.g., "src/components"
+	command?: undefined; // Ensures 'command' is not expected for this action type
 }
+
+/**
+ * Interface for a 'create_file' step.
+ * Must include 'path' and exactly one of 'content' (for predefined content)
+ * or 'generate_prompt' (for AI-generated content).
+ */
 export interface CreateFileStep extends PlanStep {
 	action: PlanStepAction.CreateFile;
-	path: string;
-	content?: string;
-	generate_prompt?: string;
-	command?: undefined; // Ensure command is not expected
+	path: string; // The relative path of the file to create, e.g., "src/index.ts"
+	content?: string; // Optional: The exact content to write to the file.
+	generate_prompt?: string; // Optional: A natural language prompt for the AI to generate the file's content.
+	command?: undefined; // Ensures 'command' is not expected for this action type
 }
+
+/**
+ * Interface for a 'modify_file' step.
+ * Requires a 'path' property and a 'modification_prompt' for the AI to apply changes.
+ */
 export interface ModifyFileStep extends PlanStep {
 	action: PlanStepAction.ModifyFile;
-	path: string;
-	modification_prompt: string;
-	command?: undefined; // Ensure command is not expected
+	path: string; // The relative path of the file to modify, e.g., "src/utils/helpers.ts"
+	modification_prompt: string; // A natural language prompt for the AI describing the desired modifications to the file.
+	command?: undefined; // Ensures 'command' is not expected for this action type
 }
 
 /**
  * Interface for a 'run_command' step.
+ * Requires a 'command' property, which is the shell command to execute.
  */
 export interface RunCommandStep extends PlanStep {
 	action: PlanStepAction.RunCommand;
-	command: string; // The command line to execute
-	path?: undefined; // Path is typically not needed here
+	command: string; // The command line string to execute, e.g., "npm install" or "git add ."
+	path?: undefined; // Ensures 'path' is not expected for this action type
 }
 
 /**
  * Represents the overall structure of the execution plan.
+ * The plan consists of a description and an ordered list of steps.
  */
 export interface ExecutionPlan {
-	planDescription: string;
-	steps: PlanStep[];
+	planDescription: string; // A concise, human-readable description of the overall plan.
+	steps: PlanStep[]; // An ordered array of individual execution steps.
 }
 
 // --- Type Guards (Update existing and add new one) ---
@@ -78,6 +98,7 @@ export function isCreateFileStep(step: PlanStep): step is CreateFileStep {
 		potentialStep.action === PlanStepAction.CreateFile &&
 		typeof potentialStep.path === "string" &&
 		potentialStep.path.trim() !== "" &&
+		// Ensure exactly one of 'content' or 'generate_prompt' is present
 		((typeof potentialStep.content === "string" &&
 			typeof potentialStep.generate_prompt === "undefined") ||
 			(typeof potentialStep.generate_prompt === "string" &&

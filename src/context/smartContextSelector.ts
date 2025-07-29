@@ -7,6 +7,7 @@ import {
 } from "../sidebar/common/sidebarTypes";
 import { TEMPERATURE } from "../sidebar/common/sidebarConstants";
 import * as SymbolService from "../services/symbolService";
+import { ActiveSymbolDetailedInfo } from "../services/contextService";
 
 const MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION = 350;
 export { MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION };
@@ -44,6 +45,7 @@ export interface SelectRelevantFilesAIOptions {
 	activeEditorSymbols?: vscode.DocumentSymbol[];
 	preSelectedHeuristicFiles?: vscode.Uri[]; // NEW PROPERTY: Heuristically pre-selected files
 	fileSummaries?: Map<string, string>;
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo; // NEW: Add activeSymbolDetailedInfo
 	aiModelCall: (
 		prompt: string,
 		modelName: string,
@@ -166,6 +168,7 @@ export async function selectRelevantFilesAI(
 		activeEditorSymbols,
 		preSelectedHeuristicFiles,
 		fileSummaries,
+		activeSymbolDetailedInfo, // NEW: Destructure activeSymbolDetailedInfo
 		aiModelCall,
 		modelName,
 		cancellationToken,
@@ -226,7 +229,143 @@ export async function selectRelevantFilesAI(
 			contextPrompt += `Selected Text (preview): "${preview}"\n`;
 		}
 
-		if (activeEditorSymbols && activeEditorContext.selection.start) {
+		// NEW: Feature activeSymbolDetailedInfo prominently if available
+		if (activeSymbolDetailedInfo && activeSymbolDetailedInfo.name) {
+			const symbolInfo = activeSymbolDetailedInfo;
+			contextPrompt += `\n--- Active Symbol Detailed Information ---\n`;
+			contextPrompt += `Symbol: "${symbolInfo.name}" (Type: ${
+				symbolInfo.kind || "Unknown"
+			})\n`;
+			if (symbolInfo.detail) {
+				contextPrompt += `Detail: ${symbolInfo.detail}\n`;
+			}
+			if (symbolInfo.filePath) {
+				const relativeSymPath = path
+					.relative(projectRoot.fsPath, symbolInfo.filePath)
+					.replace(/\\/g, "/");
+				let lineNumberDisplay = "N/A";
+				const lineNumber = symbolInfo.fullRange?.start?.line;
+				if (typeof lineNumber === "number") {
+					lineNumberDisplay = (lineNumber + 1).toString();
+				}
+				contextPrompt += `File Location: ${relativeSymPath}:${lineNumberDisplay}\n`;
+			}
+
+			const MAX_RELATED_SYMBOL_FILES_PROMPT = 5; // Limit related files for prompt conciseness
+
+			// References (general references, fetched if activeSymbolDetailedInfo doesn't explicitly contain them)
+			try {
+				const activeFileUri = vscode.Uri.file(activeEditorContext.filePath);
+				const references = await SymbolService.findReferences(
+					activeFileUri,
+					activeEditorContext.selection.start, // Use selection start to find context for references
+					cancellationToken
+				);
+
+				if (references) {
+					const uniqueReferencePaths = new Set<string>();
+					for (const ref of references) {
+						if (ref.uri.fsPath !== activeFileUri.fsPath) {
+							// Exclude self
+							const relativeRefPath = path
+								.relative(projectRoot.fsPath, ref.uri.fsPath)
+								.replace(/\\/g, "/");
+							if (relativeFilePaths.includes(relativeRefPath)) {
+								// Only add if it's one of the scanned files
+								uniqueReferencePaths.add(relativeRefPath);
+							}
+						}
+						if (uniqueReferencePaths.size >= MAX_RELATED_SYMBOL_FILES_PROMPT) {
+							break;
+						}
+					}
+					if (uniqueReferencePaths.size > 0) {
+						contextPrompt += `General References in: ${Array.from(
+							uniqueReferencePaths
+						)
+							.map((p) => `"${p}"`)
+							.join(", ")}\n`;
+					}
+				}
+			} catch (error) {
+				console.error(
+					"[SmartContextSelector] Error finding general references for symbol:",
+					symbolInfo.name,
+					error
+				);
+			}
+
+			// Incoming Calls
+			if (symbolInfo.incomingCalls && symbolInfo.incomingCalls.length > 0) {
+				const uniqueIncomingCallPaths = new Set<string>();
+				for (const call of symbolInfo.incomingCalls) {
+					const relativeCallPath = path
+						.relative(projectRoot.fsPath, call.from.uri.fsPath)
+						.replace(/\\/g, "/");
+					if (
+						relativeFilePaths.includes(relativeCallPath) &&
+						relativeCallPath !== activeEditorContext?.documentUri?.fsPath
+					) {
+						uniqueIncomingCallPaths.add(relativeCallPath);
+					}
+					if (uniqueIncomingCallPaths.size >= MAX_RELATED_SYMBOL_FILES_PROMPT) {
+						break;
+					}
+				}
+				if (uniqueIncomingCallPaths.size > 0) {
+					contextPrompt += `This symbol has Incoming Calls from (files): ${Array.from(
+						uniqueIncomingCallPaths
+					)
+						.map((p) => `"${p}"`)
+						.join(", ")}\n`;
+				}
+			}
+
+			// Outgoing Calls
+			if (symbolInfo.outgoingCalls && symbolInfo.outgoingCalls.length > 0) {
+				const uniqueOutgoingCallPaths = new Set<string>();
+				for (const call of symbolInfo.outgoingCalls) {
+					const relativeCallPath = path
+						.relative(projectRoot.fsPath, call.to.uri.fsPath)
+						.replace(/\\/g, "/");
+					if (
+						relativeFilePaths.includes(relativeCallPath) &&
+						relativeCallPath !== activeEditorContext?.documentUri?.fsPath
+					) {
+						uniqueOutgoingCallPaths.add(relativeCallPath);
+					}
+					if (uniqueOutgoingCallPaths.size >= MAX_RELATED_SYMBOL_FILES_PROMPT) {
+						break;
+					}
+				}
+				if (uniqueOutgoingCallPaths.size > 0) {
+					contextPrompt += `This symbol has Outgoing Calls to (files): ${Array.from(
+						uniqueOutgoingCallPaths
+					)
+						.map((p) => `"${p}"`)
+						.join(", ")}\n`;
+				}
+			}
+
+			// Referenced Type Definitions (briefly)
+			if (
+				symbolInfo.referencedTypeDefinitions &&
+				symbolInfo.referencedTypeDefinitions.size > 0
+			) {
+				const typeDefPaths = Array.from(
+					symbolInfo.referencedTypeDefinitions.keys()
+				)
+					.filter((p) => relativeFilePaths.includes(p)) // Only include scanned files
+					.slice(0, MAX_RELATED_SYMBOL_FILES_PROMPT);
+				if (typeDefPaths.length > 0) {
+					contextPrompt += `This symbol references Types Defined in (files): ${typeDefPaths
+						.map((p) => `"${p}"`)
+						.join(", ")}\n`;
+				}
+			}
+			contextPrompt += `--- End Active Symbol Detailed Information ---\n`;
+		} else if (activeEditorSymbols && activeEditorContext.selection.start) {
+			// Fallback to simpler symbol references if detailed info is not available
 			const position = activeEditorContext.selection.start;
 			const activeFileUri = vscode.Uri.file(activeEditorContext.filePath);
 
@@ -356,12 +495,13 @@ export async function selectRelevantFilesAI(
 	Instructions for your response:
 	1.  Analyze all the provided information to understand the user's goal.
 	2.  Review the 'Heuristically Pre-selected Files' if present. While these files are initial candidates based on proximity, **your critical task is to select *only* the most directly relevant subset of files** from *all* available files (including and beyond the heuristically pre-selected ones) to address the user's request and provided diagnostics. **Actively discard any heuristically suggested files that do not directly contribute to solving the problem or fulfilling the request.** Prioritize files essential for the task over simply related ones.
-	3.  Carefully examine the 'Internal File Relationships' section if present, as it provides crucial context on how files relate to each other, forming logical modules or feature areas.
-	4.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes. Prioritize files that are imported by the active file, or by other files you deem highly relevant to the user's request.
-	5.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
-	6.  If no specific files from the list seem particularly relevant *beyond the heuristically pre-selected ones* (e.g., the request is very general or can be answered without looking at other files beyond the active one and its immediate module), return an empty JSON array \`[]\`
-	7.  Do NOT include any files not present in the "Available Project Files" list.
-	8.  Your entire response should be ONLY the JSON array. Do not include any other text, explanations, or markdown formatting.
+	3.  If 'Active Symbol Detailed Information' is present, **pay close attention to the symbol's definitions, general references, incoming/outgoing calls, and referenced type definitions**. These relationships are crucial indicators of file relevance; prioritize files that define, implement, or are closely related via the call hierarchy or type definitions to the active symbol.
+	4.  Carefully examine the 'Internal File Relationships' section if present, as it provides crucial context on how files relate to each other, forming logical modules or feature areas.
+	5.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes. Prioritize files that are imported by the active file, or by other files you deem highly relevant to the user's request.
+	6.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
+	7.  If no specific files from the list seem particularly relevant *beyond the heuristically pre-selected ones* (e.g., the request is very general or can be answered without looking at other files beyond the active one and its immediate module), return an empty JSON array \`[]\`
+	8.  Do NOT include any files not present in the "Available Project Files" list.
+	9.  Your entire response should be ONLY the JSON array. Do not include any other text, explanations, or markdown formatting.
 
 	JSON Array of selected file paths:
 `;
@@ -393,18 +533,21 @@ export async function selectRelevantFilesAI(
 		);
 
 		let cleanedResponse = aiResponse.trim();
-		if (cleanedResponse.startsWith("```json")) {
-			cleanedResponse = cleanedResponse.substring(7);
-			if (cleanedResponse.endsWith("```")) {
-				cleanedResponse = cleanedResponse.substring(
-					0,
-					cleanedResponse.length - 3
-				);
-			}
+
+		// Check for and remove "" at the start of the response
+		if (cleanedResponse.startsWith("")) {
+			cleanedResponse = cleanedResponse.substring("".length).trim();
 		}
-		cleanedResponse = cleanedResponse
-			.replace(/^```json\s*/, "")
-			.replace(/\s*```$/, "");
+
+		// Check for and remove "" at the end of the response
+		if (cleanedResponse.endsWith("")) {
+			cleanedResponse = cleanedResponse
+				.substring(0, cleanedResponse.length - "".length)
+				.trim();
+		}
+
+		// Apply a final trim to ensure no leading/trailing whitespace remains
+		cleanedResponse = cleanedResponse.trim();
 
 		const selectedPaths: unknown = JSON.parse(cleanedResponse);
 		const aiSelectedFilesSet = new Set<vscode.Uri>(); // NEW: aiSelectedFilesSet initialization
@@ -477,6 +620,7 @@ export async function selectRelevantFilesAI(
 		if (
 			activeEditorContext?.documentUri &&
 			!finalResultFiles.some(
+				// Use `some` for URI comparison by `fsPath`
 				(uri) => uri.fsPath === activeEditorContext.documentUri.fsPath
 			)
 		) {
@@ -517,6 +661,7 @@ export async function selectRelevantFilesAI(
 		if (
 			activeEditorContext?.documentUri &&
 			!fallbackResultFiles.some(
+				// Use `some` for URI comparison by `fsPath`
 				(uri) => uri.fsPath === activeEditorContext.documentUri.fsPath
 			)
 		) {

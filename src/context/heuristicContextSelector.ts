@@ -31,15 +31,79 @@ export async function getHeuristicRelevantFiles(
 		maxCallHierarchyFiles: options?.maxCallHierarchyFiles ?? 2,
 	};
 
+	// NEW: Identify files strongly related to the active symbol for biasing
+	const symbolRelatedRelativePaths = new Set<string>();
+	if (activeSymbolDetailedInfo) {
+		// Helper to add URI to symbolRelatedRelativePaths set
+		const addUriToSymbolRelated = (
+			location: vscode.Uri | vscode.Location | vscode.Location[] | undefined
+		) => {
+			if (!location) {
+				return;
+			}
+			let actualUri: vscode.Uri | undefined;
+			if (location instanceof vscode.Uri) {
+				actualUri = location;
+			} else if ("uri" in location) {
+				// For vscode.Location
+				actualUri = location.uri;
+			} else if (Array.isArray(location) && location.length > 0) {
+				// For vscode.Location[]
+				actualUri = location[0].uri; // Take the first one, assuming relevance
+			}
+
+			if (actualUri && actualUri.scheme === "file") {
+				symbolRelatedRelativePaths.add(
+					path
+						.relative(projectRoot.fsPath, actualUri.fsPath)
+						.replace(/\\/g, "/")
+				);
+			}
+		};
+
+		// Add definition, type definition, and implementations URIs
+		addUriToSymbolRelated(activeSymbolDetailedInfo.definition);
+		addUriToSymbolRelated(activeSymbolDetailedInfo.typeDefinition);
+		if (activeSymbolDetailedInfo.implementations) {
+			activeSymbolDetailedInfo.implementations.forEach((loc) =>
+				addUriToSymbolRelated(loc)
+			);
+		}
+
+		// Add referenced type definitions URIs
+		if (activeSymbolDetailedInfo.referencedTypeDefinitions) {
+			for (const relativePath of activeSymbolDetailedInfo.referencedTypeDefinitions.keys()) {
+				// The key is already a relative path, so add directly
+				symbolRelatedRelativePaths.add(relativePath);
+			}
+		}
+
+		// Add call hierarchy URIs (from the call objects themselves)
+		if (activeSymbolDetailedInfo.incomingCalls) {
+			for (const call of activeSymbolDetailedInfo.incomingCalls) {
+				addUriToSymbolRelated(call.from.uri);
+			}
+		}
+		if (activeSymbolDetailedInfo.outgoingCalls) {
+			for (const call of activeSymbolDetailedInfo.outgoingCalls) {
+				addUriToSymbolRelated(call.to.uri);
+			}
+		}
+	}
+
 	// 1. Always include the active file if present
 	if (activeEditorContext?.documentUri) {
 		relevantFilesSet.add(activeEditorContext.documentUri);
 	}
 
-	// 2. Include files in the same directory as the active file
+	// 2. Include files in the same directory as the active file, biased by symbol relevance
 	if (activeEditorContext?.filePath) {
 		const activeFileDir = path.dirname(activeEditorContext.filePath);
-		let sameDirCount = 0;
+		const sameDirFilesWithBias: {
+			uri: vscode.Uri;
+			isSymbolRelated: boolean;
+		}[] = [];
+
 		for (const fileUri of allScannedFiles) {
 			if (cancellationToken?.isCancellationRequested) {
 				break;
@@ -48,19 +112,32 @@ export async function getHeuristicRelevantFiles(
 				.relative(projectRoot.fsPath, fileUri.fsPath)
 				.replace(/\\/g, "/");
 			if (path.dirname(relativePath) === activeFileDir) {
-				if (sameDirCount >= effectiveOptions.maxSameDirectoryFiles) {
-					break;
-				}
-				if (!relevantFilesSet.has(fileUri)) {
-					// Only add and count if genuinely new to the set
-					relevantFilesSet.add(fileUri);
-					sameDirCount++;
-				}
+				const isSymbolRelated = symbolRelatedRelativePaths.has(relativePath);
+				sameDirFilesWithBias.push({ uri: fileUri, isSymbolRelated });
+			}
+		}
+
+		// Prioritize symbol-related files within the same directory
+		sameDirFilesWithBias.sort(
+			(a, b) => (b.isSymbolRelated ? 1 : 0) - (a.isSymbolRelated ? 1 : 0)
+		); // Move symbol-related files to front
+
+		let sameDirCount = 0;
+		for (const fileEntry of sameDirFilesWithBias) {
+			if (cancellationToken?.isCancellationRequested) {
+				break;
+			}
+			if (sameDirCount >= effectiveOptions.maxSameDirectoryFiles) {
+				break;
+			}
+			if (!relevantFilesSet.has(fileEntry.uri)) {
+				relevantFilesSet.add(fileEntry.uri);
+				sameDirCount++;
 			}
 		}
 	}
 
-	// 3. Include direct dependencies of the active file
+	// 3. Include direct dependencies of the active file, biased by symbol relevance
 	if (
 		activeEditorContext?.filePath &&
 		activeEditorContext?.documentUri && // Ensure documentUri is present for relative path conversion
@@ -73,12 +150,12 @@ export async function getHeuristicRelevantFiles(
 		const importedByActiveFile = fileDependencies.get(activeFileRelativePath);
 
 		if (importedByActiveFile) {
-			let directDepCount = 0;
+			const directDependenciesWithBias: {
+				uri: vscode.Uri;
+				isSymbolRelated: boolean;
+			}[] = [];
 			for (const depPath of importedByActiveFile) {
 				if (cancellationToken?.isCancellationRequested) {
-					break;
-				}
-				if (directDepCount >= effectiveOptions.maxDirectDependencies) {
 					break;
 				}
 				// Find the original URI for the dependency from allScannedFiles
@@ -88,16 +165,34 @@ export async function getHeuristicRelevantFiles(
 							.relative(projectRoot.fsPath, uri.fsPath)
 							.replace(/\\/g, "/") === depPath
 				);
-				if (depUri && !relevantFilesSet.has(depUri)) {
-					// Only add and count if genuinely new to the set
-					relevantFilesSet.add(depUri);
+				if (depUri) {
+					const isSymbolRelated = symbolRelatedRelativePaths.has(depPath);
+					directDependenciesWithBias.push({ uri: depUri, isSymbolRelated });
+				}
+			}
+
+			// Prioritize symbol-related direct dependencies
+			directDependenciesWithBias.sort(
+				(a, b) => (b.isSymbolRelated ? 1 : 0) - (a.isSymbolRelated ? 1 : 0)
+			);
+
+			let directDepCount = 0;
+			for (const depEntry of directDependenciesWithBias) {
+				if (cancellationToken?.isCancellationRequested) {
+					break;
+				}
+				if (directDepCount >= effectiveOptions.maxDirectDependencies) {
+					break;
+				}
+				if (!relevantFilesSet.has(depEntry.uri)) {
+					relevantFilesSet.add(depEntry.uri);
 					directDepCount++;
 				}
 			}
 		}
 	}
 
-	// 4. Include files that directly import the active file (reverse dependencies)
+	// 4. Include files that directly import the active file (reverse dependencies), biased by symbol relevance
 	if (
 		activeEditorContext?.filePath &&
 		activeEditorContext?.documentUri && // Ensure documentUri is also present for relative path conversion
@@ -113,13 +208,13 @@ export async function getHeuristicRelevantFiles(
 		);
 
 		if (importersOfActiveFile && importersOfActiveFile.length > 0) {
-			let countAdded = 0;
+			const reverseDependenciesWithBias: {
+				uri: vscode.Uri;
+				isSymbolRelated: boolean;
+			}[] = [];
 			for (const importerPath of importersOfActiveFile) {
-				if (
-					cancellationToken?.isCancellationRequested ||
-					countAdded >= effectiveOptions.maxReverseDependencies // Use effectiveOptions
-				) {
-					break; // Stop if cancelled or limit reached
+				if (cancellationToken?.isCancellationRequested) {
+					break;
 				}
 				// Find the original URI for the importer from allScannedFiles
 				const importerUri = allScannedFiles.find(
@@ -128,9 +223,30 @@ export async function getHeuristicRelevantFiles(
 							.relative(projectRoot.fsPath, uri.fsPath)
 							.replace(/\\/g, "/") === importerPath
 				);
-				if (importerUri && !relevantFilesSet.has(importerUri)) {
-					// Only add and count if genuinely new to the set
-					relevantFilesSet.add(importerUri);
+				if (importerUri) {
+					const isSymbolRelated = symbolRelatedRelativePaths.has(importerPath);
+					reverseDependenciesWithBias.push({
+						uri: importerUri,
+						isSymbolRelated,
+					});
+				}
+			}
+
+			// Prioritize symbol-related reverse dependencies
+			reverseDependenciesWithBias.sort(
+				(a, b) => (b.isSymbolRelated ? 1 : 0) - (a.isSymbolRelated ? 1 : 0)
+			);
+
+			let countAdded = 0;
+			for (const importerEntry of reverseDependenciesWithBias) {
+				if (cancellationToken?.isCancellationRequested) {
+					break;
+				}
+				if (countAdded >= effectiveOptions.maxReverseDependencies) {
+					break; // Stop if cancelled or limit reached
+				}
+				if (!relevantFilesSet.has(importerEntry.uri)) {
+					relevantFilesSet.add(importerEntry.uri);
 					countAdded++;
 				}
 			}
@@ -138,6 +254,7 @@ export async function getHeuristicRelevantFiles(
 	}
 
 	// 5. Include files from active symbol's call hierarchy (incoming and outgoing calls)
+	// This section inherently deals with symbol-relevant files, so no additional 'biasing' logic is needed here.
 	if (
 		activeEditorContext?.documentUri && // Ensure there's an active file
 		activeSymbolDetailedInfo // Ensure detailed symbol info is available
