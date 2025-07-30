@@ -1,13 +1,11 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { AIRequestService } from "../../services/aiRequestService";
 import { ActiveSymbolDetailedInfo } from "../../services/contextService";
 import { HistoryEntryPart } from "../../sidebar/common/sidebarTypes";
 import * as sidebarTypes from "../../sidebar/common/sidebarTypes";
-import { ERROR_OPERATION_CANCELLED } from "../gemini";
 import { CodeIssue } from "../../ai/enhancedCodeGeneration"; // NEW: Import CodeIssue
 
-const MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT = 1000;
+const MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT = 5000;
 const MAX_REFERENCED_TYPES_TO_INCLUDE_PROMPT = 3;
 
 const jsonSchemaReference = `
@@ -472,6 +470,7 @@ ${formatCallHierarchy(
 		: "";
 
 	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
         You are an expert software engineer. Your ONLY task is to generate a JSON ExecutionPlan to resolve all reported diagnostics.
 
         The previous code generation/modification resulted in issues. Your plan MUST resolve ALL "Error" diagnostics, and address "Warning" and "Information" diagnostics where appropriate without new errors. DO NOT revert changes already completed, unless explicitly required to fix a new regression.
@@ -530,5 +529,6 @@ ${formatCallHierarchy(
         Your output MUST strictly adhere to the following TypeScript interfaces for \`ExecutionPlan\` and \`PlanStep\` types. Pay special attention to the 'path' field for file operations.
         
         ExecutionPlan (ONLY JSON):
+								------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------
 `;
 }

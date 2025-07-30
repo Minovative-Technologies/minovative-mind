@@ -1,7 +1,6 @@
 import { EnhancedCodeGenerator } from "../../ai/enhancedCodeGeneration";
 import * as sidebarTypes from "../common/sidebarTypes";
 import * as vscode from "vscode";
-import { TEMPERATURE } from "../common/sidebarConstants";
 import { AIRequestService } from "../../services/aiRequestService";
 import * as crypto from "crypto";
 
@@ -36,7 +35,10 @@ export async function _performModification(
             `;
 	}
 
-	const prompt = `You are an expert AI software developer tasked with modifying the provided file content based on the given instructions. ONLY focus on generating code.
+	const prompt = `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+
+	You are an expert software developer tasked with modifying the provided file content based on the given instructions. ONLY focus on generating code.
 
     --- Specialized Merge Instruction ---
     ${specializedMergeInstruction}
@@ -61,11 +63,10 @@ export async function _performModification(
     ${modificationPrompt}
     --- End Modification Instruction ---
 
-    Your complete, raw modified file content:`;
-
-	const generationConfig = {
-		temperature: TEMPERATURE,
-	};
+    Your complete, raw modified file content:
+				
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------
+`;
 
 	let modifiedContent = "";
 	try {
@@ -83,7 +84,7 @@ export async function _performModification(
 		};
 		const genResult = await enhancedCodeGenerator.generateFileContent(
 			filePath,
-			modificationPrompt,
+			prompt, // Changed from modificationPrompt to prompt as per instruction
 			generationContext,
 			modelName,
 			token,

@@ -9,8 +9,11 @@ export async function generateLightweightPlanPrompt(
 	aiRequestService: AIRequestService,
 	token?: vscode.CancellationToken
 ): Promise<string> {
-	const prompt = `Given the following AI response, generate a cooncise summary for the user to implement, according to the AI response. Focus on the core actionable intent and summary. Do not include any extraneous text. Only use the "/plan implement this:" at the beginning	of the response.
-AI Response: ${aiMessageContent}`;
+	const prompt = `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	Given the following AI response, generate a cooncise summary for the user to implement, according to the AI response. Focus on the core actionable intent and summary. Do not include any extraneous text. Only use the "/plan implement this:" at the beginning	of the response.
+AI Response: ${aiMessageContent}
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 
 	try {
 		const result = await aiRequestService.generateWithRetry(

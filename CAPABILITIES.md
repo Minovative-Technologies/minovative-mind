@@ -155,12 +155,11 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 ### 6.1 API & Model Settings
 
 - Gemini API key setup with secure storage
-- Model selection: `gemini-2.5-pro`, `flash`, `lite`
+- Model selection: `gemini-2.5-pro`/`flash`/`flash-lite`
 
 ### 6.2 Context Filtering
 
 - Explicit file/directory inclusions & exclusions
-- `.gitignore` compliant filtering
 
 ---
 
@@ -168,8 +167,7 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 
 ### 7.1 Filesystem Safety
 
-- Locked to workspace directory
-- Prevents path traversal, obeys `.gitignore`
+- Locked to project's workspace directory
 
 ### 7.2 Shell Command Approval
 

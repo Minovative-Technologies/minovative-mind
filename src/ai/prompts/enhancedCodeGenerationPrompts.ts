@@ -264,28 +264,28 @@ function _formatGroupedIssuesForPrompt(
 
 		// Add suggested strategy for the group
 		let suggestedStrategy =
-			"Review the provided code snippet and diagnostic message. Apply the most targeted fix to resolve this specific issue while adhering to all critical requirements.";
+			"------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------ Review the provided code snippet and diagnostic message. Apply the most targeted fix to resolve this specific issue while adhering to all critical requirements. ------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------";
 		if (groupKey.includes("ISSUE: Missing Identifier")) {
 			suggestedStrategy =
-				"Suggested Strategy: This group contains 'Cannot find name' errors, indicating a missing identifier. This almost always means a missing import statement, a typo in a variable/function/type name, or an undeclared variable/constant. Your specific action should be: 1. **Check Imports**: Verify if the missing identifier is an external dependency or a local module export; add the necessary import statement if it's missing. 2. **Check Typos**: Meticulously review the spelling of the identifier in both its usage and declaration. 3. **Check Scope/Declaration**: Ensure the identifier is declared and accessible within the current scope. If it's an undeclared variable, declare it with the correct type. Pay close attention to case sensitivity.";
+				"------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------ Suggested Strategy: This group contains 'Cannot find name' errors, indicating a missing identifier. This almost always means a missing import statement, a typo in a variable/function/type name, or an undeclared variable/constant. Your specific action should be: 1. **Check Imports**: Verify if the missing identifier is an external dependency or a local module export; add the necessary import statement if it's missing. 2. **Check Typos**: Meticulously review the spelling of the identifier in both its usage and declaration. 3. **Check Scope/Declaration**: Ensure the identifier is declared and accessible within the current scope. If it's an undeclared variable, declare it with the correct type. Pay close attention to case sensitivity. ------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------";
 		} else if (groupKey.includes("TYPE: UNUSED_IMPORT")) {
 			suggestedStrategy =
-				"Suggested Strategy: This group contains unused import warnings. This indicates an an import statement that is no longer being used by any code within the file. Your specific action should be: 1. **Remove Statement**: Delete the entire unused import statement. 2. **Verify No Reliance**: Before removal, quickly scan the file to ensure no other code unexpectedly relies on this import (e.g., dynamic usage not caught by static analysis).";
+				"------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------ Suggested Strategy: This group contains unused import warnings. This indicates an an import statement that is no longer being used by any code within the file. Your specific action should be: 1. **Remove Statement**: Delete the entire unused import statement. 2. **Verify No Reliance**: Before removal, quickly scan the file to ensure no other code unexpectedly relies on this import (e.g., dynamic usage not caught by static analysis). ------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------";
 		} else if (groupKey.includes("TYPE: SECURITY")) {
 			suggestedStrategy =
-				"Suggested Strategy: This group contains security issues or vulnerabilities. Your specific action should be: 1. **Implement Secure Practices**: Apply standard secure coding practices relevant to the language and context (e.g., input validation, output encoding, proper authentication/authorization, secure data handling). 2. **Mitigate Vulnerability**: Directly address the vulnerability described in the message (e.g., prevent XSS, SQL injection, path traversal).";
+				"------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------ Suggested Strategy: This group contains security issues or vulnerabilities. Your specific action should be: 1. **Implement Secure Practices**: Apply standard secure coding practices relevant to the language and context (e.g., input validation, output encoding, proper authentication/authorization, secure data handling). 2. **Mitigate Vulnerability**: Directly address the vulnerability described in the message (e.g., prevent XSS, SQL injection, path traversal). ------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------";
 		} else if (groupKey.includes("TYPE: BEST_PRACTICE")) {
 			suggestedStrategy =
-				"Suggested Strategy: This group contains best practice issues. These are typically suggestions for improving code quality, readability, maintainability, or performance, rather than critical errors. Your specific action should be: 1. **Refine Code**: Refactor small sections to align with established coding patterns, improve naming conventions, or use more idiomatic language features. 2. **Enhance Readability/Maintainability**: Focus on clarity, simplicity, and consistency without introducing new bugs.";
+				"------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------ Suggested Strategy: This group contains best practice issues. These are typically suggestions for improving code quality, readability, maintainability, or performance, rather than critical errors. Your specific action should be: 1. **Refine Code**: Refactor small sections to align with established coding patterns, improve naming conventions, or use more idiomatic language features. 2. **Enhance Readability/Maintainability**: Focus on clarity, simplicity, and consistency without introducing new bugs. ------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------";
 		} else if (
 			groupKey.includes("TYPE: SYNTAX") &&
 			groupKey.includes("ERROR")
 		) {
 			suggestedStrategy =
-				"Suggested Strategy: This group contains critical syntax errors that prevent the code from compiling or parsing correctly. Your specific action should be: 1. **Correct Exact Mistake**: Focus solely on fixing the precise syntax mistake indicated by the diagnostic message (e.g., missing semicolon, incorrect keyword usage, mismatched parentheses/braces, incorrect function signature). 2. **Minimal Changes**: Ensure changes are localized and do not affect surrounding correct code.";
+				"------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------ Suggested Strategy: This group contains critical syntax errors that prevent the code from compiling or parsing correctly. Your specific action should be: 1. **Correct Exact Mistake**: Focus solely on fixing the precise syntax mistake indicated by the diagnostic message (e.g., missing semicolon, incorrect keyword usage, mismatched parentheses/braces, incorrect function signature). 2. **Minimal Changes**: Ensure changes are localized and do not affect surrounding correct code. ------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------";
 		} else if (groupKey.includes("TYPE: OTHER")) {
 			suggestedStrategy =
-				"Suggested Strategy: This group contains general or uncategorized issues. While not falling into specific categories, they still require attention. Your specific action should be: 1. **Analyze Message**: Carefully read the diagnostic message and examine the problematic code snippet. 2. **Precise Fix**: Apply a targeted and precise fix that directly resolves the issue without introducing unnecessary changes or side effects.";
+				"------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------ Suggested Strategy: This group contains general or uncategorized issues. While not falling into specific categories, they still require attention. Your specific action should be: 1. **Analyze Message**: Carefully read the diagnostic message and examine the problematic code snippet. 2. **Precise Fix**: Apply a targeted and precise fix that directly resolves the issue without introducing unnecessary changes or side effects. ------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------";
 		}
 		formattedString += `Suggested Strategy: ${suggestedStrategy}\n`;
 
@@ -356,7 +356,9 @@ export function createEnhancedGenerationPrompt(
 		.map((req, idx) => `${idx + 1}. ${req}`)
 		.join("\n");
 
-	return `You are an expert software engineer specializing in ${languageId} development. Your task is to generate production-ready, accurate code. ONLY focus on generating code.
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	You are an expert software engineer specializing in ${languageId} development. Your task is to generate production-ready, accurate code. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
 ${formattedRequirements}
@@ -437,7 +439,8 @@ END_CODE
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
 - Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
+- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }
 
 /**
@@ -458,7 +461,9 @@ export function createRefinementPrompt(
 		content
 	);
 
-	return `The generated code has the following **VS Code-reported compilation/linting issues** that need to be fixed:
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	The generated code has the following **VS Code-reported compilation/linting issues** that need to be fixed:
 
 **Issues to Address:**
 ${formattedIssues}
@@ -544,7 +549,8 @@ END_CODE
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
 - Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
+- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }
 
 /**
@@ -612,7 +618,9 @@ export function createEnhancedModificationPrompt(
 		.map((req, idx) => `${idx + 1}. ${req}`)
 		.join("\n");
 
-	return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions. ONLY focus on generating code.
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	You are an expert software engineer. Your task is to modify the existing file according to the provided instructions. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
 ${formattedRequirements}
@@ -690,7 +698,9 @@ END_CODE
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
 - Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
+- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.
+
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }
 
 /**
@@ -725,7 +735,9 @@ export function createRefineModificationPrompt(
 			"\n- **Import Integrity Compromised**: All imports appear to have been removed, which is highly likely to cause compilation errors.";
 	}
 
-	return `${initialFeedback}\n\n**Issues with the modification:**\n${diffIssues
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	${initialFeedback}\n\n**Issues with the modification:**\n${diffIssues
 		.map((issue) => `- ${issue}`)
 		.join(
 			"\n"
@@ -803,7 +815,9 @@ END_CODE
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
 - Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
+- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.
+
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }
 
 /**
@@ -897,7 +911,9 @@ ${relevantOutcomes
 `;
 	}
 
-	return `You are an expert software engineer performing a root cause analysis on a failed code correction attempt.
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	You are an expert software engineer performing a root cause analysis on a failed code correction attempt.
 
 Your primary goal is to diagnose WHY the previous attempt did not resolve issues or introduced new ones, and to provide actionable insights for the *next* correction.
 
@@ -945,7 +961,9 @@ ${formattedDiff}
 1.  **Root Cause Diagnosis**: Based on the context provided (original code, attempted code, diff, and issue lists *before* and *after*, and especially 'Recent Correction Attempt Outcomes' if available), clearly state the precise root cause(s) of the failure. Focus on specific code changes (or lack thereof) that led to the issues persisting or new ones appearing. For an oscillation, explicitly diagnose *why* the cycle is occurring.
 2.  **Actionable Strategy**: Propose a concrete, fundamentally different strategy for the *next* correction attempt. Explain *how* the AI should adjust its approach to successfully resolve the issues this time, explicitly addressing the identified root causes and aiming to break any detected oscillation patterns.
 3.  **No Code**: Reiterate: Your output must be *only* the analysis text. Do not provide any code suggestions or snippets.
-4. **Brevity**: Keep the analysis concise and to the point.`;
+4. **Brevity**: Keep the analysis concise and to the point.
+
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }
 
 /**
@@ -966,7 +984,9 @@ export function createAlternativeCorrectionPrompt(
 		content
 	);
 
-	return `The code has the following **VS Code-reported compilation/linting issues** that need to be fixed using a different approach:
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	The code has the following **VS Code-reported compilation/linting issues** that need to be fixed using a different approach:
 
 **Issues to Address:**
 ${formattedIssues}
@@ -1053,7 +1073,9 @@ END_CODE
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
 - Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
+- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.
+
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }
 
 /**
@@ -1074,7 +1096,9 @@ export function createSyntaxCorrectionPrompt(
 		content
 	);
 
-	return `Fix the following **VS Code-reported compilation/linting issues** (syntax errors) in the code:
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	Fix the following **VS Code-reported compilation/linting issues** (syntax errors) in the code:
 
 **Syntax Issues:**
 ${formattedIssues}
@@ -1161,7 +1185,9 @@ END_CODE
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
 - Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
+- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.
+
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }
 
 /**
@@ -1182,7 +1208,9 @@ export function createImportCorrectionPrompt(
 		content
 	);
 
-	return `Fix the following **VS Code-reported compilation/linting issues** (import errors/warnings) in the code:
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	Fix the following **VS Code-reported compilation/linting issues** (import errors/warnings) in the code:
 
 **Import Issues:**
 ${formattedIssues}
@@ -1265,7 +1293,9 @@ END_CODE
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
 - Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
+- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.
+
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }
 
 /**
@@ -1286,7 +1316,9 @@ export function createPracticeCorrectionPrompt(
 		content
 	);
 
-	return `Fix the following **VS Code-reported compilation/linting issues** (best practice or other general issues) in the code:
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	Fix the following **VS Code-reported compilation/linting issues** (best practice or other general issues) in the code:
 
 **Issues to Address:**
 ${formattedIssues}
@@ -1369,7 +1401,9 @@ END_CODE
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
 - Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
+- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.
+
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }
 
 /**
@@ -1390,7 +1424,9 @@ export function createSecurityCorrectionPrompt(
 		content
 	);
 
-	return `Fix the following **VS Code-reported compilation/linting issues** (security vulnerabilities) in the code:
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	Fix the following **VS Code-reported compilation/linting issues** (security vulnerabilities) in the code:
 
 **Security Issues:**
 ${formattedIssues}
@@ -1472,7 +1508,9 @@ END_CODE
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
 - Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
+- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.
+
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }
 
 /**
@@ -1498,7 +1536,9 @@ export function createPureCodeFormatCorrectionPrompt(
 		content
 	);
 
-	return `You are an expert software engineer. Your task is to correct the format of the previously generated code. ONLY focus on generating code.
+	return `
+	------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+	You are an expert software engineer. Your task is to correct the format of the previously generated code. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
 1. **Strict Format Adherence**: Your response MUST contain ONLY the generated code enclosed STRICTLY within \`BEGIN_CODE\` and \`END_CODE\` delimiters. NO other text, explanations, or markdown fences (\`\`\`language) are allowed outside these delimiters.
@@ -1590,5 +1630,7 @@ END_CODE
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
 - Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
+- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.
+
+------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`;
 }

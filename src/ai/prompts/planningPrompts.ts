@@ -131,6 +131,8 @@ export function createInitialPlanningExplanationPrompt(
 			: "";
 
 	return `
+    ------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+
     You are an expert software engineer. Your task is to ONLY explain your detailed, step-by-step plan in Markdown to fulfill the user's request.
 
     **Instructions for Plan Explanation:**
@@ -155,6 +157,8 @@ export function createInitialPlanningExplanationPrompt(
     *** End Broader Project ***
 
     --- Plan Explanation (Text with Markdown) ---
+
+    ------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------
 `;
 }
 
@@ -219,7 +223,7 @@ export function createPlanningPrompt(
                 \"action\": \"create_file\",
                 \"description\": \"Create a basic config.json file.\",
                 \"path\": \"src/config.json\",
-                \"content\": \"{\\n  \\\"setting\\\": \\\"default\\\"\\n}\"
+                \"content\": \"{\\n  \\\"setting\\\": \\\"default\"\\n}\"
             }
         ]
     }
@@ -320,7 +324,7 @@ export function createPlanningPrompt(
                 \"action\": \"create_file\",
                 \"description\": \"Create a configuration file for the API service.\",
                 \"path\": \"src/config/api.config.json\",
-                \"content\": \"{\\n  \\\"apiUrl\\\": \\\"https://api.example.com/v1\\\"\\n}\"
+                \"content\": \"{\\n  \\\"apiUrl\\\": \\\"https://api.example.com/v1\"\\n}\"
             }
         ]
     }
@@ -520,10 +524,37 @@ export function createPlanningPrompt(
     `;
 
 	return `
-    **CRITICAL**: You MUST generate ONLY a valid JSON object.
-    **ABSOLUTELY ESSENTIAL**: The JSON object MUST contain a top-level string field named \`planDescription\` and a top-level array field named \`steps\`.
+    ------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+    You are an expert software engineer. Your task is to produce a comprehensive planning response.
 
-    **Goal:** The entire response MUST be ONLY a valid JSON object representing the step-by-step plan, starting with { and ending with }. Do NOT include any introductory text, explanations, apologies, or markdown formatting.
+    **CRITICAL DUAL OUTPUT MANDATE**: Your complete response MUST contain two distinct, consecutive parts with NO other text or formatting between them:
+    1.  **Detailed Textual Plan**: This part MUST be the detailed, step-by-step plan explained in human-readable Markdown. It is provided to you in the "Detailed Textual Plan Explanation" section. You MUST reproduce it verbatim.
+    2.  **Executable JSON Plan**: This part MUST immediately follow the textual plan. It MUST be a valid JSON object representing the EXACT SAME plan described in the textual part. It MUST NOT include any introductory text, explanations, markdown formatting (like \`\`\`json fences), apologies, or extraneous comments before or after the JSON object. It MUST start with \`{\` and end with \`}\`.
+
+    **JSON Plan Structure Adherence**:
+    *   The JSON plan MUST strictly adhere to the \`ExecutionPlan\` structure, including a top-level \`planDescription\` string and an array of \`PlanStep\` objects.
+    *   The structure is as follows:
+        \`\`\`json
+        {
+            "planDescription": "Brief summary of the overall goal.",
+            "steps": [
+                {
+                    "step": 1,
+                    "action": "create_directory" | "create_file" | "modify_file" | "run_command",
+                    "description": "Description of step (always required).",
+                    "path": "relative/path/to/target",
+                    "content": "...",           // Required for 'create_file' with explicit content
+                    "generate_prompt": "...",   // Required for 'create_file' with AI-generated content
+                    "modification_prompt": "...", // Required for 'modify_file'
+                    "command": "..."            // Required for 'run_command'
+                }
+            ]
+        }
+        \`\`\`
+    *   All \`PlanStep\` fields (like \`step\`, \`action\`, \`description\`, \`path\`, \`content\`, \`generate_prompt\`, \`modification_prompt\`, \`command\`) MUST be correctly used as defined by the \`PlanStepAction\` enum and related interfaces. Only include relevant fields for each \`action\` type. For example, \`content\` or \`generate_prompt\` for \`create_file\`, \`modification_prompt\` for \`modify_file\`, and \`command\` for \`run_command\`. Other fields should be omitted or set to \`undefined\`.
+    *   **Fidelity and Accuracy Emphasis**: The JSON plan MUST be a direct, accurate, and complete translation of the detailed steps provided in the "Detailed Textual Plan Explanation" section. Ensure EVERY action described textually is represented faithfully in the JSON structure, and that no steps should be omitted or invented.
+    *   **Strict JSON Formatting**: The JSON output MUST be ONLY the JSON object itself, starting with \`{\` and ending with \`}\`. It must NOT include any introductory text, explanations, markdown formatting (like \`\`\`json fences), apologies, or extraneous comments before or after the JSON object.
+    *   **JSON Escaping**: Ensure all string values within the JSON (like descriptions, prompts, paths, content) correctly escape special characters (e.g., \`\\n\`, \`\\r\`, \`\\\`, \`\"\`).
 
     ${
 			extractedRetryInstruction
@@ -531,7 +562,7 @@ export function createPlanningPrompt(
 				: ""
 		}
 
-    **Instructions for Plan Generation:**
+    **Instructions for Plan Generation (JSON Part)**:
     *   **Requirements**:
         *   Avoid cosmetic changes.
         *   Preserve existing code structure, indentation, and formatting.
@@ -581,5 +612,7 @@ export function createPlanningPrompt(
 
     **IMPORTANT:** For modification steps, ensure the modification_prompt is specific and actionable, focusing on substantial changes rather warmer cosmetic formatting. The AI will be instructed to preserve existing formatting and only make the requested functional changes.
 
-    Generate the execution plan:`;
+    Generate the response (Textual Plan in Markdown followed by JSON Plan):
+    ------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------
+`;
 }

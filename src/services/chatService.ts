@@ -79,9 +79,14 @@ export class ChatService {
 			// Revise construction of input for aiRequestService.generateWithRetry
 			const initialSystemPrompt: HistoryEntryPart[] = [
 				{
-					text: `You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Your primary role is to answer user questions and provide information. Crucially, you must not generate, modify, or execute code. You are capable of discussing programming concepts but cannot produce code snippets or perform code-related actions yourself.\n\nProject Context:\n${
+					text: `
+					------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+					
+					You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Your primary role is to answer user questions and provide information. Crucially, you must not generate, modify, or execute code. You are capable of discussing programming concepts but cannot produce code snippets or perform code-related actions yourself. Focus on creating explainations on how something will be implemented into the existing project.\n\nProject Context:\n${
 						projectContext.contextString
-					}${urlContextString ? `\n\n${urlContextString}` : ""}`,
+					}${urlContextString ? `\n\n${urlContextString}` : ""}
+					
+					------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`,
 				},
 			];
 			const fullUserTurnContents: HistoryEntryPart[] = [
@@ -261,7 +266,12 @@ export class ChatService {
 			// Construct the full user turn contents, including system prompt and user input
 			const initialSystemPrompt: HistoryEntryPart[] = [
 				{
-					text: `You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Your primary role is to answer user questions and provide information. Crucially, you must not generate, modify, or execute code. You are capable of discussing programming concepts but cannot produce code snippets or perform code-related actions yourself.\n\nProject Context:\n${projectContext.contextString}`,
+					text: `
+					------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+					
+					You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Your primary role is to answer user questions and provide information. Crucially, you must not generate, modify, or execute code. You are capable of discussing programming concepts but cannot produce code snippets or perform code-related actions yourself. Focus on creating explainations on how something will be implemented into the existing project.\n\nProject Context:\n${projectContext.contextString}
+					
+					------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------`,
 				},
 			];
 			const fullUserTurnContents: HistoryEntryPart[] = [

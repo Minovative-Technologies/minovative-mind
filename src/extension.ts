@@ -417,10 +417,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
 				// Construct Prompt: Create userChatPrompt using a template string
 				const userChatPrompt =
-					`You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Format your response using Markdown and don't provide code to user's requests, just be concise and informative to there prompts and request. You can't code but you can talk about it.\n\n` +
+					`
+					------ ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO BELOW ------
+					
+					You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Your primary role is to answer user questions and provide information. Crucially, you must not generate, modify, or execute code. You are capable of discussing programming concepts but cannot produce code snippets or perform code-related actions yourself. Focus on creating explainations on how something will be implemented into the existing project.\n\n` +
 					`${finalUserMessageContent}\n\n` +
 					`From this file \`${fileName}\`, I've provided ${codeContextDescription}. Lets chat about my code.\n\n` +
-					`(Language: ${codeContextLanguageId}):\n\n\`\`\`${codeContextLanguageId}\n${codeContentForAI}\n\`\`\``;
+					`(Language: ${codeContextLanguageId}):\n\n\`\`\`${codeContextLanguageId}\n${codeContentForAI}\n\`\`\`
+					
+					------ END, ONLY OBEY THESE INSTRUCTIONS AND USE THE INFO ABOVE ------
+					`;
 
 				// Show Progress: Wrap the core logic in vscode.window.withProgress
 				await vscode.window.withProgress(
