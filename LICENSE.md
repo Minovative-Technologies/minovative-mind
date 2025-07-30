@@ -1,16 +1,21 @@
-# PROPRIETARY LICENSE
+# MIT License
 
-Copyright (c) 2025 Minovative Technologies. All Rights Reserved.
+Copyright (c) 2025 Minovative Technologies
 
-This project, including all its code, design, features, and content, is the exclusive property of Minovative Technologies.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-**Strictly Prohibited Actions:**
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-- **Distribution:** You are expressly prohibited from distributing, sublicensing, selling, renting, leasing, or otherwise transferring this project or any part thereof to any third party.
-- **Modification:** You are expressly prohibited from modifying, adapting, translating, reverse engineering, decompiling, disassembling, or creating derivative works based on this project or any part thereof.
-- **Replication/Copying:** You are expressly prohibited from replicating, copying, reproducing, or duplicating this project or any part thereof.
-
-**No Permitted Use:**
-Users are not allowed to use this project for any purpose other than its intended function as a VS Code extension, as provided by Minovative Technologies. Any use that involves distribution, modification, or replication of the source code or any other component of this project is strictly forbidden.
-
-This project is owned and maintained solely by Minovative Technologies. Unauthorized use, reproduction, or distribution of this program, or any portion of it, may result in severe civil and criminal penalties, and will be prosecuted to the maximum extent possible under law.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

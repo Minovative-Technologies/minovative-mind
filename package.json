@@ -120,6 +120,8 @@
 		"@vscode/codicons": "^0.0.38",
 		"@vscode/test-electron": "^2.3.9",
 		"eslint": "^9.31.0",
+		"eslint-plugin-import": "^2.32.0",
+		"eslint-plugin-unicorn": "^60.0.0",
 		"glob": "^11.0.3",
 		"ts-loader": "^9.5.1",
 		"typescript": "^5.8.3",
