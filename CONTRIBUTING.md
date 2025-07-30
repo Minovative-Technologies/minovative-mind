@@ -27,7 +27,7 @@ I or others will be looking for dedicated community members to join the core dev
 
 **This process is for developers who wish to gain write access (commit rights)** to the main Minovative Mind repository.
 
-- IMPORTANT: **If you are cloning or forking the project for your own use and innovation, this file does not apply to you.** I encourage you to build freely and creatively as you possibly can!
+- IMPORTANT: **If you're cloning or forking this project for your own use and innovation, Path 2 does not apply**. I warmly encourage you to explore, build, and create as freely and imaginatively as you like!
 
 ---
 

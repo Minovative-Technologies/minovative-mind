@@ -38,6 +38,8 @@ Now, that same power is available to you. Completely for free.
 
 - 💰 **Completely Free & Open Source:** No subscriptions, no platform fees. Minovative Mind is licensed under MIT and runs locally in your system. The only cost is your own usage of the Google Gemini API that you control.
 
+See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
+
 ## Quick Start (Get Started in 1-3 minutes)
 
 1. **Install the Extension:** Install directly from your VS Code editor by cloning it then downloading the file
@@ -60,7 +62,9 @@ Now, that same power is available to you. Completely for free.
    vsce package
    ```
 
-   - Now when you have the .vsce file (e.g. minovative-mind.vsce), install it by right clicking.
+   - Step 4: Installing Extension
+
+   - Now when you have the .vsce file (e.g. minovative-mind-1.2.3.vsce), install the extension by right clicking.
 
 - **Get Your API Key:**
 
