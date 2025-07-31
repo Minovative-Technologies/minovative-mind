@@ -9,8 +9,6 @@ import {
 import { ActiveSymbolDetailedInfo } from "../../services/contextService";
 import { generateFileChangeSummary } from "../../utils/diffingUtils";
 
-// --- Helper Functions (moved from EnhancedCodeGenerator and adapted) ---
-
 /**
  * Define issue ordering constants locally for prompt formatting.
  * These were originally private members of EnhancedCodeGenerator.

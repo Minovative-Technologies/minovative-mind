@@ -1,6 +1,17 @@
 import * as vscode from "vscode";
 import { generatePreciseTextEdits } from "../utils/diffingUtils";
 
+/**
+ * Proactively wraps raw code content with BEGIN_CODE and END_CODE delimiters.
+ * This ensures that the AI's output is in a predictable format for downstream parsing.
+ * @param codeContent The raw string content from the AI, expected to be code.
+ * @returns A string with the content wrapped in BEGIN_CODE/END_CODE delimiters on separate lines.
+ */
+export function wrapCodeWithDelimiters(codeContent: string): string {
+	// Ensure delimiters are on their own lines for clarity and parsing.
+	return `BEGIN_CODE\n${codeContent}\nEND_CODE`;
+}
+
 export function cleanCodeOutput(codeString: string): string {
 	if (!codeString) {
 		return "";
@@ -8,41 +19,27 @@ export function cleanCodeOutput(codeString: string): string {
 
 	const originalLength = codeString.length;
 
+	// Globally remove all BEGIN_CODE and END_CODE markers from the string.
+	// This ensures that these internal parsing markers are NEVER part of the final code.
+	let contentWithoutDelimiters = codeString.replace(
+		/BEGIN_CODE|END_CODE/gi,
+		""
+	);
+
 	// Heuristic thresholds to identify non-code or severely malformed output
-	const MIN_CODE_LENGTH_FOR_DELIMITER_MATCH = 10; // Minimum content length if delimiters are found
 	const MIN_ALPHANUMERIC_RATIO = 0.2; // At least 20% of characters should be alphanumeric
 	const MIN_CODE_ELEMENT_DENSITY = 0.01; // At least 1% of non-whitespace characters should be part of a common keyword/structural element
 	const MIN_CODE_LINES = 3; // Minimum meaningful lines expected for actual code
 	const MAX_LENGTH_REDUCTION_RATIO = 0.95; // If more than 95% of content is stripped (and original was substantial), it's suspicious
 
-	// 1. Check for BEGIN_CODE and END_CODE delimiters.
-	// Use the regex /(?:BEGIN_CODE)\n?([\s\S]*?)\n?(?:END_CODE)/i to capture content strictly between delimiters.
-	const delimiterMatch = codeString.match(
-		/(?:BEGIN_CODE)\n?([\s\S]*?)\n?(?:END_CODE)/i
+	// Step 1: Globally remove all Markdown code block fences (```...```)
+	// This new regex is more aggressive: it targets opening fences (with optional language ID)
+	// and closing fences on their own, removing them along with surrounding newlines,
+	// ensuring no markdown fence characters remain in the output.
+	let cleanedStringContent = contentWithoutDelimiters.replace(
+		/^```(?:\S+)?\s*\n?|\n?```$/gm, // The new, aggressive regex
+		"" // Replace matched fences with an empty string to remove them
 	);
-
-	// 2. If delimiters are found and content is captured, trim and return it immediately.
-	if (delimiterMatch && delimiterMatch[1]) {
-		const extracted = delimiterMatch[1].trim();
-		// If delimiters are present but the extracted content is extremely short,
-		// and the original input was substantial, consider it malformed.
-		if (
-			extracted.length < MIN_CODE_LENGTH_FOR_DELIMITER_MATCH &&
-			originalLength > MIN_CODE_LENGTH_FOR_DELIMITER_MATCH
-		) {
-			console.warn(
-				"CleanCodeOutput: Delimiter match yielded extremely short content, treating as malformed."
-			);
-			return "";
-		}
-		return extracted;
-	}
-
-	// 3. If delimiters are not found, continue with the existing cleaning logic.
-
-	// Step 1: Globally remove all Markdown code block fences (, , etc.)
-	// Replaced the old regex /(?:\w+)?\n?/g with a more precise one for Markdown code block fences.
-	let cleanedStringContent = codeString.replace(/(?:^|\s)[a-zA-Z0-9]*\n?/g, "");
 
 	// Step 2: Define a regular expression constant fileHeaderRegex
 	// This regex matches patterns like "--- Relevant File: ... ---", "--- File: ... ---", or "--- Path: ... ---".

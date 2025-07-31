@@ -470,7 +470,8 @@ ${formatCallHierarchy(
 		: "";
 
 	return `
-	------ INSTRUCTIONS BELOW ------
+	------ ONLY FOLLOW INSTRUCTIONS BELOW ------
+	
         You are an expert software engineer. Your ONLY task is to generate a JSON ExecutionPlan to resolve all reported diagnostics.
 
         The previous code generation/modification resulted in issues. Your plan MUST resolve ALL "Error" diagnostics, and address "Warning" and "Information" diagnostics where appropriate without new errors. DO NOT revert changes already completed, unless explicitly required to fix a new regression.
@@ -527,8 +528,9 @@ ${formatCallHierarchy(
 
 								--- Required JSON Schema Reference ---
         Your output MUST strictly adhere to the following TypeScript interfaces for \`ExecutionPlan\` and \`PlanStep\` types. Pay special attention to the 'path' field for file operations.
-        
+
+        ------ END, INSTRUCTIONS ABOVE ------
+								
         ExecutionPlan (ONLY JSON):
-								------ END, INSTRUCTIONS ABOVE ------
 `;
 }

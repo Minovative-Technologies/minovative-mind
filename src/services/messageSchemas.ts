@@ -40,8 +40,6 @@ const openFileSchema = z.object({
 		}),
 });
 
-// Add schemas for other message types referenced in the existing code or common interaction patterns.
-// For types with no significant payload, a simple z.object({ type: z.literal('...') }) is sufficient.
 const universalCancelSchema = z.object({ type: z.literal("universalCancel") });
 const webviewReadySchema = z.object({ type: z.literal("webviewReady") });
 const confirmPlanExecutionSchema = z.object({
@@ -129,6 +127,13 @@ const commitReviewSchema = z.object({
 	}),
 }); // Based on usage
 
+// Schema for a new feature request message
+const newFeatureRequestSchema = z.object({
+	type: z.literal("newFeatureRequest"), // Unique discriminator
+	featureName: z.string().nonempty("Feature name cannot be empty."),
+	description: z.string().nonempty("Feature description cannot be empty."),
+});
+
 export const allMessageSchemas = z.discriminatedUnion("type", [
 	planRequestSchema,
 	chatMessageSchema,
@@ -163,6 +168,7 @@ export const allMessageSchemas = z.discriminatedUnion("type", [
 	aiResponseEndSchema,
 	structuredPlanParseFailedSchema,
 	commitReviewSchema,
+	newFeatureRequestSchema,
 ]);
 
 // Export individual schemas if they are needed for more granular error reporting
@@ -171,4 +177,5 @@ export {
 	chatMessageSchema,
 	editChatMessageSchema,
 	openFileSchema,
+	newFeatureRequestSchema,
 };

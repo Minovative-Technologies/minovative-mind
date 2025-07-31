@@ -6,7 +6,7 @@ import {
 	ContextService,
 	ActiveSymbolDetailedInfo,
 } from "../services/contextService";
-import { cleanCodeOutput } from "../utils/codeUtils";
+import { cleanCodeOutput, wrapCodeWithDelimiters } from "../utils/codeUtils";
 import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils";
 import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { getIssueIdentifier, areIssuesSimilar } from "../utils/aiUtils";
@@ -585,60 +585,64 @@ export class EnhancedCodeGenerator {
 		}
 	}
 
-	/**
-	 * Create a new private method _checkPureCodeFormat within the EnhancedCodeGenerator class.
-	 * This method will accept the raw AI response string and perform the heuristic checks
-	 * described for cleanCodeOutput (specifically, for BEGIN_CODE/END_CODE delimiters).
-	 * If garbled or non-code output is detected, it should return a CodeValidationResult
-	 * object with isValid: false, and a CodeIssue of type "format_error".
-	 */
 	private _checkPureCodeFormat(rawAIResponse: string): CodeValidationResult {
 		const issues: CodeIssue[] = [];
 		const suggestions: string[] = [];
-		let isValidFormat = true;
-		let finalContent: string;
+		let isValidFormat = true; // Assume valid initially
 
+		// The `rawAIResponse` here is the output *after* `wrapCodeWithDelimiters` has been applied.
+		// So, it *should* always contain BEGIN_CODE/END_CODE at its outermost layer.
 		const BEGIN_CODE_REGEX = /BEGIN_CODE\n?([\s\S]*?)\n?END_CODE/i;
 		const delimiterMatch = rawAIResponse.match(BEGIN_CODE_REGEX);
 
-		if (delimiterMatch && delimiterMatch[1] !== undefined) {
-			// Delimiters found, extract content within them.
-			finalContent = delimiterMatch[1].trim();
-			if (finalContent.length === 0) {
+		// Use the fully cleaned output from `cleanCodeOutput` for the `finalContent`.
+		// `cleanCodeOutput` will now proactively strip *all* delimiters (outer and inner)
+		// as well as markdown fences and other non-code elements.
+		const cleanedContentForFinalResult = cleanCodeOutput(rawAIResponse);
+
+		if (delimiterMatch) {
+			// Delimiters were found (as expected from wrapCodeWithDelimiters).
+			// Now, check if the content *between* these outermost delimiters was meaningful.
+			// delimiterMatch[1] holds the content *between the first BEGIN_CODE and first END_CODE*.
+			// This is where AI's original output, potentially with *its own* delimiters, resides.
+			const contentBetweenOuterDelimiters = delimiterMatch[1]
+				? delimiterMatch[1].trim()
+				: "";
+
+			if (contentBetweenOuterDelimiters.length === 0) {
 				isValidFormat = false;
 				issues.push({
 					type: "format_error",
 					message:
-						"AI response contained BEGIN_CODE/END_CODE delimiters but no code within them.",
+						"AI response contained BEGIN_CODE/END_CODE delimiters but no meaningful content within them. This may be due to conversational filler or an empty code block.",
 					line: 1,
 					severity: "error",
 					source: "PureCodeFormatCheck",
 				});
-				suggestions.push("AI generated empty code block inside delimiters.");
+				suggestions.push(
+					"Instruct the AI to generate only code within delimiters, without conversational text or empty blocks."
+				);
 			}
 		} else {
-			// Delimiters not found. This is a format error.
+			// This case should ideally not be hit if `wrapCodeWithDelimiters` functions correctly.
+			// If it is hit, it implies a deeper system issue or a very malformed AI response.
 			isValidFormat = false;
 			issues.push({
 				type: "format_error",
 				message:
-					"AI response did not contain the required BEGIN_CODE/END_CODE delimiters.",
+					"AI response did not contain the required BEGIN_CODE/END_CODE delimiters even after system wrapping. This indicates a critical system formatting failure.",
 				line: 1,
 				severity: "error",
 				source: "PureCodeFormatCheck",
 			});
 			suggestions.push(
-				"Instruct the AI to strictly enclose all generated code within BEGIN_CODE and END_CODE markers."
+				"Review the system's code wrapping logic (`wrapCodeWithDelimiters`) and AI integration. Ensure the AI strictly adheres to code output format."
 			);
-
-			// As a fallback for content extraction, attempt to clean anyway,
-			// even though the format is considered problematic.
-			finalContent = cleanCodeOutput(rawAIResponse);
 		}
 
 		return {
 			isValid: isValidFormat,
-			finalContent: finalContent,
+			finalContent: cleanedContentForFinalResult, // Always return the fully cleaned content
 			issues: issues,
 			suggestions: suggestions,
 		};
@@ -689,9 +693,11 @@ export class EnhancedCodeGenerator {
 				token
 			);
 
-			// NEW: Immediately call _checkPureCodeFormat on the raw AI response
-			const formatValidation = this._checkPureCodeFormat(rawContent);
-			return formatValidation; // Return the validation result directly
+			// --- NEW WRAPPING STEP ---
+			const wrappedContent = wrapCodeWithDelimiters(rawContent);
+			// Pass the wrapped content to the validation function
+			const formatValidation = this._checkPureCodeFormat(wrappedContent);
+			return formatValidation; // Returning the validation result
 		} catch (error: any) {
 			// If generation itself fails, wrap it in a CodeValidationResult for consistent return type
 			return {
@@ -993,7 +999,10 @@ export class EnhancedCodeGenerator {
 				},
 				token
 			);
-			return cleanCodeOutput(rawContent);
+			// --- NEW WRAPPING STEP ---
+			const wrappedContent = wrapCodeWithDelimiters(rawContent);
+			// Pass the wrapped content to the cleaning function
+			return cleanCodeOutput(wrappedContent);
 		} catch (error: any) {
 			throw error;
 		}
@@ -1061,7 +1070,10 @@ export class EnhancedCodeGenerator {
 				token
 			);
 
-			const refinedContent = cleanCodeOutput(rawRefinedContent);
+			// --- NEW WRAPPING STEP ---
+			const wrappedRefinedContent = wrapCodeWithDelimiters(rawRefinedContent);
+			// Pass the wrapped content to the cleaning function
+			const refinedContent = cleanCodeOutput(wrappedRefinedContent);
 
 			// Re-validate the content produced by the refinement process
 			const finalValidation = await this._validateCode(
@@ -1118,7 +1130,10 @@ export class EnhancedCodeGenerator {
 			token
 		);
 
-		const refinedContent = cleanCodeOutput(rawRefinedContent);
+		// --- NEW WRAPPING STEP ---
+		const wrappedRefinedContent = wrapCodeWithDelimiters(rawRefinedContent);
+		// Pass the wrapped content to the cleaning function
+		const refinedContent = cleanCodeOutput(wrappedRefinedContent);
 
 		const finalValidation = await this._validateCode(filePath, refinedContent);
 
@@ -1987,9 +2002,13 @@ export class EnhancedCodeGenerator {
 				},
 				token
 			);
-			// NEW: Call _checkPureCodeFormat on the raw response
-			const syntaxFormatValidation =
-				this._checkPureCodeFormat(rawSyntaxCorrection);
+			// --- NEW WRAPPING STEP ---
+			const wrappedSyntaxCorrection =
+				wrapCodeWithDelimiters(rawSyntaxCorrection);
+			// Pass the wrapped content to the validation function
+			const syntaxFormatValidation = this._checkPureCodeFormat(
+				wrappedSyntaxCorrection
+			);
 			if (!syntaxFormatValidation.isValid) {
 				return syntaxFormatValidation; // Critical format error, propagate immediately
 			}
@@ -2039,9 +2058,13 @@ export class EnhancedCodeGenerator {
 				},
 				token
 			);
-			// NEW: Call _checkPureCodeFormat on the raw response
-			const importFormatValidation =
-				this._checkPureCodeFormat(rawImportCorrection);
+			// --- NEW WRAPPING STEP ---
+			const wrappedImportCorrection =
+				wrapCodeWithDelimiters(rawImportCorrection);
+			// Pass the wrapped content to the validation function
+			const importFormatValidation = this._checkPureCodeFormat(
+				wrappedImportCorrection
+			);
 			if (!importFormatValidation.isValid) {
 				return importFormatValidation; // Critical format error, propagate immediately
 			}
@@ -2097,9 +2120,13 @@ export class EnhancedCodeGenerator {
 					},
 					token
 				);
-			// NEW: Call _checkPureCodeFormat on the raw response
-			const practiceFormatValidation = this._checkPureCodeFormat(
+			// --- NEW WRAPPING STEP ---
+			const wrappedPracticeCorrection = wrapCodeWithDelimiters(
 				rawPracticeCorrection
+			);
+			// Pass the wrapped content to the validation function
+			const practiceFormatValidation = this._checkPureCodeFormat(
+				wrappedPracticeCorrection
 			);
 			if (!practiceFormatValidation.isValid) {
 				return practiceFormatValidation; // Critical format error, propagate immediately
@@ -2153,9 +2180,13 @@ export class EnhancedCodeGenerator {
 					},
 					token
 				);
-			// NEW: Call _checkPureCodeFormat on the raw response
-			const securityFormatValidation = this._checkPureCodeFormat(
+			// --- NEW WRAPPING STEP ---
+			const wrappedSecurityCorrection = wrapCodeWithDelimiters(
 				rawSecurityCorrection
+			);
+			// Pass the wrapped content to the validation function
+			const securityFormatValidation = this._checkPureCodeFormat(
+				wrappedSecurityCorrection
 			);
 			if (!securityFormatValidation.isValid) {
 				return securityFormatValidation; // Critical format error, propagate immediately
