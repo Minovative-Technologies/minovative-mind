@@ -492,7 +492,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 
 		if (statusMessage) {
-			if (outcome !== "cancelled") {
+			if (
+				outcome !== "cancelled" &&
+				statusMessage !== "Operation completed successfully."
+			) {
 				this.chatHistoryManager.addHistoryEntry("model", statusMessage);
 			}
 			this.postMessageToWebview({
