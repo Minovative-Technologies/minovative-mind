@@ -1,6 +1,6 @@
 // src/sidebar/ui/webviewHelper.ts
 import * as vscode from "vscode";
-import { getNonce } from "../../utilities/nonce"; // Adjusted path
+import { getNonce } from "../../utils/nonce"; // Adjusted path
 
 export async function getHtmlForWebview(
 	webview: vscode.Webview,

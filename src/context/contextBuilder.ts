@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { createAsciiTree } from "../utilities/treeFormatter";
+import { createAsciiTree } from "../utils/treeFormatter";
 import { FileChangeEntry } from "../types/workflow";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 import { intelligentlySummarizeFileContent } from "./fileContentProcessor";

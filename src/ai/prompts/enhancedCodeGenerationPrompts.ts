@@ -351,7 +351,7 @@ export function createEnhancedGenerationPrompt(
 	);
 
 	const formattedRequirements = requirementsList
-		.map((req, idx) => `${idx + 1}. ${req}`)
+		.map((req, idx: number) => `${idx + 1}. ${req}`)
 		.join("\n");
 
 	return `You are an expert software engineer specializing in ${languageId} development. Your task is to generate production-ready, accurate code. ONLY focus on generating code.
@@ -423,18 +423,18 @@ ${context.successfulChangeHistory}
 		: ""
 }
 
-BEGIN_CODE
+
 // Your task: Generate the complete and correct code for the target file here.
 // Start your code immediately below this line.
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-END_CODE
+
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`\` and \`\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`\` and end IMMEDIATELY with \`\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 }
 
@@ -530,18 +530,18 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 		: ""
 }
 
-BEGIN_CODE
+
 // Your task: Generate the complete and correct code for the target file here.
 // Start your code immediately below this line.
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-END_CODE
+
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`\` and \`\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`\` and end IMMEDIATELY with \`\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 }
 
@@ -607,7 +607,7 @@ export function createEnhancedModificationPrompt(
 	);
 
 	const formattedRequirements = requirementsList
-		.map((req, idx) => `${idx + 1}. ${req}`)
+		.map((req, idx: number) => `${idx + 1}. ${req}`)
 		.join("\n");
 
 	return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions. ONLY focus on generating code.
@@ -676,18 +676,18 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 		: ""
 }
 
-BEGIN_CODE
+
 // Your task: Generate the complete and correct code for the target file here.
 // Start your code immediately below this line.
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-END_CODE
+
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`\` and \`\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`\` and end IMMEDIATELY with \`\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 }
 
@@ -789,18 +789,18 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 		: ""
 }
 
-BEGIN_CODE
+
 // Your task: Generate the complete and correct code for the target file here.
 // Start your code immediately below this line.
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-END_CODE
+
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`\` and \`\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`\` and end IMMEDIATELY with \`\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 }
 
@@ -852,7 +852,7 @@ export async function createAIFailureAnalysisPrompt(
 **Recent Correction Attempt Outcomes (for oscillation analysis):**
 ${relevantOutcomes
 	.map(
-		(outcome, index) => `
+		(outcome, index: number) => `
   --- Outcome ${index + 1} (Iteration ${outcome.iteration}) ---
   Success: ${outcome.success}
   Original Issues: ${outcome.originalIssuesCount}
@@ -864,7 +864,7 @@ ${relevantOutcomes
 	)}...
   Issues Remaining: ${outcome.issuesRemaining
 		.map(
-			(i) =>
+			(i: CodeIssue) =>
 				`- [${i.severity}] ${i.type} at line ${i.line}: ${i.message.substring(
 					0,
 					Math.min(i.message.length, 50)
@@ -873,7 +873,7 @@ ${relevantOutcomes
 		.join("\n    ")}
   Issues Introduced: ${outcome.issuesIntroduced
 		.map(
-			(i) =>
+			(i: CodeIssue) =>
 				`- [${i.severity}] ${i.type} at line ${i.line}: ${i.message.substring(
 					0,
 					Math.min(i.message.length, 50)
@@ -1039,18 +1039,18 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 		: ""
 }
 
-BEGIN_CODE
+
 // Your task: Generate the complete and correct code for the target file here.
 // Start your code immediately below this line.
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-END_CODE
+
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`\` and \`\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`\` and end IMMEDIATELY with \`\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 }
 
@@ -1147,18 +1147,18 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 		: ""
 }
 
-BEGIN_CODE
+
 // Your task: Generate the complete and correct code for the target file here.
 // Start your code immediately below this line.
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-END_CODE
+
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`\` and \`\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`\` and end IMMEDIATELY with \`\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 }
 
@@ -1251,18 +1251,18 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 		: ""
 }
 
-BEGIN_CODE
+
 // Your task: Generate the complete and correct code for the target file here.
 // Start your code immediately below this line.
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-END_CODE
+
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`\` and \`\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`\` and end IMMEDIATELY with \`\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 }
 
@@ -1355,18 +1355,18 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 		: ""
 }
 
-BEGIN_CODE
+
 // Your task: Generate the complete and correct code for the target file here.
 // Start your code immediately below this line.
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-END_CODE
+
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`\` and \`\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`\` and end IMMEDIATELY with \`\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 }
 
@@ -1458,23 +1458,23 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 		: ""
 }
 
-BEGIN_CODE
+
 // Your task: Generate the complete and correct code for the target file here.
 // Start your code immediately below this line.
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-END_CODE
+
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`\` and \`\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`\` and end IMMEDIATELY with \`\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 }
 
 /**
- * Creates the pure code format correction prompt, specifically to enforce BEGIN_CODE/END_CODE delimiters.
+ * Creates the pure code format correction prompt, specifically to enforce / delimiters.
  */
 export function createPureCodeFormatCorrectionPrompt(
 	filePath: string,
@@ -1486,7 +1486,7 @@ export function createPureCodeFormatCorrectionPrompt(
 	// We'll use the issues from the last correction attempt outcome if available and filter for format_error.
 	const issues: CodeIssue[] =
 		context.lastCorrectionAttemptOutcome?.issuesRemaining.filter(
-			(i) => i.type === "format_error"
+			(i: CodeIssue) => i.type === "format_error"
 		) || [];
 
 	const groupedAndPrioritizedIssues = _groupAndPrioritizeIssues(issues);
@@ -1499,8 +1499,8 @@ export function createPureCodeFormatCorrectionPrompt(
 	return `You are an expert software engineer. Your task is to correct the format of the previously generated code. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
-1. **Strict Format Adherence**: Your response MUST contain ONLY the generated code enclosed STRICTLY within \`BEGIN_CODE\` and \`END_CODE\` delimiters. NO other text, explanations, or markdown fences (\`\`\`language) are allowed outside these delimiters.
-2. **Pure Code Output**: The content between \`BEGIN_CODE\` and \`END_CODE\` must be valid, executable ${languageId} code.
+1. **Strict Format Adherence**: Your response MUST contain ONLY the generated code enclosed STRICTLY within \`\` and \`\` delimiters. NO other text, explanations, or markdown fences (\`\`\`language) are allowed outside these delimiters.
+2. **Pure Code Output**: The content between \`\` and \`\` must be valid, executable ${languageId} code.
 3. **No Conversational Text**: ABSOLUTELY NO conversational text, apologies, explanations, comments, or meta-information outside the delimiters.
 4. **Error Prevention**: Ensure the corrected code will compile and run *without any errors or warnings*.
 
@@ -1517,7 +1517,7 @@ ${content}
 \`\`\`
 
 **Correction Instructions:**
--   **Enforce Delimiters**: Ensure all generated code is ONLY between \`BEGIN_CODE\` and \`END_CODE\` markers.
+-   **Enforce Delimiters**: Ensure all generated code is ONLY between \`\` and \`\` markers.
 -   **Remove Extraneous Text**: Eliminate all conversational filler, explanations, markdown formatting (triple backticks), or meta-headers outside the delimiters.
 -   **Deliver Pure Code**: Focus solely on generating valid, executable code for the file.
 -   **Maintain Functionality**: Ensure the corrected output accurately reflects the intended functionality and is production-ready.
@@ -1576,17 +1576,17 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 		: ""
 }
 
-BEGIN_CODE
+
 // Your task: Generate the complete and correct code for the target file here, ensuring it strictly adheres to the pure code format.
 // Start your code immediately below this line.
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-END_CODE
+
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`\` and \`\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`\` and end IMMEDIATELY with \`\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 }

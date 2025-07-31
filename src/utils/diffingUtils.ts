@@ -1,5 +1,7 @@
+// src/utils/diffingUtils.ts
 import * as vscode from "vscode";
 import { diff_match_patch } from "diff-match-patch";
+import { DiffAnalysis } from "../types/codeGenerationTypes";
 
 export async function generatePreciseTextEdits(
 	originalContent: string,
@@ -389,6 +391,51 @@ export async function generateFileChangeSummary(
 		addedLines: addedLines,
 		removedLines: removedLines,
 		formattedDiff: formattedDiff,
+	};
+}
+
+/**
+ * Analyze the diff between original and modified content
+ */
+export function analyzeDiff(original: string, modified: string): DiffAnalysis {
+	const originalLines = original.split("\n");
+	const modifiedLines = modified.split("\n");
+
+	const issues: string[] = [];
+	let isReasonable = true;
+
+	const originalLength = originalLines.length;
+	const modifiedLength = modifiedLines.length;
+	const changeRatio =
+		originalLength === 0
+			? modifiedLength > 0
+				? 1
+				: 0
+			: Math.abs(modifiedLength - originalLength) / originalLength;
+
+	if (changeRatio > 0.8) {
+		issues.push(
+			"Modification seems too drastic - consider a more targeted approach"
+		);
+		isReasonable = false;
+	}
+
+	const originalImports = originalLines.filter((line) =>
+		line.trim().startsWith("import")
+	);
+	const modifiedImports = modifiedLines.filter((line) =>
+		line.trim().startsWith("import")
+	);
+
+	if (originalImports.length > 0 && modifiedImports.length === 0) {
+		issues.push("All imports were removed - this may be incorrect");
+		isReasonable = false;
+	}
+
+	return {
+		isReasonable,
+		issues,
+		changeRatio,
 	};
 }
 

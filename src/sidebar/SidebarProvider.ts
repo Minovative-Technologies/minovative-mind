@@ -1,3 +1,4 @@
+// src/sidebar/SidebarProvider.ts
 import * as vscode from "vscode";
 import { ChildProcess } from "child_process";
 
@@ -27,6 +28,9 @@ import {
 	showErrorNotification,
 } from "../utils/notificationUtils";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
+// Added: Imports for missing services
+import { CodeValidationService } from "../services/codeValidationService";
+import { ContextRefresherService } from "../services/contextRefresherService";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -79,8 +83,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public commitService: CommitService;
 	public gitConflictResolutionService: GitConflictResolutionService; // Service instance
 	public tokenTrackingService: TokenTrackingService;
-	private enhancedCodeGenerator: EnhancedCodeGenerator; // NEW: Declare property
+	private enhancedCodeGenerator: EnhancedCodeGenerator;
 	public revertService: RevertService; // New public property
+	// Added: Properties for missing services
+	private codeValidationService: CodeValidationService;
+	private contextRefresherService: ContextRefresherService;
 
 	constructor(
 		extensionUri: vscode.Uri,
@@ -151,6 +158,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.postMessageToWebview.bind(this),
 			this.tokenTrackingService
 		);
+
+		this.gitConflictResolutionService = new GitConflictResolutionService(
+			context
+		); // Instantiate before PlanService
+
+		// In src/sidebar/SidebarProvider.ts constructor...
+		// Moved: Instantiate this.contextService immediately after this.gitConflictResolutionService
 		this.contextService = new ContextService(
 			this.settingsManager,
 			this.chatHistoryManager,
@@ -159,20 +173,26 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.postMessageToWebview.bind(this)
 		);
 
-		this.gitConflictResolutionService = new GitConflictResolutionService(
-			context
-		); // Instantiate before PlanService
-
-		// NEW: Instantiate EnhancedCodeGenerator
-		// Modification: postMessageToWebview is now the third argument, and enableRealTimeFeedback is within the config object (fourth argument).
-		this.enhancedCodeGenerator = new EnhancedCodeGenerator(
-			this.aiRequestService,
-			this.workspaceRootUri || vscode.Uri.file("/"),
-			this.postMessageToWebview.bind(this),
+		// Added: Instantiate missing services
+		this.codeValidationService = new CodeValidationService(
+			this.workspaceRootUri || vscode.Uri.file("/")
+		);
+		// FIXED: Provide all required arguments to the ContextRefresherService constructor.
+		this.contextRefresherService = new ContextRefresherService(
+			this.contextService,
 			this.changeLogger,
-			this.contextService, // Inserted this.contextService here (5th argument)
+			this.workspaceRootUri || vscode.Uri.file("/") // Ensure Uri is passed
+		);
+
+		// Correctly instantiate EnhancedCodeGenerator with all dependencies in the right order.
+		this.enhancedCodeGenerator = new EnhancedCodeGenerator(
+			this.aiRequestService, // 1. AIRequestService
+			this.postMessageToWebview.bind(this), // 2. postMessageToWebview function
+			this.changeLogger, // 3. ProjectChangeLogger
+			this.codeValidationService, // 4. CodeValidationService
+			this.contextRefresherService, // 5. ContextRefresherService
 			{
-				// This config block is now the 6th argument
+				// 6. Config object
 				enableRealTimeFeedback: true,
 				maxFeedbackIterations: 5,
 			}
@@ -185,14 +205,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 
 		// These services need access to the provider's state and other services.
-		// You would create these files following the same pattern.
-		// Modification: Explicitly pass this.postMessageToWebview.bind(this) as the last (fifth) argument.
 		this.planService = new PlanService(
 			this,
 			this.workspaceRootUri, // Pass workspaceRootUri
 			this.gitConflictResolutionService, // Pass the GitConflictResolutionService
 			this.enhancedCodeGenerator, // Pass the instance here
-			this.postMessageToWebview.bind(this) // New fifth argument
+			this.postMessageToWebview.bind(this)
 		);
 		this.chatService = new ChatService(this);
 		this.commitService = new CommitService(this);
@@ -239,6 +257,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			logoUri
 		);
 
+		const fileUri = vscode.Uri.parse("file://");
+		const message = { type: "fileUriLoaded", uri: fileUri.toString() };
+		webviewView.webview.postMessage(message);
+
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			await handleWebviewMessage(data, this);
 		});
@@ -249,7 +271,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	): void {
 		if (this._view && this._view.visible) {
 			this._view.webview.postMessage(message).then(undefined, (err) => {
-				// Accessing 'type' property directly from 'message' is safe now because of the explicit type.
 				console.warn("Failed to post message to webview:", message.type, err);
 			});
 		}
@@ -297,7 +318,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public async handleWebviewReady(): Promise<void> {
 		let isAnyOperationBeingRestored = false;
 
-		// Prioritize checking for active plan execution at the very beginning
 		if (this.isPlanExecutionActive) {
 			console.log(
 				"[SidebarProvider] Detected active plan execution. Restoring UI state."
@@ -308,43 +328,37 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "statusUpdate",
 				value: "A plan execution is currently in progress. Please wait.",
 			});
-			// return; // Exit early if a plan execution is active
 		}
 
 		this.apiKeyManager.loadKeysFromStorage();
 		this.settingsManager.updateWebviewModelList();
 		this.chatHistoryManager.restoreChatHistoryToWebview();
 
-		// 1. Prioritize pending plan confirmation (generation *complete*, awaiting review) from PERSISTED DATA
 		if (this._persistedPendingPlanData) {
 			console.log(
 				"[SidebarProvider] Restoring pending plan confirmation to webview from persisted data."
 			);
-			const planCtx = this._persistedPendingPlanData; // Use the persisted data
+			const planCtx = this._persistedPendingPlanData;
 			const planDataForRestore = {
 				originalRequest: planCtx.originalUserRequest,
 				originalInstruction: planCtx.originalInstruction,
-				type: planCtx.type, // Changed from "textualPlanPending" to planCtx.type
+				type: planCtx.type,
 				relevantFiles: planCtx.relevantFiles,
-				textualPlanExplanation: planCtx.textualPlanExplanation, // Crucially, pass the actual plan text
+				textualPlanExplanation: planCtx.textualPlanExplanation,
 			};
 
 			this.postMessageToWebview({
 				type: "restorePendingPlanConfirmation",
 				value: planDataForRestore,
 			});
-			// Generation is complete, inputs should be re-enabled for user interaction with the review UI
 			this.postMessageToWebview({ type: "updateLoadingState", value: false });
-			// Ensure the general generation flag is reset as we're now in a review state
 			this.isGeneratingUserRequest = false;
 			await this.workspaceState.update(
 				"minovativeMind.isGeneratingUserRequest",
 				false
 			);
 			isAnyOperationBeingRestored = true;
-		}
-		// 2. Then, check for active AI streaming progress (e.g., for long chat responses)
-		else if (
+		} else if (
 			this.currentAiStreamingState &&
 			!this.currentAiStreamingState.isComplete
 		) {
@@ -355,11 +369,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "restoreStreamingProgress",
 				value: this.currentAiStreamingState,
 			});
-			this.postMessageToWebview({ type: "updateLoadingState", value: true }); // Ensure inputs are disabled
+			this.postMessageToWebview({ type: "updateLoadingState", value: true });
 			isAnyOperationBeingRestored = true;
-		}
-		// 3. Then, check for pending commit review (generation *complete*, awaiting review)
-		else if (this.pendingCommitReviewData) {
+		} else if (this.pendingCommitReviewData) {
 			console.log(
 				"[SidebarProvider] Restoring pending commit review to webview."
 			);
@@ -367,28 +379,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "restorePendingCommitReview",
 				value: this.pendingCommitReviewData,
 			});
-			// Generation is complete, inputs should be re-enabled for user interaction with the review UI
 			this.isGeneratingUserRequest = false;
 			await this.workspaceState.update(
 				"minovativeMind.isGeneratingUserRequest",
 				false
 			);
 			isAnyOperationBeingRestored = true;
-		}
-		// 4. Check for a stale generic AI generation in progress (isGeneratingUserRequest is true but no other specific state is active)
-		else if (this.isGeneratingUserRequest) {
+		} else if (this.isGeneratingUserRequest) {
 			console.log(
 				"[SidebarProvider] Detected stale generic loading state (isGeneratingUserRequest is true, but no active streaming or pending review). Resetting."
 			);
-			// If isGeneratingUserRequest is true but no streaming, pending plan, or pending commit
-			// review state is found, it indicates an interrupted or lost operation.
-			// Reset the flag and re-enable inputs, providing a status update.
-			await this.endUserOperation("cancelled", "Inputs re-enabled.");
-			// The call to endUserOperation already posts 'reenableInput' and 'statusUpdate'.
-			// No need to send 'showGenericLoadingMessage' here.
-		}
-		// 5. Default: No active operations, re-enable inputs
-		else {
+			await this.endUserOperation("success", "Inputs re-enabled.");
+		} else {
 			this.postMessageToWebview({ type: "reenableInput" });
 			this.clearActiveOperationState();
 		}
@@ -420,10 +422,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 	}
 
-	/**
-	 * Clears the active operation state, including the cancellation token source
-	 * and any pending review or streaming data.
-	 */
 	public clearActiveOperationState(): void {
 		if (this.activeOperationCancellationTokenSource) {
 			console.log(
@@ -432,43 +430,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.activeOperationCancellationTokenSource.dispose();
 			this.activeOperationCancellationTokenSource = undefined;
 		}
-		// this.pendingCommitReviewData = null; // Clear any pending commit data
-		this.currentAiStreamingState = null; // Clear streaming state when operation ends
+		this.currentAiStreamingState = null;
 	}
 
-	/**
-	 * Resets all state related to a user-initiated AI operation,
-	 * ensures UI inputs are re-enabled, and provides an optional status update.
-	 * This method centralizes the logic for ending user operations (success, failure, cancellation, or review transition).
-	 * @param outcome The final outcome of the operation, or "review" if transitioning to a review state.
-	 * @param customStatusMessage An optional custom message to display instead of the default outcome-based message.
-	 */
 	public async endUserOperation(
 		outcome: sidebarTypes.ExecutionOutcome | "review",
-		customStatusMessage?: string // Added optional parameter
+		customStatusMessage?: string
 	): Promise<void> {
 		console.log(
 			`[SidebarProvider] Ending user operation with outcome: ${outcome}`
 		);
 
-		// 1. Reset isGeneratingUserRequest and persist
 		this.isGeneratingUserRequest = false;
 		await this.workspaceState.update(
 			"minovativeMind.isGeneratingUserRequest",
 			false
 		);
 
-		// 2. Clear active operation state (cancellation token, streaming state, pendingCommitReviewData)
 		this.clearActiveOperationState();
-
-		// 3. Explicitly clear all pending context data not handled by clearActiveOperationState
 		this.pendingPlanGenerationContext = null;
 		this.lastPlanGenerationContext = null;
-		// pendingCommitReviewData is cleared by clearActiveOperationState
 
-		// Critical for UI synchronization: ensures the chat history and overall UI state are up-to-date after any operation concludes.
-		// During an edit operation, the webview handles the initial visual update,
-		// so we skip restoring the entire chat history from the backend at this early stage.
 		if (!this.isEditingMessageActive) {
 			this.chatHistoryManager.restoreChatHistoryToWebview();
 		} else {
@@ -477,19 +459,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 		}
 
-		// 4. Re-enable input in the webview
 		this.postMessageToWebview({ type: "reenableInput" });
 
-		// 5. Post optional status update to the webview and chat history
 		let statusMessage = "";
 		let isError = false;
 
 		if (customStatusMessage) {
-			// If a custom message is provided, use it and determine isError based on outcome
 			statusMessage = customStatusMessage;
 			isError = outcome === "cancelled" || outcome === "failed";
 		} else {
-			// Fallback to existing switch logic if no custom message
 			switch (outcome) {
 				case "success":
 					statusMessage = "Operation completed successfully.";
@@ -514,7 +492,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		}
 
 		if (statusMessage) {
-			// CONDITIONALLY ADD to chat history: ONLY if the operation was NOT cancelled
 			if (outcome !== "cancelled") {
 				this.chatHistoryManager.addHistoryEntry("model", statusMessage);
 			}
@@ -529,12 +506,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public async triggerUniversalCancellation(): Promise<void> {
 		console.log("[SidebarProvider] Triggering universal cancellation...");
 
-		// Immediately cancel the active operation
 		if (this.activeOperationCancellationTokenSource) {
 			this.activeOperationCancellationTokenSource.cancel();
 		}
 
-		// Kill all child processes immediately
 		this.activeChildProcesses.forEach((cp) => {
 			console.log(
 				`[SidebarProvider] Killing child process with PID: ${cp.pid}`
@@ -543,18 +518,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		});
 		this.activeChildProcesses = [];
 
-		// Set plan execution to inactive as part of cancellation
 		await this.setPlanExecutionActive(false);
 
-		// Clear all pending state immediately
 		this.pendingPlanGenerationContext = null;
-		await this.updatePersistedPendingPlanData(null); // Clear persisted context as well
+		await this.updatePersistedPendingPlanData(null);
 		this.lastPlanGenerationContext = null;
 		this.pendingCommitReviewData = null;
 		this.currentAiStreamingState = null;
 
-		// Reset the general generation flag and persist it.
-		// This is part of clearing the state on the backend.
 		this.isGeneratingUserRequest = false;
 		await this.workspaceState.update(
 			"minovativeMind.isGeneratingUserRequest",
@@ -581,21 +552,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			return;
 		}
 
-		// Pop the most recent change set from the stack before user interaction
 		const mostRecentChangeSet = this.completedPlanChangeSets.pop();
 		if (!mostRecentChangeSet) {
-			// This case should ideally not be reached due to the initial length check.
 			vscode.window.showWarningMessage(
 				"No completed workflow changes to revert."
 			);
 			return;
 		}
 
-		// State tracking variables for the revert outcome
 		let revertSuccessful: boolean = false;
 		let revertErrorMessage: string = "";
 		let finalStatusMessage: string = "";
-		let isErrorStatus: boolean = false; // Tracks if the final status message should be an error
+		let isErrorStatus: boolean = false;
 
 		const confirmation = await vscode.window.showWarningMessage(
 			"Are you sure you want to revert the changes from the most recent workflow?",
@@ -615,10 +583,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"[SidebarProvider] Starting revert of most recent workflow changes..."
 				);
 
-				// Wrap the core revert call in try...catch
 				await this.revertService.revertChanges(mostRecentChangeSet.changes);
 
-				// On successful revert
 				revertSuccessful = true;
 				finalStatusMessage =
 					"Most recent workflow changes reverted successfully!";
@@ -627,13 +593,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"[SidebarProvider] Most recent workflow changes reverted successfully."
 				);
 			} catch (error: any) {
-				// On revert failure
 				revertSuccessful = false;
 				revertErrorMessage = `Failed to revert most recent workflow changes: ${
 					error.message || String(error)
 				}`;
 				finalStatusMessage = revertErrorMessage;
-				isErrorStatus = true; // Mark as error
+				isErrorStatus = true;
 				showErrorNotification(
 					error,
 					"Failed to revert most recent workflow changes.",
@@ -644,45 +609,36 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					"[SidebarProvider] Error reverting most recent workflow changes:",
 					error
 				);
-				// Crucially, if revert fails, push the change set back onto the stack
 				this.completedPlanChangeSets.push(mostRecentChangeSet);
 			}
 		} else {
-			// On user cancellation
-			revertSuccessful = false; // Not a success
+			revertSuccessful = false;
 			revertErrorMessage = "Revert operation cancelled by user.";
 			finalStatusMessage = "Revert operation cancelled.";
-			isErrorStatus = false; // Cancellation is not an "error" state but a user choice
+			isErrorStatus = false;
 			vscode.window.showInformationMessage(finalStatusMessage);
 			console.log("[SidebarProvider] Revert operation cancelled by user.");
 
-			// If cancelled, push the change set back onto the stack
 			this.completedPlanChangeSets.push(mostRecentChangeSet);
 		}
 
-		// Unified post-operation handling section, always executes
-		// a. Persist the potentially modified completedPlanChangeSets stack
 		await this.updatePersistedCompletedPlanChangeSets(
 			this.completedPlanChangeSets
 		);
 
-		// b. Calculate stillHasRevertibleChanges
 		const stillHasRevertibleChanges = this.completedPlanChangeSets.length > 0;
 
-		// c. Send the planExecutionFinished message with correct hasRevertibleChanges status
 		this.postMessageToWebview({
 			type: "planExecutionFinished",
 			hasRevertibleChanges: stillHasRevertibleChanges,
 		});
 
-		// d. Send a final status update message to the webview summarizing the outcome
 		this.postMessageToWebview({
 			type: "statusUpdate",
 			value: finalStatusMessage,
 			isError: isErrorStatus,
 		});
 
-		// e. Ensure loading state is false and inputs are re-enabled
 		this.postMessageToWebview({ type: "updateLoadingState", value: false });
 		this.postMessageToWebview({ type: "reenableInput" });
 	}
@@ -709,18 +665,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				break;
 		}
 
-		// The chat history entry and status update for 'cancelled' will be handled by endUserOperation
-		// when it's called after this notification function completes, ensuring no duplication.
-		// For 'success' and 'failed', the message is still relevant to add to history here.
 		if (outcome !== "cancelled") {
 			this.chatHistoryManager.addHistoryEntry("model", message);
 		}
-		// Ensures the final notification and overall chat history state are immediately reflected in the UI.
 		this.chatHistoryManager.restoreChatHistoryToWebview();
 
 		if (this.isSidebarVisible === true) {
-			// For 'cancelled' outcome, these lines are removed as per instruction.
-			// For 'success' and 'failed', we still post the status update to webview.
 			if (outcome !== "cancelled") {
 				this.postMessageToWebview({
 					type: "statusUpdate",
@@ -736,14 +686,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 			switch (outcome) {
 				case "success":
-					notificationFunction = showInfoNotification; // Use new utility
+					notificationFunction = showInfoNotification;
 					break;
 				case "cancelled":
-					notificationFunction = showWarningNotification; // Use new utility
+					notificationFunction = showWarningNotification;
 					break;
 				case "failed":
-					// For failed outcomes, only update status within sidebar, no additional native pop-up
-					// This ensures any specific error already reported is the sole native notification
 					this.postMessageToWebview({
 						type: "statusUpdate",
 						value: message,
@@ -756,18 +704,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				message,
 				"Open Sidebar",
 				"Cancel Plan"
-			); // Pass message and items
+			);
 
 			if (result === "Open Sidebar") {
 				vscode.commands.executeCommand("minovative-mind.activitybar.focus");
 			} else if (result === "Cancel Plan") {
-				// User clicked 'Cancel Plan' on the native notification
 				console.log(
 					"[SidebarProvider] Native notification 'Cancel Plan' clicked. Triggering universal cancellation."
 				);
 				await this.triggerUniversalCancellation();
-				// as triggerUniversalCancellation already handles endUserOperation.
-				return; // Exit the function immediately
+				return;
 			}
 		}
 	}
