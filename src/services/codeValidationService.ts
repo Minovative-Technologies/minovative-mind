@@ -78,20 +78,20 @@ export class CodeValidationService {
 	}
 
 	/**
-	 * Checks if the raw AI response adheres to the BEGIN_CODE/END_CODE format.
+	 * Checks if the raw AI response adheres to the XBEGIN_CODEX/XEND_CODEX format.
 	 */
 	public checkPureCodeFormat(rawAIResponse: string): CodeValidationResult {
 		const issues: CodeIssue[] = [];
 		const suggestions: string[] = [];
 		const cleanedContent = cleanCodeOutput(rawAIResponse);
-		const BEGIN_CODE_REGEX = /BEGIN_CODE\n?([\s\S]*?)\n?END_CODE/i;
-		const delimiterMatch = rawAIResponse.match(BEGIN_CODE_REGEX);
+		const BEGIN_CODEX_REGEX = /XBEGIN_CODEX\n?([\s\S]*?)\n?XEND_CODEX/i;
+		const delimiterMatch = rawAIResponse.match(BEGIN_CODEX_REGEX);
 
 		if (!delimiterMatch) {
 			issues.push({
 				type: "format_error",
 				message:
-					"AI response did not contain the required BEGIN_CODE/END_CODE delimiters.",
+					"AI response did not contain the required XBEGIN_CODEX/XEND_CODEX delimiters.",
 				line: 1,
 				severity: "error",
 				source: "PureCodeFormatCheck",

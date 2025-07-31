@@ -131,7 +131,7 @@ export function createInitialPlanningExplanationPrompt(
 			: "";
 
 	return `
-    ------ ONLY FOLLOW INSTRUCTIONS BELOW ------
+    
 
     You are an expert software engineer. Your task is to ONLY explain your detailed, step-by-step plan in Markdown to fulfill the user's request.
 
@@ -146,7 +146,7 @@ export function createInitialPlanningExplanationPrompt(
     *   **Output Format**: **DO NOT output any JSON.** Your entire response must be human-readable text.
     *   **Production Readiness**: Generate production-ready code. Prioritize robustness, maintainability, security, cleanliness, efficiency, and industry best practices.
 
-    ------ END, INSTRUCTIONS ABOVE ------
+    
 
     *** Specific Context ***
     ${specificContextPrompt}
@@ -528,7 +528,7 @@ export function createPlanningPrompt(
     `;
 
 	return `
-    ------ ONLY FOLLOW INSTRUCTIONS BELOW ------
+    
 
     **CRITICAL**: You MUST generate ONLY a valid JSON object.
     **ABSOLUTELY ESSENTIAL**: The JSON object MUST contain a top-level string field named \`planDescription\` and a top-level array field named \`steps\`.
@@ -559,7 +559,7 @@ export function createPlanningPrompt(
 
     **IMPORTANT:** For modification steps, ensure the modification_prompt is specific and actionable, focusing on substantial changes rather warmer cosmetic formatting. The AI will be instructed to preserve existing formatting and only make the requested functional changes.
 
-    ------ END, INSTRUCTIONS ABOVE ------
+    
 
     *** Specific Context Prompt ***
     ${specificContextPrompt}

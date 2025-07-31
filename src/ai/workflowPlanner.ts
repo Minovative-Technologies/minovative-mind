@@ -145,7 +145,6 @@ export async function parseAndValidatePlan(
 	const unwantedPatterns = [
 		/<execute_bash>/i, // Detect custom tags like <execute_bash>
 		/\bthought\b/i, // Detect explicit "thought" markers (word boundary)
-		/------ ONLY FOLLOW INSTRUCTIONS BELOW ------/i, // Detect AI reproducing its own prompt headers
 		/^\s*(true|false|null)\b/i, // Explicitly reject JSON primitives as top-level if not expected
 	];
 

@@ -18,7 +18,6 @@ import {
 	PlanStep,
 	PlanStepAction,
 } from "../ai/workflowPlanner";
-import { typeContentIntoEditor } from "../sidebar/services/planExecutionService";
 import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { FileChangeEntry } from "../types/workflow";
 import { GitConflictResolutionService } from "./gitConflictResolutionService";
@@ -38,6 +37,7 @@ import {
 	CorrectionFeedback,
 } from "../ai/prompts/correctionPrompts";
 import { areIssuesSimilar } from "../utils/aiUtils";
+import { cleanCodeOutput } from "../utils/codeUtils";
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
@@ -212,6 +212,7 @@ export class PlanService {
 				relevantFiles && relevantFiles.length <= 3,
 				true // Added: Mark as plan explanation
 			);
+			this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 			success = true;
 
 			this.provider.pendingPlanGenerationContext = {
@@ -304,8 +305,6 @@ export class PlanService {
 
 			this.provider.activeOperationCancellationTokenSource?.dispose();
 			this.provider.activeOperationCancellationTokenSource = undefined;
-			// CRITICAL CHANGE: Ensure chat history is restored to webview after completion/cancellation
-			this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		}
 	}
 
@@ -1111,14 +1110,8 @@ export class PlanService {
 						currentStepCompletedSuccessfullyOrSkipped = true;
 					} else if (isCreateFileStep(step)) {
 						const fileUri = vscode.Uri.joinPath(rootUri, step.path);
-						// 1. Create the empty file
-						await vscode.workspace.fs.writeFile(fileUri, Buffer.from(""));
-						// 2. Open the newly created document
-						const document = await vscode.workspace.openTextDocument(fileUri);
-						// 3. Show the document in the editor
-						const editor = await vscode.window.showTextDocument(document);
+						let desiredContent: string | undefined = step.content; // Initialize with existing content if any
 
-						let content = step.content;
 						if (step.generate_prompt) {
 							const generationContext = {
 								projectContext: context.projectContext,
@@ -1127,46 +1120,135 @@ export class PlanService {
 								activeSymbolInfo: undefined,
 							};
 
-							content = (
+							const generatedResult =
 								await this.enhancedCodeGenerator.generateFileContent(
 									step.path,
 									step.generate_prompt,
 									generationContext,
-									settingsManager.getSelectedModelName(),
+									this.provider.settingsManager.getSelectedModelName(),
 									combinedToken
-								)
-							).content;
+								);
+							desiredContent = generatedResult.content;
 						}
-						await typeContentIntoEditor(editor, content ?? "", combinedToken);
 
-						affectedFileUris.add(fileUri);
+						const cleanedDesiredContent = cleanCodeOutput(desiredContent ?? "");
 
-						const { formattedDiff, summary } = await generateFileChangeSummary(
-							"",
-							content ?? "",
-							step.path
-						);
-						this._postChatUpdateForPlanExecution({
-							type: "appendRealtimeModelMessage",
-							value: {
-								text: `Step ${index + 1} OK: Created file \`${
-									step.path
-								}\` (See diff below)`,
-							},
-							diffContent: formattedDiff,
-							isPlanStepUpdate: true,
-						});
-						// MODIFICATION: Pass originalContent (empty) and newContent to logChange
-						changeLogger.logChange({
-							filePath: step.path,
-							changeType: "created",
-							summary,
-							diffContent: formattedDiff,
-							timestamp: Date.now(),
-							originalContent: "",
-							newContent: content ?? "",
-						});
-						currentStepCompletedSuccessfullyOrSkipped = true;
+						try {
+							// Attempt to stat the file to check for existence
+							await vscode.workspace.fs.stat(fileUri);
+
+							// If stat succeeds, the file exists
+							const existingContent = Buffer.from(
+								await vscode.workspace.fs.readFile(fileUri)
+							).toString("utf-8");
+
+							if (existingContent === cleanedDesiredContent) {
+								// Content is identical, skip modification
+								this._postChatUpdateForPlanExecution({
+									type: "appendRealtimeModelMessage",
+									value: {
+										text: `Step ${index + 1} OK: File \`${
+											step.path
+										}\` already has the desired content. Skipping.`,
+									},
+									isPlanStepUpdate: true,
+								});
+								currentStepCompletedSuccessfullyOrSkipped = true;
+							} else {
+								// Content is different, treat as modification
+								const document = await vscode.workspace.openTextDocument(
+									fileUri
+								);
+								const editor = await vscode.window.showTextDocument(document);
+
+								await applyAITextEdits(
+									editor,
+									existingContent,
+									cleanedDesiredContent,
+									combinedToken
+								);
+								const newContentAfterApply = editor.document.getText();
+
+								const { formattedDiff, summary } =
+									await generateFileChangeSummary(
+										existingContent,
+										newContentAfterApply,
+										step.path
+									);
+
+								this._postChatUpdateForPlanExecution({
+									type: "appendRealtimeModelMessage",
+									value: {
+										text: `Step ${index + 1} OK: Modified file \`${
+											step.path
+										}\` (See diff below)`,
+									},
+									diffContent: formattedDiff,
+									isPlanStepUpdate: true,
+								});
+								this.provider.changeLogger.logChange({
+									filePath: step.path,
+									changeType: "modified",
+									summary,
+									diffContent: formattedDiff,
+									timestamp: Date.now(),
+									originalContent: existingContent,
+									newContent: newContentAfterApply,
+								});
+								currentStepCompletedSuccessfullyOrSkipped = true;
+							}
+							affectedFileUris.add(fileUri); // Add to affected files in case of modification
+						} catch (error: any) {
+							if (
+								error instanceof vscode.FileSystemError &&
+								(error.code === "FileNotFound" ||
+									error.code === "EntryNotFound")
+							) {
+								// File does not exist, proceed with creation
+								await vscode.workspace.fs.writeFile(
+									fileUri,
+									Buffer.from(cleanedDesiredContent)
+								);
+
+								// Open and display the new file
+								const document = await vscode.workspace.openTextDocument(
+									fileUri
+								);
+								await vscode.window.showTextDocument(document);
+
+								const { formattedDiff, summary } =
+									await generateFileChangeSummary(
+										"", // No original content for creation
+										cleanedDesiredContent,
+										step.path
+									);
+
+								this._postChatUpdateForPlanExecution({
+									type: "appendRealtimeModelMessage",
+									value: {
+										text: `Step ${index + 1} OK: Created file \`${
+											step.path
+										}\` (See diff below)`,
+									},
+									diffContent: formattedDiff,
+									isPlanStepUpdate: true,
+								});
+								this.provider.changeLogger.logChange({
+									filePath: step.path,
+									changeType: "created",
+									summary,
+									diffContent: formattedDiff,
+									timestamp: Date.now(),
+									originalContent: "",
+									newContent: cleanedDesiredContent,
+								});
+								currentStepCompletedSuccessfullyOrSkipped = true;
+								affectedFileUris.add(fileUri); // Add to affected files in case of creation
+							} else {
+								// Re-throw other errors (permissions, etc.)
+								throw error;
+							}
+						}
 					} else if (isModifyFileStep(step)) {
 						const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 						const existingContent = Buffer.from(

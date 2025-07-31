@@ -52,7 +52,7 @@ To shift the AI's output from full file rewrites to surgical edits, the core cha
   3. Extract the raw diff string.
   4. _Crucially_, it would _not_ return `modifiedContent` (the full string) directly, but rather a structure that represents the diff. This could be the raw diff string itself, or parsed `vscode.TextEdit` objects if parsing happens within this method.
 - **Internal Diff Application (Implicit):** The `_validateAndRefineModification` method currently uses `generateFileChangeSummary` to compare `originalContent` and `modifiedContent`. If the AI _directly_ generates a diff, this step might become `_validateAndApplyDiff` which parses the AI's diff output, validates it, and attempts to apply it.
-- **`_checkPureCodeFormat`:** This method currently checks for `BEGIN_CODE`/`END_CODE`. A new similar method (`_checkPureDiffFormat` or extend this one) would be needed to validate `BEGIN_DIFF`/`END_DIFF` delimiters and the general structure of the diff output.
+- **`_checkPureCodeFormat`:** This method currently checks for `XBEGIN_CODEX`/`XEND_CODEX`. A new similar method (`_checkPureDiffFormat` or extend this one) would be needed to validate `BEGIN_DIFF`/`END_DIFF` delimiters and the general structure of the diff output.
 - **Return Type:** The `modifyFileContent` public method's return type `content: string` might need to be re-evaluated if it's strictly about returning the _final modified content_ after application, or if it should also expose the generated diff.
 
 **3. Leveraging `diffingUtils.ts`:**

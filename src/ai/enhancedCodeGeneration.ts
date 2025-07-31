@@ -220,7 +220,6 @@ export class EnhancedCodeGenerator {
 		rawContent: string
 	): CodeValidationResult | null {
 		const unwantedCodeGenerationPatterns = [
-			/------ ONLY FOLLOW INSTRUCTIONS BELOW ------/i, // AI reproducing its own prompt
 			/<execute_bash>/i, // Custom tags that shouldn't be in code
 			/\bthought\b/i, // Explicit "thought" process leakage
 			/you are an expert software engineer/i, // AI repeating its persona/instructions

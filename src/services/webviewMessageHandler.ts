@@ -655,6 +655,7 @@ export async function handleWebviewMessage(
 				messageIndex,
 				newContent
 			);
+			provider.chatHistoryManager.restoreChatHistoryToWebview();
 
 			const lowerCaseNewContent = newContent.trim().toLowerCase();
 

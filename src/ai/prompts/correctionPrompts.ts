@@ -470,7 +470,7 @@ ${formatCallHierarchy(
 		: "";
 
 	return `
-	------ ONLY FOLLOW INSTRUCTIONS BELOW ------
+	
 	
         You are an expert software engineer. Your ONLY task is to generate a JSON ExecutionPlan to resolve all reported diagnostics.
 
@@ -529,7 +529,7 @@ ${formatCallHierarchy(
 								--- Required JSON Schema Reference ---
         Your output MUST strictly adhere to the following TypeScript interfaces for \`ExecutionPlan\` and \`PlanStep\` types. Pay special attention to the 'path' field for file operations.
 
-        ------ END, INSTRUCTIONS ABOVE ------
+        
 								
         ExecutionPlan (ONLY JSON):
 `;

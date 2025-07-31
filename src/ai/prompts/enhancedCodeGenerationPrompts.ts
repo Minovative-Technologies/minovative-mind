@@ -29,11 +29,11 @@ const CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS = `
 // Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
 
 **CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`BEGIN_CODE\` and \`END_CODE\` delimiters.
+- Your response MUST include the \`XBEGIN_CODEX\` and \`XEND_CODEX\` delimiters.
 - The system will ONLY extract content strictly located between these delimiters.
 - Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
 - This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`BEGIN_CODE\` and end IMMEDIATELY with \`END_CODE\`, with pure code in between.
+- Your output must start IMMEDIATELY with \`XBEGIN_CODEX\` and end IMMEDIATELY with \`XEND_CODEX\`, with pure code in between.
 - **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
 // --- END NEW BLOCK ---
 
@@ -1397,8 +1397,8 @@ export function createPureCodeFormatCorrectionPrompt(
 	return `You are an expert software engineer. Your task is to correct the format of the previously generated code. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
-1. **Strict Format Adherence**: Your response MUST contain ONLY the generated code enclosed STRICTLY within \`BEGIN_CODE\` and \`END_CODE\` delimiters. NO other text, explanations, or markdown fences (\`\`\`language) are allowed outside these delimiters.
-2. **Pure Code Output**: The content between \`BEGIN_CODE\` and \`END_CODE\` must be valid, executable ${languageId} code.
+1. **Strict Format Adherence**: Your response MUST contain ONLY the generated code enclosed STRICTLY within \`XBEGIN_CODEX\` and \`XEND_CODEX\` delimiters. NO other text, explanations, or markdown fences (\`\`\`language) are allowed outside these delimiters.
+2. **Pure Code Output**: The content between \`XBEGIN_CODEX\` and \`XEND_CODEX\` must be valid, executable ${languageId} code.
 3. **No Conversational Text**: ABSOLUTELY NO conversational text, apologies, explanations, comments, or meta-information outside the delimiters.
 4. **Error Prevention**: Ensure the corrected code will compile and run *without any errors or warnings*.
 
@@ -1415,7 +1415,7 @@ ${content}
 \`\`\`
 
 **Correction Instructions:**
--   **Enforce Delimiters**: Ensure all generated code is ONLY between \`BEGIN_CODE\` and \`END_CODE\` markers.
+-   **Enforce Delimiters**: Ensure all generated code is ONLY between \`XBEGIN_CODEX\` and \`XEND_CODEX\` markers.
 -   **Remove Extraneous Text**: Eliminate all conversational filler, explanations, markdown formatting (triple backticks), or meta-headers outside the delimiters.
 -   **Deliver Pure Code**: Focus solely on generating valid, executable code for the file.
 -   **Maintain Functionality**: Ensure the corrected output accurately reflects the intended functionality and is production-ready.
