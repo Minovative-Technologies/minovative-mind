@@ -12,7 +12,7 @@ import {
 	FileStructureAnalysis, // Added for re-export
 	CorrectionAttemptOutcome, // Added for re-export
 } from "../types/codeGenerationTypes";
-import { cleanCodeOutput, wrapCodeWithDelimiters } from "../utils/codeUtils";
+import { cleanCodeOutput } from "../utils/codeUtils";
 import { areIssuesSimilar } from "../utils/aiUtils";
 import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes";
 import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
@@ -212,6 +212,50 @@ export class EnhancedCodeGenerator {
 	}
 
 	/**
+	 * Checks raw AI output for common non-code patterns that indicate a deviation from instructions.
+	 * @param rawContent The raw string response from the AI.
+	 * @returns A `CodeValidationResult` object if an issue is found, otherwise `null`.
+	 */
+	private _checkForNonCodeResponse(
+		rawContent: string
+	): CodeValidationResult | null {
+		const unwantedCodeGenerationPatterns = [
+			/------ ONLY FOLLOW INSTRUCTIONS BELOW ------/i, // AI reproducing its own prompt
+			/<execute_bash>/i, // Custom tags that shouldn't be in code
+			/\bthought\b/i, // Explicit "thought" process leakage
+			/you are an expert software engineer/i, // AI repeating its persona/instructions
+			/here's the code:/i, // Conversational lead-in
+			/i can help you by/i, // Conversational lead-in
+		];
+
+		for (const pattern of unwantedCodeGenerationPatterns) {
+			if (pattern.test(rawContent)) {
+				const message = `AI response contained unexpected conversational/instructional content and was not valid code. (Detected pattern: ${pattern.source})`;
+				console.error(`[EnhancedCodeGenerator] ${message}`);
+				console.error("Raw AI Response:\n", rawContent);
+				return {
+					isValid: false,
+					finalContent: "", // No valid content was generated
+					issues: [
+						{
+							type: "format_error",
+							message: message,
+							line: 1,
+							severity: "error",
+							source: "EnhancedCodeGenerator",
+						},
+					],
+					suggestions: [
+						"Refine your prompt for code generation.",
+						"Ensure the AI only outputs code.",
+					],
+				};
+			}
+		}
+		return null; // No issues found
+	}
+
+	/**
 	 * Generates the initial version of the code.
 	 */
 	private async _generateInitialContent(
@@ -241,8 +285,17 @@ export class EnhancedCodeGenerator {
 				},
 				token
 			);
-			const wrappedContent = wrapCodeWithDelimiters(rawContent);
-			return this.codeValidationService.checkPureCodeFormat(wrappedContent);
+
+			// --- Pre-cleaning check for non-code AI output ---
+			const validationError = this._checkForNonCodeResponse(rawContent);
+			if (validationError) {
+				return validationError;
+			}
+			// --- End Pre-cleaning check ---
+
+			return this.codeValidationService.checkPureCodeFormat(
+				cleanCodeOutput(rawContent)
+			);
 		} catch (error: any) {
 			return {
 				isValid: false,
@@ -282,49 +335,12 @@ export class EnhancedCodeGenerator {
 			),
 		};
 
-		const modifiedContent = await this._generateModification(
-			filePath,
-			modificationPrompt,
-			currentContent,
-			contextWithAnalysis,
-			modelName,
-			streamId,
-			token,
-			onCodeChunkCallback
-		);
-
-		const validation = await this._validateAndRefineModification(
-			filePath,
-			currentContent,
-			modifiedContent,
-			contextWithAnalysis,
-			modelName,
-			streamId,
-			token,
-			onCodeChunkCallback
-		);
-
-		return { content: validation.finalContent, validation };
-	}
-
-	/**
-	 * Generates a modification to existing code.
-	 */
-	private async _generateModification(
-		filePath: string,
-		modificationPrompt: string,
-		currentContent: string,
-		context: EnhancedGenerationContext,
-		modelName: string,
-		streamId: string,
-		token?: vscode.CancellationToken,
-		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
-	): Promise<string> {
+		// --- Inlined logic from _generateModification ---
 		const enhancedPrompt = createEnhancedModificationPrompt(
 			filePath,
 			modificationPrompt,
 			currentContent,
-			context
+			contextWithAnalysis
 		);
 		const rawContent = await this.aiRequestService.generateWithRetry(
 			[{ text: enhancedPrompt }],
@@ -338,8 +354,29 @@ export class EnhancedCodeGenerator {
 			},
 			token
 		);
-		const wrappedContent = wrapCodeWithDelimiters(rawContent);
-		return cleanCodeOutput(wrappedContent);
+
+		// --- New: Pre-cleaning check for non-code AI output ---
+		const validationError = this._checkForNonCodeResponse(rawContent);
+		if (validationError) {
+			return { content: "", validation: validationError };
+		}
+		// --- End New Pre-cleaning check ---
+
+		const modifiedContent = cleanCodeOutput(rawContent);
+		// --- End inlined logic ---
+
+		const validation = await this._validateAndRefineModification(
+			filePath,
+			currentContent,
+			modifiedContent,
+			contextWithAnalysis,
+			modelName,
+			streamId,
+			token,
+			onCodeChunkCallback
+		);
+
+		return { content: validation.finalContent, validation };
 	}
 
 	/**
@@ -376,9 +413,15 @@ export class EnhancedCodeGenerator {
 				},
 				token
 			);
-			const refinedContent = cleanCodeOutput(
-				wrapCodeWithDelimiters(rawRefinedContent)
-			);
+
+			// --- Pre-cleaning check for non-code AI output ---
+			const validationError = this._checkForNonCodeResponse(rawRefinedContent);
+			if (validationError) {
+				return validationError;
+			}
+			// --- End Pre-cleaning check ---
+
+			const refinedContent = cleanCodeOutput(rawRefinedContent);
 			return this.codeValidationService.validateCode(filePath, refinedContent);
 		}
 		return this.codeValidationService.validateCode(filePath, modifiedContent);
@@ -592,7 +635,16 @@ export class EnhancedCodeGenerator {
 					},
 					token
 				);
-				currentContent = cleanCodeOutput(wrapCodeWithDelimiters(rawAltContent));
+
+				// --- Pre-cleaning check for non-code AI output ---
+				const validationError = this._checkForNonCodeResponse(rawAltContent);
+				if (validationError) {
+					validationResult = validationError; // Capture the error and break
+					break;
+				}
+				// --- End Pre-cleaning check ---
+
+				currentContent = cleanCodeOutput(rawAltContent);
 
 				const altValidation = await this.codeValidationService.validateCode(
 					filePath,
@@ -689,10 +741,19 @@ export class EnhancedCodeGenerator {
 					token
 				);
 
+				// --- Pre-cleaning check for non-code AI output ---
+				const validationError = this._checkForNonCodeResponse(rawCorrection);
+				if (validationError) {
+					return validationError; // Exit correction loop on severe malformation
+				}
+				// --- End Pre-cleaning check ---
+
 				const formatValidation = this.codeValidationService.checkPureCodeFormat(
-					wrapCodeWithDelimiters(rawCorrection)
+					cleanCodeOutput(rawCorrection)
 				);
 				if (!formatValidation.isValid) {
+					// If the format is still wrong, exit the correction loop
+					// as further corrections are unlikely to succeed.
 					return formatValidation;
 				}
 				currentCorrectedContent = formatValidation.finalContent;

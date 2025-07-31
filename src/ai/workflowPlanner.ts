@@ -1,3 +1,4 @@
+// src/ai/workflowPlanner.ts
 import * as vscode from "vscode";
 import * as path from "path";
 import { loadGitIgnoreMatcher } from "../utils/ignoreUtils";
@@ -25,62 +26,56 @@ export interface PlanStep {
 	command?: string; // Optional: Relevant for run_command action (command line string)
 }
 
-// --- Specific Step Interfaces (Keep/Update existing ones) ---
+// --- Specific Step Interfaces ---
 
 /**
  * Interface for a 'create_directory' step.
- * Requires a 'path' property indicating the relative path of the directory to create.
  */
 export interface CreateDirectoryStep extends PlanStep {
 	action: PlanStepAction.CreateDirectory;
-	path: string; // The relative path of the directory to create, e.g., "src/components"
-	command?: undefined; // Ensures 'command' is not expected for this action type
+	path: string;
+	command?: undefined;
 }
 
 /**
  * Interface for a 'create_file' step.
- * Must include 'path' and exactly one of 'content' (for predefined content)
- * or 'generate_prompt' (for AI-generated content).
  */
 export interface CreateFileStep extends PlanStep {
 	action: PlanStepAction.CreateFile;
-	path: string; // The relative path of the file to create, e.g., "src/index.ts"
-	content?: string; // Optional: The exact content to write to the file.
-	generate_prompt?: string; // Optional: A natural language prompt for the AI to generate the file's content.
-	command?: undefined; // Ensures 'command' is not expected for this action type
+	path: string;
+	content?: string;
+	generate_prompt?: string;
+	command?: undefined;
 }
 
 /**
  * Interface for a 'modify_file' step.
- * Requires a 'path' property and a 'modification_prompt' for the AI to apply changes.
  */
 export interface ModifyFileStep extends PlanStep {
 	action: PlanStepAction.ModifyFile;
-	path: string; // The relative path of the file to modify, e.g., "src/utils/helpers.ts"
-	modification_prompt: string; // A natural language prompt for the AI describing the desired modifications to the file.
-	command?: undefined; // Ensures 'command' is not expected for this action type
+	path: string;
+	modification_prompt: string;
+	command?: undefined;
 }
 
 /**
  * Interface for a 'run_command' step.
- * Requires a 'command' property, which is the shell command to execute.
  */
 export interface RunCommandStep extends PlanStep {
 	action: PlanStepAction.RunCommand;
-	command: string; // The command line string to execute, e.g., "npm install" or "git add ."
-	path?: undefined; // Ensures 'path' is not expected for this action type
+	command: string;
+	path?: undefined;
 }
 
 /**
  * Represents the overall structure of the execution plan.
- * The plan consists of a description and an ordered list of steps.
  */
 export interface ExecutionPlan {
-	planDescription: string; // A concise, human-readable description of the overall plan.
-	steps: PlanStep[]; // An ordered array of individual execution steps.
+	planDescription: string;
+	steps: PlanStep[];
 }
 
-// --- Type Guards (Update existing and add new one) ---
+// --- Type Guards ---
 
 export function isCreateDirectoryStep(
 	step: PlanStep
@@ -98,7 +93,6 @@ export function isCreateFileStep(step: PlanStep): step is CreateFileStep {
 		potentialStep.action === PlanStepAction.CreateFile &&
 		typeof potentialStep.path === "string" &&
 		potentialStep.path.trim() !== "" &&
-		// Ensure exactly one of 'content' or 'generate_prompt' is present
 		((typeof potentialStep.content === "string" &&
 			typeof potentialStep.generate_prompt === "undefined") ||
 			(typeof potentialStep.generate_prompt === "string" &&
@@ -117,7 +111,6 @@ export function isModifyFileStep(step: PlanStep): step is ModifyFileStep {
 	);
 }
 
-// New type guard for run command step
 export function isRunCommandStep(step: PlanStep): step is RunCommandStep {
 	return (
 		step.action === PlanStepAction.RunCommand &&
@@ -135,9 +128,9 @@ export interface ParsedPlanResult {
 }
 
 /**
- * Parses a JSON string into an ExecutionPlan and performs basic validation.
+ * Parses a JSON string into an ExecutionPlan and performs validation and sanitization.
  *
- * @param jsonString The JSON string received from the AI.
+ * @param jsonString The raw JSON string received from the AI.
  * @param workspaceRootUri The URI of the workspace root.
  * @returns An object containing the validated ExecutionPlan or an error message.
  */
@@ -145,52 +138,115 @@ export async function parseAndValidatePlan(
 	jsonString: string,
 	workspaceRootUri: vscode.Uri
 ): Promise<ParsedPlanResult> {
-	// Log the raw JSON string before parsing
 	console.log("Attempting to parse and validate plan JSON:", jsonString);
 
+	// --- Add Pre-parsing Check for Unwanted Patterns ---
+	const rawResponse = jsonString;
+	const unwantedPatterns = [
+		/<execute_bash>/i, // Detect custom tags like <execute_bash>
+		/\bthought\b/i, // Detect explicit "thought" markers (word boundary)
+		/------ ONLY FOLLOW INSTRUCTIONS BELOW ------/i, // Detect AI reproducing its own prompt headers
+		/^\s*(true|false|null)\b/i, // Explicitly reject JSON primitives as top-level if not expected
+	];
+
+	for (const pattern of unwantedPatterns) {
+		if (pattern.test(rawResponse)) {
+			const matchedPatternSource = pattern.source; // Get the string representation of the regex for logging
+			console.error(
+				`[workflowPlanner] AI generated unexpected non-plan content. Pattern matched: "${matchedPatternSource}"`
+			);
+			console.error("Raw AI Response:\n", rawResponse);
+
+			// Return a specific error indicating the detected issue
+			return {
+				plan: null,
+				error: `AI response contained unexpected conversational or instructional content. Please try again or rephrase your request. (Detected pattern: ${matchedPatternSource})`,
+			};
+		}
+	}
+	// --- End Pre-parsing Check ---
+
 	try {
-		let cleanedString = jsonString;
-		// while preserving all internal JSON whitespace.
-		cleanedString = cleanedString.replace(
-			/^(json|typescript|text|[\w\d]+)?\s*[\r\n]?/m,
-			""
-		); // Remove leading fence and any preceding keywords like 'json', 'typescript', etc.`
-		cleanedString = cleanedString.replace(/\s*\s*$/m, ""); // Remove trailing fence
-		// Trim any remaining leading/trailing whitespace from the whole string after fence removal.
+		// --- 1. Clean Markdown Fences and Extract JSON Object ---
+		let cleanedString = jsonString
+			.replace(/```(json|typescript)?/g, "")
+			.replace(/```/g, "");
 		cleanedString = cleanedString.trim();
 
-		// 2. Find the indices of the first opening brace `{` and the last closing brace `}`.
 		const firstBraceIndex = cleanedString.indexOf("{");
 		const lastBraceIndex = cleanedString.lastIndexOf("}");
 
-		let extractedJsonString: string;
-
-		// 3. Extract the substring between these braces (inclusive).
-		// 4. Ensure error handling for cases where braces are missing or misplaced.
 		if (
 			firstBraceIndex === -1 ||
 			lastBraceIndex === -1 ||
 			lastBraceIndex < firstBraceIndex
 		) {
 			const errorMsg =
-				"Error parsing plan JSON: Could not find a valid JSON object (missing or misplaced braces). Please Retry.";
-			console.error(errorMsg, jsonString); // Log original string for debugging
+				"Error parsing plan JSON: Could not find a valid JSON object within the response.";
+			console.error(errorMsg, jsonString);
 			return { plan: null, error: errorMsg };
-		} else {
-			extractedJsonString = cleanedString.substring(
-				firstBraceIndex,
-				lastBraceIndex + 1
-			);
 		}
 
-		// 5. Optionally, add logic to clean residual keywords (e.g., `json`) preceding the extracted JSON object.
-		// The aggressive regex applied initially should handle most such cases if they are part of markdown block formatting.
-		// After extracting based on brace indices, the `extractedJsonString` should ideally be pure JSON.
-		// No further explicit keyword cleaning is added here as it's covered by previous steps.
+		let extractedJsonString = cleanedString.substring(
+			firstBraceIndex,
+			lastBraceIndex + 1
+		);
 
-		const potentialPlan = JSON.parse(extractedJsonString);
+		// --- 2. Enhanced JSON String Sanitization ---
+		console.log(
+			"Original extracted JSON string for parsing:",
+			extractedJsonString
+		);
 
-		// Basic structure validation
+		// This regex is more robust for matching string literals. It correctly handles escaped quotes
+		// and avoids matching content outside of valid JSON strings.
+		const stringLiteralRegex = /"((?:\\.|[^"\\])*)"/g;
+
+		// A map of control characters to their escaped representations.
+		const charToEscape: { [key: string]: string } = {
+			"\b": "\\b",
+			"\f": "\\f",
+			"\n": "\\n",
+			"\r": "\\r",
+			"\t": "\\t",
+		};
+
+		const sanitizedJsonString = extractedJsonString.replace(
+			stringLiteralRegex,
+			(match, contentInsideQuotes: string) => {
+				let processedContent = "";
+				for (let i = 0; i < contentInsideQuotes.length; i++) {
+					const char = contentInsideQuotes[i];
+					const charCode = char.charCodeAt(0);
+
+					// If it's a known control character with a short escape, use it.
+					if (charToEscape[char]) {
+						processedContent += charToEscape[char];
+					}
+					// Check for other control characters (U+0000 to U+001F) that must be escaped.
+					else if (charCode >= 0 && charCode <= 0x1f) {
+						// Format to \uXXXX unicode escape sequence.
+						processedContent += `\\u${charCode.toString(16).padStart(4, "0")}`;
+					}
+					// If it's not a control character, append it as is.
+					else {
+						processedContent += char;
+					}
+				}
+				// Return the processed content re-wrapped in quotes.
+				return `"${processedContent}"`;
+			}
+		);
+
+		console.log(
+			"Sanitized extracted JSON string for parsing:",
+			sanitizedJsonString
+		);
+		// --- End of Sanitization ---
+
+		const potentialPlan = JSON.parse(sanitizedJsonString);
+
+		// --- 3. Validate Plan Structure and Content ---
 		if (
 			typeof potentialPlan !== "object" ||
 			potentialPlan === null ||
@@ -198,7 +254,7 @@ export async function parseAndValidatePlan(
 			!Array.isArray(potentialPlan.steps)
 		) {
 			const errorMsg =
-				"Plan validation failed: Missing top-level fields (planDescription, steps array) or plan is not an object. Please Retry.";
+				"Plan validation failed: The JSON must have a 'planDescription' (string) and 'steps' (array).";
 			console.error(errorMsg, potentialPlan);
 			return { plan: null, error: errorMsg };
 		}
@@ -207,11 +263,10 @@ export async function parseAndValidatePlan(
 		const modifyFileConsolidationMap = new Map<string, ModifyFileStep>();
 		const intermediateSteps: PlanStep[] = [];
 
-		// Process each step and consolidate modify_file steps
 		for (let i = 0; i < potentialPlan.steps.length; i++) {
 			const step = potentialPlan.steps[i];
 
-			// --- 1. Original Base Validation --- (Preserve these checks)
+			// Base step validation
 			if (
 				typeof step !== "object" ||
 				step === null ||
@@ -221,172 +276,113 @@ export async function parseAndValidatePlan(
 				!Object.values(PlanStepAction).includes(step.action) ||
 				typeof step.description !== "string"
 			) {
-				const errorMsg = `Plan validation failed: Invalid base step structure or numbering at index ${i}. Expected step number ${
+				const errorMsg = `Plan validation failed: Step ${
 					i + 1
-				}. Please Retry.`;
+				} has an invalid structure or step number.`;
 				console.error(errorMsg, step);
 				return { plan: null, error: errorMsg };
 			}
 
-			// --- 2. Original Property Checks and .gitignore Check --- (Preserve and adapt)
+			// Path validation and .gitignore check
 			const actionsRequiringPath = [
 				PlanStepAction.CreateDirectory,
 				PlanStepAction.CreateFile,
 				PlanStepAction.ModifyFile,
 			];
-			let skipStep = false; // Flag to determine if step should be skipped entirely
+			let skipStep = false;
 
 			if (actionsRequiringPath.includes(step.action)) {
-				// Preserve existing path validation
 				if (typeof step.path !== "string" || step.path.trim() === "") {
-					const errorMsg = `Plan validation failed: Missing or empty path for required step ${step.step} (${step.action}). Path must be a non-empty relative string.`;
-					console.error(errorMsg, step);
+					const errorMsg = `Plan validation failed: Step ${step.step} (${step.action}) requires a non-empty 'path'.`;
 					return { plan: null, error: errorMsg };
 				}
 				if (path.isAbsolute(step.path) || step.path.includes("..")) {
-					const errorMsg = `Plan validation failed: Path for step ${step.step} ('${step.path}') is invalid. Paths must be relative to the workspace root, use forward slashes, and not contain '..' for directory traversal.`;
-					console.error(errorMsg, step);
+					const errorMsg = `Plan validation failed: Path for step ${step.step} must be relative and cannot contain '..'.`;
 					return { plan: null, error: errorMsg };
 				}
 
-				// Preserve .gitignore check logic, including passing 'step' to console.warn
-				const fullPath = path.join(workspaceRootUri.fsPath, step.path);
-				const relativePath = path
-					.relative(workspaceRootUri.fsPath, fullPath)
-					.replace(/\\/g, "/");
-
+				const relativePath = step.path.replace(/\\/g, "/");
 				if (
 					ig.ignores(relativePath) ||
 					(step.action === PlanStepAction.CreateDirectory &&
 						ig.ignores(relativePath + "/"))
 				) {
 					console.warn(
-						`Skipping plan step ${step.step} (${step.path}) as its path is ignored by .gitignore rules.`,
-						step
+						`Skipping step ${step.step} because its path '${step.path}' is ignored by .gitignore.`
 					);
-					skipStep = true; // Mark for skipping
-				}
-
-				if (typeof step.command !== "undefined") {
-					console.warn(
-						`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'command'.`,
-						step
-					);
+					skipStep = true;
 				}
 			}
 
-			// Preserve other original property checks (e.g., command presence/absence for specific actions).
-			// Also, ensure action-specific validations using type guards (isCreateDirectoryStep, isCreateFileStep, etc.) are correctly called.
-			// If any validation fails, return the appropriate error response.
-			let actionSpecificError: string | null = null;
-			switch (step.action) {
-				case PlanStepAction.CreateDirectory:
-					if (!isCreateDirectoryStep(step)) {
-						actionSpecificError = `Invalid CreateDirectoryStep at index ${i}. Must have a non-empty 'path'.`;
-					}
-					break;
-				case PlanStepAction.CreateFile:
-					if (!isCreateFileStep(step)) {
-						actionSpecificError = `Invalid CreateFileStep at index ${i}. Must have a non-empty 'path' and either 'content' or 'generate_prompt'.`;
-					}
-					break;
-				case PlanStepAction.ModifyFile:
-					if (!isModifyFileStep(step)) {
-						actionSpecificError = `Invalid ModifyFileStep at index ${i}. Must have a non-empty 'path' and a non-empty 'modification_prompt'.`;
-					}
-					break;
-				case PlanStepAction.RunCommand:
-					if (typeof step.path !== "undefined") {
-						console.warn(
-							`Plan validation warning: Step ${step.step} (${step.action}) should not have a 'path'.`,
-							step
-						);
-					}
-					if (!isRunCommandStep(step)) {
-						actionSpecificError = `Invalid RunCommandStep at index ${i}. Must have a non-empty 'command'.`;
-					}
-					break;
-				default:
-					// This should be caught by base validation, but for completeness.
-					break;
-			}
-			if (actionSpecificError) {
-				console.error(
-					`Plan validation failed: ${actionSpecificError} Please Retry.`,
-					step
-				);
-				return { plan: null, error: `${actionSpecificError} Please Retry.` };
-			}
-
-			// If the step should be skipped due to .gitignore, continue to the next iteration.
 			if (skipStep) {
 				continue;
 			}
 
-			// --- 3. Consolidation Logic ---
-			if (step.action === PlanStepAction.ModifyFile) {
-				const filePath = step.path!;
-				const currentModificationPrompt = step.modification_prompt;
+			// Action-specific validation
+			let actionSpecificError: string | null = null;
+			switch (step.action) {
+				case PlanStepAction.CreateDirectory:
+					if (!isCreateDirectoryStep(step)) {
+						actionSpecificError = "Invalid 'create_directory' step.";
+					}
+					break;
+				case PlanStepAction.CreateFile:
+					if (!isCreateFileStep(step)) {
+						actionSpecificError =
+							"Invalid 'create_file' step. Must have 'path' and either 'content' or 'generate_prompt'.";
+					}
+					break;
+				case PlanStepAction.ModifyFile:
+					if (!isModifyFileStep(step)) {
+						actionSpecificError =
+							"Invalid 'modify_file' step. Must have 'path' and 'modification_prompt'.";
+					}
+					break;
+				case PlanStepAction.RunCommand:
+					if (!isRunCommandStep(step)) {
+						actionSpecificError =
+							"Invalid 'run_command' step. Must have a 'command'.";
+					}
+					break;
+			}
 
-				if (modifyFileConsolidationMap.has(filePath)) {
-					// Existing modification for this file: append prompt
-					const existingStep = modifyFileConsolidationMap.get(filePath)!;
-					existingStep.modification_prompt += `\n\n---\n\n${currentModificationPrompt}`;
-					modifyFileConsolidationMap.set(filePath, existingStep);
-					// Do NOT add this current step to intermediateSteps, as it's merged into an existing entry.
+			if (actionSpecificError) {
+				const errorMsg = `Plan validation failed at step ${step.step}: ${actionSpecificError}`;
+				console.error(errorMsg, step);
+				return { plan: null, error: errorMsg };
+			}
+
+			// --- 4. Consolidate ModifyFile Steps ---
+			if (isModifyFileStep(step)) {
+				const existingStep = modifyFileConsolidationMap.get(step.path);
+				if (existingStep) {
+					existingStep.modification_prompt += `\n\n---\n\n${step.modification_prompt}`;
 				} else {
-					// First modification encountered for this file: Create a copy to serve as the initial consolidated step.
-					// Add this copy to the map AND to intermediateSteps.
 					const newConsolidatedStep: ModifyFileStep = { ...step };
-					modifyFileConsolidationMap.set(filePath, newConsolidatedStep);
+					modifyFileConsolidationMap.set(step.path, newConsolidatedStep);
 					intermediateSteps.push(newConsolidatedStep);
 				}
 			} else {
-				// For all other step types (create_directory, create_file, run_command),
-				// add them directly to intermediateSteps. These are not consolidated.
 				intermediateSteps.push(step);
-			}
-		} // End of the replaced for loop
-
-		const finalSteps: PlanStep[] = [];
-
-		// Iterate through intermediateSteps. When a placeholder for a modify_file step is found,
-		// retrieve its fully consolidated version from modifyFileConsolidationMap.
-		for (const intermediateStep of intermediateSteps) {
-			if (intermediateStep.action === PlanStepAction.ModifyFile) {
-				const filePath = intermediateStep.path!;
-				const consolidatedStep = modifyFileConsolidationMap.get(filePath);
-				if (consolidatedStep) {
-					finalSteps.push(consolidatedStep);
-				} else {
-					// Safeguard: This case indicates a logic error. If the consolidated step is missing,
-					// fall back to using the placeholder, but log an error.
-					console.error(
-						`Consolidated step not found for file: ${filePath} when reconstructing plan. Using original placeholder.`,
-						intermediateStep
-					);
-					finalSteps.push(intermediateStep);
-				}
-			} else {
-				// For all other step types, add them directly to finalSteps as they are not consolidated.
-				finalSteps.push(intermediateStep);
 			}
 		}
 
-		// Update the 'steps' array in potentialPlan with the final ordered and re-numbered steps.
-		potentialPlan.steps = finalSteps.map((step, index) => ({
+		// Re-number and finalize the steps after consolidation
+		const finalSteps = intermediateSteps.map((step, index) => ({
 			...step,
-			step: index + 1, // Re-number steps sequentially starting from 1
+			step: index + 1,
 		}));
 
+		potentialPlan.steps = finalSteps;
+
 		console.log(
-			`Plan validation successful. ${finalSteps.length} steps after consolidation and re-numbering.`
+			`Plan validation successful. ${finalSteps.length} steps after consolidation.`
 		);
 		return { plan: potentialPlan as ExecutionPlan };
 	} catch (error: any) {
 		const errorMsg = `Error parsing plan JSON: ${
-			error.message || "Unknown JSON parsing error"
-		}`;
+			error.message || "An unknown error occurred"
+		}. Please ensure the AI provides valid JSON.`;
 		console.error(errorMsg, error);
 		return { plan: null, error: errorMsg };
 	}

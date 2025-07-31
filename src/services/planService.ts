@@ -1,3 +1,4 @@
+// src/services/planService.ts
 import * as vscode from "vscode";
 import * as path from "path";
 import { GenerationConfig } from "@google/generative-ai";
@@ -750,6 +751,17 @@ export class PlanService {
 			// Check if a plan was successfully obtained after all attempts
 			if (!executablePlan) {
 				// All retries failed
+				const finalErrorMsg = `Failed to generate a valid plan after ${
+					this.MAX_PLAN_PARSE_RETRIES
+				} attempts. The AI response did not conform to the expected JSON format. Error: ${
+					lastParsingError || "Unknown parsing issue"
+				}`;
+				this._postChatUpdateForPlanExecution({
+					type: "appendRealtimeModelMessage",
+					value: { text: finalErrorMsg, isError: true },
+					isPlanStepUpdate: true,
+				});
+
 				this.provider.postMessageToWebview({
 					type: "structuredPlanParseFailed",
 					value: {
