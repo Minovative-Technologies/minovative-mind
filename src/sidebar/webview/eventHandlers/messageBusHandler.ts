@@ -1086,7 +1086,8 @@ export function initializeMessageBusHandler(
 				const { text } = message.payload;
 				elements.chatInput.value = text;
 				elements.chatInput.focus();
-				elements.chatInput.placeholder = "Ask Minovative Mind...";
+				elements.chatInput.placeholder =
+					"Ask Minovative Mind, use '/' (commands), or '@' (files)...";
 				elements.chatInput.disabled = false;
 				elements.sendButton.disabled = false;
 				setLoadingState(false, elements);
