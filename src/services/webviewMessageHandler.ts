@@ -12,6 +12,7 @@ import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 import { generateLightweightPlanPrompt } from "../ai/prompts/lightweightPrompts";
+import { scanWorkspace } from "../context/workspaceScanner"; // NEW IMPORT
 
 export async function handleWebviewMessage(
 	data: any,
@@ -65,6 +66,7 @@ export async function handleWebviewMessage(
 		"requestClearChatConfirmation", // New: Allowed for user confirmation flow
 		"confirmClearChatAndRevert", // New: Allowed as a direct user interaction during clear chat flow
 		"cancelClearChat", // New: Allowed as a direct user interaction during clear chat flow
+		"requestWorkspaceFiles", // NEW: Allow workspace file requests during background operations
 	];
 
 	if (
@@ -805,6 +807,63 @@ export async function handleWebviewMessage(
 				}
 			}
 			break; // break from the switch case
+		}
+
+		case "requestWorkspaceFiles": {
+			// NEW CASE: Request Workspace Files
+			console.log("[MessageHandler] Received requestWorkspaceFiles.");
+			try {
+				const workspaceFolders = vscode.workspace.workspaceFolders;
+				if (!workspaceFolders || workspaceFolders.length === 0) {
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: "No workspace folder is currently open.",
+						isError: true,
+					});
+					await provider.endUserOperation("failed");
+					return;
+				}
+
+				// For simplicity, use the first workspace folder
+				const rootFolder = workspaceFolders[0];
+				const workspaceRootPath = rootFolder.uri.fsPath;
+
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Scanning workspace for relevant files...",
+				});
+
+				const files = await scanWorkspace({ useCache: true });
+
+				// Convert URIs to relative paths
+				const relativePaths = files.map((fileUri) =>
+					path.relative(workspaceRootPath, fileUri.fsPath)
+				);
+
+				provider.postMessageToWebview({
+					type: "receiveWorkspaceFiles", // Assuming this message type exists on the webview side
+					value: relativePaths,
+				});
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Found ${relativePaths.length} workspace files.`,
+				});
+				// Removed: await provider.endUserOperation('success');
+			} catch (error: any) {
+				console.error(
+					"[MessageHandler] Error handling requestWorkspaceFiles:",
+					error
+				);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Failed to scan workspace files: ${
+						error.message || String(error)
+					}`,
+					isError: true,
+				});
+				await provider.endUserOperation("failed");
+			}
+			break;
 		}
 
 		case "aiResponseEnd": {

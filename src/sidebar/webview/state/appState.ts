@@ -39,4 +39,7 @@ export const appState: WebviewAppState = {
 	isTokenUsageVisible: false, // Initialize token usage visibility
 	nextMessageIndex: 0,
 	selectedImages: [], // Initialize the new property
+	allWorkspaceFiles: [],
+	isRequestingWorkspaceFiles: false, // New property to track if workspace files are being requested
+	currentSuggestionType: "none",
 };

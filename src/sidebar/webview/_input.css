@@ -256,9 +256,10 @@
 	border-radius: var(--border-radius);
 	font-size: 0.9em;
 	color: var(--vscode-editor-foreground);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	white-space: normal;
+	word-break: break-all;
+	line-height: 1.5;
+	margin-bottom: 5px;
 	transition: background-color 0.1s ease, color 0.1s ease;
 }
 .command-item:hover {
@@ -310,4 +311,8 @@
 	font-weight: bold;
 	font-size: 1.2em;
 	padding: 0;
+}
+
+#command-suggestions-container .command-item:last-child {
+	margin-bottom: 0;
 }

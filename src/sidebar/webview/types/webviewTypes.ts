@@ -88,6 +88,8 @@ export interface ImageUploadState {
 	previewElement: HTMLDivElement; // Reference to the DOM element displaying the preview
 }
 
+export type SuggestionType = "command" | "file" | "loading" | "none";
+
 export interface WebviewAppState {
 	currentAiMessageContentElement: HTMLSpanElement | null;
 	currentAccumulatedText: string;
@@ -114,4 +116,7 @@ export interface WebviewAppState {
 	isTokenUsageVisible: boolean; // New property to track token usage visibility
 	nextMessageIndex: number;
 	selectedImages: ImageUploadState[];
+	allWorkspaceFiles: string[];
+	isRequestingWorkspaceFiles: boolean;
+	currentSuggestionType: SuggestionType;
 }

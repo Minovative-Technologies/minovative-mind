@@ -31,6 +31,7 @@ import { md } from "../utils/markdownRenderer";
 import { postMessageToExtension } from "../utils/vscodeApi";
 import { RequiredDomElements } from "../types/webviewTypes";
 import { resetUIStateAfterCancellation } from "../ui/statusManager";
+import { showSuggestions, hideSuggestions } from "../ui/commandSuggestions"; // Existing import, ensures show/hideSuggestions are available
 
 // Add global variables for code streaming
 const activeCodeStreams = new Map<
@@ -1096,6 +1097,28 @@ export function initializeMessageBusHandler(
 					"[Webview] Received resetCodeStreamingArea message. Resetting code streams."
 				);
 				resetCodeStreams();
+				break;
+			}
+			case "receiveWorkspaceFiles": {
+				console.log("[Webview] Received receiveWorkspaceFiles message.");
+				const files = message.value as string[];
+				appState.allWorkspaceFiles = files;
+				// Assuming appState.isRequestingWorkspaceFiles exists and was set to true prior to this message.
+				appState.isRequestingWorkspaceFiles = false;
+
+				// Check if the input still starts with '@' and re-filter/show suggestions
+				const chatInputValue = elements.chatInput.value;
+				if (chatInputValue.startsWith("@")) {
+					const query = chatInputValue.substring(1).toLowerCase();
+					const matches = appState.allWorkspaceFiles.filter((file) =>
+						file.toLowerCase().includes(query)
+					);
+					showSuggestions(matches, "file", elements, setLoadingState);
+					elements.chatInput.focus(); // Ensure input is focused after updating suggestions
+				} else {
+					// If '@' is no longer present, hide any previously shown suggestions
+					hideSuggestions(elements, setLoadingState);
+				}
 				break;
 			}
 			default:

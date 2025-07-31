@@ -1,8 +1,9 @@
 import { sendMessage } from "../messageSender";
+import { postMessageToExtension } from "../utils/vscodeApi"; // NEW import
 import {
-	showCommandSuggestions,
-	hideCommandSuggestions,
-	selectCommand,
+	showSuggestions, // Renamed from showCommandSuggestions
+	hideSuggestions, // Renamed from hideCommandSuggestions
+	selectSuggestion, // Renamed from selectCommand
 	highlightCommand,
 	isInputtingCompleteCommand,
 } from "../ui/commandSuggestions";
@@ -53,46 +54,75 @@ export function initializeInputEventListeners(
 	chatInput.addEventListener("input", () => {
 		const text = chatInput.value;
 
+		let atIndex = -1;
+		let query = "";
+
 		if (text.startsWith("/")) {
-			// If the user has typed a complete command (e.g., "/plan " or just "/commit")
+			// ... Existing command suggestion logic ...
+			const commandQuery = text.substring(1).toLowerCase();
 			if (isInputtingCompleteCommand(text)) {
-				// Hide suggestions as the command is complete
-				hideCommandSuggestions(elements, setLoadingState);
+				hideSuggestions(elements, setLoadingState);
 				return;
 			}
-
-			// Otherwise, show command suggestions based on current input query
-			const query = text.substring(1).toLowerCase();
 			const matches = MINOVATIVE_COMMANDS.filter((cmd: string) =>
-				cmd.toLowerCase().includes(query)
+				cmd.toLowerCase().includes(commandQuery)
 			);
-
-			showCommandSuggestions(matches, elements, setLoadingState);
+			showSuggestions(matches, "command", elements, setLoadingState);
 		} else {
-			// If the input doesn't start with '/', hide any visible suggestions
-			hideCommandSuggestions(elements, setLoadingState);
+			// Logic for potential file suggestions
+			const lastAtIndex = text.lastIndexOf("@");
+			const isValidTrigger =
+				lastAtIndex === 0 || (lastAtIndex > 0 && text[lastAtIndex - 1] === " ");
+
+			if (isValidTrigger) {
+				atIndex = lastAtIndex;
+				query = text.substring(atIndex + 1).toLowerCase();
+
+				if (
+					appState.allWorkspaceFiles.length === 0 &&
+					!appState.isRequestingWorkspaceFiles
+				) {
+					console.log(
+						"Requesting workspace files as state is empty and not already requesting."
+					);
+					appState.isRequestingWorkspaceFiles = true;
+					postMessageToExtension({ type: "requestWorkspaceFiles" });
+					showSuggestions([], "loading", elements, setLoadingState);
+					return; // Wait for files to load on the next input event
+				} else {
+					// Files are available or a request is ongoing. Filter and show.
+					const matches = appState.allWorkspaceFiles.filter((file) =>
+						file.toLowerCase().includes(query)
+					);
+					showSuggestions(matches, "file", elements, setLoadingState);
+					return; // Prevent hiding suggestions
+				}
+			} else {
+				// If no command and no valid "@" trigger, hide suggestions
+				hideSuggestions(elements, setLoadingState);
+			}
 		}
 	});
 
 	// Event listener for keydown events in the chat input field
 	chatInput.addEventListener("keydown", (e) => {
-		const isCommandSuggestionsCurrentlyVisible =
+		const isCommandOrFileSuggestionsCurrentlyVisible =
 			appState.isCommandSuggestionsVisible;
-		const currentFilteredCommands = appState.filteredCommands;
-		let currentActiveCommandIndex = appState.activeCommandIndex;
+		const currentFilteredSuggestions = appState.filteredCommands; // Renamed to be more generic
+		let currentActiveSuggestionIndex = appState.activeCommandIndex; // Renamed to be more generic
 
-		// If command suggestions are not visible, handle Enter key for sending messages
-		if (!isCommandSuggestionsCurrentlyVisible) {
+		// If suggestions are not visible, handle Enter key for sending messages
+		if (!isCommandOrFileSuggestionsCurrentlyVisible) {
 			if (e.key === "Enter" && !e.shiftKey) {
 				console.log("Chat input Enter key pressed (no suggestions visible).");
 				e.preventDefault(); // Prevent new line in textarea
 				sendMessage(elements, setLoadingState);
 			}
-			return; // No further command suggestion handling needed if not visible
+			return; // No further suggestion handling needed if not visible
 		}
 
-		// Handle key presses when command suggestions ARE visible
-		if (currentFilteredCommands.length === 0) {
+		// Handle key presses when suggestions ARE visible
+		if (currentFilteredSuggestions.length === 0) {
 			// If suggestions are visible but there are no matches, pressing Enter should still be prevented
 			// to avoid sending an incomplete command or empty message.
 			if (e.key === "Enter" && !e.shiftKey) {
@@ -104,35 +134,45 @@ export function initializeInputEventListeners(
 			return;
 		}
 
-		const numCommands = currentFilteredCommands.length;
+		const numSuggestions = currentFilteredSuggestions.length; // Renamed to be more generic
 
 		if (e.key === "ArrowDown") {
 			e.preventDefault(); // Prevent cursor movement in textarea
-			currentActiveCommandIndex = (currentActiveCommandIndex + 1) % numCommands;
-			appState.activeCommandIndex = currentActiveCommandIndex; // Update the state
-			highlightCommand(currentActiveCommandIndex, elements);
+			currentActiveSuggestionIndex =
+				(currentActiveSuggestionIndex + 1) % numSuggestions;
+			appState.activeCommandIndex = currentActiveSuggestionIndex; // Update the state
+			highlightCommand(currentActiveSuggestionIndex, elements);
 		} else if (e.key === "ArrowUp") {
 			e.preventDefault(); // Prevent cursor movement in textarea
-			currentActiveCommandIndex =
-				(currentActiveCommandIndex - 1 + numCommands) % numCommands;
-			appState.activeCommandIndex = currentActiveCommandIndex; // Update the state
-			highlightCommand(currentActiveCommandIndex, elements);
+			currentActiveSuggestionIndex =
+				(currentActiveSuggestionIndex - 1 + numSuggestions) % numSuggestions;
+			appState.activeCommandIndex = currentActiveSuggestionIndex; // Update the state
+			highlightCommand(currentActiveSuggestionIndex, elements);
 		} else if (e.key === "Enter") {
 			e.preventDefault(); // Prevent new line in textarea and form submission
 
-			if (currentActiveCommandIndex !== -1) {
-				// Select the highlighted command
-				const selectedCmd = currentFilteredCommands[currentActiveCommandIndex];
-				selectCommand(selectedCmd, elements, setLoadingState);
+			if (
+				currentActiveSuggestionIndex !== -1 &&
+				appState.currentSuggestionType
+			) {
+				// Select the highlighted suggestion based on its type
+				const selectedSuggestion =
+					currentFilteredSuggestions[currentActiveSuggestionIndex];
+				selectSuggestion(
+					selectedSuggestion,
+					appState.currentSuggestionType, // Pass the type
+					elements,
+					setLoadingState
+				); // Corrected call: parameter order
 			} else {
 				console.log(
-					"Enter pressed with suggestions visible but no command highlighted. Not sending message."
+					"Enter pressed with suggestions visible but no suggestion highlighted or type unknown. Not sending message."
 				);
 			}
 		} else if (e.key === "Escape") {
 			e.preventDefault(); // Prevent default browser behavior (e.g., closing popups)
-			// Hide command suggestions
-			hideCommandSuggestions(elements, setLoadingState);
+			// Hide suggestions
+			hideSuggestions(elements, setLoadingState); // Renamed call
 		}
 	});
 
@@ -142,12 +182,44 @@ export function initializeInputEventListeners(
 	// disappearing before a click registers on them.
 	chatInput.addEventListener("blur", () => {
 		setTimeout(() => {
-			// Only hide if the input value does not start with '/',
-			// otherwise, it indicates the user might still be typing a command
-			// or has just selected one, in which case the `selectCommand` function
-			// will handle hiding the suggestions already.
-			if (chatInput && !chatInput.value.startsWith("/")) {
-				hideCommandSuggestions(elements, setLoadingState);
+			if (!chatInput) {
+				return;
+			}
+
+			// Capture the state of currentSuggestionType at the beginning of this blur event processing.
+			const originalSuggestionType = appState.currentSuggestionType;
+
+			// Condition to NOT hide suggestions:
+			// If suggestions are currently visible AND the current suggestion type is 'file'
+			// AND the chat input value still starts with '@'
+			const shouldKeepFileSuggestionsVisible =
+				appState.isCommandSuggestionsVisible &&
+				originalSuggestionType === "file" &&
+				chatInput.value.includes("@"); // Changed from startsWith('@') to includes('@') for more robust blur behavior
+
+			if (shouldKeepFileSuggestionsVisible) {
+				// Do NOT hide suggestions as per instruction.
+				console.log("[Blur] Keeping file suggestions visible due to @ input.");
+			} else {
+				// Otherwise, call hideSuggestions.
+				console.log("[Blur] Hiding suggestions as per general rule.");
+				hideSuggestions(elements, setLoadingState);
+				// Note: hideSuggestions internally sets appState.currentSuggestionType to 'none'.
+			}
+
+			// Additionally, if the input no longer contains '@' and the current suggestion type *was* 'file',
+			// reset appState.currentSuggestionType to 'none'.
+			// This handles cases where file suggestions might have been active, and the '@' was removed,
+			// requiring a state cleanup even if `hideSuggestions` wasn't called by the main branch (which it would be).
+			// This explicitly follows the instruction for robustness.
+			if (
+				!chatInput.value.includes("@") && // Changed from startsWith('@') to includes('@') for consistency
+				originalSuggestionType === "file"
+			) {
+				console.log(
+					"[Blur] Additional cleanup: Resetting currentSuggestionType from 'file' to 'none' as @ removed."
+				);
+				appState.currentSuggestionType = "none";
 			}
 		}, 150); // 150ms delay to allow click event to propagate
 	});

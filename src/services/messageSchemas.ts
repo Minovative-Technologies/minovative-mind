@@ -127,6 +127,10 @@ const commitReviewSchema = z.object({
 	}),
 }); // Based on usage
 
+const requestWorkspaceFilesSchema = z.object({
+	type: z.literal("requestWorkspaceFiles"),
+});
+
 // Schema for a new feature request message
 const newFeatureRequestSchema = z.object({
 	type: z.literal("newFeatureRequest"), // Unique discriminator
@@ -168,6 +172,7 @@ export const allMessageSchemas = z.discriminatedUnion("type", [
 	aiResponseEndSchema,
 	structuredPlanParseFailedSchema,
 	commitReviewSchema,
+	requestWorkspaceFilesSchema, // Added here, before the final schema
 	newFeatureRequestSchema,
 ]);
 

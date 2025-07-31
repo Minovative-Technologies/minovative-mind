@@ -99,6 +99,11 @@ export interface WebviewToExtensionChatMessageType {
 	imageParts?: Array<{ mimeType: string; data: string }>; // Optional array of image data
 }
 
+// NEW: Message type for requesting a list of workspace files from the extension
+export interface RequestWorkspaceFilesMessage {
+	type: "requestWorkspaceFiles";
+}
+
 /**
  * Union type for all messages sent from the Webview to the Extension.
  * Each member should have a distinct 'type' literal property.
@@ -109,7 +114,8 @@ export type WebviewToExtensionMessages =
 	| EditChatMessage
 	| GeneratePlanPromptFromAIMessage
 	| RevertRequestMessage // Added RevertRequestMessage
-	| WebviewToExtensionChatMessageType;
+	| WebviewToExtensionChatMessageType
+	| RequestWorkspaceFilesMessage; // NEW: Added RequestWorkspaceFilesMessage
 
 // New message type: Extension to Webview for pre-filling chat input
 export interface PrefillChatInput {
@@ -297,6 +303,12 @@ export interface ResetCodeStreamingAreaMessage {
 	type: "resetCodeStreamingArea";
 }
 
+// NEW: Message type for receiving a list of workspace files from the extension
+export interface ReceiveWorkspaceFilesMessage {
+	type: "receiveWorkspaceFiles";
+	value: string[]; // Array of relative file paths
+}
+
 /**
  * Union type for all messages sent from the Extension to the Webview.
  * Each member should have a distinct 'type' literal property.
@@ -330,7 +342,8 @@ export type ExtensionToWebviewMessages =
 	| CodeFileStreamStartMessage // NEW: Added CodeFileStreamStartMessage
 	| CodeFileStreamChunkMessage // NEW: Added CodeFileStreamChunkMessage
 	| CodeFileStreamEndMessage
-	| ResetCodeStreamingAreaMessage; // NEW: Added ResetCodeStreamingAreaMessage
+	| ResetCodeStreamingAreaMessage
+	| ReceiveWorkspaceFilesMessage; // NEW: Added ReceiveWorkspaceFilesMessage
 
 export interface PlanGenerationContext {
 	type: "chat" | "editor";
