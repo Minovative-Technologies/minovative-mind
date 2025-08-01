@@ -6,3 +6,4 @@ node_modules
 NOTES.md
 TODO.md
 chats/
+.DS_Store
