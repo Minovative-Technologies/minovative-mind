@@ -42,29 +42,72 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 
 ## Quick Start (Get Started in 1-3 minutes)
 
-1. **Install the Extension:** Install directly from your VS Code editor by cloning/fork it then downloading the file
+### ✅ Summary
 
-   - Step 1: Clone it and get the project up and running in your VS Code editor
+| Step | Description                                     |
+| ---- | ----------------------------------------------- |
+| 1    | Clone the repository                            |
+| 2    | Install project dependencies with `npm install` |
+| 3    | Generate `.vsix` using `npx vsce package`       |
+| 4    | Install the extension via GUI or `code` CLI     |
 
-   ```bash
-   git clone https://github.com/Minovative-Technologies/minovative-mind.git
-   ```
+Here's the cleaned-up version in **Markdown** format, ready to paste into your `README.md`:
 
-   - Step 2: Run this command
+---
 
-   ```bash
-   npm run package
-   ```
+## 🔧 How to Use the Minovative Mind Extension from GitHub
 
-   - Step 3: Run this command
+### **Step 1: Clone the Repository**
 
-   ```bash
-   vsce package
-   ```
+```bash
+git clone https://github.com/Minovative-Technologies/minovative-mind.git
+cd minovative-mind
+```
 
-   - Step 4: Installing Extension
+### **Step 2: Install Dependencies**
 
-   - Now when you have the .vsce file (e.g. minovative-mind-1.2.3.vsce), install the extension by right clicking.
+Make sure you have **Node.js** and **npm** installed, then run:
+
+```bash
+npm install
+```
+
+### **Step 3: Package the Extension**
+
+Use the following command to package the extension:
+
+```bash
+npx vsce package
+```
+
+> This will generate a `.vsix` file, such as:
+> `minovative-mind-1.2.3.vsix`
+
+> If `vsce` is not installed, you can install it globally:
+>
+> ```bash
+> npm install -g @vscode/vsce
+> ```
+
+### **Step 4: Install the Extension in VS Code**
+
+You have two options:
+
+#### **Option A: Using the GUI**
+
+1. Open VS Code.
+2. Go to the extension file `minovative-mind-1.2.3.vsix`, right click it.
+3. Choose **“Install Extension VSIX”**.
+
+#### **Option B: Using the Command Line**
+
+```bash
+code --install-extension minovative-mind-1.2.3.vsix
+```
+
+> If the `code` command isn't available, [enable it from the command palette](https://code.visualstudio.com/docs/setup/mac#_launching-from-the-command-line).
+
+---
 
 - **Get Your API Key:**
 
@@ -72,8 +115,12 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 
 - **Set Your Key in VS Code:**
 
-  - Open VS Code project, press (Windows: `CTRL + ALT + M` or Mac: `CONTROL + CMD + M`) or click on the Minovative Mind icon in sidebar on the left.
+  - Open VS Code project
+
+    - press (Windows: `CTRL + ALT + M` or Mac: `CONTROL + CMD + M`) or click on the Minovative Mind icon in sidebar on the left.
+
   - In the Minovative Mind sidebar, copy and paste your API key in the API Key Management section on the bottom.
+
   - For a better experience, you could move the Minovative Mind extension from the primary bar to the secondary bar by right clicking the Minovative Mind icon
     - After right clicking, go to "Move To" > "Secondary Side Bar"
 
@@ -96,6 +143,7 @@ This project thrives on community innovation.
 
 ## Other things about this project
 
+- [**`CONTRIBUTING.md`**](./CONTRIBUTING.md)
 - [**`CAPABILITIES.md`**](./CAPABILITIES.md)
 - [**`ARCHITECTURE.md`**](./ARCHITECTURE.md)
 
