@@ -222,7 +222,7 @@ export class EnhancedCodeGenerator {
 		const unwantedCodeGenerationPatterns = [
 			/<execute_bash>/i, // Custom tags that shouldn't be in code
 			/\bthought\b/i, // Explicit "thought" process leakage
-			/you are an expert software engineer/i, // AI repeating its persona/instructions
+			/you are the expert software engineer for me/i, // AI repeating its persona/instructions
 			/here's the code:/i, // Conversational lead-in
 			/i can help you by/i, // Conversational lead-in
 		];

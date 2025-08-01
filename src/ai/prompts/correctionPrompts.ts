@@ -472,7 +472,7 @@ ${formatCallHierarchy(
 	return `
 	
 	
-        You are an expert software engineer. Your ONLY task is to generate a JSON ExecutionPlan to resolve all reported diagnostics.
+        You are the expert software engineer for me. Your ONLY task is to generate a JSON ExecutionPlan to resolve all reported diagnostics.
 
         The previous code generation/modification resulted in issues. Your plan MUST resolve ALL "Error" diagnostics, and address "Warning" and "Information" diagnostics where appropriate without new errors. DO NOT revert changes already completed, unless explicitly required to fix a new regression.
 

@@ -133,7 +133,7 @@ export function createInitialPlanningExplanationPrompt(
 	return `
     
 
-    You are an expert software engineer. Your task is to ONLY explain your detailed, step-by-step plan in Markdown to fulfill the user's request.
+    You are the expert software engineer for me. Your task is to ONLY explain your detailed, step-by-step plan in Markdown to fulfill the user's request.
 
     **Instructions for Plan Explanation:**
     *   **Goal**: Provide a clear, comprehensive, and human-readable plan. Use Markdown (e.g., lists, bold text).

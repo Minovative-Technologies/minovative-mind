@@ -80,6 +80,7 @@ export async function _performModification(
 			relevantSnippets: "",
 			editorContext: undefined,
 			activeSymbolInfo: undefined,
+			recentCorrectionAttemptOutcomes: [], // Added as per instruction
 		};
 		const genResult = await enhancedCodeGenerator.generateFileContent(
 			filePath,

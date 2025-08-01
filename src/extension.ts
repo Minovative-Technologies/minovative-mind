@@ -58,7 +58,7 @@ async function executeExplainAction(
 
 	const userInstruction =
 		"Explain the following code selection concisely and simply. Focus on its purpose, functionality, and key components. Provide the explanation without using Markdown formatting at ALL.";
-	const systemPrompt = `You are an expert software engineer analyzing the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
+	const systemPrompt = `You are the expert software engineer for me, analyzing the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
 
 	const prompt = `
 	-- System Prompt --

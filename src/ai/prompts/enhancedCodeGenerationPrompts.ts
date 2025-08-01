@@ -369,7 +369,7 @@ export function createEnhancedGenerationPrompt(
 		.map((req, idx: number) => `${idx + 1}. ${req}`)
 		.join("\n");
 
-	return `You are an expert software engineer specializing in ${languageId} development. Your task is to generate production-ready, accurate code. ONLY focus on generating code.
+	return `You are the expert software engineer for me, specializing in ${languageId} development. Your task is to generate production-ready, accurate code. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
 ${formattedRequirements}
@@ -599,7 +599,7 @@ export function createEnhancedModificationPrompt(
 		.map((req, idx: number) => `${idx + 1}. ${req}`)
 		.join("\n");
 
-	return `You are an expert software engineer. Your task is to modify the existing file according to the provided instructions. ONLY focus on generating code.
+	return `You are the expert software engineer for me,. Your task is to modify the existing file according to the provided instructions. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
 ${formattedRequirements}
@@ -858,7 +858,7 @@ ${relevantOutcomes
 `;
 	}
 
-	return `You are an expert software engineer performing a root cause analysis on a failed code correction attempt.
+	return `You are the expert software engineer for me, performing a root cause analysis on a failed code correction attempt.
 
 Your primary goal is to diagnose WHY the previous attempt did not resolve issues or introduced new ones, and to provide actionable insights for the *next* correction.
 
@@ -1394,7 +1394,7 @@ export function createPureCodeFormatCorrectionPrompt(
 		content
 	);
 
-	return `You are an expert software engineer. Your task is to correct the format of the previously generated code. ONLY focus on generating code.
+	return `You are the expert software engineer for me,. Your task is to correct the format of the previously generated code. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
 1. **Strict Format Adherence**: Your response MUST contain ONLY the generated code enclosed STRICTLY within \`XBEGIN_CODEX\` and \`XEND_CODEX\` delimiters. NO other text, explanations, or markdown fences (\`\`\`language) are allowed outside these delimiters.
