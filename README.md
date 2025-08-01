@@ -92,7 +92,7 @@ My vision is to empower every developer with a powerful, free, and open-source A
 This project thrives on community innovation.
 
 - ⭐ **Star us on GitHub** to show your support!
-- 🗣️ **Join the conversation** on our [MM's Discord Server]() or follow us on [X/Twitter](https://x.com/minovative_tech).
+- 🗣️ **Join the conversation** on our [Minovative Mind Discord](https://discord.gg/KFkMgAH3EG) or follow us on [X/Twitter](https://x.com/minovative_tech).
 
 ## Other things about this project
 

@@ -15,7 +15,7 @@ This is the core of my vision. The [Creator](https://github.com/Quarantiine) bui
 **Your exploration, modification, and extension of this project is a primary and celebrated form of contribution.**
 
 If you build something amazing, share it with the community on the offical Discord:
-[Minovative Mind Discord](), or share it on social media.
+[Minovative Mind Discord](https://discord.gg/KFkMgAH3EG), or share it on social media.
 
 ### Path 2: Improving the Core Project
 
