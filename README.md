@@ -73,7 +73,9 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 - **Set Your Key in VS Code:**
 
   - Open VS Code project, press (Windows: `CTRL + ALT + M` or Mac: `CONTROL + CMD + M`) or click on the Minovative Mind icon in sidebar on the left.
-  - In the Minovative Mind sidebar, copy and paste your API key in the API Key Management section on the bottom. Build away!
+  - In the Minovative Mind sidebar, copy and paste your API key in the API Key Management section on the bottom.
+  - For a better experience, you could move the Minovative Mind extension from the primary bar to the secondary bar by right clicking the Minovative Mind icon
+    - After right clicking, go to "Move To" > "Secondary Side Bar"
 
 ## More Than a Tool—It's A Platform
 
