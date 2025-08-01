@@ -82,7 +82,6 @@ npx vsce package
 
 > This will generate a `.vsix` file, such as:
 > `minovative-mind-1.2.3.vsix`
-
 > If `vsce` is not installed, you can install it globally:
 >
 > ```bash
