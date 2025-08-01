@@ -109,6 +109,8 @@ code --install-extension minovative-mind-1.2.3.vsix
 
 ---
 
+#### Step 5: API Key Setup
+
 - **Get Your API Key:**
 
   - Create a free API key from [**Google AI Studio**](https://aistudio.google.com/app/apikey).
