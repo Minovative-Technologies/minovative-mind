@@ -3,7 +3,7 @@ import { SidebarProvider } from "../sidebar/SidebarProvider";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { UrlContextService } from "./urlContextService";
 import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes"; // Import HistoryEntry for type safety, and HistoryEntryPart
-import { DEFAULT_FLASH_MODEL } from "../sidebar/common/sidebarConstants";
+import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 
 export class ChatService {
 	private urlContextService: UrlContextService;
@@ -17,7 +17,7 @@ export class ChatService {
 		groundingEnabled: boolean = false
 	): Promise<void> {
 		const { settingsManager } = this.provider;
-		const modelName = DEFAULT_FLASH_MODEL; // Use the default model for regular chat
+		const modelName = DEFAULT_FLASH_LITE_MODEL; // Use the default model for regular chat
 
 		this.provider.activeOperationCancellationTokenSource =
 			new vscode.CancellationTokenSource();
@@ -186,7 +186,7 @@ export class ChatService {
 			contextService,
 			aiRequestService,
 		} = this.provider;
-		const modelName = DEFAULT_FLASH_MODEL; // Use the default model for regeneration
+		const modelName = DEFAULT_FLASH_LITE_MODEL; // Use the default model for regeneration
 
 		// 1. Cancel any existing activeOperationCancellationTokenSource and create a new one.
 		this.provider.activeOperationCancellationTokenSource?.cancel();

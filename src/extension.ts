@@ -8,10 +8,7 @@ import { hasMergeConflicts } from "./utils/mergeUtils"; // Added import for merg
 import { CodeSelectionService } from "./services/codeSelectionService";
 import { getSymbolsInDocument } from "./services/symbolService";
 import { DiagnosticService } from "./utils/diagnosticUtils";
-import {
-	DEFAULT_FLASH_LITE_MODEL,
-	DEFAULT_FLASH_MODEL,
-} from "./sidebar/common/sidebarConstants";
+import { DEFAULT_FLASH_LITE_MODEL } from "./sidebar/common/sidebarConstants";
 
 // Helper function type definition for AI action results (kept for potential future use)
 type ActionResult =
