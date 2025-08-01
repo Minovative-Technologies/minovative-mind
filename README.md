@@ -109,7 +109,7 @@ code --install-extension minovative-mind-1.2.3.vsix
 
 ---
 
-#### Step 5: API Key Setup
+### Step 5: API Key Setup
 
 - **Get Your API Key:**
 
