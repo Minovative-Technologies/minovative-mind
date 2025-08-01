@@ -148,6 +148,7 @@ This project thrives on community innovation.
 - [**`CONTRIBUTING.md`**](./CONTRIBUTING.md)
 - [**`CAPABILITIES.md`**](./CAPABILITIES.md)
 - [**`ARCHITECTURE.md`**](./ARCHITECTURE.md)
+- [**`ROADMAP.md`**](./ROADMAP.md)
 
 ---
 

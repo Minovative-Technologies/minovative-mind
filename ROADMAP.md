@@ -2,7 +2,7 @@
 
 This document outlines ideas to implement for future development for Minovative Mind. It's designed to be a living document, allowing for granular updates and contributions.
 
-## #1 Feature that will make Minovative Mind a even better and top performing AI Agent in the market
+## #1 Feature that will make Minovative Mind an even better and top performing AI Agent in the market
 
 Minovative Mind already performs at high levels without surgical edits like GitHub Copilt and Cursor AI, but with surgical edits, Minovative Mind will be even more powerful as ever if implmented correctly.
 
@@ -32,48 +32,4 @@ A "surgical insertion" or "surgical edit" involves applying highly precise, gran
 
 ---
 
-#### High-Level Implementation Strategy To Help You Out (Optional)
-
-To shift the AI's output from full file rewrites to surgical edits, the core changes would primarily involve prompt engineering and the AI response parsing logic.
-
-**1. AI Model Interaction & Prompt Engineering:**
-
-- **Instruction to AI:** The most crucial step is to modify the prompts sent to the AI. Instead of asking for "the complete updated content of the file," the prompt would request "a unified diff (or a JSON array of line-based edits) to apply to the existing file."
-- **Format Specification:** The prompt must clearly specify the desired output format (e.g., standard Git-style unified diff format).
-  - _Example Prompt Snippet:_ "Given the following `original_content` and the `user_instruction`, provide _only_ a unified diff that applies the necessary changes. Do not include any conversational text or explanations. Wrap the diff within `BEGIN_DIFF` and `END_DIFF` markers."
-- **Contextual Information:** The AI still needs the full original file content (`currentContent`) as context to understand the current state and generate accurate relative changes.
-- **Refinement Prompts:** The `createRefinementPrompt` and `createRefineModificationPrompt` functions would need to adapt. If the AI outputs an invalid diff, the correction prompt should specifically highlight the diff parsing error and reiterate the requirement for a valid diff format.
-
-**2. Modification of `EnhancedCodeGenerator` (`src/ai/enhancedCodeGeneration.ts`):**
-
-- **`_generateModification` Method:** This method (currently responsible for generating the full `modifiedContent` string) would be updated to:
-  1. Call the AI with the new diff-generating prompt.
-  2. Expect the AI's raw response to be a diff string (e.g., wrapped in `BEGIN_DIFF`/`END_DIFF`).
-  3. Extract the raw diff string.
-  4. _Crucially_, it would _not_ return `modifiedContent` (the full string) directly, but rather a structure that represents the diff. This could be the raw diff string itself, or parsed `vscode.TextEdit` objects if parsing happens within this method.
-- **Internal Diff Application (Implicit):** The `_validateAndRefineModification` method currently uses `generateFileChangeSummary` to compare `originalContent` and `modifiedContent`. If the AI _directly_ generates a diff, this step might become `_validateAndApplyDiff` which parses the AI's diff output, validates it, and attempts to apply it.
-- **`_checkPureCodeFormat`:** This method currently checks for `XBEGIN_CODEX`/`XEND_CODEX`. A new similar method (`_checkPureDiffFormat` or extend this one) would be needed to validate `BEGIN_DIFF`/`END_DIFF` delimiters and the general structure of the diff output.
-- **Return Type:** The `modifyFileContent` public method's return type `content: string` might need to be re-evaluated if it's strictly about returning the _final modified content_ after application, or if it should also expose the generated diff.
-
-**3. Leveraging `diffingUtils.ts`:**
-
-- **`generatePreciseTextEdits`:** This function is already perfectly suited for calculating `vscode.TextEdit` objects from an old and new content string. If the AI outputs a full new file, this is what `applyAITextEdits` (likely in `planExecutionService.ts`) would use.
-- **`parseDiffHunkToTextEdits`:** If the AI is trained to output standard unified diffs, this existing function could be directly used within `EnhancedCodeGenerator` or `PlanService` to parse the AI's output into `vscode.TextEdit` objects. This would be a more direct "surgical" approach from the AI's output.
-- **`applyDiffHunkToDocument`:** This helper could be used to apply the parsed edits.
-
-**4. Integration with `PlanService` (`src/services/planService.ts`):**
-
-- **`_executePlanSteps` (`isModifyFileStep`):** When executing a `ModifyFile` step, the `planService` currently calls `this.enhancedCodeGenerator.modifyFileContent`. The `modifyFileContent` would now conceptually be "diff-aware."
-- **`applyAITextEdits`:** This function (which is called in `_executePlanSteps` after `modifyFileContent`) is the key execution point. It would ideally be updated to:
-  1. Receive the raw diff string directly from `enhancedCodeGenerator`.
-  2. Use `parseDiffHunkToTextEdits` to convert the raw diff into `vscode.TextEdit` objects.
-  3. Apply these `TextEdit` objects to the `vscode.TextEditor` using `editor.edit`.
-
-**Challenges and Considerations:**
-
-- **AI Diff Generation Accuracy:** Training the AI to reliably produce perfectly formatted and contextually correct diffs (especially for complex changes) is a non-trivial prompt engineering challenge.
-- **Context Window for Diffing:** For large files, the AI still needs the full file content to generate an accurate diff. This means the overall context window size remains important.
-- **Partial Diff Application:** What if the AI generates a diff that partially conflicts with the current file state (e.g., if the user made changes locally after the AI's context was captured)? The application logic needs robust conflict resolution or clear error reporting.
-- **Debugging AI-Generated Diffs:** Debugging issues with a diff output can be more complex than debugging a full code block. Visual diff tools within VS Code would be essential.
-
-By implementing this feature, your Minovative Mind AI will become a more precise, reliable, and developer-friendly assistant, making its code modifications safer and easier to integrate into existing projects.
+> IMPORTANT: The "Surgical Code Modifications" feature will not be included in the free, open-source version of Minovative Mind. Instead, the free version will offer full-file rewrites for AI-powered code modifications. You are welcome to develop and integrate your own "Surgical Code Modifications" implementation if desired.
