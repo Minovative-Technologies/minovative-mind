@@ -14,9 +14,9 @@ This isn't just another AI assistant. Minovative Mind is a living testament to t
 
 > **This entire project (as of time of writing, July 29, 2025)—over 33,500 lines of robust, production-ready TypeScript—was developed with a ~90% contribution from the AI agent itself (Minovative Mind) with zero unit testing.**
 
-It masterfully orchestrated its own creation, architecting intricate and complex systems, generating tens of thousands of lines of code, and seamlessly integrating with VS Code's core APIs while autonomously refining its own work through self-correction. I didn’t merely build an AI agent; I guided its self-construction, leveraging natural language and the power of the Gemini 2.5 Flash model to bring it to life. Smarter models are not always needed to solve problems.
+It masterfully orchestrated its own creation, architecting intricate and complex systems, generating tens of thousands of lines of code, and seamlessly integrating with VS Code's core APIs while autonomously refining its own work through self-correction. The [Creator](https://github.com/Quarantiine) didn’t merely build an AI agent; He guided its self-construction, leveraging natural language and the power of the Gemini 2.5 Flash model to bring it to life. Smarter models are not always needed to solve problems.
 
-Now, that same power is available to you. Completely for free.
+Now...that same power is available to you. Completely for free.
 
 ## Key Features
 
@@ -42,7 +42,7 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 
 ## Quick Start (Get Started in 1-3 minutes)
 
-1. **Install the Extension:** Install directly from your VS Code editor by cloning it then downloading the file
+1. **Install the Extension:** Install directly from your VS Code editor by cloning/fork it then downloading the file
 
    - Step 1: Clone it and get the project up and running in your VS Code editor
 
@@ -50,13 +50,13 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
    git clone https://github.com/Minovative-Technologies/minovative-mind.git
    ```
 
-   - Step 2: Run this command in the project terminal
+   - Step 2: Run this command
 
    ```bash
    npm run package
    ```
 
-   - Step 3: Run this command in the project terminal as well
+   - Step 3: Run this command
 
    ```bash
    vsce package
@@ -79,13 +79,13 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 
 ## More Than a Tool—It's A Platform
 
-Minovative Mind was architected from day one to be an extensible tool. I don't just want you to _use_ it; I want you to _build on it_. Fork/Clone the repository, create your own specialized agents, integrate proprietary tools, MCPs, or anything else you can think of and push the boundaries of what's possible.
+Minovative Mind was architected from day one to be an extensible tool. We don't just want you to _use_ it; We want you to _build on it_. Fork/Clone the repository, create your own specialized agents, integrate proprietary tools, MCPs, or anything else you can think of and push the boundaries of what's possible.
 
 See the [**`CONTRIBUTING.md`**](./CONTRIBUTING.md) to learn how you can use Minovative Mind as a foundation for your own AI-powered solutions.
 
 ## The Vision
 
-My vision is to empower every developer with a powerful, free, and open-source AI tool. By integrating cutting-edge AI models with a robust architectural framework, we can revolutionize software development, making it faster, more accessible, and unleash unprecedented creativity.
+My vision is to empower every developer with a powerful, free, and open-source AI Agent dev tool. By integrating cutting-edge AI models with a robust architectural framework, we can revolutionize software development, making it faster, more accessible, and unleash unprecedented creativity.
 
 ## Join Us
 

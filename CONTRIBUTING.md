@@ -1,6 +1,6 @@
 # Contributing to Minovative Mind
 
-First off, thank you for your interest in Minovative Mind! I (The Creator) am thrilled to have you here. This project is built on the belief that the future of development is collaborative—both between humans and AI, and within the open-source community.
+First off, thank you for your interest in Minovative Mind! This project is built on the belief that the future of development is collaborative—both between humans and AI, and within the open-source community.
 
 Your creativity and ingenuity are the most valuable assets to this ecosystem.
 
@@ -10,24 +10,24 @@ Minovative Mind is both a powerful tool and an extensible AI Agent. Because of t
 
 ### Path 1: Building on the Platform (Most Encouraged)
 
-This is the core of my vision. I (The Creator) built Minovative Mind to be a launchpad for my own ideas, but I decided to make it completely free for all developers to use and build upon. I strongly encourage you all to clone the repository and use it as a foundation to create your own unique solutions, AI agents, or anything else that captures your mind.
+This is the core of my vision. The [Creator](https://github.com/Quarantiine) built Minovative Mind to be a launchpad for my own ideas, but we decided to make it completely free for all developers to use and build upon. We strongly encourage you all to clone/fork the repository and use it as a foundation to create your own unique solutions, AI agents, or anything else that captures your mind.
 
 **Your exploration, modification, and extension of this project is a primary and celebrated form of contribution.**
 
-If you build something amazing, share it with the community on the offical Discord!
-[Minovative Mind Discord]()
+If you build something amazing, share it with the community on the offical Discord:
+[Minovative Mind Discord](), or share it on social media.
 
 ### Path 2: Improving the Core Project
 
-Contributors to this repository play a vital role in advancing the Minovative Mind AI agent for the benefit of all developers. To maintain the project's quality and integrity, a review process will be conducted to evaluate and approve individuals seeking to contribute to the project.
+Contributors to this repository play a vital role in advancing the Minovative Mind AI agent for the benefit of all developers. To maintain the project's quality and integrity, a review process will be conducted to evaluate and approve individuals seeking to contribute to this project.
 
 #### Becoming a Core Contributor
 
-I or others will be looking for dedicated community members to join the core development team and help shape the future of Minovative Mind.
+We will be looking for dedicated community members to join the core development team and help shape the future of Minovative Mind.
 
 **This process is for developers who wish to gain write access (commit rights)** to the main Minovative Mind repository.
 
-- IMPORTANT: **If you're cloning or forking this project for your own use and innovation, Path 2 does not apply**. I warmly encourage you to explore, build, and create as freely and imaginatively as you like!
+- IMPORTANT: **If you're cloning or forking this project for your own use and innovation, This does not pertain to you**. We warmly encourage you to explore, build, and create as freely and imaginatively as you like!
 
 ---
 
