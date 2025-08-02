@@ -1,7 +1,7 @@
 // src/sidebar/common/sidebarTypes.ts
 import * as vscode from "vscode";
 import { Content } from "@google/generative-ai"; // Assuming History might be needed if HistoryEntry evolves
-import { ActiveSymbolDetailedInfo } from "../../services/contextService"; // NEW: Required for PlanGenerationContext
+import { ActiveSymbolDetailedInfo } from "../../services/contextService";
 
 export interface ImageInlineData {
 	mimeType: string;
@@ -99,7 +99,6 @@ export interface WebviewToExtensionChatMessageType {
 	imageParts?: Array<{ mimeType: string; data: string }>; // Optional array of image data
 }
 
-// NEW: Message type for requesting a list of workspace files from the extension
 export interface RequestWorkspaceFilesMessage {
 	type: "requestWorkspaceFiles";
 }
@@ -115,7 +114,7 @@ export type WebviewToExtensionMessages =
 	| GeneratePlanPromptFromAIMessage
 	| RevertRequestMessage // Added RevertRequestMessage
 	| WebviewToExtensionChatMessageType
-	| RequestWorkspaceFilesMessage; // NEW: Added RequestWorkspaceFilesMessage
+	| RequestWorkspaceFilesMessage;
 
 // New message type: Extension to Webview for pre-filling chat input
 export interface PrefillChatInput {
@@ -256,19 +255,16 @@ export interface UpdateStreamingRelevantFilesMessage {
 	value: string[]; // Array of relative file paths (e.g., "src/foo/bar.ts")
 }
 
-// NEW: Add RestoreStreamingProgressMessage
 export interface RestoreStreamingProgressMessage {
 	type: "restoreStreamingProgress";
 	value: AiStreamingState | null;
 }
 
-// NEW: Add RestorePendingCommitReviewMessage
 export interface RestorePendingCommitReviewMessage {
 	type: "restorePendingCommitReview";
 	value: { commitMessage: string; stagedFiles: string[] } | null;
 }
 
-// NEW: Define GitProcessUpdateMessage
 export interface GitProcessUpdateMessage {
 	type: "gitProcessUpdate";
 	value: {
@@ -278,7 +274,6 @@ export interface GitProcessUpdateMessage {
 	};
 }
 
-// NEW: Define UpdateCurrentTokenEstimatesMessage
 export interface UpdateCurrentTokenEstimatesMessage {
 	type: "updateCurrentTokenEstimates";
 	value: {
@@ -288,22 +283,18 @@ export interface UpdateCurrentTokenEstimatesMessage {
 	};
 }
 
-// NEW: Define RequestClearChatConfirmationMessage
 export interface RequestClearChatConfirmationMessage {
 	type: "requestClearChatConfirmation";
 }
 
-// NEW: Define ChatClearedMessage
 export interface ChatClearedMessage {
 	type: "chatCleared";
 }
 
-// NEW: Define ResetCodeStreamingAreaMessage
 export interface ResetCodeStreamingAreaMessage {
 	type: "resetCodeStreamingArea";
 }
 
-// NEW: Message type for receiving a list of workspace files from the extension
 export interface ReceiveWorkspaceFilesMessage {
 	type: "receiveWorkspaceFiles";
 	value: string[]; // Array of relative file paths
@@ -337,13 +328,13 @@ export type ExtensionToWebviewMessages =
 	| AppendRealtimeModelMessage
 	| UpdateTokenStatisticsMessage // Added UpdateTokenStatisticsMessage
 	| UpdateCurrentTokenEstimatesMessage // NEW
-	| RestoreStreamingProgressMessage // NEW: Added RestoreStreamingProgressMessage
+	| RestoreStreamingProgressMessage
 	| RestorePendingCommitReviewMessage
-	| CodeFileStreamStartMessage // NEW: Added CodeFileStreamStartMessage
-	| CodeFileStreamChunkMessage // NEW: Added CodeFileStreamChunkMessage
+	| CodeFileStreamStartMessage
+	| CodeFileStreamChunkMessage
 	| CodeFileStreamEndMessage
 	| ResetCodeStreamingAreaMessage
-	| ReceiveWorkspaceFilesMessage; // NEW: Added ReceiveWorkspaceFilesMessage
+	| ReceiveWorkspaceFilesMessage;
 
 export interface PlanGenerationContext {
 	type: "chat" | "editor";
@@ -366,7 +357,7 @@ export interface PlanGenerationContext {
 	workspaceRootUri: vscode.Uri;
 	relevantFiles?: string[];
 	isMergeOperation?: boolean; // New optional property for merge conflict resolution
-	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo; // NEW: Added optional property for detailed symbol information
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo;
 }
 
 export interface PlanGenerationResult {

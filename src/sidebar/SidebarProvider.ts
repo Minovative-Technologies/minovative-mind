@@ -537,7 +537,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.isEditingMessageActive = false;
 
 		console.log("[SidebarProvider] Universal cancellation complete.");
-		this.postMessageToWebview({ type: "reenableInput" });
 	}
 
 	public async cancelActiveOperation(): Promise<void> {
