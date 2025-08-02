@@ -12,7 +12,7 @@ A showcase of implementing a complex task: e.g., planning, file creation, and co
 
 This isn't just another AI assistant. Minovative Mind is a living testament to the future of software development.
 
-> **This entire project (as of time of writing, July 29, 2025)—over 35,000 lines of robust, production-ready TypeScript—was developed with a ~90% contribution from the AI agent itself (Minovative Mind) with zero unit testing...**
+> **This entire project—over 35,000 lines of robust, production-ready TypeScript—was developed with a ~90% contribution from the AI agent itself (Minovative Mind) with zero unit testing, no funding ($0), and by one [developer](https://github.com/Quarantiine)...**
 
 It masterfully orchestrated its own creation, architecting intricate and complex systems, generated tens of thousands of lines of code, and seamlessly integrated within VS Code's core APIs while autonomously refining its own work through self-correction. The [Creator](https://github.com/Quarantiine), of this project, didn’t merely build an AI agent; He guided its self-construction, leveraging natural language and the power of the Gemini 2.5 models (Thinking Mode) to bring it to life.
 
