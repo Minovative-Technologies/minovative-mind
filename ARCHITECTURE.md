@@ -38,7 +38,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 5. **AI Model Integration (Gemini Client)**:
 
-   - **Responsibility**: Provides the low-level, direct interface for communicating with the Google Gemini API, using (`gemini-2.5-pro/flash/flash-lite`), handling API initialization, streaming responses, basic error mapping, and accurate token counting. Input your own api key to use Minovative Mind.
+   - **Responsibility**: Provides the low-level, direct interface for communicating with the Google Gemini API, using (`gemini-2.5-pro/flash/flash-lite` [Thinking Mode]), handling API initialization, streaming responses, basic error mapping, and accurate token counting. Input your own api key to use Minovative Mind.
    - **Key Files**: `src/ai/gemini.ts`.
    - **AI Usage**: Yes
 

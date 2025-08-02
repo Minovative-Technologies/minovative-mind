@@ -22,7 +22,7 @@ let currentModelName: string | null = null;
  * Re-initializes if the API key or model name changes.
  *
  * @param apiKey The Google Gemini API key.
- * @param modelName The specific Gemini model name to use (e.g., "gemini-1.5-pro-latest").
+ * @param modelName The specific Gemini model name to use (e.g., "gemini-2.5-pro-latest").
  * @returns True if initialization was successful or already initialized correctly, false otherwise.
  */
 function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
@@ -271,7 +271,7 @@ export function resetClient() {
  * It ensures the Gemini model client is initialized for the given API key and model.
  *
  * @param apiKey The API key to use.
- * @param modelName The name of the model (e.g., 'gemini-pro').
+ * @param modelName The name of the model (e.g., 'gemini-2.5-pro').
  * @param contents The content array for the Gemini model.
  * @returns The total token count.
  */

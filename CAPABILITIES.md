@@ -155,7 +155,7 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 ### 6.1 API & Model Settings
 
 - Gemini API key setup with secure storage
-- Model selection: `gemini-2.5-pro`/`flash`/`flash-lite`
+- Model selection: `gemini-2.5-pro`/`flash`/`flash-lite` (Thinking Mode)
 
 ### 6.2 Context Filtering
 
