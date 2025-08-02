@@ -1,6 +1,6 @@
 # Minovative Mind
 
-## An open-source AI agent that automates software development, powerful enough to build itself
+## An open-source AI agent that automates software development, powerful enough that it built itself
 
 A showcase of implementing a complex task: e.g., planning, file creation, and code generation
 
