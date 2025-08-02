@@ -150,7 +150,7 @@ This project thrives on community innovation.
 - [**`CODE_OF_CONDUCT.md`**](./CODE_OF_CONDUCT.md)
 - [**`LICENSE.md`**](./LICENSE.md)
 - [**`SECURITY.md`**](./SECURITY.md)
-- [**`GOOGLE‑AI‑POLICIES.md`**](./GOOGLE‑AI‑POLICIES.md)
+- [**`GOOGLE_AI_POLICIES.md`**](./GOOGLE_AI_POLICIES.md)
 
 ---
 
