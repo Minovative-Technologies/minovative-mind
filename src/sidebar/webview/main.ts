@@ -93,7 +93,9 @@ function setLoadingState(
 
 	// Define enablement for image upload controls
 	const canInteractWithImageControls =
-		!loading && !appState.isAwaitingUserReview;
+		!loading &&
+		!appState.isAwaitingUserReview &&
+		!appState.isCancellationInProgress;
 
 	console.log(
 		`[setLoadingState] Final computed canInteractWithMainChatControls=${canInteractWithMainChatControls}, canSendCurrentInput=${canSendCurrentInput}, canInteractWithChatHistoryButtons=${canInteractWithChatHistoryButtons}`
@@ -109,7 +111,8 @@ function setLoadingState(
 		!appState.isLoading &&
 		!appState.isAwaitingUserReview && // Refactored
 		!appState.isCommandSuggestionsVisible &&
-		appState.totalKeys > 0;
+		appState.totalKeys > 0 &&
+		!appState.isCancellationInProgress;
 	elements.prevKeyButton.disabled =
 		!enableApiKeyControls || appState.totalKeys <= 1;
 	elements.nextKeyButton.disabled =
@@ -120,7 +123,8 @@ function setLoadingState(
 	const enableAddKeyInputControls =
 		!loading &&
 		!appState.isAwaitingUserReview && // Refactored
-		!appState.isCommandSuggestionsVisible;
+		!appState.isCommandSuggestionsVisible &&
+		!appState.isCancellationInProgress;
 	elements.addKeyInput.disabled = !enableAddKeyInputControls;
 	elements.addKeyButton.disabled = !enableAddKeyInputControls;
 

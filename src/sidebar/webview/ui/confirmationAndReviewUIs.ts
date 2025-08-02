@@ -1,11 +1,7 @@
 import { setIconForButton } from "../utils/iconHelpers";
 import { faCheck, faTimes, faRedo } from "@fortawesome/free-solid-svg-icons";
 import { appState } from "../state/appState";
-import {
-	updateStatus,
-	resetUIStateAfterCancellation,
-	updateEmptyChatPlaceholderVisibility,
-} from "./statusManager"; // Added updateEmptyChatPlaceholderVisibility
+import { updateStatus } from "./statusManager"; // Added updateEmptyChatPlaceholderVisibility
 import { PendingPlanData, RequiredDomElements } from "../types/webviewTypes";
 import { stopTypingAnimation } from "./typingAnimation";
 import { md } from "../utils/markdownRenderer";
@@ -600,9 +596,9 @@ export function handleCancelPlanExecution(
 	}
 
 	appState.isCancellationInProgress = true; // Set cancellation flag for immediate effect
+	setLoadingState(true, elements);
 	postMessageToExtension({ type: "universalCancel" }); // Use universal cancel for immediate cancellation
 	updateStatus(elements, "Cancelling operations...", false);
-	resetUIStateAfterCancellation(elements, setLoadingState);
 }
 
 /**
@@ -696,5 +692,4 @@ export function handleCancelCommit(
 	appState.isCancellationInProgress = true; // Set cancellation flag for immediate effect
 	postMessageToExtension({ type: "universalCancel" }); // Use universal cancel for immediate cancellation
 	updateStatus(elements, "Cancelling operations...", false);
-	resetUIStateAfterCancellation(elements, setLoadingState);
 }
