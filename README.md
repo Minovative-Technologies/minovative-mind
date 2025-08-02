@@ -62,6 +62,7 @@ Here's the cleaned-up version in **Markdown** format, ready to paste into your `
 ```bash
 git clone https://github.com/Minovative-Technologies/minovative-mind.git
 cd minovative-mind
+git remote remove origin
 ```
 
 ### **Step 2: Install Dependencies**
