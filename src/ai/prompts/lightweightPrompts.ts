@@ -10,12 +10,7 @@ export async function generateLightweightPlanPrompt(
 	token?: vscode.CancellationToken
 ): Promise<string> {
 	const prompt = `
-	
-	
-	Given the following AI response, generate a cooncise summary for the user to implement, according to the AI response. Focus on the core actionable intent and summary. Do not include any extraneous text. Only use the "/plan implement this:" at the beginning	of the response.
-	
-	
-
+	Given the following AI response, generate a concise summary for the user to implement, according to the AI response. Focus on the core actionable intent and summary. Do not include any extraneous text. Only use the "/plan implement this:" at the beginning	of the response.
 	AI Response: ${aiMessageContent}`;
 
 	try {

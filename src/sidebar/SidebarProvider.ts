@@ -27,10 +27,10 @@ import {
 	showWarningNotification,
 	showErrorNotification,
 } from "../utils/notificationUtils";
-import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 // Added: Imports for missing services
 import { CodeValidationService } from "../services/codeValidationService";
 import { ContextRefresherService } from "../services/contextRefresherService";
+import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -537,6 +537,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.isEditingMessageActive = false;
 
 		console.log("[SidebarProvider] Universal cancellation complete.");
+		this.postMessageToWebview({ type: "reenableInput" });
 	}
 
 	public async cancelActiveOperation(): Promise<void> {

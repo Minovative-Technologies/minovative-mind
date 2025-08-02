@@ -584,7 +584,7 @@ export class PlanService {
 		await this.provider.setPlanExecutionActive(true);
 		this._postChatUpdateForPlanExecution({
 			type: "appendRealtimeModelMessage",
-			value: { text: `Generating detailed execution plan (JSON)...` },
+			value: { text: `Generating detailed execution plan` },
 			isPlanStepUpdate: true,
 		});
 

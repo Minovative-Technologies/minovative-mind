@@ -671,7 +671,7 @@ export class ContextService {
 							value:
 								filesForContextBuilding.length > 0
 									? `AI identified no additional files. Using ${filesForContextBuilding.length} heuristically relevant file(s).` // Updated message
-									: `AI identified no specific files. No heuristically relevant files found either.`, // Updated message
+									: `AI identified no specific files.`, // Updated message
 						});
 					}
 				} catch (error: any) {

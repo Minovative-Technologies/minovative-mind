@@ -28,9 +28,9 @@ export function cleanCodeOutput(codeString: string): string {
 	// --- END NEW LOGIC ---
 
 	// Heuristic thresholds to identify non-code or severely malformed output
-	const MIN_ALPHANUMERIC_RATIO = 0.2; // At least 20% of characters should be alphanumeric
+	const MIN_ALPHANUMERIC_RATIO = 0.1; // At least 10% of characters should be alphanumeric
 	const MIN_CODE_ELEMENT_DENSITY = 0.01; // At least 1% of non-whitespace characters should be part of a common keyword/structural element
-	const MIN_CODE_LINES = 3; // Minimum meaningful lines expected for actual code
+	const MIN_CODE_LINES = 1; // Minimum meaningful lines expected for actual code
 	const MAX_LENGTH_REDUCTION_RATIO = 0.95; // If more than 95% of content is stripped (and original was substantial), it's suspicious
 
 	// Step 1: Globally remove all Markdown code block fences (```...```) from the extracted content.

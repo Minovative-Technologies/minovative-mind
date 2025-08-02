@@ -1,7 +1,5 @@
 # Minovative Mind (AI Agent): An Integrated AI-Driven Development & Automation Platform for VS Code
 
-## (Time of writing - August 1, 2025)
-
 A deeper analysis of the file structure, class responsibilities, and how different components interact, here is a more comprehensive breakdown of the systems that work together in this project. This results in approximately **19** distinct systems:
 
 ## The Core parts that powers Minovative Mind
@@ -20,7 +18,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 2. **Sidebar UI & Communication**:
 
-   - **Responsibility**: Manages the webview-based sidebar interface, its rendering, user interactions within the sidebar, and the crucial bidirectional communication between the extension's backend and the webview frontend.
+   - **Responsibility**: Manages the webview-based sidebar interface, its rendering, user interactions within the sidebar, and the crucial bidirectional communication between the extension's backend and the webview frontend, including the preservation and restoration of relevant UI states for a continuous user experience.
    - **Key Files**: `src/sidebar/SidebarProvider.ts`, `src/sidebar/ui/webviewHelper.ts` (and implied `src/services/webviewMessageHandler.ts`).
    - **AI Usage**: No
 
@@ -44,7 +42,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 6. **AI Request Orchestration & Retry**:
 
-   - **Responsibility**: Manages the overall process of making AI requests, including implementing robust retry logic for transient errors, handling cancellation requests, and orchestrating potentially parallel AI calls. It acts as an abstraction layer over the direct API client.
+   - **Responsibility**: Manages the overall process of making AI requests, including implementing robust retry logic for transient errors, handling cancellation requests, and orchestrating and optimizing concurrent AI calls through parallel processing and batching. It acts as an abstraction layer over the direct API client, enhancing scalability and efficiency.
    - **Key Files**: `src/services/aiRequestService.ts`.
    - **AI Usage**: Yes
 
@@ -56,7 +54,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 8. **Chat History Management**:
 
-   - **Responsibility**: Manages the persistence, retrieval, truncation, and display of the conversational history between the user and the AI, ensuring context is maintained across sessions.
+   - **Responsibility**: Manages the persistence, retrieval, truncation, and display of the conversational history between the user and the AI, ensuring full context and conversational state are seamlessly restored across VS Code sessions.
    - **Key Files**: `src/sidebar/managers/chatHistoryManager.ts`.
    - **AI Usage**: No
 
@@ -110,7 +108,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 17. **Git Integration & Automation**:
 
-    - **Responsibility**: Facilitates AI-assisted Git operations. This includes staging changes, generating insightful commit messages based on detected diffs, and providing functionality for AI-guided resolution and marking of merge conflicts.
+    - **Responsibility**: Facilitates AI-assisted Git operations. This includes staging changes, generating insightful commit messages based on detected diffs, and providing functionality for automated AI-guided resolution of merge conflicts, including updating VS Code's Git status for resolved files.
     - **Key Files**: `src/services/commitService.ts`, `src/sidebar/services/gitService.ts` (implied), `src/services/gitConflictResolutionService.ts`, `src/utils/mergeUtils.ts`, `src/utils/diffingUtils.ts`.
     - **AI Usage**: Yes
 
@@ -122,11 +120,12 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 19. **Concurrency Management (Infrastructure)**:
 
-    - **Responsibility**: Provides generic, reusable utilities for managing parallel tasks and controlling concurrency across various operations within the extension, optimizing resource usage and preventing timeouts.
+    - **Responsibility**: Provides generic, reusable utilities for managing parallel tasks and controlling concurrency across various operations within the extension, notably for optimizing AI request handling, enhancing resource usage efficiency, and preventing timeouts.
     - **Key Files**: `src/utils/parallelProcessor.ts`.
     - **AI Usage**: No
 
 20. **AI Prompt Management & Engineering**:
+
     - **Responsibility**: This system is responsible for the definition, generation, structuring, and management of prompts sent to the AI models, ensuring they are contextually relevant, effectively formatted, and aligned with specific AI tasks.
     - **Key Files and Components**:
       - Prompt Definition & Templates: `src/ai/prompts/` (e.g., `correctionPrompts.ts`, `enhancedCodeGenerationPrompts.ts`, `lightweightPrompts.ts`, `planningPrompts.ts`)
@@ -134,6 +133,11 @@ A deeper analysis of the file structure, class responsibilities, and how differe
       - Workflow Planning Prompts: `src/services/planService.ts` (generating planning-related prompts, e.g., `createInitialPlanningExplanationPrompt`, `createPlanningPrompt`)
       - AI Request Interface: `src/services/aiRequestService.ts` (function as the primary interface for sending prepared prompt content as `HistoryEntryPart` arrays to the AI model, including prompt encapsulation and transmission)
     - **AI Usage**: Yes
+
+21. **URL Context Processing**:
+    - **Responsibility**: processing user-provided URLs to fetch and format external information, enriching AI context and augmenting prompts.
+    - **Key Files**: `src/services/urlContextService.ts`
+    - **AI Usage**: No
 
 This breakdown provides a detailed view of the interconnected systems that collectively enable the Minovative Mind VS Code extension to function.
 

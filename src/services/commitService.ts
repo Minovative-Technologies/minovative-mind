@@ -205,6 +205,11 @@ export class CommitService {
 						? errorMessage
 						: undefined,
 			});
+			this.provider.isGeneratingUserRequest = false;
+
+			if (isCancellation) {
+				this.provider.postMessageToWebview({ type: "reenableInput" });
+			}
 
 			// Always clear the active operation state immediately after posting the status.
 			this.provider.clearActiveOperationState();
