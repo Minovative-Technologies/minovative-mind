@@ -1,8 +1,8 @@
 # .github/FUNDING.yml
 
-github: []  # You can skip if you're not using GitHub Sponsors
+github: []
 patreon: []
 open_collective: []
-ko_fi: your_kofi_username
-buy_me_a_coffee: your_bmac_username
-custom: ['https://your-project.com/sponsor']
+ko_fi: null
+buy_me_a_coffee: null
+custom: []
