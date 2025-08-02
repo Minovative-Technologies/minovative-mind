@@ -122,9 +122,7 @@ code --install-extension minovative-mind-1.2.3.vsix
 
   - In the Minovative Mind sidebar, copy and paste your API key in the API Key Management section on the bottom.
 
-For a better experience, you could move the Minovative Mind extension from the primary bar to the secondary bar by right clicking the Minovative Mind icon. After right clicking, go to "Move To" > "Secondary Side Bar"
-
--
+For a better experience, you could move the Minovative Mind extension from the primary bar to the secondary bar by right clicking the Minovative Mind icon. After right clicking, go to "Move To" > "Secondary Side Bar".
 
 ## More Than a Tool—It's A Platform
 
