@@ -135,11 +135,7 @@ See the [**`CONTRIBUTING.md`**](./CONTRIBUTING.md) to learn how you can use Mino
 
 My vision is to empower every developer with a powerful, free, and open-source AI Agent dev tool. By integrating cutting-edge AI models with a robust architectural framework, we can revolutionize software development, making it faster, more accessible, and unleash unprecedented creativity.
 
-## Join Us
-
-This project thrives on community innovation.
-
-## 🙌 How to Support
+## 🙌 Join US! How to Support
 
 - ⭐ **Star us on GitHub** to show your support!
 - 💖 **Support development** on [Patreon](https://patreon.com/MinovativeTechnologies) — every contribution can help us grow!
