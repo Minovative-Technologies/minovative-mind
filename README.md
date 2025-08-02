@@ -138,7 +138,7 @@ My vision is to empower every developer with a powerful, free, and open-source A
 ## 🙌 Join US! How to Support
 
 - ⭐ **Star us on GitHub** to show your support!
-- 💖 **Support development** on [Patreon](https://patreon.com/MinovativeTechnologies) — every contribution can help us grow!
+- 💖 **Support development** on [Patreon](https://www.patreon.com/c/minovativetechnologies/membership) — every contribution can help us grow!
 - 🗣️ **Join the conversation** on our [Minovative Mind Discord](https://discord.gg/KFkMgAH3EG) or follow us on [X/Twitter](https://x.com/minovative_tech).
 
 ## Other things about this project
