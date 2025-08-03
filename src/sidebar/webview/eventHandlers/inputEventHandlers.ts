@@ -70,14 +70,23 @@ export function initializeInputEventListeners(
 			showSuggestions(matches, "command", elements, setLoadingState);
 		} else {
 			// Logic for potential file suggestions
-			const lastAtIndex = text.lastIndexOf("@");
-			const isValidTrigger =
-				lastAtIndex === 0 || (lastAtIndex > 0 && text[lastAtIndex - 1] === " ");
+			const text = chatInput.value;
+			const lastAtSymbolIndex = text.lastIndexOf("@");
 
-			if (isValidTrigger) {
-				atIndex = lastAtIndex;
-				query = text.substring(atIndex + 1).toLowerCase();
+			// NEW TRIGGER LOGIC: Activate ONLY if '@' is found AND is NOT followed by a space.
+			// This ensures inputs like "@file" trigger, but "@ " or "@file" do not.
+			const isFileTriggerActive =
+				lastAtSymbolIndex !== -1 &&
+				text.length > lastAtSymbolIndex + 1 &&
+				text[lastAtSymbolIndex + 1] !== " ";
 
+			if (isFileTriggerActive) {
+				// Extract and Trim Query:
+				// The query text is everything after the '@' symbol.
+				const queryPart = text.substring(lastAtSymbolIndex + 1);
+				const trimmedQuery = queryPart.trim().toLowerCase();
+
+				// Handle Workspace File Loading:
 				if (
 					appState.allWorkspaceFiles.length === 0 &&
 					!appState.isRequestingWorkspaceFiles
@@ -90,15 +99,17 @@ export function initializeInputEventListeners(
 					showSuggestions([], "loading", elements, setLoadingState);
 					return; // Wait for files to load on the next input event
 				} else {
-					// Files are available or a request is ongoing. Filter and show.
+					// Filter and Show Suggestions:
 					const matches = appState.allWorkspaceFiles.filter((file) =>
-						file.toLowerCase().includes(query)
+						file.toLowerCase().includes(trimmedQuery)
 					);
+
+					// showSuggestions handles displaying "No matching files" if matches is empty.
 					showSuggestions(matches, "file", elements, setLoadingState);
-					return; // Prevent hiding suggestions
+					return; // Prevent hiding suggestions after showing them
 				}
 			} else {
-				// If no command and no valid "@" trigger, hide suggestions
+				// Hide Suggestions if trigger condition is not met
 				hideSuggestions(elements, setLoadingState);
 			}
 		}
