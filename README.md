@@ -2,7 +2,7 @@
 
 ## An open-source AI agent that automates software development, powerful enough that it built itself
 
-A showcase of implementing a complex task: e.g., planning, file creation, and code generation
+A showcase of implementing a feature: e.g., planning, file creation, and code generation
 
 - [Minovative Mind YouTube Showcase](https://youtu.be/f08_WgmSbUc)
 
