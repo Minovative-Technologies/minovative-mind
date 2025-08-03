@@ -536,6 +536,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 		this.isEditingMessageActive = false;
 
+		await this.endUserOperation("cancelled"); // Added line as per instruction.
+
 		// Send the confirmation message back to the webview after all cleanup is done.
 		this.postMessageToWebview({
 			type: "operationCancelledConfirmation",
