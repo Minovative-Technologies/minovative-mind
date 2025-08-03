@@ -55,7 +55,7 @@ Here's the cleaned-up version in **Markdown** format, ready to paste into your `
 
 ---
 
-## 🔧 How to Clone the Minovative Mind Extension from GitHub
+## 🔧 How to Clone the Minovative Mind Extension from GitHub to Use
 
 ### **Step 1: Clone the Repository**
 
