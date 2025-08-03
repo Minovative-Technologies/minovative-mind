@@ -40,91 +40,100 @@ A deeper analysis of the file structure, class responsibilities, and how differe
    - **Key Files**: `src/ai/gemini.ts`.
    - **AI Usage**: Yes
 
-6. **AI Request Orchestration & Retry**:
+6. **Gemini Flash Lite Model Specific Task Integration**:
+
+- **Responsibility:** This system specifically details the integration and utilization of the **Gemini Flash Lite** model for tasks requiring efficient and lightweight AI processing. It identifies where this model is invoked for prompt generation, chat interactions, and plan management within the application's core logic.
+- **Key Files:**
+  - `src/ai/prompts/lightweightPrompts.ts` (for generating lightweight plan prompts)
+  - `src/services/chatService.ts` (for handling regular chat and regenerating AI responses)
+  - `src/services/planService.ts` (for initial plan generation, editor action plans, structured plan generation, validation, and command correction)
+- **AI Usage:** Yes
+
+7. **AI Request Orchestration & Retry**:
 
    - **Responsibility**: Manages the overall process of making AI requests, including implementing robust retry logic for transient errors, handling cancellation requests, and orchestrating and optimizing concurrent AI calls through parallel processing and batching. It acts as an abstraction layer over the direct API client, enhancing scalability and efficiency.
    - **Key Files**: `src/services/aiRequestService.ts`.
    - **AI Usage**: Yes
 
-7. **Token Usage Tracking**:
+8. **Token Usage Tracking**:
 
    - **Responsibility**: Monitors and tracks the consumption of AI tokens for different request types, providing real-time and aggregate usage statistics to the user.
    - **Key Files**: `src/services/tokenTrackingService.ts`.
    - **AI Usage**: Yes
 
-8. **Chat History Management**:
+9. **Chat History Management**:
 
    - **Responsibility**: Manages the persistence, retrieval, truncation, and display of the conversational history between the user and the AI, ensuring full context and conversational state are seamlessly restored across VS Code sessions.
    - **Key Files**: `src/sidebar/managers/chatHistoryManager.ts`.
    - **AI Usage**: No
 
-9. **Chat Interaction & Response**:
+10. **Chat Interaction & Response**:
 
-   - **Responsibility**: Orchestrates the user's general conversational experience with the AI, including receiving user messages, integrating various contextual data (like URL context), and managing the AI's textual responses for display in the chat interface.
-   - **Key Files**: `src/services/chatService.ts`.
-   - **AI Usage**: Yes
+    - **Responsibility**: Orchestrates the user's general conversational experience with the AI, including receiving user messages, integrating various contextual data (like URL context), and managing the AI's textual responses for display in the chat interface.
+    - **Key Files**: `src/services/chatService.ts`.
+    - **AI Usage**: Yes
 
-10. **Workspace File Scanning**:
+11. **Workspace File Scanning**:
 
     - **Responsibility**: Efficiently scans the VS Code workspace to discover and identify relevant project files and directories, respecting `.gitignore` rules, applying size and type filters, and utilizing caching for performance.
     - **Key Files**: `src/context/workspaceScanner.ts`.
     - **AI Usage**: No
 
-11. **Code & Project Structure Analysis**:
+12. **Code & Project Structure Analysis**:
 
     - **Responsibility**: A collection of services dedicated to deeply understanding the project's codebase, including extracting document symbols, fetching and formatting diagnostic information (errors, warnings), detecting the project's technology stack/type, and building the internal dependency graph between files.
     - **Key Files**: `src/services/symbolService.ts`, `src/utils/diagnosticUtils.ts`, `src/services/projectTypeDetector.ts`, `src/context/dependencyGraphBuilder.ts`.
     - **AI Usage**: No
 
-12. **Intelligent Context Selection & Assembly**:
+13. **Intelligent Context Selection & Assembly**:
 
     - **Responsibility**: Determines the most relevant portions of the project (specific files, code snippets, summaries, active symbols) to provide as context to the AI. This system employs both heuristic (rule-based) and AI-driven (smart) selection strategies, and then assembles this disparate information into a cohesive, token-optimized prompt string. Includes a sequential processing mode for very large contexts.
     - **Key Files**: `src/services/contextService.ts`, `src/context/heuristicContextSelector.ts`, `src/context/smartContextSelector.ts`, `src/context/fileContentProcessor.ts`, `src/context/contextBuilder.ts`, `src/services/sequentialContextService.ts`.
     - **AI Usage**: Yes
 
-13. **External URL Content Fetching**:
+14. **External URL Content Fetching**:
 
     - **Responsibility**: Specializes in retrieving and formatting content from external URLs (e.g., documentation pages, Stack Overflow links) to enrich the context provided to the AI.
     - **Key Files**: `src/services/urlContextService.ts`.
     - **AI Usage**: No
 
-14. **AI Planning Engine (Structured)**:
+15. **AI Planning Engine (Structured)**:
 
     - **Responsibility**: Focuses on the AI's ability to generate, parse, and validate multi-step action plans in a structured (e.g., JSON) format, ensuring the generated plan adheres strictly to the predefined schema. This is the "brain" responsible for creating the executable strategy.
     - **Key Files**: `src/ai/workflowPlanner.ts`.
     - **AI Usage**: Yes
 
-15. **Plan Execution & Workflow Automation**:
+16. **Plan Execution & Workflow Automation**:
 
     - **Responsibility**: Interprets and executes the concrete steps defined in an AI-generated structured plan. This includes performing file system operations (creating/modifying files and directories), executing external commands (with user confirmation), and managing step-level retries and AI-driven corrections for failed steps. It orchestrates the entire automated workflow.
     - **Key Files**: `src/services/planService.ts` (orchestration logic), `src/sidebar/services/planExecutionService.ts` (implied utility for specific step execution).
     - **AI Usage**: Yes
 
-16. **Enhanced Code Generation & Self-Correction**:
+17. **Enhanced Code Generation & Self-Correction**:
 
     - **Responsibility**: A sophisticated system dedicated to generating, modifying, and refining code files. It incorporates real-time validation against VS Code's language services (diagnostics), and employs iterative AI-driven self-correction loops to produce functional, error-free, and well-formatted code.
     - **Key Files**: `src/ai/enhancedCodeGeneration.ts`.
     - **AI Usage**: Yes
 
-17. **Git Integration & Automation**:
+18. **Git Integration & Automation**:
 
     - **Responsibility**: Facilitates AI-assisted Git operations. This includes staging changes, generating insightful commit messages based on detected diffs, and providing functionality for automated AI-guided resolution of merge conflicts, including updating VS Code's Git status for resolved files.
     - **Key Files**: `src/services/commitService.ts`, `src/sidebar/services/gitService.ts` (implied), `src/services/gitConflictResolutionService.ts`, `src/utils/mergeUtils.ts`, `src/utils/diffingUtils.ts`.
     - **AI Usage**: Yes
 
-18. **Project Change Logging & Reversion**:
+19. **Project Change Logging & Reversion**:
 
     - **Responsibility**: Maintains a comprehensive, auditable log of all file system changes (creations, modifications, deletions) made by AI-driven workflows and provides the functionality to revert those changes, ensuring a safe and transparent development process.
     - **Key Files**: `src/workflow/ProjectChangeLogger.ts`, `src/services/RevertService.ts`.
     - **AI Usage**: No
 
-19. **Concurrency Management (Infrastructure)**:
+20. **Concurrency Management (Infrastructure)**:
 
     - **Responsibility**: Provides generic, reusable utilities for managing parallel tasks and controlling concurrency across various operations within the extension, notably for optimizing AI request handling, enhancing resource usage efficiency, and preventing timeouts.
     - **Key Files**: `src/utils/parallelProcessor.ts`.
     - **AI Usage**: No
 
-20. **AI Prompt Management & Engineering**:
+21. **AI Prompt Management & Engineering**:
 
     - **Responsibility**: This system is responsible for the definition, generation, structuring, and management of prompts sent to the AI models, ensuring they are contextually relevant, effectively formatted, and aligned with specific AI tasks.
     - **Key Files and Components**:
@@ -134,12 +143,11 @@ A deeper analysis of the file structure, class responsibilities, and how differe
       - AI Request Interface: `src/services/aiRequestService.ts` (function as the primary interface for sending prepared prompt content as `HistoryEntryPart` arrays to the AI model, including prompt encapsulation and transmission)
     - **AI Usage**: Yes
 
-21. **URL Context Processing**:
+22. **URL Context Processing**:
+
     - **Responsibility**: processing user-provided URLs to fetch and format external information, enriching AI context and augmenting prompts.
     - **Key Files**: `src/services/urlContextService.ts`
     - **AI Usage**: No
-
-This breakdown provides a detailed view of the interconnected systems that collectively enable the Minovative Mind VS Code extension to function.
 
 ---
 
