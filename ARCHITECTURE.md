@@ -42,7 +42,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 6. **Gemini Flash Lite Model Specific Task Integration**:
 
-   - **Responsibility:** This system specifically details the integration and utilization of the **Gemini Flash Lite** model for tasks requiring efficient and lightweight AI processing. It identifies where this model is invoked for prompt generation, chat interactions, and plan management within the application's core logic.
+   - **Responsibility:** This system specifically details the integration and utilization of the **Gemini Flash Lite** model for tasks requiring efficient and lightweight AI processing. It identifies where this model is invoked for prompt generation, chat interactions, and plan management within the application's core logic. The AI model that's used in generating code, in the file, are only selected by the user in the "AI Model Selection" section in the Minovative Mind sidebar.
    - **Key Files:**
    - `src/ai/prompts/lightweightPrompts.ts` (for generating lightweight plan prompts)
    - `src/services/chatService.ts` (for handling regular chat and regenerating AI responses)
