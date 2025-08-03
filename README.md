@@ -1,4 +1,4 @@
-# Minovative Mind
+# Minovative Mind (Now Public!)
 
 ## An open-source AI agent that automates software development, powerful enough that it built itself
 
