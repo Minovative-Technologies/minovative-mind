@@ -215,35 +215,6 @@ export function initializeButtonEventListeners(
 
 		if (appState.currentAiMessageContentElement) {
 			stopTypingAnimation();
-			const cancellationText = "*Cancelling operation...*";
-			appState.currentAiMessageContentElement.innerHTML =
-				md.render(cancellationText);
-			appState.currentAiMessageContentElement.dataset.originalMarkdown =
-				cancellationText;
-
-			const messageElement =
-				appState.currentAiMessageContentElement.parentElement;
-			if (messageElement) {
-				const copyButton = messageElement.querySelector(
-					".copy-button"
-				) as HTMLButtonElement | null;
-				const deleteButton = messageElement.querySelector(
-					".delete-button"
-				) as HTMLButtonElement | null;
-				const editButton = messageElement.querySelector(
-					".edit-button"
-				) as HTMLButtonElement | null;
-
-				if (copyButton) {
-					copyButton.disabled = true;
-				}
-				if (deleteButton) {
-					deleteButton.disabled = true;
-				}
-				if (editButton) {
-					editButton.disabled = true;
-				}
-			}
 		}
 
 		postMessageToExtension({ type: "universalCancel" });

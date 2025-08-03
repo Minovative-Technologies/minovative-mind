@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { CodeValidationResult, CodeIssue } from "../types/codeGenerationTypes";
 import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils";
 import { cleanCodeOutput } from "../utils/codeUtils";
+import { BEGIN_CODEX_REGEX } from "../utils/extractingDelimiters";
 
 export class CodeValidationService {
 	constructor(private diagnosticService: DiagnosticService) {}
@@ -84,7 +85,6 @@ export class CodeValidationService {
 		const issues: CodeIssue[] = [];
 		const suggestions: string[] = [];
 		const cleanedContent = cleanCodeOutput(rawAIResponse);
-		const BEGIN_CODEX_REGEX = /XBEGIN_CODEX\n?([\s\S]*?)\n?XEND_CODEX/i;
 		const delimiterMatch = rawAIResponse.match(BEGIN_CODEX_REGEX);
 
 		if (!delimiterMatch) {

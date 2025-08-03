@@ -136,10 +136,25 @@ export function resetUIStateAfterCancellation(
 
 	// Clear any active streaming related state and reset flags
 	stopTypingAnimation();
+	// This ensures the "Model: Generating..." text doesn't linger in the chat.
+	if (
+		appState.currentAiMessageContentElement && // Check if there's a reference to the text content span
+		appState.currentAiMessageContentElement.parentElement && // Check if the parent message element exists
+		appState.currentAiMessageContentElement.parentElement.classList.contains(
+			"ai-message"
+		) // Ensure it's an actual AI message element
+	) {
+		console.log(
+			"[Webview] Removing lingering AI message with 'Generating...' text."
+		);
+		const lingeringMessageElement =
+			appState.currentAiMessageContentElement.parentElement;
+		// Remove the entire AI message container from the DOM.
+		lingeringMessageElement.remove();
+	}
 	appState.currentAiMessageContentElement = null;
 	appState.currentAccumulatedText = "";
 	appState.typingBuffer = "";
-	appState.isCancellationInProgress = false; // Explicitly reset this crucial flag
 	appState.isCommitActionInProgress = false; // Reset commit flag
 	appState.isPlanExecutionInProgress = false; // Reset plan execution flag
 	appState.isAwaitingUserReview = false; // CRITICAL: Reset review state
@@ -153,5 +168,8 @@ export function resetUIStateAfterCancellation(
 	updateEmptyChatPlaceholderVisibility(elements);
 
 	setLoadingState(false, elements);
-	console.log("UI state reset complete");
+	appState.isCancellationInProgress = false;
+	console.log(
+		"UI state reset complete. isCancellationInProgress reset to false."
+	);
 }

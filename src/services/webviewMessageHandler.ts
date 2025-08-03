@@ -13,6 +13,7 @@ import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 import { generateLightweightPlanPrompt } from "../ai/prompts/lightweightPrompts";
 import { scanWorkspace } from "../context/workspaceScanner"; // NEW IMPORT
+import { resetUIStateAfterCancellation } from "../sidebar/webview/ui/statusManager";
 
 export async function handleWebviewMessage(
 	data: any,
@@ -67,6 +68,7 @@ export async function handleWebviewMessage(
 		"confirmClearChatAndRevert", // New: Allowed as a direct user interaction during clear chat flow
 		"cancelClearChat", // New: Allowed as a direct user interaction during clear chat flow
 		"requestWorkspaceFiles", // NEW: Allow workspace file requests during background operations
+		"operationCancelledConfirmation", // NEW: Allowed to update UI state after cancellation
 	];
 
 	if (
@@ -89,6 +91,21 @@ export async function handleWebviewMessage(
 		case "universalCancel":
 			console.log("[MessageHandler] Received universal cancellation request.");
 			await provider.triggerUniversalCancellation();
+			break;
+
+		case "operationCancelledConfirmation":
+			console.log(
+				"[WebviewMessageHandler] Received operationCancelledConfirmation from extension."
+			);
+			// When the extension confirms cancellation and potentially collapses the sidebar,
+			// the webview should update its UI state. This typically means resetting
+			// loading indicators and re-enabling user input fields.
+			provider.postMessageToWebview({
+				type: "updateLoadingState",
+				value: false,
+			});
+
+			provider.postMessageToWebview({ type: "reenableInput" });
 			break;
 
 		case "webviewReady":

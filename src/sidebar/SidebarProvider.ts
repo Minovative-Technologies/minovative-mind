@@ -536,7 +536,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 		this.isEditingMessageActive = false;
 
-		console.log("[SidebarProvider] Universal cancellation complete.");
+		// Send the confirmation message back to the webview after all cleanup is done.
+		this.postMessageToWebview({
+			type: "operationCancelledConfirmation",
+			// No payload needed for this specific confirmation message.
+		});
 	}
 
 	public async cancelActiveOperation(): Promise<void> {

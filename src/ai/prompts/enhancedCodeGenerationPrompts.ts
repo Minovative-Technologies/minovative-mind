@@ -20,22 +20,8 @@ const issueTypeOrder: CodeIssue["type"][] = [
 	"best_practice",
 	"other",
 ];
+
 const severityOrder: CodeIssue["severity"][] = ["error", "warning", "info"];
-
-// --- NEW: Centralized instruction block for output format ---
-const CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS = `
-// Your task: Generate the complete and correct code for the target file here.
-// Start your code immediately below this line.
-// Ensure the code is valid, production-ready, and adheres to modern best practices for that code.
-
-**CRITICAL NEGATIVE CONSTRAINT**:
-- Your response MUST include the \`XBEGIN_CODEX\` and \`XEND_CODEX\` delimiters.
-- The system will ONLY extract content strictly located between these delimiters.
-- Therefore, your response MUST contain **ABSOLUTELY NOTHING ELSE** outside of these markers.
-- This means: **NO** conversational text, **NO** explanations, **NO** apologies, **NO** comments (even inside the code block itself, unless they are part of the original/expected code logic), **NO** markdown formatting (e.g., \`\`\`language), **NO** meta-headers, and **NO** other extraneous characters or elements.
-- Your output must start IMMEDIATELY with \`XBEGIN_CODEX\` and end IMMEDIATELY with \`XEND_CODEX\`, with pure code in between.
-- **PURE CODE ONLY. NOTHING ELSE. ONLY CODE.`;
-// --- END NEW BLOCK ---
 
 /**
  * Analyzes a file path for framework and structure information.
@@ -436,8 +422,7 @@ Analyze past successful patterns and apply effective solution strategies.
 ${context.successfulChangeHistory}
 `
 		: ""
-}
-${CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS}`;
+}`;
 }
 
 /**
@@ -530,8 +515,7 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 --- End AI Self-Correction Analysis ---
 `
 		: ""
-}
-${CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS}`;
+}`;
 }
 
 /**
@@ -663,8 +647,7 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 --- End AI Self-Correction Analysis ---
 `
 		: ""
-}
-${CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS}`;
+}`;
 }
 
 /**
@@ -763,8 +746,7 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 --- End AI Self-Correction Analysis ---
 `
 		: ""
-}
-${CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS}`;
+}`;
 }
 
 /**
@@ -1000,8 +982,7 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 --- End AI Self-Correction Analysis ---
 `
 		: ""
-}
-${CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS}`;
+}`;
 }
 
 /**
@@ -1095,8 +1076,7 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 --- End AI Self-Correction Analysis ---
 `
 		: ""
-}
-${CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS}`;
+}`;
 }
 
 /**
@@ -1186,8 +1166,7 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 --- End AI Self-Correction Analysis ---
 `
 		: ""
-}
-${CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS}`;
+}`;
 }
 
 /**
@@ -1277,8 +1256,7 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 --- End AI Self-Correction Analysis ---
 `
 		: ""
-}
-${CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS}`;
+}`;
 }
 
 /**
@@ -1367,8 +1345,7 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 --- End AI Self-Correction Analysis ---
 `
 		: ""
-}
-${CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS}`;
+}`;
 }
 
 /**
@@ -1472,6 +1449,5 @@ ${context.lastCorrectionAttemptOutcome.aiFailureAnalysis}
 --- End AI Self-Correction Analysis ---
 `
 		: ""
-}
-${CRITICAL_OUTPUT_FORMAT_INSTRUCTIONS}`;
+}`;
 }

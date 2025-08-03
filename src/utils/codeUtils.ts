@@ -1,6 +1,7 @@
 // src/utils/codeUtils.ts
 import * as vscode from "vscode";
 import { generatePreciseTextEdits } from "../utils/diffingUtils";
+import { BEGIN_CODEX_REGEX } from "./extractingDelimiters";
 
 export function cleanCodeOutput(codeString: string): string {
 	if (!codeString) {
@@ -12,20 +13,13 @@ export function cleanCodeOutput(codeString: string): string {
 
 	// --- NEW: Prioritize extracting content between delimiters ---
 	// This is the primary mechanism to isolate the intended code block and discard extraneous text.
-	const BEGIN_CODEX_REGEX = /XBEGIN_CODEX\n?([\s\S]*?)\n?XEND_CODEX/i;
 	const delimiterMatch = codeString.match(BEGIN_CODEX_REGEX);
 
 	if (delimiterMatch && delimiterMatch[1]) {
 		// If delimiters are found, the content to process is ONLY what's inside them.
 		// This effectively throws away any text before XBEGIN_CODEX or after XEND_CODEX.
 		contentToProcess = delimiterMatch[1];
-	} else {
-		// Fallback for cases where the AI fails to use delimiters.
-		// The original string is processed, but we first remove the delimiters themselves
-		// in case of partial or mismatched tags.
-		contentToProcess = codeString.replace(/XBEGIN_CODEX|XEND_CODEX/gi, "");
 	}
-	// --- END NEW LOGIC ---
 
 	// Heuristic thresholds to identify non-code or severely malformed output
 	const MIN_ALPHANUMERIC_RATIO = 0.1; // At least 10% of characters should be alphanumeric

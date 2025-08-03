@@ -312,6 +312,9 @@ export type ExtensionToWebviewMessages =
 	| ChatClearedMessage // NEW
 	| GitProcessUpdateMessage // NEW
 	| RequestClearChatConfirmationMessage // NEW
+	| {
+			type: "operationCancelledConfirmation";
+	  }
 	| UpdateLoadingStateMessage
 	| ReenableInputMessage
 	| ApiKeyStatusMessage

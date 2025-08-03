@@ -142,16 +142,28 @@ export class EnhancedCodeGenerator {
 				return result;
 			}
 		} catch (error: any) {
-			this.postMessageToWebview({
-				type: "codeFileStreamEnd",
-				value: {
-					streamId,
-					filePath,
-					success: false,
-					error: error instanceof Error ? error.message : String(error),
-				},
-			});
-			throw error;
+			// Check if the error message indicates cancellation (case-insensitive)
+			if (
+				error instanceof Error &&
+				error.message.toLowerCase().includes("cancelled")
+			) {
+				// If it's a cancellation error, re-throw it immediately.
+				// This prevents sending a redundant codeFileStreamEnd message from this layer.
+				throw error;
+			} else {
+				// For any other type of error, post the codeFileStreamEnd message
+				// to indicate failure for this specific operation, and then re-throw.
+				this.postMessageToWebview({
+					type: "codeFileStreamEnd",
+					value: {
+						streamId,
+						filePath,
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					},
+				});
+				throw error; // Re-throw the error for higher-level handling
+			}
 		}
 	}
 
@@ -198,16 +210,28 @@ export class EnhancedCodeGenerator {
 			});
 			return result;
 		} catch (error: any) {
-			this.postMessageToWebview({
-				type: "codeFileStreamEnd",
-				value: {
-					streamId,
-					filePath,
-					success: false,
-					error: error instanceof Error ? error.message : String(error),
-				},
-			});
-			throw error;
+			// Check if the error message indicates cancellation (case-insensitive)
+			if (
+				error instanceof Error &&
+				error.message.toLowerCase().includes("cancelled")
+			) {
+				// If it's a cancellation error, re-throw it immediately.
+				// This prevents sending a redundant codeFileStreamEnd message from this layer.
+				throw error;
+			} else {
+				// For any other type of error, post the codeFileStreamEnd message
+				// to indicate failure for this specific operation, and then re-throw.
+				this.postMessageToWebview({
+					type: "codeFileStreamEnd",
+					value: {
+						streamId,
+						filePath,
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					},
+				});
+				throw error; // Re-throw the error for higher-level handling
+			}
 		}
 	}
 

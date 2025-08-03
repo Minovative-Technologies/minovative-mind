@@ -360,7 +360,17 @@ export function initializeMessageBusHandler(
 				}
 
 				// Update the overall loading state of the UI (disables/enables inputs, shows/hides cancel button)
-				setLoadingState(!isComplete, elements);
+				if (isComplete) {
+					if (!appState.isCancellationInProgress) {
+						setLoadingState(false, elements);
+					} else {
+						console.log(
+							"[Guard] UI remains disabled due to ongoing cancellation (restoreStreamingProgress completed)."
+						);
+					}
+				} else {
+					setLoadingState(true, elements);
+				}
 				break;
 			}
 
@@ -427,7 +437,6 @@ export function initializeMessageBusHandler(
 			case "aiResponseEnd": {
 				// 1. Ensure that resetStreamingAnimationState(); and appState.isCancellationInProgress = false; are called at the top.
 				resetStreamingAnimationState();
-				appState.isCancellationInProgress = false;
 
 				console.log("Received aiResponseEnd. Stream finished.");
 
@@ -610,8 +619,40 @@ export function initializeMessageBusHandler(
 					}
 				}
 				// 4. Ensure the final else if handles standard UI re-enablement.
-				else if (message.success || !message.success) {
-					setLoadingState(false, elements);
+				else if (message.success) {
+					// Ensure setLoadingState(false, elements) is NOT called if appState.isCancellationInProgress is true.
+					if (!appState.isCancellationInProgress) {
+						setLoadingState(false, elements);
+					} else {
+						console.log(
+							"[Guard] UI remains disabled due to ongoing cancellation."
+						);
+					}
+				}
+				// Ensure error paths do not prematurely re-enable UI if cancellation is in progress
+				else if (!message.success) {
+					// If it's an error and not a cancellation, or an error path where UI should still be loading due to cancellation
+					if (!isCancellation) {
+						// If it's a real error, not a cancellation
+						if (!appState.isCancellationInProgress) {
+							// If not cancellation, re-enable UI
+							setLoadingState(false, elements);
+						} else {
+							// If cancellation is in progress, UI remains disabled
+							console.log(
+								"[Guard] UI remains disabled due to ongoing cancellation (aiResponseEnd error path)."
+							);
+						}
+					} else {
+						// It is a cancellation
+						if (!appState.isCancellationInProgress) {
+							setLoadingState(false, elements); // Should ideally be handled by resetUIStateAfterCancellation or similar
+						} else {
+							console.log(
+								"[Guard] UI remains disabled as cancellation is acknowledged (aiResponseEnd cancellation path)."
+							);
+						}
+					}
 				}
 				break;
 			}
@@ -702,6 +743,13 @@ export function initializeMessageBusHandler(
 					updateStatus, // Corrected order as per showPlanParseErrorUI signature
 					setLoadingState // Corrected order as per showPlanParseErrorUI signature
 				);
+				if (!appState.isCancellationInProgress) {
+					setLoadingState(false, elements);
+				} else {
+					console.log(
+						"[Guard] UI remains disabled due to ongoing cancellation (structuredPlanParseFailed)."
+					);
+				}
 				break;
 			}
 
@@ -713,7 +761,13 @@ export function initializeMessageBusHandler(
 					!Array.isArray(message.value.stagedFiles)
 				) {
 					console.error("Invalid 'commitReview' message value:", message.value);
-					setLoadingState(false, elements);
+					if (!appState.isCancellationInProgress) {
+						setLoadingState(false, elements);
+					} else {
+						console.log(
+							"[Guard] UI remains disabled due to ongoing cancellation (commitReview invalid value)."
+						);
+					}
 					return;
 				}
 				const { commitMessage, stagedFiles } = message.value;
@@ -743,7 +797,13 @@ export function initializeMessageBusHandler(
 							"Invalid 'restorePendingCommitReview' message value:",
 							message.value
 						);
-						setLoadingState(false, elements);
+						if (!appState.isCancellationInProgress) {
+							setLoadingState(false, elements);
+						} else {
+							console.log(
+								"[Guard] UI remains disabled due to ongoing cancellation (restorePendingCommitReview invalid value)."
+							);
+						}
 						return;
 					}
 					const { commitMessage, stagedFiles } = message.value;
@@ -759,7 +819,13 @@ export function initializeMessageBusHandler(
 						setLoadingState
 					);
 
-					setLoadingState(false, elements);
+					if (!appState.isCancellationInProgress) {
+						setLoadingState(false, elements);
+					} else {
+						console.log(
+							"[Guard] UI remains disabled due to ongoing cancellation (restorePendingCommitReview)."
+						);
+					}
 
 					if (elements.cancelGenerationButton) {
 						elements.cancelGenerationButton.style.display = "none";
@@ -768,7 +834,13 @@ export function initializeMessageBusHandler(
 					console.warn(
 						"restorePendingCommitReview received without message.value. No action taken."
 					);
-					setLoadingState(false, elements);
+					if (!appState.isCancellationInProgress) {
+						setLoadingState(false, elements);
+					} else {
+						console.log(
+							"[Guard] UI remains disabled due to ongoing cancellation (restorePendingCommitReview fallback)."
+						);
+					}
 				}
 				break;
 			}
@@ -811,7 +883,13 @@ export function initializeMessageBusHandler(
 						if (elements.cancelGenerationButton) {
 							elements.cancelGenerationButton.style.display = "none";
 						}
-						setLoadingState(false, elements);
+						if (!appState.isCancellationInProgress) {
+							setLoadingState(false, elements);
+						} else {
+							console.log(
+								"[Guard] UI remains disabled due to ongoing cancellation (restorePendingPlanConfirmation)."
+							);
+						}
 					} else {
 						console.error(
 							"Error: Plan confirmation container not found during restore. Cannot display pending plan."
@@ -822,13 +900,25 @@ export function initializeMessageBusHandler(
 							true
 						);
 						appState.pendingPlanData = null;
-						setLoadingState(false, elements);
+						if (!appState.isCancellationInProgress) {
+							setLoadingState(false, elements);
+						} else {
+							console.log(
+								"[Guard] UI remains disabled due to ongoing cancellation (restorePendingPlanConfirmation fallback)."
+							);
+						}
 					}
 				} else {
 					console.warn(
 						"restorePendingPlanConfirmation received without message.value. No action taken."
 					);
-					setLoadingState(false, elements);
+					if (!appState.isCancellationInProgress) {
+						setLoadingState(false, elements);
+					} else {
+						console.log(
+							"[Guard] UI remains disabled due to ongoing cancellation (restorePendingPlanConfirmation no value)."
+						);
+					}
 				}
 				break;
 
@@ -966,7 +1056,13 @@ export function initializeMessageBusHandler(
 				const planFinishedMessage = message as PlanExecutionFinishedMessage;
 				appState.hasRevertibleChanges =
 					planFinishedMessage.hasRevertibleChanges;
-				setLoadingState(false, elements); // Refresh UI to update revert button visibility
+				if (!appState.isCancellationInProgress) {
+					setLoadingState(false, elements); // Refresh UI to update revert button visibility
+				} else {
+					console.log(
+						"[Guard] UI remains disabled due to ongoing cancellation (planExecutionFinished)."
+					);
+				}
 				break;
 			}
 			case "revertCompleted": {
@@ -983,7 +1079,13 @@ export function initializeMessageBusHandler(
 				if (elements.chatContainer) {
 					elements.chatContainer.innerHTML = "";
 				}
-				setLoadingState(false, elements);
+				if (!appState.isCancellationInProgress) {
+					setLoadingState(false, elements);
+				} else {
+					console.log(
+						"[Guard] UI remains disabled due to ongoing cancellation (chatCleared)."
+					);
+				}
 				resetStreamingAnimationState();
 				hideAllConfirmationAndReviewUIs(elements);
 				appState.pendingPlanData = null; // Ensure this is reset too
@@ -1090,7 +1192,13 @@ export function initializeMessageBusHandler(
 					"Ask Minovative Mind, use '/' (commands), or '@' (files)...";
 				elements.chatInput.disabled = false;
 				elements.sendButton.disabled = false;
-				setLoadingState(false, elements);
+				if (!appState.isCancellationInProgress) {
+					setLoadingState(false, elements);
+				} else {
+					console.log(
+						"[Guard] UI remains disabled due to ongoing cancellation (PrefillChatInput)."
+					);
+				}
 				break;
 			}
 			case "resetCodeStreamingArea": {
@@ -1120,6 +1228,14 @@ export function initializeMessageBusHandler(
 					// If '@' is no longer present, hide any previously shown suggestions
 					hideSuggestions(elements, setLoadingState);
 				}
+				break;
+			}
+			case "operationCancelledConfirmation": {
+				console.log(
+					"[Webview] Received operationCancelledConfirmation. Resetting UI state."
+				);
+				resetUIStateAfterCancellation(elements, setLoadingState);
+				resetCodeStreams();
 				break;
 			}
 			default:
