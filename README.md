@@ -44,7 +44,7 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 
 ### ✅ Summary
 
-- ***Minovative Mind is better for files within 1000 to 1500 lines of code***
+- ***Minovative Mind performs better for files <1500 lines of code***
 
 | Step | Description                                     |
 | ---- | ----------------------------------------------- |
