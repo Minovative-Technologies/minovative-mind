@@ -44,6 +44,8 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 
 ### ✅ Summary
 
+- ***Minovative Mind is better for small to medium sized projects***
+
 | Step | Description                                     |
 | ---- | ----------------------------------------------- |
 | 1    | Clone the repository                            |
