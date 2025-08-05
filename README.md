@@ -1,4 +1,4 @@
-# Minovative Mind
+# Minovative Mind (Now Public!)
 
 ## An open-source AI agent that automates software development, powerful enough that it built itself
 
@@ -44,6 +44,8 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 
 ### ✅ Summary
 
+- ***Minovative Mind performs better for files <1500 lines of code***
+
 | Step | Description                                     |
 | ---- | ----------------------------------------------- |
 | 1    | Clone the repository                            |
@@ -55,7 +57,7 @@ Here's the cleaned-up version in **Markdown** format, ready to paste into your `
 
 ---
 
-## 🔧 How to Use the Minovative Mind Extension from GitHub
+## 🔧 How to Clone the Minovative Mind Extension from GitHub to Use
 
 ### **Step 1: Clone the Repository**
 
