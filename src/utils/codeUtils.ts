@@ -15,39 +15,7 @@ export function cleanCodeOutput(codeString: string): string {
 		""
 	);
 
-	// Step 2: Define a regular expression for file headers.
-	const fileHeaderRegex =
-		/^---\s*(?:Relevant\s+)?(?:File|Path):\s*[^-\n]+\s*---$/im;
-
-	// Step 3: Split the content into lines for filtering.
-	const lines = cleanedStringContent.split("\n");
-
-	// Step 4: Initialize an empty array to hold the filtered lines.
-	const filteredLines: string[] = [];
-	let inContentBlock = false;
-
-	// Step 5: Iterate through each line to filter out headers and blank lines.
-	for (const line of lines) {
-		if (!inContentBlock) {
-			if (line.trim() === "" || fileHeaderRegex.test(line)) {
-				continue;
-			} else {
-				inContentBlock = true;
-				filteredLines.push(line);
-			}
-		} else {
-			if (fileHeaderRegex.test(line)) {
-				break;
-			} else {
-				filteredLines.push(line);
-			}
-		}
-	}
-
-	// Step 6: Join the filtered lines and apply a final trim.
-	let finalCleanedOutput = filteredLines.join("\n").trim();
-
-	return finalCleanedOutput;
+	return cleanedStringContent;
 }
 
 export async function applyAITextEdits(
