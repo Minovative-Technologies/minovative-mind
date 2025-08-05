@@ -556,7 +556,7 @@ export function initializeMessageBusHandler(
 				// Handle status bar updates for errors/cancellations
 				if (!message.success) {
 					const statusMessage = isCancellation
-						? "AI operation cancelled."
+						? ""
 						: typeof message.error === "string"
 						? `AI Operation Failed: ${message.error}`
 						: "AI operation failed or was cancelled.";

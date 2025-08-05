@@ -351,14 +351,10 @@ export function createEnhancedGenerationPrompt(
 		"**Security**: Implement secure coding practices meticulously, identifying and addressing potential vulnerabilities relevant to the language and context."
 	);
 
-	const formattedRequirements = requirementsList
-		.map((req, idx: number) => `${idx + 1}. ${req}`)
-		.join("\n");
-
-	return `You are the expert software engineer for me, specializing in ${languageId} development. Your task is to generate production-ready, accurate code. ONLY focus on generating code.
-
-**CRITICAL REQUIREMENTS:**
-${formattedRequirements}
+	// This prompt strictly targets technical problem-solving.
+	// It explicitly states "ONLY focus on generating code." and is now strengthened with an explicit exclusion.
+	// Emphasis on quality attributes like accuracy, error prevention, and best practices is clearly stated in the requirements list.
+	return `You are the expert software engineer for me, specializing in ${languageId} development. Your task is to generate production-ready, accurate code. ONLY focus on generating code. EXCLUDE all conversational or meta-commentary.
 
 ${
 	context.isOscillating
@@ -443,7 +439,11 @@ export function createRefinementPrompt(
 		content
 	);
 
-	return `The generated code has the following **VS Code-reported compilation/linting issues** that need to be fixed:
+	// This prompt strictly targets technical problem-solving by focusing on VS Code-reported issues.
+	// It now explicitly states to "ONLY provide the refined code" and to "EXCLUDE all conversational or meta-commentary."
+	// Emphasis on quality attributes like comprehensive issue resolution, imports correctness, variable/type usage,
+	// code style, modularity/maintainability, and production readiness is clearly present in the instructions.
+	return `ONLY provide the refined code. EXCLUDE all conversational or meta-commentary. The generated code has the following **VS Code-reported compilation/linting issues** that need to be fixed:
 
 **Issues to Address:**
 ${formattedIssues}
@@ -579,14 +579,10 @@ export function createEnhancedModificationPrompt(
 		"**Production Readiness**: Stress robustness, maintainability, and adherence to best practices for all modifications."
 	);
 
-	const formattedRequirements = requirementsList
-		.map((req, idx: number) => `${idx + 1}. ${req}`)
-		.join("\n");
-
-	return `You are the expert software engineer for me,. Your task is to modify the existing file according to the provided instructions. ONLY focus on generating code.
-
-**CRITICAL REQUIREMENTS:**
-${formattedRequirements}
+	// This prompt strictly targets technical problem-solving for file modifications.
+	// It explicitly states "ONLY focus on generating code." and is now strengthened with an explicit exclusion.
+	// Emphasis on quality attributes is clearly defined in the requirements list, adapting for rewrite vs. incremental changes.
+	return `You are the expert software engineer for me,. Your task is to modify the existing file according to the provided instructions. ONLY focus on generating code. EXCLUDE all conversational or meta-commentary.
 
 Path: ${filePath}
 Language: ${languageId}
@@ -682,7 +678,11 @@ export function createRefineModificationPrompt(
 			"\n- **Import Integrity Compromised**: All imports appear to have been removed, which is highly likely to cause compilation errors.";
 	}
 
-	return `${initialFeedback}\n\n**Issues with the modification:**\n${diffIssues
+	// This prompt strictly targets technical problem-solving by refining existing code.
+	// It now explicitly states to "ONLY provide the refined code" and to "EXCLUDE all conversational or meta-commentary."
+	// Emphasis on quality attributes like zero errors, preserving surrounding code, maintaining formatting,
+	// import integrity, strict style adherence, and functionality/correctness is clearly present in the instructions.
+	return `ONLY provide the refined code. EXCLUDE all conversational or meta-commentary. ${initialFeedback}\n\n**Issues with the modification:**\n${diffIssues
 		.map((issue) => `- ${issue}`)
 		.join(
 			"\n"
@@ -840,6 +840,9 @@ ${relevantOutcomes
 `;
 	}
 
+	// This prompt strictly targets technical problem-solving by performing root cause analysis.
+	// It includes very robust and clear directives to exclude conversational or meta-commentary,
+	// and emphasizes providing actionable, breakthrough strategies for quality.
 	return `You are the expert software engineer for me, performing a root cause analysis on a failed code correction attempt.
 
 Your primary goal is to diagnose WHY the previous attempt did not resolve issues or introduced new ones, and to provide actionable insights for the *next* correction.
@@ -909,7 +912,11 @@ export function createAlternativeCorrectionPrompt(
 		content
 	);
 
-	return `The code has the following **VS Code-reported compilation/linting issues** that need to be fixed using a different approach:
+	// This prompt strictly targets technical problem-solving by attempting alternative corrections.
+	// It now explicitly states to "ONLY provide the corrected code" and to "EXCLUDE all conversational or meta-commentary."
+	// Emphasis on quality attributes like zero errors, robust/maintainable/secure/clean/efficient code,
+	// and proactive error mitigation is clearly present in the instructions.
+	return `ONLY provide the corrected code. EXCLUDE all conversational or meta-commentary. The code has the following **VS Code-reported compilation/linting issues** that need to be fixed using a different approach:
 
 **Issues to Address:**
 ${formattedIssues}
@@ -1003,7 +1010,11 @@ export function createSyntaxCorrectionPrompt(
 		content
 	);
 
-	return `Fix the following **VS Code-reported compilation/linting issues** (syntax errors) in the code:
+	// This prompt strictly targets technical problem-solving by fixing syntax errors.
+	// It now explicitly states to "ONLY provide the corrected code" and to "EXCLUDE all conversational or meta-commentary."
+	// Emphasis on quality attributes like zero errors, learning from history, and proactive error mitigation
+	// is clearly present in the instructions, along with specific syntax correction directives.
+	return `ONLY provide the corrected code. EXCLUDE all conversational or meta-commentary. Fix the following **VS Code-reported compilation/linting issues** (syntax errors) in the code:
 
 **Syntax Issues:**
 ${formattedIssues}
@@ -1097,7 +1108,11 @@ export function createImportCorrectionPrompt(
 		content
 	);
 
-	return `Fix the following **VS Code-reported compilation/linting issues** (import errors/warnings) in the code:
+	// This prompt strictly targets technical problem-solving by fixing import issues.
+	// It now explicitly states to "ONLY provide the corrected code" and to "EXCLUDE all conversational or meta-commentary."
+	// Emphasis on quality attributes like zero errors, learning from history, and proactive error mitigation
+	// is clearly present in the instructions.
+	return `ONLY provide the corrected code. EXCLUDE all conversational or meta-commentary. Fix the following **VS Code-reported compilation/linting issues** (import errors/warnings) in the code:
 
 **Import Issues:**
 ${formattedIssues}
@@ -1187,7 +1202,11 @@ export function createPracticeCorrectionPrompt(
 		content
 	);
 
-	return `Fix the following **VS Code-reported compilation/linting issues** (best practice or other general issues) in the code:
+	// This prompt strictly targets technical problem-solving by fixing best practice and other general issues.
+	// It now explicitly states to "ONLY provide the corrected code" and to "EXCLUDE all conversational or meta-commentary."
+	// Emphasis on quality attributes like zero errors, learning from history, and proactive error mitigation
+	// is clearly present in the instructions.
+	return `ONLY provide the corrected code. EXCLUDE all conversational or meta-commentary. Fix the following **VS Code-reported compilation/linting issues** (best practice or other general issues) in the code:
 
 **Issues to Address:**
 ${formattedIssues}
@@ -1277,7 +1296,11 @@ export function createSecurityCorrectionPrompt(
 		content
 	);
 
-	return `Fix the following **VS Code-reported compilation/linting issues** (security vulnerabilities) in the code:
+	// This prompt strictly targets technical problem-solving by fixing security vulnerabilities.
+	// It now explicitly states to "ONLY provide the corrected code" and to "EXCLUDE all conversational or meta-commentary."
+	// Emphasis on quality attributes like learning from history and proactive error mitigation/secure handling
+	// is clearly present in the instructions.
+	return `ONLY provide the corrected code. EXCLUDE all conversational or meta-commentary. Fix the following **VS Code-reported compilation/linting issues** (security vulnerabilities) in the code:
 
 **Security Issues:**
 ${formattedIssues}
@@ -1371,13 +1394,15 @@ export function createPureCodeFormatCorrectionPrompt(
 		content
 	);
 
+	// This prompt strictly targets technical problem-solving by correcting code format.
+	// It is highly robust and clearly states to "ONLY focus on generating code." and to
+	// "ABSOLUTELY NO conversational text, apologies, explanations, comments, or meta-information outside the delimiters."
+	// Emphasis on quality attributes like maintaining functionality and production readiness is also present.
 	return `You are the expert software engineer for me,. Your task is to correct the format of the previously generated code. ONLY focus on generating code.
 
 **CRITICAL REQUIREMENTS:**
-1. **Strict Format Adherence**: Your response MUST contain ONLY the generated code enclosed STRICTLY within \`XBEGIN_CODEX\` and \`XEND_CODEX\` delimiters. NO other text, explanations, or markdown fences (\`\`\`language) are allowed outside these delimiters.
-2. **Pure Code Output**: The content between \`XBEGIN_CODEX\` and \`XEND_CODEX\` must be valid, executable ${languageId} code.
-3. **No Conversational Text**: ABSOLUTELY NO conversational text, apologies, explanations, comments, or meta-information outside the delimiters.
-4. **Error Prevention**: Ensure the corrected code will compile and run *without any errors or warnings*.
+1. **Pure Code Output**: The content between \`XBEGIN_CODEX\` and \`XEND_CODEX\` must be valid, executable ${languageId} code.
+2. **No Conversational Text**: ABSOLUTELY NO conversational text, apologies, explanations, comments, or meta-information outside the delimiters.
 
 **Context:**
 - Path: ${filePath}

@@ -435,7 +435,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	public async endUserOperation(
 		outcome: sidebarTypes.ExecutionOutcome | "review",
-		customStatusMessage?: string
+		customStatusMessage?: string,
+		shouldReenableInputs: boolean = true
 	): Promise<void> {
 		console.log(
 			`[SidebarProvider] Ending user operation with outcome: ${outcome}`
@@ -447,9 +448,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			false
 		);
 
+		// State cleanup: This also handles activeOperationCancellationTokenSource disposal/reset and currentAiStreamingState = null
 		this.clearActiveOperationState();
 		this.pendingPlanGenerationContext = null;
 		this.lastPlanGenerationContext = null;
+		// Clear pendingCommitReviewData ONLY if not pausing for review
+		if (outcome !== "review") {
+			this.pendingCommitReviewData = null;
+		}
 
 		if (!this.isEditingMessageActive) {
 			this.chatHistoryManager.restoreChatHistoryToWebview();
@@ -459,7 +465,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 		}
 
-		this.postMessageToWebview({ type: "reenableInput" });
+		// UI feedback after state cleanup
+		if (shouldReenableInputs) {
+			this.postMessageToWebview({ type: "reenableInput" });
+		}
 
 		let statusMessage = "";
 		let isError = false;
@@ -509,39 +518,56 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public async triggerUniversalCancellation(): Promise<void> {
 		console.log("[SidebarProvider] Triggering universal cancellation...");
 
+		// 1. Cancel the active operation, then dispose and clear the token source
 		if (this.activeOperationCancellationTokenSource) {
-			this.activeOperationCancellationTokenSource.cancel();
+			this.activeOperationCancellationTokenSource.cancel(); // Signal cancellation
+			const wasAiGenerationInProgress =
+				!!this.currentAiStreamingState &&
+				!this.currentAiStreamingState.isComplete;
+			// The clearActiveOperationState() method handles disposing and nullifying the token source,
+			// as well as setting currentAiStreamingState to null.
+			this.clearActiveOperationState();
 		}
 
+		// 2. Terminate any active child processes
 		this.activeChildProcesses.forEach((cp) => {
 			console.log(
 				`[SidebarProvider] Killing child process with PID: ${cp.pid}`
 			);
 			cp.kill();
 		});
-		this.activeChildProcesses = [];
+		this.activeChildProcesses = []; // Clear the list of child processes
 
-		await this.setPlanExecutionActive(false);
+		// 3. Reset all other relevant state variables to a quiescent state
+		await this.setPlanExecutionActive(false); // Update plan execution status
 
 		this.pendingPlanGenerationContext = null;
-		await this.updatePersistedPendingPlanData(null);
+		await this.updatePersistedPendingPlanData(null); // Clear persisted data
 		this.lastPlanGenerationContext = null;
-		this.pendingCommitReviewData = null;
-		this.currentAiStreamingState = null;
+		this.pendingCommitReviewData = null; // Ensure this is cleared upon universal cancellation
+		// this.currentAiStreamingState = null; // Removed: Handled by clearActiveOperationState()
 
-		this.isGeneratingUserRequest = false;
+		this.isGeneratingUserRequest = false; // Reset generation flag
 		await this.workspaceState.update(
 			"minovativeMind.isGeneratingUserRequest",
 			false
+		); // Persist the reset flag
+		this.isEditingMessageActive = false; // Reset editing flag
+
+		// 4. Call endUserOperation to finalize UI state and send status updates.
+		// This ensures "reenableInput" and "statusUpdate" are sent after all core state cleanup.
+		const wasAiGenerationInProgress =
+			!!this.currentAiStreamingState &&
+			!this.currentAiStreamingState.isComplete;
+		await this.endUserOperation(
+			"cancelled",
+			undefined,
+			!wasAiGenerationInProgress
 		);
-		this.isEditingMessageActive = false;
 
-		await this.endUserOperation("cancelled"); // Added line as per instruction.
-
-		// Send the confirmation message back to the webview after all cleanup is done.
+		// 5. Send a specific confirmation message to the webview, after all other messages
 		this.postMessageToWebview({
 			type: "operationCancelledConfirmation",
-			// No payload needed for this specific confirmation message.
 		});
 	}
 

@@ -57,7 +57,7 @@ async function executeExplainAction(
 	}
 
 	const userInstruction =
-		"Explain the following code selection concisely and simply. Focus on its purpose, functionality, and key components. Provide the explanation without using Markdown formatting at ALL.";
+		"Explain the following code selection concisely and in detail as possible. Focus on its purpose, functionality, and key components. Provide the explanation in plain text.";
 	const systemPrompt = `You are the expert software engineer for me, analyzing the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
 
 	const prompt = `
@@ -416,8 +416,8 @@ export async function activate(context: vscode.ExtensionContext) {
 				const userChatPrompt =
 					`
 
-					You are Minovative Mind, an AI coding assistant in VS Code. Respond helpfully and concisely. Your primary role is to answer user questions and fixes to their problem. Crucially, you cannot not generate, modify, or execute code. Don't give the user code diffs, you are capable of discussing programming concepts. Focus on creating plans according to the user's prompts, to fix them head on. If the user's prompts doesn't need a plan, just response normally.
-					
+You name is **MINO**, an AI coding assistant in Visual Studio Code, built to support software developers by delivering concise, accurate, and practical answers to programming questions and solutions for coding issues. Your core role is to assist developers in resolving bugs or adding new features/enhancements only by laying out plans to complete them. Provide clear, step-by-step plans or pseudocode-like explanations tailored to the developer’s query, avoiding code snippets or diffs. Focus on actionable advice for software development tasks for the user. If a query is unclear, request details. Maintain a professional, encouraging tone, focused on fixing issues directly with insights into best practices or edge cases, using up to date knowledge.
+
 					\n\n` +
 					`${finalUserMessageContent}\n\n` +
 					`From this file \`${fileName}\`, I've provided ${codeContextDescription}. Lets chat about my code.\n\n` +
