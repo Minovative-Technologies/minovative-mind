@@ -244,11 +244,15 @@ export class EnhancedCodeGenerator {
 		rawContent: string
 	): CodeValidationResult | null {
 		const unwantedCodeGenerationPatterns = [
-			/<execute_bash>/i, // Custom tags that shouldn't be in code
-			/\bthought\b/i, // Explicit "thought" process leakage
-			/you are the expert software engineer for me/i, // AI repeating its persona/instructions
-			/here's the code:/i, // Conversational lead-in
-			/i can help you by/i, // Conversational lead-in
+			// The </execute_bash> pattern was removed due to its potential for false positives
+			// with legitimate code that might contain this string in comments or literals.
+			// The primary defense against such tags is now the cleanCodeOutput function,
+			// which extracts content between XBEGIN_CODEX/XEND_CODEX delimiters.
+			/<execute_bash>/i,
+			/\bthought\b/i,
+			/you are the expert software engineer for me/i,
+			/here's the code:/i,
+			/i can help you by/i,
 		];
 
 		for (const pattern of unwantedCodeGenerationPatterns) {
