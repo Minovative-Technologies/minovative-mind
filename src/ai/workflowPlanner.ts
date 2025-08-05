@@ -24,6 +24,7 @@ export interface PlanStep {
 	description: string;
 	path?: string; // Optional: Relevant for file/directory actions (relative path from workspace root)
 	command?: string; // Optional: Relevant for run_command action (command line string)
+	generate_prompt?: string;
 }
 
 // --- Specific Step Interfaces ---
@@ -255,6 +256,14 @@ export async function parseAndValidatePlan(
 			const errorMsg =
 				"Plan validation failed: The JSON must have a 'planDescription' (string) and 'steps' (array).";
 			console.error(errorMsg, potentialPlan);
+			return { plan: null, error: errorMsg };
+		}
+
+		// ADDED CHECK: Ensure the steps array is not empty
+		if (potentialPlan.steps.length === 0) {
+			const errorMsg =
+				"Plan validation failed: The generated plan contains an empty steps array. It must contain at least one step.";
+			console.error(`[workflowPlanner] ${errorMsg}`);
 			return { plan: null, error: errorMsg };
 		}
 

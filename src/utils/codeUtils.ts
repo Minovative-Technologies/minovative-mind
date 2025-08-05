@@ -59,18 +59,6 @@ export function cleanCodeOutput(codeString: string): string {
 	// Step 6: Join the filtered lines and apply a final trim.
 	let finalCleanedOutput = filteredLines.join("\n").trim();
 
-	// --- Heuristic Checks for fundamentally malformed output ---
-
-	// Heuristic 1: Check if the output became empty after cleaning.
-	if (finalCleanedOutput.length === 0) {
-		if (originalLength > 0) {
-			console.warn(
-				"CleanCodeOutput: Cleaned output became empty from non-empty input, indicating severe malformation or non-code."
-			);
-		}
-		return "";
-	}
-
 	return finalCleanedOutput;
 }
 

@@ -189,3 +189,84 @@ export const fewShotExamples = `
     }
     --- End Valid JSON Output Examples ---
 `;
+
+export const jsonSchemaReference = `
+        interface ExecutionPlan {
+          planDescription: string;
+          steps: PlanStep[];
+        }
+
+        interface PlanStep {
+          step: number; // 1-indexed, sequential
+          action: "create_directory" | "create_file" | "modify_file" | "run_command";
+          description: string;
+          // File/Directory Operations:
+          path?: string; // REQUIRED for 'create_directory', 'create_file', 'modify_file'. Must be a non-empty, relative string (e.g., 'src/components/button.ts'). DO NOT leave this empty, null, or undefined.
+          // 'create_file' specific:
+          content?: string; // Exclusive with 'generate_prompt'. Full content of the new file.
+          generate_prompt?: string; // Exclusive with 'content'. A prompt to generate file content.
+          // 'modify_file' specific:
+          modification_prompt?: string; // REQUIRED for 'modify_file'. Instructions on how to modify the file's content.
+          // 'run_command' specific:
+          command?: string; // REQUIRED for 'run_command'. The command string to execute.
+        }`;
+
+export const fewShotCorrectionExamples = `
+        --- Valid Correction Plan Examples ---
+        Example 1: Simple syntax fix in an existing file
+        {
+            \"planDescription\": \"Fix a syntax error in utils.ts\",
+            \"steps\": [
+                {
+                    \"step\": 1,
+                    \"action\": \"modify_file\",
+                    \"description\": \"Correct missing semicolon and adjust function call in utils.ts as per diagnostic.\",
+                    \"path\": \"src/utils.ts\",
+                    \"modification_prompt\": \"The file src/utils.ts has a syntax error: 'Expected ;'. Add a semicolon at the end of line 10. Also, ensure the 'calculateSum' function call on line 15 passes the correct number of arguments as indicated by the 'Expected 2 arguments, but got 1.' diagnostic.\"
+                }
+            ]
+        }
+
+        Example 2: Adding a missing import
+        {
+            \"planDescription\": \"Add missing 'useState' import to MyComponent.tsx\",
+            \"steps\": [
+                {
+                    \"step\": 1,
+                    \"action\": \"modify_file\",
+                    \"description\": \"Add missing 'useState' import from 'react' to MyComponent.tsx to resolve 'useState is not defined' error.\",
+                    \"path\": \"src/components/MyComponent.tsx\",
+                    \"modification_prompt\": \"Add 'useState' to the React import statement in src/components/MyComponent.tsx so it becomes 'import React, { useState } from 'react';' to resolve the 'useState is not defined' error.\"
+                }
+            ]
+        }
+
+        Example 3: Resolving a type error in TypeScript
+        {
+            \"planDescription\": \"Correct type mismatch in userSlice.ts\",
+            \"steps\": [
+                {
+                    \"step\": 1,
+                    \"action\": \"modify_file\",
+                    \"description\": \"Adjust the type definition for 'user' state in userSlice.ts from 'string' to 'UserInterface' to match expected object structure.\",
+                    \"path\": \"src/store/userSlice.ts\",
+                    \"modification_prompt\": \"In src/store/userSlice.ts, change the type of the 'user' property in the initial state from 'string' to 'UserInterface' (assuming UserInterface is already defined or will be imported). Ensure the default value for 'user' is a valid UserInterface object or null as appropriate.\"
+                }
+            ]
+        }
+
+        Example 4: Creating a new file to fix a missing module error
+        {
+            \"planDescription\": \"Create a new utility file for common functions\",
+            \"steps\": [
+                {
+                    \"step\": 1,
+                    \"action\": \"create_file\",
+                    \"description\": \"Create 'src/utils/mathUtils.ts' as it is missing, which causes 'Module not found' error.\",
+                    \"path\": \"src/utils/mathUtils.ts\",
+                    \"generate_prompt\": \"Generate a TypeScript file 'src/utils/mathUtils.ts' that exports a function named 'add' which takes two numbers and returns their sum, and a function named 'subtract' which takes two numbers and returns their difference.\"
+                }
+            ]
+        }
+        --- End Valid Correction Plan Examples ---
+    `;

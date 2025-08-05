@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
+import * as crypto from "crypto";
 import { EnhancedCodeGenerator } from "../../ai/enhancedCodeGeneration";
 
 // New imports for AI interaction and code utilities
@@ -11,6 +12,12 @@ import { generateFileChangeSummary } from "../../utils/diffingUtils";
 import { FileChangeEntry } from "../../types/workflow";
 import { ExtensionToWebviewMessages } from "../../sidebar/common/sidebarTypes"; // NEW IMPORT
 import { DEFAULT_FLASH_MODEL } from "../common/sidebarConstants";
+import { getLanguageId } from "../../utils/codeAnalysisUtils"; // NEW IMPORT for language ID
+import {
+	EnhancedGenerationContext,
+	EditorContext,
+} from "../../types/codeGenerationTypes"; // NEW IMPORT for context types
+import { formatSuccessfulChangesForPrompt } from "../../workflow/changeHistoryFormatter"; // NEW IMPORT for change history
 
 // Define enums and interfaces for plan execution
 export enum PlanStepAction {
@@ -29,6 +36,7 @@ export interface PlanStep {
 	content?: string; // Content for actions like CreateFile, TypeContent
 	modificationPrompt?: string; // Prompt for ModifyFile action
 	description: string; // User-friendly description of the step
+	generate_prompt?: string; // ADDED: Prompt for AI-driven content generation for CreateFile
 	// other properties as needed for different actions
 	command?: string; // For executeCommand
 	args?: string[]; // For executeCommand
@@ -305,17 +313,129 @@ export async function executePlanStep(
 
 		case PlanStepAction.CreateFile: {
 			let targetFileUri: vscode.Uri;
-			if (!step.file || !step.content) {
-				throw new Error("Missing file path or content for CreateFile action.");
+			if (!step.file) {
+				// Ensure file path is always present
+				throw new Error("Missing file path for CreateFile action.");
 			}
 			targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file!);
 
-			let contentToProcess = step.content; // Introduce local mutable variable for content
+			let contentToProcess: string | undefined = step.content; // Introduce local mutable variable for content
 
-			// As per instructions, if 'content' exists, clean it.
-			// In this 'CreateFile' action, 'step.content' is guaranteed to exist due to the check above.
-			if (contentToProcess) {
-				contentToProcess = cleanCodeOutput(contentToProcess);
+			// 1. Add a conditional check at the beginning of the case: `if (step.generate_prompt && !step.content)`.
+			// This block will handle AI-driven content generation.
+			if (step.generate_prompt && !step.content) {
+				progress.report({
+					message: `Generating content for new file: ${path.basename(
+						targetFileUri.fsPath
+					)}...`,
+				});
+
+				// a. Generate a unique `streamId` using `crypto.randomUUID()`.
+				const streamId = crypto.randomUUID();
+
+				// b. Define an `onCodeChunkCallback` function
+				const onCodeChunkCallback = (chunk: string) => {
+					postMessageToWebview({
+						type: "codeFileStreamChunk",
+						value: {
+							streamId,
+							filePath: step.file!,
+							chunk,
+						},
+					});
+				};
+
+				// c. Construct an `EnhancedGenerationContext` object.
+				const editorContext: EditorContext = {
+					filePath: step.file!,
+					documentUri: targetFileUri,
+					fullText: "", // New file, so empty initially
+					selection: new vscode.Range(0, 0, 0, 0),
+					selectedText: "",
+					instruction: step.generate_prompt ?? "", // Added as per instructions
+					languageId: getLanguageId(path.extname(step.file!)), // Added as per instructions
+				};
+
+				const generationContext: EnhancedGenerationContext = {
+					editorContext: editorContext, // Constructed for the file being created.
+					successfulChangeHistory: formatSuccessfulChangesForPrompt(
+						changeLogger.getCompletedPlanChangeSets()
+					), // Formatted from changeLogger.
+					projectContext: "", // Default empty object if not readily available.
+					activeSymbolInfo: undefined, // Default undefined if not readily available.
+					relevantSnippets: "", // Default empty as it's not directly needed for new file creation context
+					// Other properties like relevantSnippets, fileStructureAnalysis will be handled by EnhancedCodeGenerator internally if needed.
+				};
+
+				try {
+					// d. Before calling the AI, send a `codeFileStreamStart` message
+					const languageId = getLanguageId(path.extname(step.file!));
+					postMessageToWebview({
+						type: "codeFileStreamStart",
+						value: { streamId, filePath: step.file!, languageId },
+					});
+
+					// e. Call `enhancedCodeGenerator.generateFileContent`
+					const generatedContentResult =
+						await enhancedCodeGenerator.generateFileContent(
+							step.file!, // filePath
+							step.generate_prompt!, // generatePrompt
+							generationContext, // EnhancedGenerationContext
+							modelName, // modelName
+							token, // token
+							undefined, // feedbackCallback (can be undefined if not needed here, or passed from main plan orchestrator)
+							onCodeChunkCallback // onCodeChunkCallback
+						);
+
+					// f. Capture the `content` from the result
+					let generatedContent = generatedContentResult.content;
+
+					// g. Clean this AI-generated content
+					contentToProcess = cleanCodeOutput(generatedContent);
+
+					// End the stream after successful generation and cleaning
+					postMessageToWebview({
+						type: "codeFileStreamEnd",
+						value: { streamId, filePath: step.file!, success: true },
+					});
+				} catch (aiError: any) {
+					// Ensure stream ends even on error
+					postMessageToWebview({
+						type: "codeFileStreamEnd",
+						value: {
+							streamId,
+							filePath: step.file!,
+							success: false,
+							error:
+								aiError instanceof Error ? aiError.message : String(aiError),
+						},
+					});
+					const errorMessage = `Failed to generate content for ${path.basename(
+						targetFileUri.fsPath
+					)}: ${aiError.message}`;
+					console.error("[PlanExecutionService] " + errorMessage, aiError);
+					postChatUpdate({
+						type: "appendRealtimeModelMessage",
+						value: { text: errorMessage, isError: true },
+					});
+					throw aiError; // Re-throw to stop plan execution
+				}
+			} else if (!step.content) {
+				// If generate_prompt was false/undefined AND content is also missing
+				throw new Error(
+					"Missing content for CreateFile action. Either 'content' or 'generate_prompt' must be provided."
+				);
+			} else {
+				// This branch handles cases where step.content is explicitly provided.
+				// As per existing logic and instructions, clean it.
+				contentToProcess = cleanCodeOutput(step.content);
+			}
+
+			// Ensure contentToProcess is a string before proceeding with file operations.
+			if (contentToProcess === undefined) {
+				throw new Error(
+					"Content to process is undefined after AI generation or content check."
+				);
 			}
 
 			try {

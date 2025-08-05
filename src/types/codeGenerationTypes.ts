@@ -65,6 +65,7 @@ export interface DiffAnalysis {
  * Encapsulates details about a single correction attempt that did not yield the desired result.
  */
 export interface CorrectionAttemptOutcome {
+	type: string;
 	success: boolean;
 	iteration: number;
 	originalIssuesCount: number;
@@ -80,6 +81,7 @@ export interface CorrectionAttemptOutcome {
 		| "unreasonable_diff"
 		| "command_failed"
 		| "unknown";
+	feedbackUsed?: CorrectionFeedback;
 }
 
 export interface EnhancedGenerationContext {
@@ -95,4 +97,40 @@ export interface EnhancedGenerationContext {
 	isOscillating?: boolean;
 	relevantFiles?: string;
 	isRewriteOperation?: boolean;
+}
+
+// NOTE: The CorrectionFeedback interface was not found in the provided current content for this file.
+// Based on its usage context in src/ai/enhancedCodeGeneration.ts and common patterns,
+// if it were present, it would likely look like this:
+export interface CorrectionFeedback {
+	type:
+		| "no_improvement"
+		| "new_errors_introduced"
+		| "parsing_failed"
+		| "unreasonable_diff"
+		| "command_failed"
+		| "unknown"
+		| "oscillation_detected"; // Added based on enhancedCodeGeneration.ts usage
+	message: string;
+	details?: {
+		previousIssues?: CodeIssue[];
+		currentIssues?: CodeIssue[];
+		parsingError?: string;
+		failedJson?: string;
+		issuesIntroduced?: CodeIssue[];
+		relevantDiff?: string; // Added as per instruction
+	};
+	issuesRemaining: CodeIssue[];
+	issuesIntroduced?: CodeIssue[];
+	relevantDiff?: string; // Also potentially a top-level property based on usage
+}
+
+export interface EditorContext {
+	instruction: string;
+	selectedText: string;
+	fullText: string;
+	languageId: string;
+	filePath: string;
+	documentUri: import("vscode").Uri;
+	selection: import("vscode").Range;
 }

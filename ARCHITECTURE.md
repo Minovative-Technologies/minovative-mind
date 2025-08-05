@@ -111,7 +111,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 17. **Enhanced Code Generation & Self-Correction**:
 
-    - **Responsibility**: A sophisticated system dedicated to generating, modifying, and refining code files. It incorporates real-time validation against VS Code's language services (diagnostics), and employs iterative AI-driven self-correction loops to produce functional, error-free, and well-formatted code.
+    - **Responsibility**: A sophisticated system dedicated to generating, modifying, and refining code files. It incorporates real-time validation against VS Code's language services (diagnostics), and employs iterative AI-driven self-correction loops to produce functional, error-free, and well-formatted code. The self-correction process now includes re-formatting relevant files at the start of each correction attempt, ensuring the AI operates with the most current context derived from the initial workspace scan.
     - **Key Files**: `src/ai/enhancedCodeGeneration.ts`.
     - **AI Usage**: Yes
 

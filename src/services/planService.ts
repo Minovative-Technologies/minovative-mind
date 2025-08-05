@@ -707,7 +707,37 @@ export class PlanService {
 				if (parsedPlanResult.plan) {
 					// Success! Assign plan and break the loop
 					executablePlan = parsedPlanResult.plan;
-					break;
+					// ADDED CHECK: Ensure the plan has steps before proceeding
+					if (executablePlan.steps.length === 0) {
+						const errorMsg = `Correction plan generated with no executable steps. This is not allowed.`;
+						console.error(`[PlanService] ${errorMsg}`);
+						// Treat this as a parsing/validation failure to trigger retries or final error reporting
+						lastParsingError = errorMsg;
+						lastFailedJson = structuredPlanJsonString; // Capture the last valid-looking JSON
+						retryAttempt++; // Increment attempt count
+						// Re-prepare prompt for next attempt (if available)
+						if (retryAttempt <= this.MAX_PLAN_PARSE_RETRIES) {
+							// Logic to update currentJsonPlanningPrompt with error feedback
+							currentJsonPlanningPrompt = createPlanningPrompt(
+								planContext.type === "chat"
+									? planContext.originalUserRequest
+									: undefined,
+								planContext.projectContext,
+								planContext.type === "editor"
+									? planContext.editorContext
+									: undefined,
+								`CRITICAL ERROR: Your previous JSON output resulted in an empty steps array. You MUST provide a plan with at least one step. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct empty steps)`,
+								planContext.chatHistory,
+								planContext.textualPlanExplanation,
+								formattedRecentChanges,
+								urlContextString
+							);
+						}
+						// Break from this specific 'if (parsedPlanResult.plan)' block to continue the retry loop
+						continue;
+					}
+
+					break; // Exit retry loop if plan is valid and has steps
 				} else {
 					// Parsing failed, capture error and failed JSON
 					lastParsingError =
@@ -1946,6 +1976,7 @@ export class PlanService {
 								previousIssues: lastAttemptForFile.issuesRemaining,
 								currentIssues: lastAttemptForFile.issuesRemaining,
 							},
+							issuesRemaining: lastAttemptForFile?.issuesRemaining ?? [],
 						};
 						this._postChatUpdateForPlanExecution({
 							type: "appendRealtimeModelMessage",
@@ -2137,6 +2168,7 @@ export class PlanService {
 									parsingError: parsedPlanResult.error,
 									failedJson: correctionPlanJsonString,
 								},
+								issuesRemaining: lastAttemptForFile?.issuesRemaining ?? [],
 							};
 							console.error(
 								`[MinovativeMind] Failed to parse AI correction plan for '${fileRelativePath}' (Attempt ${currentCorrectionAttempt}): ${parsedPlanResult.error}`
@@ -2334,6 +2366,7 @@ export class PlanService {
 						stdout: stdout,
 						stderr: stderr,
 					},
+					issuesRemaining: [],
 				};
 			} else {
 				correctionPromptRetryReason = this._formatCorrectionFeedbackForPrompt(
@@ -2485,6 +2518,7 @@ export class PlanService {
 							parsingError: parsedPlanResult.error,
 							failedJson: correctionPlanJsonString,
 						},
+						issuesRemaining: [],
 					};
 				}
 			} catch (correctionError: any) {
@@ -2508,6 +2542,7 @@ export class PlanService {
 				lastCorrectionFeedbackForPrompt = {
 					type: "unknown",
 					message: `An unexpected error occurred during command correction: ${correctionError.message}`,
+					issuesRemaining: [],
 				};
 			}
 			currentCorrectionAttempt++;

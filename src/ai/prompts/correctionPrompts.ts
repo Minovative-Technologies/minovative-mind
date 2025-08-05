@@ -4,90 +4,12 @@ import { ActiveSymbolDetailedInfo } from "../../services/contextService";
 import { HistoryEntryPart } from "../../sidebar/common/sidebarTypes";
 import * as sidebarTypes from "../../sidebar/common/sidebarTypes";
 import { CodeIssue } from "../../ai/enhancedCodeGeneration"; // NEW: Import CodeIssue
-
-const MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT = 5000;
-const MAX_REFERENCED_TYPES_TO_INCLUDE_PROMPT = 3;
-
-const jsonSchemaReference = `
-        interface ExecutionPlan {
-          planDescription: string;
-          steps: PlanStep[];
-        }
-
-        interface PlanStep {
-          step: number; // 1-indexed, sequential
-          action: "create_directory" | "create_file" | "modify_file" | "run_command";
-          description: string;
-          // File/Directory Operations:
-          path?: string; // REQUIRED for 'create_directory', 'create_file', 'modify_file'. Must be a non-empty, relative string (e.g., 'src/components/button.ts'). DO NOT leave this empty, null, or undefined.
-          // 'create_file' specific:
-          content?: string; // Exclusive with 'generate_prompt'. Full content of the new file.
-          generate_prompt?: string; // Exclusive with 'content'. A prompt to generate file content.
-          // 'modify_file' specific:
-          modification_prompt?: string; // REQUIRED for 'modify_file'. Instructions on how to modify the file's content.
-          // 'run_command' specific:
-          command?: string; // REQUIRED for 'run_command'. The command string to execute.
-        }`;
-
-const fewShotCorrectionExamples = `
-        --- Valid Correction Plan Examples ---
-        Example 1: Simple syntax fix in an existing file
-        {
-            \"planDescription\": \"Fix a syntax error in utils.ts\",
-            \"steps\": [
-                {
-                    \"step\": 1,
-                    \"action\": \"modify_file\",
-                    \"description\": \"Correct missing semicolon and adjust function call in utils.ts as per diagnostic.\",
-                    \"path\": \"src/utils.ts\",
-                    \"modification_prompt\": \"The file src/utils.ts has a syntax error: 'Expected ;'. Add a semicolon at the end of line 10. Also, ensure the 'calculateSum' function call on line 15 passes the correct number of arguments as indicated by the 'Expected 2 arguments, but got 1.' diagnostic.\"
-                }
-            ]
-        }
-
-        Example 2: Adding a missing import
-        {
-            \"planDescription\": \"Add missing 'useState' import to MyComponent.tsx\",
-            \"steps\": [
-                {
-                    \"step\": 1,
-                    \"action\": \"modify_file\",
-                    \"description\": \"Add missing 'useState' import from 'react' to MyComponent.tsx to resolve 'useState is not defined' error.\",
-                    \"path\": \"src/components/MyComponent.tsx\",
-                    \"modification_prompt\": \"Add 'useState' to the React import statement in src/components/MyComponent.tsx so it becomes 'import React, { useState } from 'react';' to resolve the 'useState is not defined' error.\"
-                }
-            ]
-        }
-
-        Example 3: Resolving a type error in TypeScript
-        {
-            \"planDescription\": \"Correct type mismatch in userSlice.ts\",
-            \"steps\": [
-                {
-                    \"step\": 1,
-                    \"action\": \"modify_file\",
-                    \"description\": \"Adjust the type definition for 'user' state in userSlice.ts from 'string' to 'UserInterface' to match expected object structure.\",
-                    \"path\": \"src/store/userSlice.ts\",
-                    \"modification_prompt\": \"In src/store/userSlice.ts, change the type of the 'user' property in the initial state from 'string' to 'UserInterface' (assuming UserInterface is already defined or will be imported). Ensure the default value for 'user' is a valid UserInterface object or null as appropriate.\"
-                }
-            ]
-        }
-
-        Example 4: Creating a new file to fix a missing module error
-        {
-            \"planDescription\": \"Create a new utility file for common functions\",
-            \"steps\": [
-                {
-                    \"step\": 1,
-                    \"action\": \"create_file\",
-                    \"description\": \"Create 'src/utils/mathUtils.ts' as it is missing, which causes 'Module not found' error.\",
-                    \"path\": \"src/utils/mathUtils.ts\",
-                    \"generate_prompt\": \"Generate a TypeScript file 'src/utils/mathUtils.ts' that exports a function named 'add' which takes two numbers and returns their sum, and a function named 'subtract' which takes two numbers and returns their difference.\"
-                }
-            ]
-        }
-        --- End Valid Correction Plan Examples ---
-    `;
+import {
+	MAX_REFERENCED_TYPE_CONTENT_CHARS_PROMPT,
+	MAX_REFERENCED_TYPES_TO_INCLUDE_PROMPT,
+} from "../../sidebar/common/sidebarConstants";
+import { fewShotCorrectionExamples } from "./jsonFormatExamples";
+import { escapeForJsonValue } from "../../utils/aiUtils";
 
 /**
  * Encapsulates feedback from a previous failed correction attempt,
@@ -100,7 +22,8 @@ export interface CorrectionFeedback {
 		| "parsing_failed" // AI's JSON output for the plan was malformed/invalid
 		| "unreasonable_diff" // The generated diff was too drastic or illogical
 		| "command_failed" // A command executed as part of the plan failed
-		| "unknown"; // Other or uncategorized failure
+		| "unknown" // Other or uncategorized failure
+		| "oscillation_detected"; // Detected a repeating pattern of unresolved issues
 	message: string; // A concise summary of the failure reason
 	details?: {
 		parsingError?: string;
@@ -111,7 +34,7 @@ export interface CorrectionFeedback {
 		currentIssues?: CodeIssue[];
 	}; // More elaborate details, e.g., stack trace, specific error message
 	failedJson?: string; // The malformed JSON output if parsing failed
-	issuesRemaining?: CodeIssue[]; // List of issues that still persist after the attempt
+	issuesRemaining: CodeIssue[]; // List of issues that still persist after the attempt
 	issuesIntroduced?: CodeIssue[]; // List of *new* issues introduced by the attempt
 	relevantDiff?: string; // The diff that caused the issues or was part of the failed attempt
 }
@@ -300,9 +223,11 @@ const formatCodeIssues = (
 	const formatted = limited
 		.map(
 			(issue) =>
-				`  - [${issue.severity.toUpperCase()}] ${issue.type}: "${
-					issue.message
-				}" at line ${issue.line}${issue.code ? ` (Code: ${issue.code})` : ""}`
+				`  - [${issue.severity.toUpperCase()}] ${
+					issue.type
+				}: "${escapeForJsonValue(issue.message)}" at line ${issue.line}${
+					issue.code ? ` (Code: ${issue.code})` : ""
+				}`
 		)
 		.join("\n");
 	return issues.length > limit
@@ -361,22 +286,30 @@ export function createCorrectionPlanPrompt(
 		? `
     --- Previous Correction Attempt Feedback ---
     Correction Type: ${correctionFeedback.type}
-    Feedback Message: ${correctionFeedback.message}
+    Feedback Message: ${escapeForJsonValue(correctionFeedback.message)}
     ${
 			correctionFeedback.details?.parsingError
-				? `Parsing Error: ${correctionFeedback.details.parsingError}\n`
+				? `Parsing Error: ${escapeForJsonValue(
+						correctionFeedback.details.parsingError
+				  )}\n`
 				: ""
 		}${
 				correctionFeedback.details?.failedJson
-					? `Failed JSON Output (if applicable):\n\`\`\`json\n${correctionFeedback.details.failedJson}\n\`\`\`\n`
+					? `Failed JSON Output (if applicable):\n\`\`\`json\n${escapeForJsonValue(
+							correctionFeedback.details.failedJson
+					  )}\n\`\`\`\n`
 					: ""
 		  }${
 				correctionFeedback.details?.stdout
-					? `STDOUT:\n\`\`\`\n${correctionFeedback.details.stdout}\n\`\`\`\n`
+					? `STDOUT:\n\`\`\`\n${escapeForJsonValue(
+							correctionFeedback.details.stdout
+					  )}\n\`\`\`\n`
 					: ""
 		  }${
 				correctionFeedback.details?.stderr
-					? `STDERR:\n\`\`\`\n${correctionFeedback.details.stderr}\n\`\`\`\n`
+					? `STDERR:\n\`\`\`\n${escapeForJsonValue(
+							correctionFeedback.details.stderr
+					  )}\n\`\`\`\n`
 					: ""
 		  }Issues Remaining (after previous attempt):\n${formatCodeIssues(
 				correctionFeedback.issuesRemaining
@@ -386,7 +319,9 @@ export function createCorrectionPlanPrompt(
 		)}
     ${
 			correctionFeedback.relevantDiff
-				? `Relevant Diff (from previous attempt):\n\`\`\`diff\n${correctionFeedback.relevantDiff}\n\`\`\`\n`
+				? `Relevant Diff (from previous attempt):\n\`\`\`diff\n${escapeForJsonValue(
+						correctionFeedback.relevantDiff
+				  )}\n\`\`\`\n`
 				: ""
 		}
     --- End Previous Correction Attempt Feedback ---`
@@ -470,20 +405,18 @@ ${formatCallHierarchy(
 		: "";
 
 	return `
-	
-	
-        You are the expert software engineer for me. Your ONLY task is to generate a JSON ExecutionPlan to resolve all reported diagnostics.
+        You are the expert software engineer for me. Your ONLY task is to generate a JSON *correction plan* (ExecutionPlan) detailing the steps needed to fix reported diagnostics, rather than outputting final corrected code directly.
 
-        The previous code generation/modification resulted in issues. Your plan MUST resolve ALL "Error" diagnostics, and address "Warning" and "Information" diagnostics where appropriate without new errors. DO NOT revert changes already completed, unless explicitly required to fix a new regression.
-
-        **CRITICAL DIRECTIVES:**
-        *   **Single-Shot Correction**: Resolve ALL reported issues in this single plan. The resulting code MUST compile and run without errors or warnings.
-        *   **JSON Output**: Provide ONLY a valid JSON object strictly following the 'ExecutionPlan' schema. No markdown fences or extra text.
+        The previous code generation/modification resulted in issues. Your plan MUST resolve ALL "Error" diagnostics, and address "Warning" and "Information" diagnostics where appropriate without introducing new errors. DO NOT revert changes already completed, unless explicitly required to fix a regression or an issue caused by previous changes.
+        *   **Focus on Diagnostics**: Your plan MUST directly address and resolve all provided "Error" diagnostics. Address "Warning" and "Information" diagnostics only if they are directly related or can be fixed without introducing new issues.
+        *   **Surgical Modifications**: Limit modifications strictly to code segments directly responsible for the reported issues. Avoid unrelated refactoring, code style changes, or adding new features unless explicitly necessary to fix a bug or resolve a diagnostic.
+        *   **Location Awareness**: Pay close attention to file paths and line numbers provided in diagnostics and \`editorContext\`. Target your modifications precisely to these locations.
+        *   **JSON Output**: Provide ONLY a valid JSON object strictly following the 'ExecutionPlan' schema. NO markdown fences (e.g., \`\`\`), conversational text, or explanations outside the JSON.
         *   **Maintain Context**: Preserve original code style, structure, formatting (indentation, spacing, line breaks), comments, and project conventions (e.g., import order).
         *   **Production Readiness**: All generated/modified code MUST be robust, maintainable, efficient, and adhere to industry best practices, prioritizing modularity and readability.
-        *   **Valid File Operations**: Use 'modify_file', 'create_file', 'create_directory', or 'run_command'. Ensure 'path' is non-empty, relative to workspace root, and safe (no '..' or absolute paths).
         *   **Detailed Descriptions**: Provide clear, concise 'description' for each step, explaining *why* it's necessary and *how* it specifically addresses diagnostics.
         *   **Single Modify Per File**: For any given file path, at most **one** \`modify_file\` step. Combine all logical changes for that file into a single, comprehensive \`modification_prompt\`.
+        *   **Learn from Feedback**: If 'Previous Correction Attempt Feedback' is provided, carefully analyze its \`type\` and \`message\` (especially \`parsing_failed\` or \`no_improvement\`/oscillation). Understand why the last attempt failed (e.g., malformed JSON, no issue reduction, or oscillation detected) and incorporate this learning into the new plan. Avoid repeating past mistakes, particularly oscillation patterns, and ensure your JSON is syntactically correct and complete.
 
         --- Json Escaping Instructions ---
         ${jsonEscapingInstructions}
@@ -519,18 +452,15 @@ ${formatCallHierarchy(
         ${correctionFeedbackSection}
         --- End Previous Correction Attempt Feedback ---
 
-        ${jsonSchemaReference}
+        --- Required JSON Schema Reference ---
+        Your output MUST strictly adhere to the following TypeScript interfaces for \`ExecutionPlan\` and \`PlanStep\` types. Pay special attention to the 'path' field for file operations.
+
         --- End Required JSON Schema Reference ---
 
         --- Few Shot Correction Examples ---
         ${fewShotCorrectionExamples}
         --- Few Shot Correction Examples ---
 
-								--- Required JSON Schema Reference ---
-        Your output MUST strictly adhere to the following TypeScript interfaces for \`ExecutionPlan\` and \`PlanStep\` types. Pay special attention to the 'path' field for file operations.
-
-        
-								
         ExecutionPlan (ONLY JSON):
 `;
 }
