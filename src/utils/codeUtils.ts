@@ -1,7 +1,6 @@
 // src/utils/codeUtils.ts
 import * as vscode from "vscode";
 import { generatePreciseTextEdits } from "../utils/diffingUtils";
-import { BEGIN_CODEX_REGEX } from "./extractingDelimiters";
 
 export function cleanCodeOutput(codeString: string): string {
 	if (!codeString) {
@@ -9,16 +8,6 @@ export function cleanCodeOutput(codeString: string): string {
 	}
 
 	let contentToProcess = codeString;
-
-	// --- NEW: Prioritize extracting content between delimiters ---
-	// This is the primary mechanism to isolate the intended code block and discard extraneous text.
-	const delimiterMatch = codeString.match(BEGIN_CODEX_REGEX);
-
-	if (delimiterMatch && delimiterMatch[1]) {
-		// If delimiters are found, the content to process is ONLY what's inside them.
-		// This effectively throws away any text before XBEGIN_CODEX or after XEND_CODEX.
-		contentToProcess = delimiterMatch[1];
-	}
 
 	// Step 1: Globally remove all Markdown code block fences (```...```) from the extracted content.
 	let cleanedStringContent = contentToProcess.replace(
