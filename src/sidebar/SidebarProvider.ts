@@ -482,7 +482,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					statusMessage = "Operation completed successfully.";
 					break;
 				case "cancelled":
-					statusMessage = "Operation cancelled.";
+					statusMessage = "";
 					isError = true;
 					break;
 				case "failed":

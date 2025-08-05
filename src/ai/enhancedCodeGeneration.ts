@@ -536,7 +536,7 @@ export class EnhancedCodeGenerator {
 
 		while (iteration < this.config.maxFeedbackIterations!) {
 			if (token?.isCancellationRequested) {
-				throw new Error("Operation cancelled");
+				throw new Error("");
 			}
 			iteration++;
 			this._sendFeedback(feedbackCallback, {

@@ -536,7 +536,7 @@ export async function applyDiffHunkToDocument(
 		// Validate edits before applying
 		for (const edit of edits) {
 			if (token?.isCancellationRequested) {
-				return { success: false, error: "Operation cancelled" };
+				return { success: false, error: "" };
 			}
 
 			// Check if the range is valid for this document
