@@ -250,7 +250,7 @@ export function createCorrectionPlanPrompt(
 	const chatHistoryForPrompt =
 		chatHistory && chatHistory.length > 0
 			? `
-        --- Recent Chat History (for additional context on user's train of thought and previous conversations with a AI model) ---
+        --- Recent Chat History (for additional context on my train of thought and previous conversations with a AI model) ---
         ${chatHistory
 					.map(
 						(entry) =>
@@ -422,9 +422,9 @@ ${formatCallHierarchy(
         ${jsonEscapingInstructions}
         --- Json Escaping Instructions ---
 
-        --- Original User Request ---
+        --- Original Request ---
         ${originalUserInstruction}
-        --- End Original User Request ---
+        --- End Original Request ---
 
         --- Broader Project Context ---
         ${projectContext}

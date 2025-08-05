@@ -334,9 +334,7 @@ export class EnhancedCodeGenerator {
 			}
 			// --- End Pre-cleaning check ---
 
-			return this.codeValidationService.checkPureCodeFormat(
-				cleanCodeOutput(rawContent)
-			);
+			return this.codeValidationService.checkPureCodeFormat(rawContent);
 		} catch (error: any) {
 			return {
 				isValid: false,

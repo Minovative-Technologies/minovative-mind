@@ -8,7 +8,6 @@ export function cleanCodeOutput(codeString: string): string {
 		return "";
 	}
 
-	const originalLength = codeString.length;
 	let contentToProcess = codeString;
 
 	// --- NEW: Prioritize extracting content between delimiters ---

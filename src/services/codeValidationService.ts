@@ -85,35 +85,44 @@ export class CodeValidationService {
 		const issues: CodeIssue[] = [];
 		const suggestions: string[] = [];
 		const cleanedContent = cleanCodeOutput(rawAIResponse);
+
+		let isPureCodeFormatValid = true;
 		const delimiterMatch = rawAIResponse.match(BEGIN_CODEX_REGEX);
 
 		if (!delimiterMatch) {
+			// Condition 1: Delimiters are completely missing.
 			issues.push({
 				type: "format_error",
 				message:
 					"AI response did not contain the required XBEGIN_CODEX/XEND_CODEX delimiters.",
-				line: 1,
+				line: 1, // Assuming the issue pertains to the overall response format
 				severity: "error",
 				source: "PureCodeFormatCheck",
 			});
 			suggestions.push(
 				"Instruct the AI to generate only code within delimiters."
 			);
-		} else if (delimiterMatch[1]?.trim().length === 0) {
+			isPureCodeFormatValid = false;
+		} else if (cleanedContent === "") {
+			// Condition 2: Delimiters are present, but the content extracted by cleanCodeOutput is empty.
+			// This covers cases where delimiters exist but are empty, or contain only stripped-away non-code elements.
 			issues.push({
 				type: "format_error",
-				message: "AI response contained delimiters but no content within them.",
-				line: 1,
+				message:
+					"AI response provided empty delimiters (XBEGIN_CODEX/XEND_CODEX) or contained only non-code elements within them.",
+				line: 1, // Assuming the issue pertains to the overall response format
 				severity: "error",
 				source: "PureCodeFormatCheck",
 			});
 			suggestions.push(
-				"Instruct the AI to generate code, not just conversational filler."
+				"Ensure the AI generates actual code content within the delimiters."
 			);
+			isPureCodeFormatValid = false;
 		}
 
+		// Return the result object conforming to CodeValidationResult
 		return {
-			isValid: issues.length === 0,
+			isValid: isPureCodeFormatValid,
 			finalContent: cleanedContent,
 			issues,
 			suggestions,

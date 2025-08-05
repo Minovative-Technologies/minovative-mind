@@ -16,9 +16,9 @@ export function createInitialPlanningExplanationPrompt(
 
 	if (editorContext) {
 		if (editorContext.instruction.toLowerCase() === "/fix") {
-			instructionType = `The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix. Only focus on fixing the diagnostics provided.`;
+			instructionType = `I triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix. Only focus on fixing the diagnostics provided.`;
 			specificContextPrompt = `
-        --- Specific User Request Context from Editor ---
+        --- Specific Request Context from Editor ---
         File Path: ${editorContext.filePath}
         Language: ${editorContext.languageId}
 
@@ -44,15 +44,15 @@ export function createInitialPlanningExplanationPrompt(
         \`\`\`
         --- End Full Content ---`;
 
-			mainInstructions = `Based on the user's request from the editor ('/fix' command) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For '/fix', the plan should ONLY clearly address the 'Relevant Diagnostics' listed. **Crucially, for '/fix' requests, you MUST actively consult the "Active Symbol Detailed Information" section in the "Broader Project Context" to:**
+			mainInstructions = `Based on my request from the editor ('/fix' command) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For '/fix', the plan should ONLY clearly address the 'Relevant Diagnostics' listed. **Crucially, for '/fix' requests, you MUST actively consult the "Active Symbol Detailed Information" section in the "Broader Project Context" to:**
             *   **Understand the broader impact of a change.**
             *   **Identify all affected areas by considering definitions, implementations, and call hierarchy.**
             *   **Ensure robust and less disruptive fixes by checking referenced types for compatibility and correct usage.**
             *   **Anticipate unintended side effects.**`;
 		} else if (editorContext.instruction.toLowerCase() === "/merge") {
-			instructionType = `The user triggered the '/merge' command to resolve Git merge conflicts in the selected file. Only focus on resolving the conflicts.`;
+			instructionType = `I triggered the '/merge' command to resolve Git merge conflicts in the selected file. Only focus on resolving the conflicts.`;
 			specificContextPrompt = `
-        --- Specific User Request Context from Editor ---
+        --- Specific Request Context from Editor ---
         File Path: ${editorContext.filePath}
         Language: ${editorContext.languageId}
 
@@ -72,11 +72,11 @@ export function createInitialPlanningExplanationPrompt(
         \`\`\`
         --- End Full Content ---`;
 
-			mainInstructions = `Based on the user's request to resolve Git merge conflicts in the provided file, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to resolve all conflicts and produce a clean, merged file. Your plan must identify and resolve all '<<<<<<<', '=======', and '>>>>>>>' markers. Make sure the AI produces a single 'modify_file' step to resolve all conflicts.`;
+			mainInstructions = `Based on my request to resolve Git merge conflicts in the provided file, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to resolve all conflicts and produce a clean, merged file. Your plan must identify and resolve all '<<<<<<<', '=======', and '>>>>>>>' markers. Make sure the AI produces a single 'modify_file' step to resolve all conflicts.`;
 		} else {
-			instructionType = `The user provided the custom instruction for you to complete. Only focus on completing the user's instructions: "${editorContext.instruction}".`;
+			instructionType = `I provided the custom instruction for you to complete. Only focus on completing the instructions: "${editorContext.instruction}".`;
 			specificContextPrompt = `
-        --- Specific User Request Context from Editor ---
+        --- Specific Request Context from Editor ---
         File Path: ${editorContext.filePath}
         Language: ${editorContext.languageId}
 
@@ -102,21 +102,21 @@ export function createInitialPlanningExplanationPrompt(
         \`\`\`
         --- End Full Content ---`;
 
-			mainInstructions = `Based on the user's request from the editor (custom instruction) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
+			mainInstructions = `Based on my request from the editor (custom instruction) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
 		}
 	} else if (userRequest) {
 		specificContextPrompt = `
-        --- User Request from Chat ---
+        --- My Request from Chat ---
         ${userRequest}
-        --- End User Request ---`;
+        --- End Request ---`;
 
-		mainInstructions = `Based on the user's request from the chat ("${userRequest}") and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill it.`;
+		mainInstructions = `Based on my request from the chat ("${userRequest}") and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill it.`;
 	}
 
 	const chatHistoryForPrompt =
 		chatHistory && chatHistory.length > 0
 			? `
-    --- Recent Chat History (for additional context on user's train of thought and previous conversations with a AI model) ---
+    --- Recent Chat History (for additional context on my train of thought and previous conversations with a AI model) ---
     ${chatHistory
 			.map(
 				(entry) =>
@@ -134,7 +134,7 @@ export function createInitialPlanningExplanationPrompt(
 	return `
     
 
-    You are the expert software engineer for me. Your task is to ONLY explain your detailed, step-by-step plan in Markdown to fulfill the user's request, ONLY focused on solving the problem or implementing the feature.
+    You are the expert software engineer for me. Your task is to ONLY explain your detailed, step-by-step plan in Markdown to fulfill my request, ONLY focused on solving the problem or implementing the feature.
 
     **Instructions for Plan Explanation:**
     *   **Goal**: Provide a clear, comprehensive, and human-readable plan. Use Markdown (e.g., lists, bold text).
@@ -204,7 +204,7 @@ export function createPlanningPrompt(
 	const chatHistoryForPrompt =
 		chatHistory && chatHistory.length > 0
 			? `
-    --- Recent Chat History (for additional context on user's train of thought and previous conversations with a AI model) ---
+    --- Recent Chat History (for additional context on my train of thought and previous conversations with a AI model) ---
     ${chatHistory
 			.map(
 				(entry) =>
@@ -235,12 +235,12 @@ export function createPlanningPrompt(
 	if (editorContext) {
 		if (editorContext.instruction.toLowerCase() === "/fix") {
 			specificContextPrompt = `
-        --- Specific User Request Context from Editor ---
+        --- Specific Request Context from Editor ---
         File Path: ${editorContext.filePath}
         Language: ${editorContext.languageId}
         
         --- Instruction Type ---
-        The user triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix. Only focus on fixing the diagnostics provided.
+        I triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix. Only focus on fixing the diagnostics provided.
         --- End Instruction Type ---
 
         --- Selected Code in Editor ---
@@ -261,19 +261,19 @@ export function createPlanningPrompt(
         \`\`\`
         --- End Full Content ---`;
 
-			mainInstructions = `Based on the user's request from the editor ('/fix' command), the provided file/selection context, and any relevant chat history, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). **For '/fix' requests, you MUST actively leverage the "Active Symbol Detailed Information" section in the "Broader Project Context". Specifically, when formulating \`modification_prompt\` for \`modify_file\` steps:**
+			mainInstructions = `Based on my request from the editor ('/fix' command), the provided file/selection context, and any relevant chat history, generate a plan to fulfill the request. For '/fix', the plan should **prioritize addressing the specific 'Relevant Diagnostics' listed above**, potentially involving modifications inside or outside the selection, or even in other files (like adding imports). **For '/fix' requests, you MUST actively leverage the "Active Symbol Detailed Information" section in the "Broader Project Context". Specifically, when formulating \`modification_prompt\` for \`modify_file\` steps:**
             *   **Actively reference and leverage the \`Active Symbol Detailed Information\` section within the \`Broader Project Context\` to understand the symbol's context and impact.**
             *   **Use the symbol's definition, implementations, call hierarchy, and referenced types to precisely identify the scope of the fix, predict potential side-effects, and ensure comprehensive, non-disruptive changes across interconnected code.**
             *   **Prioritize \`modify_file\` steps that account for global symbol impact when a symbol is refactored.**
             For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
 		} else if (editorContext.instruction.toLowerCase() === "/merge") {
 			specificContextPrompt = `
-        --- Specific User Request Context from Editor ---
+        --- Specific Request Context from Editor ---
         File Path: ${editorContext.filePath}
         Language: ${editorContext.languageId}
         
         --- Instruction Type ---
-        The user triggered the '/merge' command to resolve Git merge conflicts in the selected file. Only focus on resolving the conflicts.
+        I triggered the '/merge' command to resolve Git merge conflicts in the selected file. Only focus on resolving the conflicts.
         --- End Instruction Type ---
 
         --- Selected Code in Editor ---
@@ -288,15 +288,15 @@ export function createPlanningPrompt(
         \`\`\`
         --- End Full Content ---`;
 
-			mainInstructions = `Based on the user's request to resolve Git merge conflicts in the provided file, and any relevant chat history, generate a structured plan (JSON steps) with a 'modify_file' action. Your plan must produce a clean, merged file without any '<<<<<<<', '=======', or '>>>>>>>' conflict markers. The 'modification_prompt' for this 'modify_file' step should describe the exact merge resolution strategy, such as: "Resolve all Git merge conflicts in the provided content. Analyze each conflict block (<<<<<<<, =======, >>>>>>>). For simple conflicts, combine changes intelligently. For complex conflicts, prioritize changes from the 'HEAD' section unless the 'incoming' section contains critical additions. Remove all conflict markers upon completion. The goal is a fully merged, syntactically correct, and functional file.". Reiterate the "Single Modify Step Per File" instruction to ensure the AI combines all conflict resolutions for the active file into one 'modify_file' step. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section to understand project conventions. Ensure any generated 'path' values adhere to standard practices and are relative to the workspace root.`;
+			mainInstructions = `Based on my request to resolve Git merge conflicts in the provided file, and any relevant chat history, generate a structured plan (JSON steps) with a 'modify_file' action. Your plan must produce a clean, merged file without any '<<<<<<<', '=======', or '>>>>>>>' conflict markers. The 'modification_prompt' for this 'modify_file' step should describe the exact merge resolution strategy, such as: "Resolve all Git merge conflicts in the provided content. Analyze each conflict block (<<<<<<<, =======, >>>>>>>). For simple conflicts, combine changes intelligently. For complex conflicts, prioritize changes from the 'HEAD' section unless the 'incoming' section contains critical additions. Remove all conflict markers upon completion. The goal is a fully merged, syntactically correct, and functional file.". Reiterate the "Single Modify Step Per File" instruction to ensure the AI combines all conflict resolutions for the active file into one 'modify_file' step. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section to understand project conventions. Ensure any generated 'path' values adhere to standard practices and are relative to the workspace root.`;
 		} else {
 			specificContextPrompt = `
-        --- Specific User Request Context from Editor ---
+        --- Specific Request Context from Editor ---
         File Path: ${editorContext.filePath}
         Language: ${editorContext.languageId}
         
         --- Instruction Type ---
-        The user provided the custom instruction for you to complete: "${
+        I provided the custom instruction for you to complete: "${
 					editorContext.instruction
 				}".
         --- End Instruction Type ---
@@ -319,14 +319,14 @@ export function createPlanningPrompt(
         \`\`\`
         --- End Full Content ---`;
 
-			mainInstructions = `Based on the user's request from the editor (custom instruction), the provided file/selection context, and any relevant chat history, generate a plan to fulfill the request. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
+			mainInstructions = `Based on my request from the editor (custom instruction), the provided file/selection context, and any relevant chat history, generate a plan to fulfill the request. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
 		}
 	} else if (userRequest) {
 		specificContextPrompt = `
-        --- User Request from Chat ---
+        --- My Request from Chat ---
         ${userRequest}
-        --- End User Request ---`;
-		mainInstructions = `Based on the user's request from the chat (\"${userRequest}\") and any relevant chat history, generate a plan to fulfill it. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
+        --- End Request ---`;
+		mainInstructions = `Based on my request from the chat (\"${userRequest}\") and any relevant chat history, generate a plan to fulfill it. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
 	}
 
 	const textualPlanPromptSection = `
