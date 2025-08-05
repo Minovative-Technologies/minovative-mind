@@ -1,9 +1,18 @@
 import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
-import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
+import {
+	ERROR_OPERATION_CANCELLED,
+	GOOGLE_SEARCH_TOOL,
+	initializeGenerativeAI,
+} from "../ai/gemini"; // Ensure initializeGenerativeAI is imported
+import { GenerationConfig, Tool } from "@google/generative-ai"; // Ensure Tool is imported
 import { UrlContextService } from "./urlContextService";
 import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes"; // Import HistoryEntry for type safety, and HistoryEntryPart
-import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
+import {
+	DEFAULT_FLASH_LITE_MODEL,
+	GEMINI_API_KEY_SECRET_KEY,
+	MODEL_SELECTION_STORAGE_KEY,
+} from "../sidebar/common/sidebarConstants"; // Import constants for API key and model selection
 
 export class ChatService {
 	private urlContextService: UrlContextService;
@@ -17,7 +26,12 @@ export class ChatService {
 		groundingEnabled: boolean = false
 	): Promise<void> {
 		const { settingsManager } = this.provider;
-		const modelName = DEFAULT_FLASH_LITE_MODEL; // Use the default model for regular chat
+		// Retrieve the active apiKey and the current modelName from settings
+		const apiKey = this.provider.apiKeyManager.getActiveApiKey();
+		const modelName = settingsManager.getSetting<string>(
+			MODEL_SELECTION_STORAGE_KEY,
+			DEFAULT_FLASH_LITE_MODEL
+		);
 
 		this.provider.activeOperationCancellationTokenSource =
 			new vscode.CancellationTokenSource();
@@ -25,6 +39,59 @@ export class ChatService {
 
 		let success = true;
 		let finalAiResponseText: string | null = null;
+
+		// Add checks for apiKey and modelName before initialization
+		if (!apiKey) {
+			vscode.window.showErrorMessage(
+				"Gemini API key is not set. Please set it in VS Code settings to use chat features."
+			);
+			this.provider.postMessageToWebview({
+				type: "aiResponseEnd",
+				success: false,
+				error: "Gemini API key is not set.",
+			});
+			return; // Exit early if API key is missing
+		}
+
+		if (!modelName) {
+			vscode.window.showErrorMessage(
+				"Gemini model is not selected. Please select one in VS Code settings to use chat features."
+			);
+			this.provider.postMessageToWebview({
+				type: "aiResponseEnd",
+				success: false,
+				error: "Gemini model is not selected.",
+			});
+			return; // Exit early if model name is missing
+		}
+
+		// Define toolConfig: GOOGLE_SEARCH_TOOL if groundingEnabled is true, otherwise undefined.
+		let toolConfig: Tool[] | undefined = undefined;
+		if (groundingEnabled) {
+			toolConfig = GOOGLE_SEARCH_TOOL as Tool[];
+		}
+
+		// Call initializeGenerativeAI with apiKey, modelName, and toolConfig.
+		const initializationSuccess = initializeGenerativeAI(
+			apiKey,
+			modelName,
+			toolConfig
+		);
+
+		// Add error handling to verify the success of initializeGenerativeAI.
+		if (!initializationSuccess) {
+			vscode.window.showErrorMessage(
+				`Failed to initialize Gemini AI with model '${modelName}'. Please check your API key and selected model.`
+			);
+			this.provider.postMessageToWebview({
+				type: "aiResponseEnd",
+				success: false,
+				error: `Failed to initialize Gemini AI with model '${modelName}'.`,
+			});
+			throw new Error(
+				`Failed to initialize Gemini AI with model '${modelName}'.`
+			);
+		}
 
 		// Extract text content for services that only handle text (UrlContextService, ContextService)
 		const userMessageTextForContext = userContentParts
@@ -45,13 +112,6 @@ export class ChatService {
 				console.log(
 					`[ChatService] Processed ${urlContexts.length} URLs for context`
 				);
-			}
-
-			// If grounding with Google Search is enabled, perform search and augment userMessage or context.
-			if (groundingEnabled) {
-				// TODO: Implement Google Search API call and context augmentation here.
-				// Example: const googleResults = await performGoogleSearch(userMessage);
-				// Then, append or prepend results to userMessage or projectContext.
 			}
 
 			const projectContext =
@@ -94,13 +154,20 @@ You name is **MINO**, an AI coding assistant in Visual Studio Code, built to sup
 			];
 
 			let accumulatedResponse = "";
+
+			let generationConfig: GenerationConfig | undefined = undefined;
+
+			if (groundingEnabled) {
+				generationConfig = {};
+			}
+
 			finalAiResponseText =
 				await this.provider.aiRequestService.generateWithRetry(
 					fullUserTurnContents, // Pass HistoryEntryPart[] as the first argument
 					modelName,
 					this.provider.chatHistoryManager.getChatHistory(),
 					"chat",
-					undefined,
+					generationConfig,
 					{
 						onChunk: (chunk: string) => {
 							accumulatedResponse += chunk;
@@ -114,7 +181,8 @@ You name is **MINO**, an AI coding assistant in Visual Studio Code, built to sup
 							});
 						},
 					},
-					token
+					token,
+					false
 				);
 
 			if (token.isCancellationRequested) {
@@ -299,7 +367,8 @@ You name is **MINO**, an AI coding assistant in Visual Studio Code, built to sup
 						});
 					},
 				},
-				token
+				token,
+				false
 			);
 
 			// 9. Handle token.isCancellationRequested or error: responses.

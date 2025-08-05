@@ -4,6 +4,7 @@ import {
 	GenerativeModel,
 	Content,
 	GenerationConfig,
+	Tool,
 } from "@google/generative-ai";
 
 export const ERROR_QUOTA_EXCEEDED = "ERROR_GEMINI_QUOTA_EXCEEDED";
@@ -11,6 +12,8 @@ export const ERROR_QUOTA_EXCEEDED = "ERROR_GEMINI_QUOTA_EXCEEDED";
 export const ERROR_OPERATION_CANCELLED = "Operation cancelled by user.";
 // Add a new error constant for service unavailability
 export const ERROR_SERVICE_UNAVAILABLE = "ERROR_GEMINI_SERVICE_UNAVAILABLE";
+
+export const GOOGLE_SEARCH_TOOL = [{ googleSearch: {} }];
 
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
@@ -23,9 +26,14 @@ let currentModelName: string | null = null;
  *
  * @param apiKey The Google Gemini API key.
  * @param modelName The specific Gemini model name to use (e.g., "gemini-2.5-pro-latest").
+ * @param tools Optional array of tools to configure the model with.
  * @returns True if initialization was successful or already initialized correctly, false otherwise.
  */
-function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
+export function initializeGenerativeAI(
+	apiKey: string,
+	modelName: string,
+	tools?: Tool[]
+): boolean {
 	console.log(
 		`Gemini: Attempting to initialize GoogleGenerativeAI with model: ${modelName}...`
 	);
@@ -60,7 +68,10 @@ function initializeGenerativeAI(apiKey: string, modelName: string): boolean {
 				}. New model: ${modelName}`
 			);
 			generativeAI = new GoogleGenerativeAI(apiKey);
-			model = generativeAI.getGenerativeModel({ model: modelName });
+			model = generativeAI.getGenerativeModel({
+				model: modelName,
+				tools: tools,
+			});
 			currentApiKey = apiKey;
 			currentModelName = modelName;
 			console.log("Gemini: GoogleGenerativeAI initialized successfully.");
