@@ -54,64 +54,80 @@ export function initializeInputEventListeners(
 	chatInput.addEventListener("input", () => {
 		const text = chatInput.value;
 
-		let atIndex = -1;
-		let query = "";
+		// 1. Declare local flags:
+		let commandSuggestionsActive = false;
+		let fileSuggestionsActive = false;
 
+		// 2. Command Suggestion Handling:
 		if (text.startsWith("/")) {
-			// ... Existing command suggestion logic ...
-			const commandQuery = text.substring(1).toLowerCase();
-			if (isInputtingCompleteCommand(text)) {
-				hideSuggestions(elements, setLoadingState);
-				return;
-			}
-			const matches = MINOVATIVE_COMMANDS.filter((cmd: string) =>
-				cmd.toLowerCase().includes(commandQuery)
-			);
-			showSuggestions(matches, "command", elements, setLoadingState);
-		} else {
-			// Logic for potential file suggestions
-			const text = chatInput.value;
-			const lastAtSymbolIndex = text.lastIndexOf("@");
-
-			// NEW TRIGGER LOGIC: Activate ONLY if '@' is found AND is NOT followed by a space.
-			// This ensures inputs like "@file" trigger, but "@ " or "@file" do not.
-			const isFileTriggerActive =
-				lastAtSymbolIndex !== -1 &&
-				text.length > lastAtSymbolIndex + 1 &&
-				text[lastAtSymbolIndex + 1] !== " ";
-
-			if (isFileTriggerActive) {
-				// Extract and Trim Query:
-				// The query text is everything after the '@' symbol.
-				const queryPart = text.substring(lastAtSymbolIndex + 1);
-				const trimmedQuery = queryPart.trim().toLowerCase();
-
-				// Handle Workspace File Loading:
-				if (
-					appState.allWorkspaceFiles.length === 0 &&
-					!appState.isRequestingWorkspaceFiles
-				) {
-					console.log(
-						"Requesting workspace files as state is empty and not already requesting."
-					);
-					appState.isRequestingWorkspaceFiles = true;
-					postMessageToExtension({ type: "requestWorkspaceFiles" });
-					showSuggestions([], "loading", elements, setLoadingState);
-					return; // Wait for files to load on the next input event
-				} else {
-					// Filter and Show Suggestions:
-					const matches = appState.allWorkspaceFiles.filter((file) =>
-						file.toLowerCase().includes(trimmedQuery)
-					);
-
-					// showSuggestions handles displaying "No matching files" if matches is empty.
-					showSuggestions(matches, "file", elements, setLoadingState);
-					return; // Prevent hiding suggestions after showing them
-				}
+			if (!isInputtingCompleteCommand(text)) {
+				const commandQuery = text.substring(1).toLowerCase();
+				const matches = MINOVATIVE_COMMANDS.filter((cmd: string) =>
+					cmd.toLowerCase().includes(commandQuery)
+				);
+				showSuggestions(matches, "command", elements, setLoadingState);
+				commandSuggestionsActive = true;
 			} else {
-				// Hide Suggestions if trigger condition is not met
+				// If it's a complete command, hide command suggestions.
+				// Crucially, do not return; allow execution to proceed to file suggestion handling.
 				hideSuggestions(elements, setLoadingState);
+				commandSuggestionsActive = false;
 			}
+		} else {
+			// If the input does NOT start with '/', hide command suggestions.
+			hideSuggestions(elements, setLoadingState);
+			commandSuggestionsActive = false;
+		}
+
+		// 3. File Suggestion Handling:
+		// This section must execute independently of the command block, after command processing.
+		const currentInputText = chatInput.value;
+		const lastAtSymbolIndex = currentInputText.lastIndexOf("@");
+
+		let isAtTriggerValid = false;
+		let queryPart = "";
+		if (
+			lastAtSymbolIndex !== -1 &&
+			currentInputText.length > lastAtSymbolIndex + 1 &&
+			currentInputText[lastAtSymbolIndex + 1] !== " "
+		) {
+			const textBeforeAt = currentInputText.substring(0, lastAtSymbolIndex);
+			const backtickCountBeforeAt = (textBeforeAt.match(/`/g) || []).length;
+
+			if (backtickCountBeforeAt % 2 === 0) {
+				// Even backticks means it's not inside a code block
+				queryPart = currentInputText
+					.substring(lastAtSymbolIndex + 1)
+					.trim()
+					.toLowerCase();
+				if (queryPart.length > 0) {
+					// Only valid if there's a non-empty query part after '@'
+					isAtTriggerValid = true;
+				}
+			}
+		}
+
+		if (isAtTriggerValid) {
+			if (
+				appState.allWorkspaceFiles.length === 0 &&
+				!appState.isRequestingWorkspaceFiles
+			) {
+				appState.isRequestingWorkspaceFiles = true;
+				postMessageToExtension({ type: "requestWorkspaceFiles" });
+				showSuggestions([], "loading", elements, setLoadingState);
+				fileSuggestionsActive = true;
+			} else {
+				const filteredFiles = appState.allWorkspaceFiles.filter((file) =>
+					file.toLowerCase().includes(queryPart)
+				);
+				showSuggestions(filteredFiles, "file", elements, setLoadingState);
+				fileSuggestionsActive = true;
+			}
+		}
+
+		// 4. Final Conditional Hiding:
+		if (!commandSuggestionsActive && !fileSuggestionsActive) {
+			hideSuggestions(elements, setLoadingState);
 		}
 	});
 
