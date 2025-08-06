@@ -141,31 +141,6 @@ export async function parseAndValidatePlan(
 ): Promise<ParsedPlanResult> {
 	console.log("Attempting to parse and validate plan JSON:", jsonString);
 
-	// --- Add Pre-parsing Check for Unwanted Patterns ---
-	const rawResponse = jsonString;
-	const unwantedPatterns = [
-		/<execute_bash>/i, // Detect custom tags like <execute_bash>
-		/\bthought\b/i, // Detect explicit "thought" markers (word boundary)
-		/^\s*(true|false|null)\b/i, // Explicitly reject JSON primitives as top-level if not expected
-	];
-
-	for (const pattern of unwantedPatterns) {
-		if (pattern.test(rawResponse)) {
-			const matchedPatternSource = pattern.source; // Get the string representation of the regex for logging
-			console.error(
-				`[workflowPlanner] AI generated unexpected non-plan content. Pattern matched: "${matchedPatternSource}"`
-			);
-			console.error("Raw AI Response:\n", rawResponse);
-
-			// Return a specific error indicating the detected issue
-			return {
-				plan: null,
-				error: `AI response contained unexpected conversational or instructional content. Please try again or rephrase your request. (Detected pattern: ${matchedPatternSource})`,
-			};
-		}
-	}
-	// --- End Pre-parsing Check ---
-
 	try {
 		// --- 1. Clean Markdown Fences and Extract JSON Object ---
 		let cleanedString = jsonString

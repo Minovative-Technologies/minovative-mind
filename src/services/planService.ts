@@ -38,6 +38,7 @@ import {
 } from "../ai/prompts/correctionPrompts";
 import { areIssuesSimilar } from "../utils/aiUtils";
 import { cleanCodeOutput } from "../utils/codeUtils";
+import { repairJsonEscapeSequences } from "../utils/jsonUtils";
 
 export class PlanService {
 	private readonly MAX_PLAN_PARSE_RETRIES = 3;
@@ -577,6 +578,99 @@ export class PlanService {
 		}
 	}
 
+	// src/services/planService.ts
+
+	/**
+	 * Attempts to parse and validate JSON, applying programmatic repair for escape sequence errors.
+	 * @param jsonString The raw JSON string to parse.
+	 * @param workspaceRootUri The root URI of the workspace for context.
+	 * @returns A promise resolving to the parsed plan or an error.
+	 */
+	private async parseAndValidatePlanWithFix(
+		jsonString: string,
+		workspaceRootUri: vscode.Uri
+	): Promise<ParsedPlanResult> {
+		// Changed: Return ParsedPlanResult for consistency
+		try {
+			// 1. Attempt initial parse and validation.
+			let parsedResult = await parseAndValidatePlan(
+				jsonString,
+				workspaceRootUri
+			);
+
+			// 2. Check if parsing failed and if the error is specifically about escaped characters.
+			if (!parsedResult.plan && parsedResult.error) {
+				const errorMessageLower = parsedResult.error.toLowerCase();
+				if (errorMessageLower.includes("bad escaped character")) {
+					console.log(
+						"[PlanService] Detected 'Bad escaped character' error. Attempting programmatic repair."
+					);
+
+					// Attempt programmatic repair.
+					const repairedJsonString = repairJsonEscapeSequences(jsonString);
+
+					// Only re-parse if the repair function actually changed the string.
+					if (repairedJsonString !== jsonString) {
+						console.log(
+							"[PlanService] Re-parsing JSON after programmatic repair."
+						);
+						// 3. Attempt to parse the repaired JSON.
+						const reParsedResult = await parseAndValidatePlan(
+							repairedJsonString,
+							workspaceRootUri
+						);
+
+						if (reParsedResult.plan) {
+							// 4. Repair was successful. Return the repaired plan.
+							console.log("[PlanService] Programmatic JSON repair successful.");
+							// FIX: Directly return the re-parsed result.
+							return reParsedResult;
+						} else {
+							// Repair failed. Report a combined error.
+							console.warn(
+								"[PlanService] Programmatic JSON repair failed. Original error:",
+								parsedResult.error,
+								"Repair error:",
+								reParsedResult.error
+							);
+							return {
+								// FIX: Return null for the plan.
+								plan: null,
+								error: `JSON parsing failed: Original error "${parsedResult.error}". Programmatic repair failed with error: "${reParsedResult.error}".`,
+							};
+						}
+					} else {
+						// Repair function didn't change the string, implies no fix was applied or needed for this specific error type.
+						console.log(
+							"[PlanService] Repair function did not alter JSON. Proceeding with original error."
+						);
+						// Fallback to the original error.
+						// FIX: Directly return the original parsed result.
+						return parsedResult;
+					}
+				} else {
+					// Error is not related to escaped characters, return original result.
+					// FIX: Directly return the original parsed result.
+					return parsedResult;
+				}
+			} else {
+				// Initial parse was successful.
+				// FIX: Directly return the original parsed result.
+				return parsedResult;
+			}
+		} catch (e: any) {
+			// Catch any exceptions during the process (e.g., parseAndValidatePlan itself throws).
+			console.error(
+				"[PlanService] Exception during parseAndValidatePlanWithFix:",
+				e
+			);
+			return {
+				// FIX: Return null for the plan.
+				plan: null,
+				error: `An unexpected error occurred during JSON parsing/validation: ${e.message}`,
+			};
+		}
+	}
 	// --- PLAN GENERATION & EXECUTION ---
 	public async generateStructuredPlanAndExecute(
 		planContext: sidebarTypes.PlanGenerationContext
@@ -699,81 +793,84 @@ export class PlanService {
 					.trim();
 
 				// JSON Parsing and Validation
-				const parsedPlanResult: ParsedPlanResult = await parseAndValidatePlan(
-					structuredPlanJsonString,
+				let parsedPlanResult: ParsedPlanResult;
+				let currentJsonStringForParse = structuredPlanJsonString; // Start with the AI output
+				let successfulRepairOccurred = false; // Flag to indicate if repair fixed the issue
+
+				// Call the enhanced parsing function
+				parsedPlanResult = await this.parseAndValidatePlanWithFix(
+					currentJsonStringForParse,
 					planContext.workspaceRootUri
 				);
 
+				// src/services/planService.ts -> within generateStructuredPlanAndExecute method
+
 				if (parsedPlanResult.plan) {
-					// Success! Assign plan and break the loop
 					executablePlan = parsedPlanResult.plan;
 					// ADDED CHECK: Ensure the plan has steps before proceeding
 					if (executablePlan.steps.length === 0) {
 						const errorMsg = `Correction plan generated with no executable steps. This is not allowed.`;
 						console.error(`[PlanService] ${errorMsg}`);
 						// Treat this as a parsing/validation failure to trigger retries or final error reporting
-						lastParsingError = errorMsg;
-						lastFailedJson = structuredPlanJsonString; // Capture the last valid-looking JSON
-						retryAttempt++; // Increment attempt count
-						// Re-prepare prompt for next attempt (if available)
-						if (retryAttempt <= this.MAX_PLAN_PARSE_RETRIES) {
-							// Logic to update currentJsonPlanningPrompt with error feedback
-							currentJsonPlanningPrompt = createPlanningPrompt(
-								planContext.type === "chat"
-									? planContext.originalUserRequest
-									: undefined,
-								planContext.projectContext,
-								planContext.type === "editor"
-									? planContext.editorContext
-									: undefined,
-								`CRITICAL ERROR: Your previous JSON output resulted in an empty steps array. You MUST provide a plan with at least one step. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct empty steps)`,
-								planContext.chatHistory,
-								planContext.textualPlanExplanation,
-								formattedRecentChanges,
-								urlContextString
-							);
-						}
-						// Break from this specific 'if (parsedPlanResult.plan)' block to continue the retry loop
-						continue;
-					}
-
-					break; // Exit retry loop if plan is valid and has steps
-				} else {
-					// Parsing failed, capture error and failed JSON
-					lastParsingError =
-						parsedPlanResult.error || "Failed to parse the JSON plan from AI.";
-					lastFailedJson = structuredPlanJsonString;
-
-					retryAttempt++; // Increment for the next potential attempt
-
-					// If more retries are available, prepare for the next attempt
-					if (retryAttempt <= this.MAX_PLAN_PARSE_RETRIES) {
-						// Create feedback string for the AI
-						// This feedback string is directly built into the prompt for general planning retries.
-						// For correction plans, a structured CorrectionFeedback is used.
-						// No change needed here for this instruction.
-
-						// Update the prompt for the next iteration
-						currentJsonPlanningPrompt = createPlanningPrompt(
-							planContext.type === "chat"
-								? planContext.originalUserRequest
-								: undefined,
-							planContext.projectContext,
-							planContext.type === "editor"
-								? planContext.editorContext
-								: undefined,
-							// Pass the error message as diagnostics/retry string for this general plan generation retry.
-							// This is not using CorrectionFeedback type, but a direct string to the prompt.
-							`CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${lastParsingError}". You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. Do not include markdown fences. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct JSON)`,
-							planContext.chatHistory,
-							planContext.textualPlanExplanation,
-							formattedRecentChanges,
-							urlContextString
-						);
+						parsedPlanResult.error = errorMsg; // Set error for retry logic
+						// FIX: Change undefined to null
+						parsedPlanResult.plan = null; // Ensure no plan is used
 					} else {
-						// All retries exhausted, break loop to handle final failure after the loop
-						break;
+						// Success! We have a valid plan, potentially after a repair.
+						// We can break the retry loop here, as AI retries are not needed for this specific successful repair.
+						successfulRepairOccurred = true; // Mark that repair was successful
 					}
+				}
+
+				// If we reach here, it means parsing failed (either initially or after repair attempt).
+				// Capture error and failed JSON for the retry mechanism.
+				lastParsingError =
+					parsedPlanResult.error || "Failed to parse the JSON plan from AI.";
+				lastFailedJson = currentJsonStringForParse; // The JSON string that was attempted to parse (original AI output)
+
+				// Increment retry count ONLY if AI needs to regenerate the plan.
+				// If a successful repair occurred, we do NOT increment the AI retry count.
+				if (!successfulRepairOccurred) {
+					retryAttempt++;
+				}
+
+				// If more retries are available, prepare for the next AI attempt.
+				if (
+					retryAttempt <= this.MAX_PLAN_PARSE_RETRIES &&
+					!successfulRepairOccurred
+				) {
+					// Update the prompt for the next iteration, including the captured error.
+					currentJsonPlanningPrompt = createPlanningPrompt(
+						planContext.type === "chat"
+							? planContext.originalUserRequest
+							: undefined,
+						planContext.projectContext,
+						planContext.type === "editor"
+							? planContext.editorContext
+							: undefined,
+						// Inject the error message into the prompt for the AI to correct.
+						`CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${lastParsingError}". You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct JSON)`,
+						planContext.chatHistory,
+						planContext.textualPlanExplanation,
+						formattedRecentChanges,
+						urlContextString
+					);
+				}
+
+				// Check if a plan was successfully obtained after all attempts or if a repair succeeded
+				if (
+					executablePlan &&
+					executablePlan.steps &&
+					executablePlan.steps.length > 0 &&
+					successfulRepairOccurred
+				) {
+					break; // Exit retry loop if plan is valid and successful repair occurred.
+				} else if (
+					retryAttempt > this.MAX_PLAN_PARSE_RETRIES &&
+					!successfulRepairOccurred
+				) {
+					// If all retries failed and no successful repair happened, break to handle final failure.
+					break;
 				}
 			} // End of while loop
 

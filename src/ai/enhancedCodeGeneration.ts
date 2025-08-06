@@ -12,6 +12,7 @@ import {
 	isModifyFileStep,
 	isRunCommandStep,
 	parseAndValidatePlan,
+	ParsedPlanResult,
 	PlanStep,
 	PlanStepAction,
 } from "../ai/workflowPlanner";
@@ -250,53 +251,6 @@ export class EnhancedCodeGenerator {
 	}
 
 	/**
-	 * Checks raw AI output for common non-code patterns that indicate a deviation from instructions.
-	 * @param rawContent The raw string response from the AI.
-	 * @returns A `CodeValidationResult` object if an issue is found, otherwise `null`.
-	 */
-	private _checkForNonCodeResponse(
-		rawContent: string
-	): CodeValidationResult | null {
-		const unwantedCodeGenerationPatterns = [
-			// The </execute_bash> pattern was removed due to its potential for false positives
-			// with legitimate code that might contain this string in comments or literals.
-			// The primary defense against such tags is now the cleanCodeOutput function,
-			// which extracts content between XBEGIN_CODEX/XEND_CODEX delimiters.
-			/<execute_bash>/i,
-			/\bthought\b/i,
-			/you are the expert software engineer for me/i,
-			/here's the code:/i,
-			/i can help you by/i,
-		];
-
-		for (const pattern of unwantedCodeGenerationPatterns) {
-			if (pattern.test(rawContent)) {
-				const message = `AI response contained unexpected conversational/instructional content and was not valid code. (Detected pattern: ${pattern.source})`;
-				console.error(`[EnhancedCodeGenerator] ${message}`);
-				console.error("Raw AI Response:\n", rawContent);
-				return {
-					isValid: false,
-					finalContent: "", // No valid content was generated
-					issues: [
-						{
-							type: "format_error",
-							message: message,
-							line: 1,
-							severity: "error",
-							source: "EnhancedCodeGenerator",
-						},
-					],
-					suggestions: [
-						"Refine your prompt for code generation.",
-						"Ensure the AI only outputs code.",
-					],
-				};
-			}
-		}
-		return null; // No issues found
-	}
-
-	/**
 	 * Generates the initial version of the code.
 	 */
 	private async _generateInitialContent(
@@ -326,13 +280,6 @@ export class EnhancedCodeGenerator {
 				},
 				token
 			);
-
-			// --- Pre-cleaning check for non-code AI output ---
-			const validationError = this._checkForNonCodeResponse(rawContent);
-			if (validationError) {
-				return validationError;
-			}
-			// --- End Pre-cleaning check ---
 
 			return this.codeValidationService.checkPureCodeFormat(rawContent);
 		} catch (error: any) {
@@ -394,13 +341,6 @@ export class EnhancedCodeGenerator {
 			token
 		);
 
-		// --- New: Pre-cleaning check for non-code AI output ---
-		const validationError = this._checkForNonCodeResponse(rawContent);
-		if (validationError) {
-			return { content: "", validation: validationError };
-		}
-		// --- End New Pre-cleaning check ---
-
 		const modifiedContent = cleanCodeOutput(rawContent);
 		// --- End inlined logic ---
 
@@ -453,13 +393,6 @@ export class EnhancedCodeGenerator {
 				token
 			);
 
-			// --- Pre-cleaning check for non-code AI output ---
-			const validationError = this._checkForNonCodeResponse(rawRefinedContent);
-			if (validationError) {
-				return validationError;
-			}
-			// --- End Pre-cleaning check ---
-
 			const refinedContent = cleanCodeOutput(rawRefinedContent);
 			return this.codeValidationService.validateCode(filePath, refinedContent);
 		}
@@ -500,6 +433,8 @@ export class EnhancedCodeGenerator {
 		}
 	}
 
+	// src/ai/enhancedCodeGeneration.ts
+
 	/**
 	 * Helper method to parse and validate an AI-generated CorrectionPlan (ExecutionPlan).
 	 * @param jsonString The raw JSON string from the AI.
@@ -509,7 +444,8 @@ export class EnhancedCodeGenerator {
 	private async _parseAndValidateCorrectionPlan(
 		jsonString: string,
 		rootUri: vscode.Uri
-	): Promise<{ plan?: ExecutionPlan | null; error?: string }> {
+	): Promise<ParsedPlanResult> {
+		// FIX: Return ParsedPlanResult
 		// Replicate logic from PlanService.parseAndValidatePlan
 		try {
 			// Markdown stripping, consistent with PlanService
@@ -523,13 +459,14 @@ export class EnhancedCodeGenerator {
 				cleanedJsonString,
 				rootUri
 			);
-			return parsedResult; // parsedResult already has { plan?: ExecutionPlan; error?: string; }
+			return parsedResult; // parsedResult is already a ParsedPlanResult
 		} catch (e: any) {
 			console.error(
 				`[EnhancedCodeGenerator] Error parsing/validating correction plan: ${e.message}`,
 				e
 			);
-			return { error: `Parsing/validation failed: ${e.message}` };
+			// FIX: Return a valid ParsedPlanResult with a null plan
+			return { plan: null, error: `Parsing/validation failed: ${e.message}` };
 		}
 	}
 
@@ -1333,7 +1270,7 @@ export class EnhancedCodeGenerator {
 			);
 
 			let rawCorrectionPlan: string = ""; // Initialized with empty string
-			let parsedPlan: ExecutionPlan | null | undefined; // Modified: Accommodate potential null values
+			let parsedPlan: ExecutionPlan | null = null;
 			let parsingError: string | undefined;
 
 			try {
@@ -1351,6 +1288,7 @@ export class EnhancedCodeGenerator {
 					rawCorrectionPlan,
 					rootUri
 				);
+				// This assignment is now type-safe
 				parsedPlan = parsedResult.plan;
 				parsingError = parsedResult.error;
 
