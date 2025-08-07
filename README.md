@@ -36,7 +36,7 @@ Now...that same power is available to you. Completely for free.
 
 - ⏪ **Safe & Reversible Changes:** Every file system operation performed by the agent is logged. If you don't like a change, you can easily review and revert the entire operation with a simple 2-click button, ensuring you are always in control.
 
-- 💰 **Completely Free & Open Source:** No subscriptions, no platform fees. Minovative Mind is licensed under MIT and runs locally in your system. The only cost is your own usage of the Google Gemini API that you control.
+- 💰 **Completely Free & Open Source:** No subscriptions, no platform fees. Minovative Mind is licensed under [LICENSE](./LICENSE.md) and runs locally in your system. The only cost is your OWN usage of the Google Gemini API that YOU control.
 
 See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 
@@ -44,7 +44,7 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 
 ### ✅ Summary
 
-- ***Minovative Mind performs faster for files <1500 lines of code***
+- **_Minovative Mind performs faster for files <1500 lines of code_**
 
 | Step | Description                                     |
 | ---- | ----------------------------------------------- |
