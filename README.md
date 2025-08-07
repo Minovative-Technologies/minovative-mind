@@ -1,4 +1,4 @@
-# Minovative Mind (Now Public and Easy to Use!)
+# Minovative Mind (Now Public, Easy to Use, and Free!)
 
 ## An open-source AI agent that automates software development, powerful enough that it built itself
 
@@ -125,7 +125,7 @@ code --install-extension minovative-mind-1.2.3.vsix
 
   - In the Minovative Mind sidebar, copy and paste your API key in the API Key Management section on the bottom.
 
-For a better experience, you could move the Minovative Mind extension from the primary bar to the secondary bar by right clicking the Minovative Mind icon. After right clicking, go to "Move To" > "Secondary Side Bar".
+> **TIP:** For a better experience, you could move the Minovative Mind extension from the primary bar to the secondary bar by right clicking the Minovative Mind icon. After right clicking, go to "Move To" > "Secondary Side Bar".
 
 ## More Than a Tool—It's A Platform
 
@@ -143,7 +143,7 @@ My vision is to empower every developer with a powerful, free, and open-source A
 - 💖 **Support development** on [Patreon](https://www.patreon.com/c/minovativetechnologies/membership) — every contribution can help us grow!
 - 🗣️ **Join the conversation** on our [Minovative Mind Discord](https://discord.gg/KFkMgAH3EG) or follow us on [X/Twitter](https://x.com/minovative_tech).
 
-## Other things about this project
+## Learn more about the project
 
 - [**`CONTRIBUTING.md`**](./CONTRIBUTING.md)
 - [**`CAPABILITIES.md`**](./CAPABILITIES.md)

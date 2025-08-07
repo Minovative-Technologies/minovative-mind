@@ -42,16 +42,6 @@ export interface OpenUrlMessage {
 	url: string;
 }
 
-export interface FirebaseConfigPayload {
-	apiKey: string;
-	authDomain: string;
-	projectId: string;
-	storageBucket: string;
-	messagingSenderId: string;
-	appId: string;
-	measurementId?: string;
-}
-
 export interface ApiKeyInfo {
 	maskedKey: string;
 	index: number;
