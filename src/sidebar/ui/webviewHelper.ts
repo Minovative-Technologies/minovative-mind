@@ -1,13 +1,13 @@
 // src/sidebar/ui/webviewHelper.ts
 import * as vscode from "vscode";
-import { getNonce } from "../../utils/nonce"; // Adjusted path
+import { getNonce } from "../../utils/nonce";
 
 export async function getHtmlForWebview(
 	webview: vscode.Webview,
 	extensionUri: vscode.Uri,
-	availableModels: readonly string[], // Pass as parameter
-	selectedModel: string, // Pass as parameter
-	logoUri: vscode.Uri // New parameter
+	availableModels: readonly string[],
+	selectedModel: string,
+	logoUri: vscode.Uri
 ): Promise<string> {
 	const scriptUri = webview.asWebviewUri(
 		vscode.Uri.joinPath(extensionUri, "dist", "webview.js")

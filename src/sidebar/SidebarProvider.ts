@@ -42,7 +42,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public readonly workspaceState: vscode.Memento;
 	public readonly workspaceRootUri: vscode.Uri | undefined; // Make it readonly and optional
 
-	// New getter
 	public get isSidebarVisible(): boolean {
 		return !!this._view && this._view.visible;
 	}
@@ -62,12 +61,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		commitMessage: string;
 		stagedFiles: string[];
 	} | null = null;
-	public isGeneratingUserRequest: boolean = false; // Added property
+	public isGeneratingUserRequest: boolean = false;
 	public isEditingMessageActive: boolean = false;
 	private _persistedPendingPlanData: sidebarTypes.PersistedPlanData | null =
-		null; // New private property
-	public completedPlanChangeSets: RevertibleChangeSet[] = []; // New public property
-	public isPlanExecutionActive: boolean = false; // New public property
+		null;
+	public completedPlanChangeSets: RevertibleChangeSet[] = [];
+	public isPlanExecutionActive: boolean = false;
 
 	// --- MANAGERS & SERVICES ---
 	public apiKeyManager: ApiKeyManager;
@@ -81,11 +80,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public planService: PlanService;
 	public chatService: ChatService;
 	public commitService: CommitService;
-	public gitConflictResolutionService: GitConflictResolutionService; // Service instance
+	public gitConflictResolutionService: GitConflictResolutionService;
 	public tokenTrackingService: TokenTrackingService;
 	private enhancedCodeGenerator: EnhancedCodeGenerator;
-	public revertService: RevertService; // New public property
-	// Added: Properties for missing services
+	public revertService: RevertService;
 	private codeValidationService: CodeValidationService;
 	private contextRefresherService: ContextRefresherService;
 
@@ -296,8 +294,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	): Promise<void> {
 		this.completedPlanChangeSets = data || [];
 		await this.workspaceState.update(
-			"minovativeMind.completedPlanChangeSets", // New key
-			this.completedPlanChangeSets // Persist the entire stack
+			"minovativeMind.completedPlanChangeSets",
+			this.completedPlanChangeSets
 		);
 		console.log(
 			`[SidebarProvider] Persisted completed plan change sets updated to: ${

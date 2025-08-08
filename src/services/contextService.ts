@@ -141,10 +141,10 @@ export class ContextService {
 		cancellationToken: vscode.CancellationToken | undefined,
 		userRequest?: string,
 		editorContext?: PlanGenerationContext["editorContext"],
-		initialDiagnosticsString?: string, // Renamed parameter for clarity
-		options?: ContextBuildOptions, // Options parameter
-		includePersona: boolean = true, // New optional parameter with default true
-		includeVerboseHeaders: boolean = true // ADDED: New optional parameter with default true
+		initialDiagnosticsString?: string,
+		options?: ContextBuildOptions,
+		includePersona: boolean = true,
+		includeVerboseHeaders: boolean = true
 	): Promise<BuildProjectContextResult> {
 		const startTime = Date.now();
 		const enablePerformanceMonitoring =

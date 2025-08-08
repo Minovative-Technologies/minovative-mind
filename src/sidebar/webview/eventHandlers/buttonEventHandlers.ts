@@ -19,14 +19,10 @@ import { postMessageToExtension } from "../utils/vscodeApi";
 import { updateStatus, updateApiKeyStatus } from "../ui/statusManager";
 import { appState } from "../state/appState";
 import { sendMessage } from "../messageSender";
-import {
-	hidePlanParseErrorUI,
-	// createPlanConfirmationUI, // This function creates the UI and attaches internal confirmation event listeners - not used directly here
-} from "../ui/confirmationAndReviewUIs";
+import { hidePlanParseErrorUI } from "../ui/confirmationAndReviewUIs";
 import { stopTypingAnimation } from "../ui/typingAnimation";
-import { RequiredDomElements } from "../types/webviewTypes"; // Correct import path
-import { md } from "../utils/markdownRenderer"; // Import markdown renderer
-import { clearImagePreviews } from "../utils/imageUtils"; // New import
+import { RequiredDomElements } from "../types/webviewTypes";
+import { clearImagePreviews } from "../utils/imageUtils";
 
 /**
  * Initializes all button and interactive element event listeners in the webview.
@@ -255,7 +251,7 @@ export function initializeButtonEventListeners(
 			".generate-plan-button"
 		) as HTMLButtonElement | null;
 
-		// New: Check for code copy button
+		// Check for code copy button
 		const codeCopyButton = target.closest(
 			".code-copy-button"
 		) as HTMLButtonElement | null;
@@ -305,10 +301,10 @@ export function initializeButtonEventListeners(
 			return;
 		}
 
-		// New: Handle .code-copy-button clicks before the general .copy-button
+		// Handle .code-copy-button clicks before the general .copy-button
 		if (codeCopyButton && !codeCopyButton.disabled) {
 			event.preventDefault(); // Prevent default button action
-			codeCopyButton.disabled = true; // Add: Disable button immediately
+			codeCopyButton.disabled = true; // Disable button immediately
 
 			const faCheckSvg = `<svg class="fa-icon" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="check" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L192 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"></path></svg>`;
 

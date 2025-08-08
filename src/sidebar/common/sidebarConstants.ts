@@ -1,7 +1,7 @@
 // src/sidebar/common/sidebarConstants.ts
 
 // Secret storage keys
-export const GEMINI_API_KEY_SECRET_KEY = "geminiApiKey"; // New constant for the single API key
+export const GEMINI_API_KEY_SECRET_KEY = "geminiApiKey";
 
 // Workspace state keys
 export const MODEL_SELECTION_STORAGE_KEY = "geminiSelectedModel";

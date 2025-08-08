@@ -141,7 +141,7 @@ export class ChatService {
 				{
 					text: `
 
-[You are **MINO**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
+[You are **M.I.N.O**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind, focus on answering my prompts/request)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
 
 					\n\nProject Context:\n${projectContext.contextString}${
 						urlContextString ? `\n\n${urlContextString}` : ""
@@ -226,7 +226,6 @@ export class ChatService {
 			const isCancellation = finalAiResponseText === ERROR_OPERATION_CANCELLED;
 
 			// Only send aiResponseEnd if we haven't already cancelled
-			// CRITICAL CHANGE: Removed the 'if' condition. aiResponseEnd must always be sent.
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
 				success: success,
@@ -335,7 +334,7 @@ export class ChatService {
 				{
 					text: `
 
-[You are **MINO**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
+[You are **M.I.N.O**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind, focus on answering my prompts/request)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
 
 					\n\nProject Context:\n${projectContext.contextString}`,
 				},

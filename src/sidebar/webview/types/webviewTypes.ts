@@ -44,12 +44,12 @@ export interface RequiredDomElements {
 	tokenUsageToggle: HTMLButtonElement;
 	revertChangesButton: HTMLButtonElement;
 
-	// New properties for clear chat confirmation
+	// Clear chat confirmation
 	chatClearConfirmationContainer: HTMLDivElement | null;
 	confirmClearChatButton: HTMLButtonElement | null;
 	cancelClearChatButton: HTMLButtonElement | null;
 
-	// New properties for image upload
+	// Image upload
 	imageUploadInput: HTMLInputElement;
 	attachImageButton: HTMLButtonElement;
 	imagePreviewsContainer: HTMLDivElement;
@@ -110,10 +110,10 @@ export interface WebviewAppState {
 	isAwaitingUserReview: boolean;
 	isCommitActionInProgress: boolean;
 	isCancellationInProgress: boolean;
-	isPlanExecutionInProgress: boolean; // New property to track plan execution state
+	isPlanExecutionInProgress: boolean; // Track plan execution state
 	hasRevertibleChanges: boolean;
 	totalKeys: number;
-	isTokenUsageVisible: boolean; // New property to track token usage visibility
+	isTokenUsageVisible: boolean; // Track token usage visibility
 	nextMessageIndex: number;
 	selectedImages: ImageUploadState[];
 	allWorkspaceFiles: string[];

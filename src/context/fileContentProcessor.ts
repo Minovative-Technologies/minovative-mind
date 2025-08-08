@@ -87,7 +87,7 @@ export function intelligentlySummarizeFileContent(
 		range: vscode.Range,
 		header?: string,
 		footer?: string,
-		desiredBlockLength?: number // NEW PARAMETER
+		desiredBlockLength?: number
 	): boolean => {
 		if (currentLength >= maxAllowedLength) {
 			return false;
@@ -151,7 +151,7 @@ export function intelligentlySummarizeFileContent(
 		range: vscode.Range;
 		header?: string;
 		footer?: string;
-		desiredBlockLength?: number; // NEW
+		desiredBlockLength?: number;
 	}
 
 	const candidates: ContentCandidate[] = [];

@@ -337,7 +337,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			// New confirmation dialog for custom prompts
+			// Confirmation dialog for custom prompts
 			if (selectedCommand.label === "custom prompt" && instruction) {
 				// Changed from "Custom Prompt..."
 				const confirmation = await vscode.window.showInformationMessage(
@@ -363,9 +363,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 				selectedText = editor.document.getText(originalSelection);
 				effectiveRange = originalSelection;
-			}
-			// NEW ELSE IF BLOCK FOR "chat" COMMAND
-			else if (instruction === "chat") {
+			} else if (instruction === "chat") {
 				let codeContentForAI: string;
 				let codeContextDescription: string;
 				const codeContextLanguageId = languageId; // Language ID is always from the document.
@@ -414,7 +412,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				const userChatPrompt =
 					`
 
-[You are **MINO**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
+[You are **M.I.N.O**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind, focus on answering my prompts/request)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
 
 					\n\n` +
 					`${finalUserMessageContent}\n\n` +
@@ -672,7 +670,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			// The original diagnosticsString calculation block that was here is now moved into the withProgress block.
 
-			// New /docs instruction handling (now using the upfront logic, this block still handles execution)
+			// /docs instruction handling (now using the upfront logic, this block still handles execution)
 			if (instruction === "/docs") {
 				const selectedModel = DEFAULT_FLASH_LITE_MODEL; // Use default model for documentation generation
 				if (!selectedModel) {

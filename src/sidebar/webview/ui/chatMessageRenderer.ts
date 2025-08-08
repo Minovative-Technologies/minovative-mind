@@ -15,8 +15,7 @@ import {
 	updateStatus,
 } from "./statusManager";
 import { RequiredDomElements } from "../types/webviewTypes";
-import { initializeDomElements } from "../state/domElements";
-import { ImageInlineData } from "../../common/sidebarTypes"; // New import
+import { ImageInlineData } from "../../common/sidebarTypes";
 
 // Global reference to setLoadingState function
 let globalSetLoadingState:
@@ -42,11 +41,8 @@ export function appendMessage(
 	isRelevantFilesExpandedForHistory?: boolean,
 	isPlanExplanationForRender: boolean = false,
 	isPlanStepUpdateForRender: boolean = false,
-	imageParts?: ImageInlineData[] // New parameter
+	imageParts?: ImageInlineData[]
 ): void {
-	// elements.chatContainer is guaranteed to be present by the RequiredDomElements type,
-	// so no null check is needed for chatContainer itself.
-
 	// Handle loading-message deduplication
 	if (className === "loading-message") {
 		const existingLoadingMsg = elements.chatContainer.querySelector(
@@ -293,7 +289,7 @@ export function appendMessage(
 	let copyButton: HTMLButtonElement | null = null;
 	let deleteButton: HTMLButtonElement | null = null;
 	let editButton: HTMLButtonElement | null = null;
-	// NEW: Declare planButton and its container
+	// Declare planButton and its container
 	let generatePlanButton: HTMLButtonElement | null = null;
 	let planButtonContainer: HTMLDivElement | null = null;
 
@@ -321,7 +317,7 @@ export function appendMessage(
 				setIconForButton(editButton, faPenToSquare);
 			}
 
-			// NEW: "Generate Plan" button creation (for ai-message only)
+			// "Generate Plan" button creation (for ai-message only)
 			if (
 				className.includes("ai-message") &&
 				!isPlanExplanationForRender &&
@@ -347,7 +343,7 @@ export function appendMessage(
 				planButtonContainer.appendChild(generatePlanButton);
 			}
 
-			// NEW LOGIC for initial button disabled state
+			// LOGIC for initial button disabled state
 			if (className.includes("user-message")) {
 				if (copyButton) {
 					copyButton.disabled = false;
@@ -391,7 +387,7 @@ export function appendMessage(
 			if (editButton) {
 				messageActions.appendChild(editButton);
 			}
-			// NEW: Append "Generate Plan" button container
+			// Append "Generate Plan" button container
 			if (planButtonContainer) {
 				messageActions.appendChild(planButtonContainer);
 			}

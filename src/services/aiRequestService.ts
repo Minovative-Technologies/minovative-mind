@@ -220,7 +220,7 @@ export class AIRequestService {
 				}
 				result = accumulatedResult; // Store successful final result
 
-				// NEW: Accurately count and track output tokens after the response is complete
+				// Accurately count and track output tokens after the response is complete
 				if (this.tokenTrackingService && currentApiKey) {
 					try {
 						// Update call to countGeminiTokens to pass only the output text for output token count

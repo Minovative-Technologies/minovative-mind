@@ -88,6 +88,7 @@
 	padding-left: calc(
 		var(--message-padding) * 1.2
 	); /* Adjust padding due to left border */
+	text-align: left;
 }
 
 .ai-message.error-message strong {

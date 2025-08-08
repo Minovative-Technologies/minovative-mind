@@ -48,7 +48,7 @@ export class DiagnosticService {
 		maxTotalChars: number = 25000,
 		maxPerSeverity: number = 25,
 		token?: vscode.CancellationToken, // Make token optional
-		// NEW PARAMETER: Specify which severities to include. Defaults to all.
+		// Specify which severities to include. Defaults to all.
 		includeSeverities: vscode.DiagnosticSeverity[] = [
 			vscode.DiagnosticSeverity.Error,
 			vscode.DiagnosticSeverity.Warning,

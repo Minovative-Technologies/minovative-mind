@@ -31,7 +31,7 @@ export async function getHeuristicRelevantFiles(
 		maxCallHierarchyFiles: options?.maxCallHierarchyFiles ?? 2,
 	};
 
-	// NEW: Identify files strongly related to the active symbol for biasing
+	// Identify files strongly related to the active symbol for biasing
 	const symbolRelatedRelativePaths = new Set<string>();
 	if (activeSymbolDetailedInfo) {
 		// Helper to add URI to symbolRelatedRelativePaths set

@@ -54,18 +54,18 @@ export class SequentialContextService {
 	private aiRequestService: AIRequestService;
 	private workspaceRoot: vscode.Uri;
 	private postMessageToWebview: (message: any) => void;
-	private settingsManager: SettingsManager; // NEW
+	private settingsManager: SettingsManager;
 
 	constructor(
 		aiRequestService: AIRequestService,
 		workspaceRoot: vscode.Uri,
 		postMessageToWebview: (message: any) => void,
-		settingsManager: SettingsManager // NEW
+		settingsManager: SettingsManager
 	) {
 		this.aiRequestService = aiRequestService;
 		this.workspaceRoot = workspaceRoot;
 		this.postMessageToWebview = postMessageToWebview;
-		this.settingsManager = settingsManager; // NEW
+		this.settingsManager = settingsManager;
 		this.sequentialProcessor = new SequentialFileProcessor(
 			aiRequestService,
 			workspaceRoot,

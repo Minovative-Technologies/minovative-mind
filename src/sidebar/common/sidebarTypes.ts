@@ -72,7 +72,7 @@ export interface EditChatMessage {
 	newContent: string; // The new, edited content of the message
 }
 
-// New message type: Webview to Extension for generating plan prompt from AI message
+// Webview to Extension for generating plan prompt from AI message
 export interface GeneratePlanPromptFromAIMessage {
 	type: "generatePlanPromptFromAIMessage";
 	payload: { messageIndex: number };
@@ -106,7 +106,7 @@ export type WebviewToExtensionMessages =
 	| WebviewToExtensionChatMessageType
 	| RequestWorkspaceFilesMessage;
 
-// New message type: Extension to Webview for pre-filling chat input
+// Extension to Webview for pre-filling chat input
 export interface PrefillChatInput {
 	type: "PrefillChatInput";
 	payload: { text: string };
@@ -191,7 +191,7 @@ export interface AppendRealtimeModelMessage {
 	value: { text: string; isError?: boolean };
 	diffContent?: string;
 	relevantFiles?: string[];
-	isPlanStepUpdate?: boolean; // New property
+	isPlanStepUpdate?: boolean;
 }
 
 interface RestorePendingPlanConfirmationMessage {
@@ -299,9 +299,9 @@ export type ExtensionToWebviewMessages =
 	| AiResponseStartMessage
 	| AiResponseChunkMessage
 	| AiResponseEndMessage
-	| ChatClearedMessage // NEW
-	| GitProcessUpdateMessage // NEW
-	| RequestClearChatConfirmationMessage // NEW
+	| ChatClearedMessage
+	| GitProcessUpdateMessage
+	| RequestClearChatConfirmationMessage
 	| {
 			type: "operationCancelledConfirmation";
 	  }
@@ -320,7 +320,7 @@ export type ExtensionToWebviewMessages =
 	| RevertCompletedMessage
 	| AppendRealtimeModelMessage
 	| UpdateTokenStatisticsMessage // Added UpdateTokenStatisticsMessage
-	| UpdateCurrentTokenEstimatesMessage // NEW
+	| UpdateCurrentTokenEstimatesMessage
 	| RestoreStreamingProgressMessage
 	| RestorePendingCommitReviewMessage
 	| CodeFileStreamStartMessage
@@ -349,7 +349,7 @@ export interface PlanGenerationContext {
 	textualPlanExplanation: string;
 	workspaceRootUri: vscode.Uri;
 	relevantFiles?: string[];
-	isMergeOperation?: boolean; // New optional property for merge conflict resolution
+	isMergeOperation?: boolean;
 	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo;
 }
 

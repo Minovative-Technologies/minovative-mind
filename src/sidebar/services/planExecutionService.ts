@@ -3,21 +3,20 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { EnhancedCodeGenerator } from "../../ai/enhancedCodeGeneration";
 
-// New imports for AI interaction and code utilities
 import { _performModification } from "./aiInteractionService";
-import { AIRequestService } from "../../services/aiRequestService"; // Added import
+import { AIRequestService } from "../../services/aiRequestService";
 import { applyAITextEdits, cleanCodeOutput } from "../../utils/codeUtils";
 import { ProjectChangeLogger } from "../../workflow/ProjectChangeLogger";
 import { generateFileChangeSummary } from "../../utils/diffingUtils";
 import { FileChangeEntry } from "../../types/workflow";
-import { ExtensionToWebviewMessages } from "../../sidebar/common/sidebarTypes"; // NEW IMPORT
+import { ExtensionToWebviewMessages } from "../../sidebar/common/sidebarTypes";
 import { DEFAULT_FLASH_MODEL } from "../common/sidebarConstants";
-import { getLanguageId } from "../../utils/codeAnalysisUtils"; // NEW IMPORT for language ID
+import { getLanguageId } from "../../utils/codeAnalysisUtils";
 import {
 	EnhancedGenerationContext,
 	EditorContext,
-} from "../../types/codeGenerationTypes"; // NEW IMPORT for context types
-import { formatSuccessfulChangesForPrompt } from "../../workflow/changeHistoryFormatter"; // NEW IMPORT for change history
+} from "../../types/codeGenerationTypes";
+import { formatSuccessfulChangesForPrompt } from "../../workflow/changeHistoryFormatter";
 
 // Define enums and interfaces for plan execution
 export enum PlanStepAction {
@@ -349,7 +348,7 @@ export async function executePlanStep(
 				const editorContext: EditorContext = {
 					filePath: step.file!,
 					documentUri: targetFileUri,
-					fullText: "", // New file, so empty initially
+					fullText: "",
 					selection: new vscode.Range(0, 0, 0, 0),
 					selectedText: "",
 					instruction: step.generate_prompt ?? "", // Added as per instructions

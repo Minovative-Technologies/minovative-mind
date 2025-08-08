@@ -187,7 +187,6 @@ export function createProjectCompilerHost(
 		// Provide ts.sys.useCaseSensitiveFileNames as a function
 		useCaseSensitiveFileNames: () => ts.sys.useCaseSensitiveFileNames,
 
-		// New methods added
 		getSourceFile: (
 			fileName: string,
 			languageVersion: ts.ScriptTarget,

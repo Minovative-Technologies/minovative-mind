@@ -46,7 +46,7 @@ export class PlanService {
 	private readonly MAX_CORRECTION_PLAN_ATTEMPTS = 3; // Max attempts for AI to generate a valid correction *plan*
 	private urlContextService: UrlContextService;
 	private enhancedCodeGenerator: EnhancedCodeGenerator;
-	// New private member to store correction attempt history per file
+	// To store correction attempt history per file
 	private fileCorrectionAttemptHistory: Map<
 		string,
 		{
@@ -1430,7 +1430,7 @@ export class PlanService {
 								step.path
 							);
 
-						// New if condition: check for actual line changes reported by diffing utility
+						// check for actual line changes reported by diffing utility
 						if (addedLines.length > 0 || removedLines.length > 0) {
 							affectedFileUris.add(fileUri);
 
@@ -1958,7 +1958,6 @@ export class PlanService {
 		};
 	}
 
-	// Add new _performFinalValidationAndCorrection method
 	private async _performFinalValidationAndCorrection(
 		affectedFileUris: Set<vscode.Uri>,
 		rootUri: vscode.Uri,

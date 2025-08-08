@@ -9,7 +9,6 @@ import {
 	AiStreamingState,
 	PersistedPlanData,
 	PlanExecutionFinishedMessage,
-	// New imports for code streaming
 	CodeFileStreamStartMessage,
 	CodeFileStreamChunkMessage,
 	CodeFileStreamEndMessage,
@@ -120,7 +119,7 @@ export function initializeMessageBusHandler(
 				pre.appendChild(codeElement);
 				container.appendChild(pre);
 
-				// NEW: Footer for file path and loading dots
+				// Footer for file path and loading dots
 				const footer = document.createElement("div");
 				footer.classList.add("code-file-stream-footer");
 				footer.innerHTML = `

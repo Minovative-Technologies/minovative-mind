@@ -31,15 +31,15 @@ export const appState: WebviewAppState = {
 	isApiKeySet: false,
 	isLoading: false,
 	isAwaitingUserReview: false,
-	isCommitActionInProgress: false, // Added as per instruction
-	isCancellationInProgress: false, // Initialize the new flag
-	isPlanExecutionInProgress: false, // Initialize plan execution tracking
+	isCommitActionInProgress: false,
+	isCancellationInProgress: false,
+	isPlanExecutionInProgress: false,
 	hasRevertibleChanges: false,
 	totalKeys: 0,
-	isTokenUsageVisible: false, // Initialize token usage visibility
+	isTokenUsageVisible: false,
 	nextMessageIndex: 0,
-	selectedImages: [], // Initialize the new property
+	selectedImages: [],
 	allWorkspaceFiles: [],
-	isRequestingWorkspaceFiles: false, // New property to track if workspace files are being requested
+	isRequestingWorkspaceFiles: false,
 	currentSuggestionType: "none",
 };

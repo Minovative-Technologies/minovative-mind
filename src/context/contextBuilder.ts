@@ -100,7 +100,7 @@ export async function buildContextString(
 	dependencyGraph?: Map<string, string[]>,
 	documentSymbols?: Map<string, vscode.DocumentSymbol[] | undefined>,
 	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo,
-	reverseDependencyGraph?: Map<string, string[]> // NEW parameter for prioritization
+	reverseDependencyGraph?: Map<string, string[]>
 ): Promise<string> {
 	let context = `Project Context (Workspace: ${path.basename(
 		workspaceRoot.fsPath

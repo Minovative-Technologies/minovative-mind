@@ -1,5 +1,5 @@
 import { sendMessage } from "../messageSender";
-import { postMessageToExtension } from "../utils/vscodeApi"; // NEW import
+import { postMessageToExtension } from "../utils/vscodeApi";
 import {
 	showSuggestions, // Renamed from showCommandSuggestions
 	hideSuggestions, // Renamed from hideCommandSuggestions

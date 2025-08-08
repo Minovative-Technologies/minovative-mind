@@ -138,7 +138,6 @@ const newFeatureRequestSchema = z.object({
 	description: z.string().nonempty("Feature description cannot be empty."),
 });
 
-// New schema definition
 const operationCancelledConfirmationSchema = z.object({
 	type: z.literal("operationCancelledConfirmation"),
 });

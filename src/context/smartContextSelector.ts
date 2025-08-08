@@ -41,11 +41,11 @@ export interface SelectRelevantFilesAIOptions {
 	projectRoot: vscode.Uri;
 	activeEditorContext?: PlanGenerationContext["editorContext"];
 	diagnostics?: string;
-	fileDependencies?: Map<string, string[]>; // New optional property
+	fileDependencies?: Map<string, string[]>;
 	activeEditorSymbols?: vscode.DocumentSymbol[];
-	preSelectedHeuristicFiles?: vscode.Uri[]; // NEW PROPERTY: Heuristically pre-selected files
+	preSelectedHeuristicFiles?: vscode.Uri[];
 	fileSummaries?: Map<string, string>;
-	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo; // NEW: Add activeSymbolDetailedInfo
+	activeSymbolDetailedInfo?: ActiveSymbolDetailedInfo;
 	aiModelCall: (
 		prompt: string,
 		modelName: string,
@@ -168,7 +168,7 @@ export async function selectRelevantFilesAI(
 		activeEditorSymbols,
 		preSelectedHeuristicFiles,
 		fileSummaries,
-		activeSymbolDetailedInfo, // NEW: Destructure activeSymbolDetailedInfo
+		activeSymbolDetailedInfo,
 		aiModelCall,
 		modelName,
 		cancellationToken,
@@ -229,7 +229,7 @@ export async function selectRelevantFilesAI(
 			contextPrompt += `Selected Text (preview): "${preview}"\n`;
 		}
 
-		// NEW: Feature activeSymbolDetailedInfo prominently if available
+		// Feature activeSymbolDetailedInfo prominently if available
 		if (activeSymbolDetailedInfo && activeSymbolDetailedInfo.name) {
 			const symbolInfo = activeSymbolDetailedInfo;
 			contextPrompt += `\n--- Active Symbol Detailed Information ---\n`;
@@ -550,7 +550,7 @@ export async function selectRelevantFilesAI(
 		cleanedResponse = cleanedResponse.trim();
 
 		const selectedPaths: unknown = JSON.parse(cleanedResponse);
-		const aiSelectedFilesSet = new Set<vscode.Uri>(); // NEW: aiSelectedFilesSet initialization
+		const aiSelectedFilesSet = new Set<vscode.Uri>();
 
 		if (
 			!Array.isArray(selectedPaths) ||
@@ -614,9 +614,9 @@ export async function selectRelevantFilesAI(
 			}
 		}
 
-		let finalResultFiles: vscode.Uri[] = Array.from(aiSelectedFilesSet); // NEW: Create finalResultFiles from AI selection
+		let finalResultFiles: vscode.Uri[] = Array.from(aiSelectedFilesSet);
 
-		// NEW: Add active editor's file if it exists and is NOT already in aiSelectedFilesSet
+		// Add active editor's file if it exists and is NOT already in aiSelectedFilesSet
 		if (
 			activeEditorContext?.documentUri &&
 			!finalResultFiles.some(

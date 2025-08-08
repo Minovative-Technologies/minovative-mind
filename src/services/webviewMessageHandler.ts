@@ -12,8 +12,7 @@ import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 import { generateLightweightPlanPrompt } from "../ai/prompts/lightweightPrompts";
-import { scanWorkspace } from "../context/workspaceScanner"; // NEW IMPORT
-import { resetUIStateAfterCancellation } from "../sidebar/webview/ui/statusManager";
+import { scanWorkspace } from "../context/workspaceScanner";
 
 export async function handleWebviewMessage(
 	data: any,
@@ -57,18 +56,18 @@ export async function handleWebviewMessage(
 		"openFile", // Allowed as a direct user interaction
 		"toggleRelevantFilesDisplay", // Allowed as a UI interaction
 		"openSettingsPanel",
-		"universalCancel", // New universal cancellation message, must be allowed during background operations
+		"universalCancel", // Universal cancellation message, must be allowed during background operations
 		"editChatMessage", // 1. Added "editChatMessage" to the allowedDuringBackground array
 		"getTokenStatistics", // Allow token statistics requests during background operations
 		"getCurrentTokenEstimates", // Allow current token estimates during background operations
 		"openSidebar", // Allow opening sidebar during background operations
 		"generatePlanPromptFromAIMessage", // CRITICAL CHANGE: Allow this new message type during background operations
 		"revertRequest",
-		"requestClearChatConfirmation", // New: Allowed for user confirmation flow
-		"confirmClearChatAndRevert", // New: Allowed as a direct user interaction during clear chat flow
-		"cancelClearChat", // New: Allowed as a direct user interaction during clear chat flow
-		"requestWorkspaceFiles", // NEW: Allow workspace file requests during background operations
-		"operationCancelledConfirmation", // NEW: Allowed to update UI state after cancellation
+		"requestClearChatConfirmation", // Allowed for user confirmation flow
+		"confirmClearChatAndRevert", // Allowed as a direct user interaction during clear chat flow
+		"cancelClearChat", // Allowed as a direct user interaction during clear chat flow
+		"requestWorkspaceFiles", // Allow workspace file requests during background operations
+		"operationCancelledConfirmation", // Allowed to update UI state after cancellation
 	];
 
 	if (
@@ -357,7 +356,7 @@ export async function handleWebviewMessage(
 			}
 			break;
 
-		// New cases for clear chat confirmation flow
+		// Clear chat confirmation flow
 		case "requestClearChatConfirmation":
 			console.log("[MessageHandler] Received requestClearChatConfirmation.");
 			provider.postMessageToWebview({ type: "requestClearChatConfirmation" });
@@ -828,7 +827,7 @@ export async function handleWebviewMessage(
 		}
 
 		case "requestWorkspaceFiles": {
-			// NEW CASE: Request Workspace Files
+			// Request Workspace Files
 			console.log("[MessageHandler] Received requestWorkspaceFiles.");
 			try {
 				const workspaceFolders = vscode.workspace.workspaceFolders;
