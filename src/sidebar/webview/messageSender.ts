@@ -146,12 +146,12 @@ export function sendMessage(
 			imagePartsToSend.length > 0 ? imagePartsToSend : undefined // imageParts
 		);
 		updateStatus(elements, "Sending message to AI...");
-		const groundingEnabled = elements.groundingToggle?.checked ?? false;
+		// const groundingEnabled = elements.groundingToggle?.checked ?? false;
 
 		postMessageToExtension({
 			type: "chatMessage",
 			value: fullMessage,
-			groundingEnabled,
+			// groundingEnabled,
 			imageParts: imagePartsToSend.length > 0 ? imagePartsToSend : undefined,
 		});
 	}

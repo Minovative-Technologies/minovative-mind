@@ -20,8 +20,6 @@ Now...that same power is available to you. Completely for free.
 
 ## Key Features
 
-- 🌐 **Real-time Web Knowledge:** Leverages Gemini API's integrated Google Search capabilities to fetch and incorporate up-to-date information from the internet. This enables the agent to provide more relevant, timely, and informed responses by accessing current events, data, and web content.
-
 - 🔗 **Intelligent Link & File Content Processing:** Utilizes the Gemini API's advanced capabilities to parse and understand content directly from URLs. This allows the AI agent to extract crucial information, context, or references from linked resources or file contents, enhancing its comprehension and actionability.
 
 - 🖼️ **Multimodal Input Support:** Engage with the AI using more than just text. Attach image files or paste them directly into the chat interface. The agent processes these images (as Base64 data) alongside your text prompts, enabling richer interactions and visual understanding.

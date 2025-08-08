@@ -36,7 +36,7 @@ export interface RequiredDomElements {
 
 	chatInputControlsWrapper: HTMLDivElement;
 	commandSuggestionsContainer: HTMLDivElement;
-	groundingToggle: HTMLInputElement;
+	// groundingToggle: HTMLInputElement;
 
 	// Token usage display elements
 	tokenUsageContainer: HTMLDivElement;

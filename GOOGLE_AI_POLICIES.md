@@ -62,7 +62,6 @@ Google Cloud and Gemini platforms implement [robust security frameworks](https:/
 
 - Data submitted to Google Gemini is not used to train models without explicit user opt-in.
 - Input and output data may be cached for up to 24 hours by default to improve user experience and diagnostics, unless data caching is disabled at the project level.
-- Some prompt and contextual data may be logged for up to 30 days for abuse and safety monitoring, especially when using grounding/search augmentation.
 - Users and organizations seeking total zero data retention can reference specific measures:
   - [Generative AI Data Governance & Zero Data Retention](https://cloud.google.com/vertex-ai/generative-ai/docs/data-governance)
 
@@ -87,7 +86,6 @@ All security concerns or potential AI policy violations should be reported throu
 
 - [Responsible AI Progress Reports](https://blog.google/technology/ai/responsible-ai-2024-report-ongoing-work/)
 - [Google Public Policy and Responsible AI](https://publicpolicy.google/responsible-ai/)
-- [Google Search's guidance about AI-generated content](https://developers.google.com/search/blog/2023/02/google-search-and-ai-content)
 
 ### Disclaimer
 

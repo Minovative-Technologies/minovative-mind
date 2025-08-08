@@ -103,9 +103,9 @@ export function initializeDomElements(): RequiredDomElements | null {
 	const commandSuggestionsContainer = document.getElementById(
 		"command-suggestions-container"
 	) as HTMLDivElement;
-	const groundingToggle = document.getElementById(
-		"grounding-toggle"
-	) as HTMLInputElement;
+	// const groundingToggle = document.getElementById(
+	// 	"grounding-toggle"
+	// ) as HTMLInputElement;
 
 	// Token usage elements
 	const tokenUsageContainer = document.getElementById(
@@ -169,7 +169,7 @@ export function initializeDomElements(): RequiredDomElements | null {
 
 		chatInputControlsWrapper,
 		commandSuggestionsContainer,
-		groundingToggle,
+		// groundingToggle,
 
 		// Token usage elements
 		tokenUsageContainer,

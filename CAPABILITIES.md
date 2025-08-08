@@ -76,7 +76,6 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 - **Comprehensive Data Integration**: Integrates various contextual data points, including VS Code diagnostics (`DiagnosticService`), user selection, document symbols (`SymbolService`), and code references.
 - **Dynamic Memory Updates**: Tracks recent changes in the workspace to continually update the AI's contextual understanding.
 - **External Content Processing**: Extracts and processes content from URLs and external documentation (via `UrlContextService`) to enrich AI prompts.
-- **Google Search Grounding**: Offers a toggle for grounding AI responses with real-time information from Google Search for enhanced accuracy and relevance.
 - **Core Services**: `SymbolService`, `DiagnosticService`, `ContextService`, and `UrlContextService`.
 
 ### 3.2 Enhanced Chat History
