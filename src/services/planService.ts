@@ -1140,13 +1140,6 @@ export class PlanService {
 		const totalSteps = steps.length;
 		const { settingsManager, changeLogger } = this.provider;
 
-		// Pre-compute relevant snippets once before the step execution loop.
-		const relevantSnippets = await this._formatRelevantFilesForPrompt(
-			context.relevantFiles ?? [],
-			rootUri,
-			combinedToken
-		);
-
 		let index = 0;
 		while (index < totalSteps) {
 			// Outer while loop
@@ -1159,6 +1152,15 @@ export class PlanService {
 				if (combinedToken.isCancellationRequested) {
 					throw new Error(ERROR_OPERATION_CANCELLED);
 				}
+
+				// Re-compute relevant snippets for each step (or attempt).
+				// This ensures AI context is up-to-date with any previous changes
+				// made by earlier steps in the plan.
+				const relevantSnippets = await this._formatRelevantFilesForPrompt(
+					context.relevantFiles ?? [],
+					rootUri,
+					combinedToken
+				);
 
 				// Start of detailedStepDescription logic
 				let detailedStepDescription: string;
@@ -1242,7 +1244,7 @@ export class PlanService {
 						if (step.generate_prompt) {
 							const generationContext = {
 								projectContext: context.projectContext,
-								relevantSnippets: relevantSnippets,
+								relevantSnippets: relevantSnippets, // Use the dynamically updated snippets
 								editorContext: context.editorContext,
 								activeSymbolInfo: undefined,
 							};
@@ -1313,14 +1315,15 @@ export class PlanService {
 									diffContent: formattedDiff,
 									isPlanStepUpdate: true,
 								});
+								// Log `originalContent` and `newContent`
 								this.provider.changeLogger.logChange({
 									filePath: step.path,
 									changeType: "modified",
 									summary,
 									diffContent: formattedDiff,
 									timestamp: Date.now(),
-									originalContent: existingContent,
-									newContent: newContentAfterApply,
+									originalContent: existingContent, // Pass original content
+									newContent: newContentAfterApply, // Pass new content
 								});
 								currentStepCompletedSuccessfullyOrSkipped = true;
 							}
@@ -1360,14 +1363,15 @@ export class PlanService {
 									diffContent: formattedDiff,
 									isPlanStepUpdate: true,
 								});
+								// Log `originalContent` and `newContent`
 								this.provider.changeLogger.logChange({
 									filePath: step.path,
 									changeType: "created",
 									summary,
 									diffContent: formattedDiff,
 									timestamp: Date.now(),
-									originalContent: "",
-									newContent: cleanedDesiredContent,
+									originalContent: "", // Pass empty string for original content on creation
+									newContent: cleanedDesiredContent, // Pass new content
 								});
 								currentStepCompletedSuccessfullyOrSkipped = true;
 								affectedFileUris.add(fileUri); // Add to affected files in case of creation
@@ -1384,7 +1388,7 @@ export class PlanService {
 
 						const modificationContext = {
 							projectContext: context.projectContext,
-							relevantSnippets: relevantSnippets,
+							relevantSnippets: relevantSnippets, // Use the dynamically updated snippets
 							editorContext: context.editorContext,
 							activeSymbolInfo: undefined,
 						};
@@ -1457,14 +1461,14 @@ export class PlanService {
 								isPlanStepUpdate: true,
 							});
 							// MODIFICATION: Pass existingContent and newContentAfterApply to logChange
-							changeLogger.logChange({
+							this.provider.changeLogger.logChange({
 								filePath: step.path,
 								changeType: "modified",
 								summary,
 								diffContent: formattedDiff,
 								timestamp: Date.now(),
-								originalContent: existingContent,
-								newContent: newContentAfterApply,
+								originalContent: existingContent, // Pass original content
+								newContent: newContentAfterApply, // Pass new content
 							});
 						} else {
 							// If content is identical or only cosmetic changes, still count as success, but no diff/change log
@@ -1644,7 +1648,7 @@ export class PlanService {
 						);
 
 						if (userChoice === "Retry Step") {
-							currentTransientAttempt = 0;
+							currentTransientAttempt = 0; // Reset transient attempt counter for manual retry
 						} else if (userChoice === "Skip Step") {
 							currentStepCompletedSuccessfullyOrSkipped = true;
 							this._postChatUpdateForPlanExecution({

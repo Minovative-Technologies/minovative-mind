@@ -803,10 +803,14 @@ ${relevantOutcomes
   Original Issues: ${outcome.originalIssuesCount}
   Issues After Attempt: ${outcome.issuesAfterAttemptCount}
   Failure Type: ${outcome.failureType}
-  Relevant Diff Summary: ${outcome.relevantDiff.substring(
-		0,
-		Math.min(outcome.relevantDiff.length, 100)
-	)}...
+  Relevant Diff Summary: ${
+		outcome.relevantDiff
+			? outcome.relevantDiff.substring(
+					0,
+					Math.min(outcome.relevantDiff.length, 100)
+			  )
+			: "N/A"
+	}...
   Issues Remaining: ${outcome.issuesRemaining
 		.map(
 			(i: CodeIssue) =>
@@ -816,15 +820,18 @@ ${relevantOutcomes
 				)}...`
 		)
 		.join("\n    ")}
-  Issues Introduced: ${outcome.issuesIntroduced
-		.map(
-			(i: CodeIssue) =>
-				`- [${i.severity}] ${i.type} at line ${i.line}: ${i.message.substring(
-					0,
-					Math.min(i.message.length, 50)
-				)}...`
-		)
-		.join("\n    ")}
+  Issues Introduced: ${
+		outcome.issuesIntroduced && outcome.issuesIntroduced.length > 0
+			? outcome.issuesIntroduced
+					.map(
+						(i: CodeIssue) =>
+							`- [${i.severity}] ${i.type} at line ${
+								i.line
+							}: ${i.message.substring(0, Math.min(i.message.length, 50))}\n`
+					)
+					.join("\n    ")
+			: "No issues introduced"
+	}
   AI Failure Analysis (from that attempt): ${
 		outcome.aiFailureAnalysis
 			? outcome.aiFailureAnalysis.substring(

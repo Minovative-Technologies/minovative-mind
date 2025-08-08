@@ -71,15 +71,20 @@ export interface CorrectionAttemptOutcome {
 	originalIssuesCount: number;
 	issuesAfterAttemptCount: number;
 	issuesRemaining: CodeIssue[];
-	issuesIntroduced: CodeIssue[];
-	relevantDiff: string;
+	issuesIntroduced?: CodeIssue[]; // Made optional as per instruction
+	relevantDiff?: string; // Made optional as per instruction
+	aiGeneratedContent: string; // Added as per instruction
+	stdout?: string; // Added for richer context on failures
+	stderr?: string; // Added for richer context on failures
 	aiFailureAnalysis: string;
-	failureType:
-		| "no_improvement"
+	failureType: // Modified to include enum-like values
+	| "no_improvement"
 		| "new_errors_introduced"
 		| "parsing_failed"
 		| "unreasonable_diff"
 		| "command_failed"
+		| "regression_detected" // Added
+		| "oscillation_detected" // Added
 		| "unknown";
 	feedbackUsed?: CorrectionFeedback;
 }
@@ -117,12 +122,14 @@ export interface CorrectionFeedback {
 		currentIssues?: CodeIssue[];
 		parsingError?: string;
 		failedJson?: string;
-		issuesIntroduced?: CodeIssue[];
+		issuesIntroduced?: CodeIssue[]; // Added as per instruction
 		relevantDiff?: string; // Added as per instruction
+		stdout?: string; // Potentially useful for command_failed
+		stderr?: string; // Potentially useful for command_failed
 	};
 	issuesRemaining: CodeIssue[];
-	issuesIntroduced?: CodeIssue[];
-	relevantDiff?: string; // Also potentially a top-level property based on usage
+	issuesIntroduced?: CodeIssue[]; // Added as per instruction
+	relevantDiff?: string; // Added as per instruction
 }
 
 export interface EditorContext {
