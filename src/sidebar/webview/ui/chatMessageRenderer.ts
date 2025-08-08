@@ -29,6 +29,44 @@ export function setGlobalSetLoadingState(
 	globalSetLoadingState = setLoadingState;
 }
 
+/**
+ * Finalizes an AI streaming message by stopping animation, rendering final text,
+ * re-enabling buttons, and resetting app state variables.
+ * @param elements - The required DOM elements.
+ */
+export function finalizeStreamingMessage(elements: RequiredDomElements): void {
+	if (appState.currentAiMessageContentElement) {
+		console.log("[ChatMessageRenderer] Finalizing AI streaming message.");
+		stopTypingAnimation();
+
+		// Ensure any remaining text in the buffer is added to accumulated text
+		appState.currentAccumulatedText += appState.typingBuffer;
+
+		// Render the final accumulated content
+		appState.currentAiMessageContentElement.innerHTML = md.render(
+			appState.currentAccumulatedText
+		);
+		// Store the original markdown text for copy functionality
+		appState.currentAiMessageContentElement.dataset.originalMarkdown =
+			appState.currentAccumulatedText;
+
+		// Re-enable action buttons on all messages, which will handle the just-completed message
+		reenableAllMessageActionButtons(elements);
+
+		// Reset app state variables
+		appState.currentAiMessageContentElement = null;
+		appState.currentAccumulatedText = "";
+		appState.typingBuffer = "";
+		appState.typingTimer = null; // Ensure the timer is cleared
+
+		elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight;
+	} else {
+		console.log(
+			"[ChatMessageRenderer] No active AI streaming message to finalize."
+		);
+	}
+}
+
 export function appendMessage(
 	elements: RequiredDomElements,
 	sender: string,
@@ -43,6 +81,14 @@ export function appendMessage(
 	isPlanStepUpdateForRender: boolean = false,
 	imageParts?: ImageInlineData[]
 ): void {
+	// Instruction 2: At the very beginning of the `appendMessage` function, insert the following conditional call:
+	if (
+		(sender === "Model" && text === "" && className.includes("ai-message")) ||
+		(className !== "loading-message" && !isHistoryMessage)
+	) {
+		finalizeStreamingMessage(elements);
+	}
+
 	// Handle loading-message deduplication
 	if (className === "loading-message") {
 		const existingLoadingMsg = elements.chatContainer.querySelector(

@@ -15,7 +15,8 @@ import {
 import {
 	reenableAllMessageActionButtons,
 	setGlobalSetLoadingState,
-	disableAllMessageActionButtons, // Added this import
+	disableAllMessageActionButtons,
+	finalizeStreamingMessage, // Add this import
 } from "./ui/chatMessageRenderer";
 import { RequiredDomElements } from "./types/webviewTypes";
 import { setIconForButton } from "./utils/iconHelpers";

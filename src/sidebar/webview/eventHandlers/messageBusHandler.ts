@@ -1,4 +1,7 @@
-import { appendMessage } from "../ui/chatMessageRenderer";
+import {
+	appendMessage,
+	finalizeStreamingMessage,
+} from "../ui/chatMessageRenderer";
 import {
 	updateApiKeyStatus,
 	updateStatus,
@@ -54,14 +57,6 @@ export function initializeMessageBusHandler(
 ): void {
 	// Initialize codeStreamingArea at the beginning
 	codeStreamingArea = document.getElementById("code-streaming-area");
-
-	// Helper for AI chat streaming state reset
-	const resetStreamingAnimationState = () => {
-		stopTypingAnimation();
-		appState.currentAiMessageContentElement = null;
-		appState.currentAccumulatedText = "";
-		appState.typingBuffer = "";
-	};
 
 	window.addEventListener("message", (event: MessageEvent) => {
 		const message = event.data;
@@ -227,6 +222,7 @@ export function initializeMessageBusHandler(
 			}
 
 			case "restoreStreamingProgress": {
+				finalizeStreamingMessage(elements); // New: Call finalizeStreamingMessage
 				const { content, relevantFiles, isComplete, isError } =
 					message.value as AiStreamingState;
 				console.log(
@@ -235,8 +231,6 @@ export function initializeMessageBusHandler(
 					"Is Complete:",
 					isComplete
 				);
-
-				resetStreamingAnimationState();
 
 				// Append the base AI message element. This sets up the DOM structure
 				// and assigns `appState.currentAiMessageContentElement` to the correct span.
@@ -405,7 +399,7 @@ export function initializeMessageBusHandler(
 
 			case "aiResponseStart": {
 				setLoadingState(true, elements);
-				resetStreamingAnimationState();
+				finalizeStreamingMessage(elements); // Modified: Replace resetStreamingAnimationState()
 				console.log(
 					"Received aiResponseStart. Starting stream via appendMessage."
 				);
@@ -434,9 +428,7 @@ export function initializeMessageBusHandler(
 				break;
 			}
 			case "aiResponseEnd": {
-				// 1. Ensure that resetStreamingAnimationState(); and appState.isCancellationInProgress = false; are called at the top.
-				resetStreamingAnimationState();
-
+				finalizeStreamingMessage(elements); // New: Add at the beginning
 				console.log("Received aiResponseEnd. Stream finished.");
 
 				const isCancellation =
@@ -1085,7 +1077,7 @@ export function initializeMessageBusHandler(
 						"[Guard] UI remains disabled due to ongoing cancellation (chatCleared)."
 					);
 				}
-				resetStreamingAnimationState();
+				finalizeStreamingMessage(elements);
 				hideAllConfirmationAndReviewUIs(elements);
 				appState.pendingPlanData = null; // Ensure this is reset too
 				appState.pendingCommitReviewData = null; // Ensure this is reset too
@@ -1206,32 +1198,11 @@ export function initializeMessageBusHandler(
 				resetCodeStreams();
 				break;
 			}
-			case "receiveWorkspaceFiles": {
-				console.log("[Webview] Received receiveWorkspaceFiles message.");
-				const files = message.value as string[];
-				appState.allWorkspaceFiles = files;
-				// Assuming appState.isRequestingWorkspaceFiles exists and was set to true prior to this message.
-				appState.isRequestingWorkspaceFiles = false;
-
-				// Check if the input still starts with '@' and re-filter/show suggestions
-				const chatInputValue = elements.chatInput.value;
-				if (chatInputValue.startsWith("@")) {
-					const query = chatInputValue.substring(1).toLowerCase();
-					const matches = appState.allWorkspaceFiles.filter((file) =>
-						file.toLowerCase().includes(query)
-					);
-					showSuggestions(matches, "file", elements, setLoadingState);
-					elements.chatInput.focus(); // Ensure input is focused after updating suggestions
-				} else {
-					// If '@' is no longer present, hide any previously shown suggestions
-					hideSuggestions(elements, setLoadingState);
-				}
-				break;
-			}
 			case "operationCancelledConfirmation": {
 				console.log(
 					"[Webview] Received operationCancelledConfirmation. Resetting UI state."
 				);
+				finalizeStreamingMessage(elements); // New: Add before resetUIStateAfterCancellation
 				resetUIStateAfterCancellation(elements, setLoadingState);
 				resetCodeStreams();
 				break;
