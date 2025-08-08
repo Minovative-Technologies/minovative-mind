@@ -17,10 +17,30 @@
 }
 
 .empty-chat-logo {
-	width: 70px; /* Example size */
+	width: 20px; /* Example size */
 	height: auto; /* Maintain aspect ratio */
 	opacity: 0.5; /* Subtle appearance */
 	filter: grayscale(100%); /* Make it monochrome to fit theme */
+	position: absolute;
+	top: 10px; /* Adjust position to align with text */
+	right: 10px; /* Adjust position to align with text */
+}
+
+.empty-chat-container {
+	display: flex;
+	flex-direction: column; /* Stack image and text vertically */
+	justify-content: start; /* start content vertically */
+	align-items: start; /* start content horizontally */
+	text-align: start; /* start text within its own line */
+	padding-bottom: 20px;
+	padding-left: 5px;
+	padding-right: 5px;
+	background-color: var(
+		--vscode-editorWidget-background
+	); /* Match chat container background */
+	border-radius: var(--border-radius); /* Match chat container border radius */
+	overflow-y: scroll;
+	overflow-x: hidden;
 }
 
 .empty-chat-text {
@@ -28,6 +48,24 @@
 	color: var(--vscode-descriptionForeground); /* A subtle text color */
 	max-width: 80%; /* Prevent text from stretching too wide */
 	line-height: 1.5;
+}
+
+.empty-chat-list-title {
+	font-weight: 600;
+	position: relative;
+	margin: 0;
+	padding: 0;
+	color: var(--vscode-editor-foreground); /* Main text color */
+	right: 10px;
+}
+
+.empty-chat-list {
+	display: flex;
+	flex-direction: column; /* Stack items vertically */
+	gap: 1px; /* Space between items */
+	width: 100%; /* Full width of the parent */
+	padding: 0 10px;
+	margin: 0 !important;
 }
 
 .message {
