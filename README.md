@@ -40,22 +40,7 @@ See more in the [**`CAPABILITIES.md`**](./CAPABILITIES.md) file
 
 ## Quick Start (Get Started in 1-3 minutes)
 
-### ✅ Summary
-
-- **_Minovative Mind performs faster for files <1500 lines of code_**
-
-| Step | Description                                     |
-| ---- | ----------------------------------------------- |
-| 1    | Clone the repository                            |
-| 2    | Install project dependencies with `npm install` |
-| 3    | Generate `.vsix` using `npx vsce package`       |
-| 4    | Install the extension via GUI or `code` CLI     |
-
-Here's the cleaned-up version in **Markdown** format, ready to paste into your `README.md`:
-
----
-
-## 🔧 How to Clone the Minovative Mind Extension from GitHub to Use
+### 🔧 How to Clone the Minovative Mind Extension from GitHub to Use
 
 ### **Step 1: Clone the Repository**
 
