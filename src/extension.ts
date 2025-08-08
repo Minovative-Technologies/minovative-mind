@@ -270,7 +270,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const symbols = await getSymbolsInDocument(documentUri);
 
 			// Initialize variables for intelligent selection
-			let selectedText: string;
+			let selectedText: string = ""; // FIX: Initialize to empty string
 			let effectiveRange: vscode.Range = originalSelection;
 			let selectionMethodUsed: string = "initial";
 			let diagnosticsString: string | undefined = undefined; // Will be set contextually
@@ -587,6 +587,19 @@ export async function activate(context: vscode.ExtensionContext) {
 						}
 						// --- End of original fallback logic for /fix ---
 					}
+
+					// NEW: Calculate diagnosticsString for /fix immediately after selection logic
+					// This targets all ERROR diagnostics in the file.
+					diagnosticsString =
+						await DiagnosticService.formatContextualDiagnostics(
+							documentUri,
+							sidebarProvider.workspaceRootUri!,
+							undefined, // Get diagnostics for the entire file (undefined selection)
+							undefined, // Use default maxTotalChars
+							undefined, // Use default maxPerSeverity
+							undefined, // No cancellation token available here from a central operation
+							[vscode.DiagnosticSeverity.Error] // Only errors
+						);
 				} else if (instruction === "/merge") {
 					// --- Original /merge logic from the extension.ts file ---
 					if (!hasMergeConflicts(fullText)) {
@@ -668,6 +681,28 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 			} // End of the replaced else block (when originalSelection.isEmpty)
 
+			// NEW: Calculate displayFileName logic
+			let displayFileName: string = fileName; // Default to full path
+
+			if (
+				vscode.workspace.workspaceFolders &&
+				vscode.workspace.workspaceFolders.length > 0
+			) {
+				const relativePath = vscode.workspace.asRelativePath(fileName);
+				if (relativePath !== fileName) {
+					displayFileName = relativePath;
+				} else {
+					console.warn(
+						`[Minovative Mind] Could not determine relative path for ${fileName}. Falling back to full path.`
+					);
+				}
+			} else {
+				console.warn(
+					"[Minovative Mind] No workspace folders found. Using full file path."
+				);
+			}
+			// END NEW LOGIC
+
 			// The original diagnosticsString calculation block that was here is now moved into the withProgress block.
 
 			// /docs instruction handling (now using the upfront logic, this block still handles execution)
@@ -725,6 +760,22 @@ export async function activate(context: vscode.ExtensionContext) {
 				return; // Crucially return here to prevent falling through to planning logic
 			}
 
+			// Handle /fix instruction: Prefill chat input and return
+			if (instruction === "/fix") {
+				// The preceding logic ensures `selectedText` is assigned. The faulty check is removed.
+				const formattedDiagnostics = diagnosticsString || "No errors found.";
+				const composedMessage = `/plan Please fix the following code errors in ${displayFileName}:\n\n${formattedDiagnostics}\n\n---`;
+
+				// Post message to webview to prefill chat input
+				sidebarProvider.postMessageToWebview({
+					type: "PrefillChatInput",
+					payload: { text: composedMessage },
+				});
+
+				// Terminate the command execution for the /fix scenario
+				return;
+			}
+
 			let result: sidebarTypes.PlanGenerationResult = {
 				success: false,
 				error: "Textual plan generation was cancelled or did not complete.",
@@ -761,21 +812,10 @@ export async function activate(context: vscode.ExtensionContext) {
 				},
 				async (progress, token) => {
 					// Centralize Diagnostics String Calculation:
-					if (instruction === "/fix") {
-						// PHASE 2: For /fix, always send ALL file-level ERROR diagnostics, not just within selection.
-						diagnosticsString =
-							await DiagnosticService.formatContextualDiagnostics(
-								documentUri,
-								sidebarProvider.workspaceRootUri!,
-								undefined, // Set selection to undefined to get diagnostics for the entire file.
-								undefined, // Use default maxTotalChars
-								undefined, // Use default maxPerSeverity
-								token, // Pass cancellation token if available, otherwise undefined
-								[vscode.DiagnosticSeverity.Error] // Explicitly filter for only Error severity.
-							);
-					} else {
-						// For other commands (/docs, /merge, custom prompt), use the determined effectiveRange.
-						// The existing logic for other commands is preserved.
+					// For /fix, diagnosticsString is already calculated above.
+					// For other commands (/docs, /merge, custom prompt), use the determined effectiveRange.
+					if (instruction !== "/fix") {
+						// Only calculate if not /fix
 						diagnosticsString =
 							await DiagnosticService.formatContextualDiagnostics(
 								documentUri,

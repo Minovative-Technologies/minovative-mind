@@ -1185,18 +1185,17 @@ export function initializeMessageBusHandler(
 					"[Webview] Received PrefillChatInput. Prefilling chat input."
 				);
 				const { text } = message.payload;
-				elements.chatInput.value = text;
-				elements.chatInput.focus();
-				elements.chatInput.placeholder =
-					"Ask Minovative Mind, use '/' (commands), or '@' (files)...";
-				elements.chatInput.disabled = false;
-				elements.sendButton.disabled = false;
-				if (!appState.isCancellationInProgress) {
-					setLoadingState(false, elements);
-				} else {
-					console.log(
-						"[Guard] UI remains disabled due to ongoing cancellation (PrefillChatInput)."
+				const chatInput = elements.chatInput;
+				if (chatInput) {
+					chatInput.value = text; // Set the chat input field's value
+					chatInput.focus(); // Set focus to the input field for user interaction
+					// Update the status bar message to inform the user
+					updateStatus(
+						elements,
+						"Context loaded into chat input. Review and send."
 					);
+					// Ensure the UI controls are enabled (e.g., send button)
+					setLoadingState(false, elements);
 				}
 				break;
 			}
