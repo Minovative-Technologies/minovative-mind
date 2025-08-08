@@ -1,4 +1,3 @@
-// src/ai/enhancedCodeGeneration.ts;
 import * as vscode from "vscode";
 import * as path from "path";
 import * as crypto from "crypto";
@@ -48,12 +47,13 @@ import {
 } from "../utils/codeAnalysisUtils";
 import { formatSuccessfulChangesForPrompt } from "../workflow/changeHistoryFormatter";
 import { analyzeDiff } from "../utils/diffingUtils";
-import { DiagnosticService } from "../utils/diagnosticUtils";
+import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils"; // MODIFIED: Added getSeverityName import
 import {
 	createEnhancedGenerationPrompt,
 	createEnhancedModificationPrompt,
 	createRefineModificationPrompt,
 } from "./prompts/enhancedCodeGenerationPrompts";
+import { escapeForJsonValue } from "../utils/aiUtils"; // MODIFIED: Ensure escapeForJsonValue is imported
 
 // Re-export these types to make them accessible to other modules that import from this file.
 export type {
@@ -281,7 +281,7 @@ export class EnhancedCodeGenerator {
 				token
 			);
 
-			return this.codeValidationService.checkPureCodeFormat(rawContent);
+			return this.codeValidationService.checkPureCodeFormat(rawContent, false);
 		} catch (error: any) {
 			return {
 				isValid: false,
@@ -1281,20 +1281,80 @@ export class EnhancedCodeGenerator {
 				5000,
 				100
 			);
-			const diagnosticsForPrompt =
+
+			// 1. Fetch standard VS Code diagnostics
+			const diagnosticsFromVsCode =
 				(await DiagnosticService.formatContextualDiagnostics(
 					vscode.Uri.file(filePath),
 					rootUri,
-					undefined, // current file content - prompt already has this via editorContext
-					5000, // Timeout
-					undefined, // Active diagnostics (use all)
+					undefined,
+					5000,
+					undefined,
 					token,
 					[
 						vscode.DiagnosticSeverity.Error,
 						vscode.DiagnosticSeverity.Warning,
 						vscode.DiagnosticSeverity.Information,
 					]
-				)) || "No specific diagnostics found."; // Default if empty
+				)) || null;
+
+			// 2. Retrieve custom `format_error` issues
+			const customFormatIssues = currentDiagnostics.filter(
+				(issue) => issue.type === "format_error"
+			);
+
+			// 3. Format these `customFormatIssues` into a readable string.
+			let formattedCustomIssues = "";
+			if (customFormatIssues.length > 0) {
+				formattedCustomIssues = "--- AI Response Format Issues ---\n";
+				formattedCustomIssues += customFormatIssues
+					.map((issue) => {
+						let severityVscode: vscode.DiagnosticSeverity;
+						switch (issue.severity) {
+							case "error":
+								severityVscode = vscode.DiagnosticSeverity.Error;
+								break;
+							case "warning":
+								severityVscode = vscode.DiagnosticSeverity.Warning;
+								break;
+							case "info":
+								severityVscode = vscode.DiagnosticSeverity.Information;
+								break;
+							default:
+								severityVscode = vscode.DiagnosticSeverity.Information; // Default to info
+						}
+						const severityName = getSeverityName(severityVscode);
+						return `  - [${severityName.toUpperCase()}] ${
+							issue.type
+						}: "${escapeForJsonValue(issue.message)}" at line ${issue.line}${
+							issue.code ? ` (Code: ${issue.code})` : ""
+						}`;
+					})
+					.join("\n");
+				formattedCustomIssues += "\n--- End AI Response Format Issues ---";
+			}
+
+			// 4. Combine the diagnostics strings.
+			let combinedDiagnosticsString = "";
+			if (
+				diagnosticsFromVsCode !== null &&
+				diagnosticsFromVsCode !== "No specific diagnostics found."
+			) {
+				combinedDiagnosticsString += diagnosticsFromVsCode;
+			}
+
+			if (formattedCustomIssues !== "") {
+				if (combinedDiagnosticsString !== "") {
+					combinedDiagnosticsString += "\n\n"; // Separator
+				}
+				combinedDiagnosticsString += formattedCustomIssues;
+			}
+
+			// 5. Assign the final `combinedDiagnosticsString` to the `diagnosticsForPrompt` variable.
+			const diagnosticsForPrompt =
+				combinedDiagnosticsString !== ""
+					? combinedDiagnosticsString
+					: "No specific diagnostics found.";
 
 			let jsonEscapingInstructionsForPrompt = "";
 			if (

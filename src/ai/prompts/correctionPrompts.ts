@@ -404,6 +404,24 @@ ${formatCallHierarchy(
 `
 		: "";
 
+    // ADDED START
+    let specificFormatErrorInstruction = "";
+    // Check if the aggregatedFormattedDiagnostics primarily contains AI Response Format Issues
+    // and lacks other standard VS Code diagnostics (Error, Warning, Info).
+    if (
+        aggregatedFormattedDiagnostics.includes("---" + " AI Response Format Issues ---") &&
+        !aggregatedFormattedDiagnostics.includes("  - [ERROR]") &&
+        !aggregatedFormattedDiagnostics.includes("  - [WARNING]") &&
+        !aggregatedFormattedDiagnostics.includes("  - [INFO]")
+    ) {
+        // Define the specific instruction to guide the AI when only format errors are present.
+        specificFormatErrorInstruction = `
+        IMPORTANT: The primary diagnostic identified is an 'AI Response Format Issue' (e.g., missing code block delimiters like XBEGIN_CODEX/XEND_CODEX). You MUST generate a 'modify_file' step for the affected file (indicated in 'Editor Context' or the issue itself) to **insert these delimiters** around the generated code snippet. This is a critical code modification necessary to make the AI's output parseable and usable by the system.
+        `;
+    }
+// ADDED END
+
+    // MODIFIED: Insert the specificFormatErrorInstruction variable into the prompt string
 	return `
         You are the expert software engineer for me. Your ONLY task is to generate a JSON *correction plan* (ExecutionPlan) detailing the steps needed to fix reported diagnostics, rather than outputting final corrected code directly.
 
@@ -421,6 +439,8 @@ ${formatCallHierarchy(
         --- Json Escaping Instructions ---
         ${jsonEscapingInstructions}
         --- Json Escaping Instructions ---
+
+        ${specificFormatErrorInstruction}
 
         --- Original Request ---
         ${originalUserInstruction}

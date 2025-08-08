@@ -141,7 +141,7 @@ export class ChatService {
 				{
 					text: `
 
-[You are **M.I.N.O**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind, focus on answering my prompts/request)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
+[You are **Mino**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind, focus on answering my prompts/request)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
 
 					\n\nProject Context:\n${projectContext.contextString}${
 						urlContextString ? `\n\n${urlContextString}` : ""
@@ -334,7 +334,7 @@ export class ChatService {
 				{
 					text: `
 
-[You are **M.I.N.O**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind, focus on answering my prompts/request)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
+[You are **Mino**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind, focus on answering my prompts/request)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
 
 					\n\nProject Context:\n${projectContext.contextString}`,
 				},
