@@ -2,6 +2,13 @@
 
 Minovative Mind is a powerful AI-augmented Visual Studio Code extension that integrates Google Gemini models into your development workflow. It enhances productivity through intelligent assistance, automated planning, and AI-driven coding support.
 
+## 🚀 Key Capabilities for Developers
+
+- **Seamless Gemini Integration**: Leverage powerful Google Gemini models directly within your VS Code workflow for intelligent assistance.
+- **AI-Powered Code Modification**: Benefit from self-correcting code generation driven by real-time diagnostics and deep symbol awareness, ensuring robust and accurate changes.
+- **Automated Workflows & Planning**: Streamline tasks with AI-driven structured planning, file manipulation, and automated Git commit message generation.
+- **Enhanced Contextual Understanding**: Gain deeper insights into your codebase through symbol and dependency graphing, enabling more relevant and accurate AI interactions.
+
 ---
 
 ## 1. Core AI Features
