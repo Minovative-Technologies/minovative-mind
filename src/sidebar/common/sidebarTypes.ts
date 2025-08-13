@@ -8,14 +8,10 @@ export interface ImageInlineData {
 	data: string; // Base64 encoded string
 }
 
-// Define the specific structure for parts within HistoryEntry
 export type HistoryEntryPart =
 	| { text: string }
 	| { inlineData: ImageInlineData };
 
-// HistoryEntry should align with Gemini API's TextPart expectation for its content parts
-// by explicitly defining its parts property, overriding the general 'Part[]' from 'Content'.
-// Omit 'parts' from the original Content interface to enforce our stricter definition.
 export interface HistoryEntry extends Omit<Content, "parts"> {
 	parts: HistoryEntryPart[];
 	diffContent?: string;
@@ -221,9 +217,6 @@ export interface RevertCompletedMessage {
 	type: "revertCompleted";
 }
 
-/**
- * Message type for updating token statistics.
- */
 export interface UpdateTokenStatisticsMessage {
 	type: "updateTokenStatistics";
 	value: {
@@ -236,10 +229,6 @@ export interface UpdateTokenStatisticsMessage {
 	};
 }
 
-/**
- * Message type for dynamically updating the relevant files list
- * for a currently streaming AI response in the webview.
- */
 export interface UpdateStreamingRelevantFilesMessage {
 	type: "updateStreamingRelevantFiles";
 	value: string[]; // Array of relative file paths (e.g., "src/foo/bar.ts")
@@ -290,10 +279,6 @@ export interface ReceiveWorkspaceFilesMessage {
 	value: string[]; // Array of relative file paths
 }
 
-/**
- * Union type for all messages sent from the Extension to the Webview.
- * Each member should have a distinct 'type' literal property.
- */
 export type ExtensionToWebviewMessages =
 	| StatusUpdateMessage
 	| AiResponseStartMessage

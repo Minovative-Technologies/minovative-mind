@@ -385,10 +385,6 @@ export async function handleWebviewMessage(
 				});
 				provider.postMessageToWebview({ type: "reenableInput" });
 
-				// Show VS Code notification
-				vscode.window.showInformationMessage(
-					"Chat history cleared and all past changes reverted!"
-				);
 				console.log(
 					"[MessageHandler] Chat history cleared and all past changes reverted successfully."
 				);

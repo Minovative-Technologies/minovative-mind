@@ -2,12 +2,10 @@
 import * as vscode from "vscode";
 import { ChildProcess } from "child_process";
 
-// Managers
 import { ApiKeyManager } from "./managers/apiKeyManager";
 import { SettingsManager } from "./managers/settingsManager";
 import { ChatHistoryManager } from "./managers/chatHistoryManager";
 
-// Other Imports
 import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
 import { RevertService } from "../services/RevertService";
 import { RevertibleChangeSet } from "../types/workflow";
@@ -27,7 +25,7 @@ import {
 	showWarningNotification,
 	showErrorNotification,
 } from "../utils/notificationUtils";
-// Added: Imports for missing services
+
 import { CodeValidationService } from "../services/codeValidationService";
 import { ContextRefresherService } from "../services/contextRefresherService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
@@ -267,6 +265,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public postMessageToWebview(
 		message: sidebarTypes.ExtensionToWebviewMessages
 	): void {
+		if (message.type === "appendRealtimeModelMessage") {
+			// Safely cast to access properties, assuming the structure is consistent
+			const payload = message as any;
+			const textContent = payload.value?.text;
+			const diffContent = payload.value?.diffContent;
+			const relevantFiles = payload.value?.relevantFiles;
+
+			// Only add to history if there's actual text content
+			if (textContent !== undefined && textContent !== null) {
+				this.chatHistoryManager.addHistoryEntry(
+					"model",
+					textContent,
+					diffContent,
+					relevantFiles,
+					undefined, // isRelevantFilesExpanded - not provided by this message type
+					undefined, // isPlanExplanation - not provided by this message type
+					undefined // Pass the flag if present
+				);
+			} else {
+				console.warn(
+					"[SidebarProvider] Received appendRealtimeModelMessage without text content."
+				);
+			}
+		}
+
 		if (this._view && this._view.visible) {
 			this._view.webview.postMessage(message).then(undefined, (err) => {
 				console.warn("Failed to post message to webview:", message.type, err);
@@ -694,15 +717,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		switch (outcome) {
 			case "success":
-				message = `Plan for '${description}' completed successfully!`;
+				message = `Plan for ("${description}") completed successfully!`;
 				isError = false;
 				break;
 			case "cancelled":
-				message = `Plan for '${description}' was cancelled.`;
+				message = `Plan for ("${description}") was cancelled.`;
 				isError = true;
 				break;
 			case "failed":
-				message = `Plan for '${description}' failed. Check sidebar for details.`;
+				message = `Plan for ("${description}") failed. Check sidebar for details.`;
 				isError = true;
 				break;
 		}

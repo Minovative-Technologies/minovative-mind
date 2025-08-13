@@ -191,12 +191,11 @@
 	); /* A subtle background */
 	color: var(--vscode-descriptionForeground); /* Soft text color */
 	font-style: italic;
-	text-align: center;
-	align-self: center; /* Center horizontally in flex container */
-	max-width: 80%; /* Make it narrower */
+	text-align: start;
+	align-self: start; /* start horizontally in flex container */
+	max-width: 100%; /* Make it narrower */
 	margin-left: auto; /* For centering with auto margins */
 	margin-right: auto; /* For centering with auto margins */
-	padding: 8px 15px; /* Adjust padding */
 	border: none;
 	box-shadow: none;
 	word-wrap: normal; /* Prevent aggressive word wrapping if not needed */

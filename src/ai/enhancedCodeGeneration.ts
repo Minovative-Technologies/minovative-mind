@@ -773,9 +773,7 @@ export class EnhancedCodeGenerator {
 									);
 
 								this._reportCorrectionStepProgress(
-									`Step ${index + 1} OK: Modified file \`${
-										step.path
-									}\` (See diff below)`,
+									`Step ${index + 1} OK: Modified file \`${step.path}\``,
 									false,
 									formattedDiff
 								);
@@ -826,9 +824,7 @@ export class EnhancedCodeGenerator {
 									);
 
 								this._reportCorrectionStepProgress(
-									`Step ${index + 1} OK: Created file \`${
-										step.path
-									}\` (See diff below)`,
+									`Step ${index + 1} OK: Created file \`${step.path}\``,
 									false,
 									formattedDiff
 								);
@@ -938,9 +934,7 @@ export class EnhancedCodeGenerator {
 							affectedFileUris.add(fileUri);
 
 							this._reportCorrectionStepProgress(
-								`Step ${index + 1} OK: Modified file \`${
-									step.path
-								}\` (See diff below)`,
+								`Step ${index + 1} OK: Modified file \`${step.path}\``,
 								false,
 								formattedDiff
 							);
