@@ -334,7 +334,7 @@ export class SequentialContextService {
 	): Promise<vscode.Uri[]> {
 		this.postMessageToWebview({
 			type: "statusUpdate",
-			value: "Identifying relevant files for your request...",
+			value: "Identifying relevant files",
 		});
 
 		// Retrieve optimization settings

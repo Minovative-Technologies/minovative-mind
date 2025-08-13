@@ -123,10 +123,9 @@
 	color: var(--vscode-errorForeground);
 	border-color: var(--vscode-inputValidation-errorBorder);
 	border-left-width: 4px;
-	padding-left: calc(
-		var(--message-padding) * 1.2
-	); /* Adjust padding due to left border */
+	padding: 10px;
 	text-align: left;
+	width: 100%;
 }
 
 .ai-message.error-message strong {

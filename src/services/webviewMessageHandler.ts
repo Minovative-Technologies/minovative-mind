@@ -373,15 +373,10 @@ export async function handleWebviewMessage(
 				await provider.updatePersistedCompletedPlanChangeSets(null);
 
 				// Send success messages to webview
-				provider.postMessageToWebview({ type: "chatCleared" }); // Triggers UI clear
+				provider.postMessageToWebview({ type: "chatCleared" });
 				provider.postMessageToWebview({
 					type: "planExecutionFinished",
 					hasRevertibleChanges: false,
-				}); // Updates revert button state
-				provider.postMessageToWebview({
-					type: "statusUpdate",
-					value:
-						"Chat history cleared and all past changes reverted successfully.",
 				});
 				provider.postMessageToWebview({ type: "reenableInput" });
 

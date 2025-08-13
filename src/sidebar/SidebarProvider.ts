@@ -38,13 +38,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public readonly extensionUri: vscode.Uri;
 	public readonly secretStorage: vscode.SecretStorage;
 	public readonly workspaceState: vscode.Memento;
-	public readonly workspaceRootUri: vscode.Uri | undefined; // Make it readonly and optional
+	public readonly workspaceRootUri: vscode.Uri | undefined;
 
 	public get isSidebarVisible(): boolean {
 		return !!this._view && this._view.visible;
 	}
 
-	// State
 	public activeOperationCancellationTokenSource:
 		| vscode.CancellationTokenSource
 		| undefined;

@@ -2347,7 +2347,6 @@ export class PlanService {
 									0,
 									true
 								);
-								return { currentFileUri, needsCorrection: true }; // Continue correction for this file
 							}
 						} catch (correctionError: any) {
 							if (correctionError.message === ERROR_OPERATION_CANCELLED) {
@@ -2367,28 +2366,35 @@ export class PlanService {
 								0,
 								true
 							);
-							return { currentFileUri, needsCorrection: true }; // Continue correction for this file
+							currentAIPlanGenerationSuccessful = false;
 						}
-					}
 
-					if (errorsFoundInCurrentFileBeforeAttempt) {
+						// 1. After AI correction steps, ensure a final validation is performed:
 						await DiagnosticService.waitForDiagnosticsToStabilize(
 							currentFileUri,
-							token
+							token,
+							5000,
+							100
 						);
-						const diagnosticsAfterCorrection =
-							DiagnosticService.getDiagnosticsForUri(currentFileUri);
-						const errorsAfterCorrection = diagnosticsAfterCorrection.filter(
-							(d: vscode.Diagnostic) =>
-								d.severity === vscode.DiagnosticSeverity.Error
+						const fileContentBuffer: Uint8Array =
+							await vscode.workspace.fs.readFile(currentFileUri);
+						const currentFileContent: string = new TextDecoder("utf-8").decode(
+							fileContentBuffer
 						);
-
+						const finalValidationForFile =
+							await this.enhancedCodeGenerator.validateFileContent(
+								currentFileUri.fsPath,
+								currentFileContent
+							);
 						const codeIssuesAfterCorrection: CodeIssue[] =
-							errorsAfterCorrection.map((d) => this._diagnosticToCodeIssue(d));
+							finalValidationForFile.issues.filter(
+								(d: any) => d.severity === "error"
+							);
 
+						// 2. Update the success determination logic:
 						const currentFileAttemptSuccessful =
-							codeIssuesAfterCorrection.length === 0 &&
-							currentAIPlanGenerationSuccessful;
+							finalValidationForFile.isValid &&
+							codeIssuesAfterCorrection.length === 0;
 
 						const currentFileOutcome = {
 							iteration: currentCorrectionAttempt,
@@ -2404,37 +2410,54 @@ export class PlanService {
 							.get(fileRelativePath)!
 							.push(currentFileOutcome);
 
-						if (
-							codeIssuesAfterCorrection.length > 0 ||
-							!currentFileAttemptSuccessful
-						) {
-							console.log(
-								`[MinovativeMind] Errors still present in '${path.relative(
-									rootUri.fsPath,
-									currentFileUri.fsPath
-								)}' after correction attempt ${currentCorrectionAttempt}. Adding back for next round.`
-							);
-							return { currentFileUri, needsCorrection: true };
-						} else {
-							console.log(
-								`[MinovativeMind] Errors resolved for '${path.relative(
-									rootUri.fsPath,
-									currentFileUri.fsPath
-								)}' after correction attempt ${currentCorrectionAttempt}. Clearing history for this file.`
-							);
+						// 3. Implement conditional logging and return logic:
+						if (currentFileAttemptSuccessful) {
 							this._logStepProgress(
 								0,
-								0,
+								0, // Not directly applicable for this message type
 								`Correction successful for '${path.relative(
 									rootUri.fsPath,
 									currentFileUri.fsPath
 								)}'.`,
 								0,
 								0,
-								false
+								false // isError: false
 							);
 							this.fileCorrectionAttemptHistory.delete(fileRelativePath);
 							return { currentFileUri, needsCorrection: false };
+						} else {
+							// Log specific failure details based on validation outcome:
+							if (!finalValidationForFile.isValid) {
+								this._logStepProgress(
+									0,
+									0,
+									`Final code validation for '${fileRelativePath}' failed. Details: ${finalValidationForFile.issues
+										.map((i: any) => i.message)
+										.join(", ")}.`,
+									0,
+									0,
+									true // isError: true
+								);
+							} else if (codeIssuesAfterCorrection.length > 0) {
+								this._logStepProgress(
+									0,
+									0,
+									`Errors still present in '${fileRelativePath}' after correction attempt. Remaining errors: ${codeIssuesAfterCorrection.length}.`,
+									0,
+									0,
+									true // isError: true
+								);
+							} else {
+								this._logStepProgress(
+									0,
+									0,
+									`File '${fileRelativePath}' failed final validation check for unknown reasons.`,
+									0,
+									0,
+									true // isError: true
+								);
+							}
+							return { currentFileUri, needsCorrection: true };
 						}
 					} else {
 						return { currentFileUri, needsCorrection: false };

@@ -38,7 +38,6 @@ import { cleanCodeOutput } from "../utils/codeUtils";
 import { areIssuesSimilar } from "../utils/aiUtils";
 import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes";
 import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
-import { CodeValidationService } from "../services/codeValidationService";
 import { ContextRefresherService } from "../services/contextRefresherService";
 import {
 	analyzeFileStructure,
@@ -47,13 +46,14 @@ import {
 } from "../utils/codeAnalysisUtils";
 import { formatSuccessfulChangesForPrompt } from "../workflow/changeHistoryFormatter";
 import { analyzeDiff } from "../utils/diffingUtils";
-import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils"; // MODIFIED: Added getSeverityName import
+import { DiagnosticService, getSeverityName } from "../utils/diagnosticUtils";
 import {
 	createEnhancedGenerationPrompt,
 	createEnhancedModificationPrompt,
 	createRefineModificationPrompt,
 } from "./prompts/enhancedCodeGenerationPrompts";
-import { escapeForJsonValue } from "../utils/aiUtils"; // MODIFIED: Ensure escapeForJsonValue is imported
+import { escapeForJsonValue } from "../utils/aiUtils";
+import { CodeValidationService } from "../services/codeValidationService";
 
 // Re-export these types to make them accessible to other modules that import from this file.
 export type {
@@ -250,6 +250,43 @@ export class EnhancedCodeGenerator {
 		}
 	}
 
+	public async validateFileContent(
+		fsPath: string,
+		content: string
+	): Promise<CodeValidationResult> {
+		console.log(`[EnhancedCodeGenerator] Validating file: ${fsPath}`);
+		try {
+			const validationResult = await this.codeValidationService.validateCode(
+				fsPath,
+				content
+			);
+			return validationResult;
+		} catch (error) {
+			console.error(
+				`[EnhancedCodeGenerator] Error during validation for ${fsPath}:`,
+				error
+			);
+			// Return a default error structure if validation itself fails unexpectedly
+			return {
+				isValid: false,
+				finalContent: content,
+				issues: [
+					{
+						type: "other",
+						line: 1,
+						severity: "error",
+						message: `Validation failed: ${(error as Error).message}`,
+						code: "VALIDATION_ERROR",
+						source: "EnhancedCodeGenerator",
+					},
+				],
+				suggestions: [
+					"An unexpected error occurred during the validation process.",
+				],
+			};
+		}
+	}
+
 	/**
 	 * Generates the initial version of the code.
 	 */
@@ -321,7 +358,6 @@ export class EnhancedCodeGenerator {
 			),
 		};
 
-		// --- Inlined logic from _generateModification ---
 		const enhancedPrompt = createEnhancedModificationPrompt(
 			filePath,
 			modificationPrompt,
@@ -342,7 +378,6 @@ export class EnhancedCodeGenerator {
 		);
 
 		const modifiedContent = cleanCodeOutput(rawContent);
-		// --- End inlined logic ---
 
 		const validation = await this._validateAndRefineModification(
 			filePath,
@@ -433,8 +468,6 @@ export class EnhancedCodeGenerator {
 		}
 	}
 
-	// src/ai/enhancedCodeGeneration.ts
-
 	/**
 	 * Helper method to parse and validate an AI-generated CorrectionPlan (ExecutionPlan).
 	 * @param jsonString The raw JSON string from the AI.
@@ -445,45 +478,40 @@ export class EnhancedCodeGenerator {
 		jsonString: string,
 		rootUri: vscode.Uri
 	): Promise<ParsedPlanResult> {
-		// FIX: Return ParsedPlanResult
-		// Replicate logic from PlanService.parseAndValidatePlan
 		try {
-			// Markdown stripping, consistent with PlanService
 			const cleanedJsonString = jsonString
 				.replace(/^\s*/im, "")
 				.replace(/\s*$/im, "")
 				.trim();
 
-			// Use the shared utility function for parsing and validation
 			const parsedResult = await parseAndValidatePlan(
 				cleanedJsonString,
 				rootUri
 			);
-			return parsedResult; // parsedResult is already a ParsedPlanResult
+			return parsedResult;
 		} catch (e: any) {
 			console.error(
 				`[EnhancedCodeGenerator] Error parsing/validating correction plan: ${e.message}`,
 				e
 			);
-			// FIX: Return a valid ParsedPlanResult with a null plan
 			return { plan: null, error: `Parsing/validation failed: ${e.message}` };
 		}
 	}
 
 	/**
 	 * Helper method to report progress and messages related to correction steps.
-	 * This adapts `_postChatUpdateForPlanExecution` from `PlanService` for this context.
 	 */
 	private _reportCorrectionStepProgress(
 		message: string,
+		index: number, // Modified signature
+		totalSteps: number, // Modified signature
 		isError: boolean = false,
 		diffContent?: string
 	): void {
-		// `postMessageToWebview` is available.
 		this.postMessageToWebview({
 			type: "appendRealtimeModelMessage",
 			value: { text: message, isError: isError },
-			isPlanStepUpdate: true, // Mark as plan step update for UI differentiation
+			isPlanStepUpdate: true,
 			diffContent: diffContent,
 		});
 		console.log(`[EnhancedCodeGenerator] Correction Step: ${message}`);
@@ -499,10 +527,9 @@ export class EnhancedCodeGenerator {
 
 	/**
 	 * Helper to format relevant files content into Markdown fenced code blocks for prompts.
-	 * Copied and adapted from PlanService's _formatRelevantFilesForPrompt.
 	 */
 	private async _formatRelevantFilesForPrompt(
-		relevantFilePaths: string[], // These are relative paths
+		relevantFilePaths: string[],
 		workspaceRootUri: vscode.Uri,
 		token: vscode.CancellationToken
 	): Promise<string> {
@@ -610,15 +637,175 @@ export class EnhancedCodeGenerator {
 	}
 
 	/**
+	 * Helper to apply file modifications (create/modify) and log changes consistently.
+	 * @returns The new content of the file after applying changes.
+	 */
+	private async _applyFileOperationAndLog(
+		fileUri: vscode.Uri,
+		relativePath: string,
+		desiredContent: string,
+		aiGeneratedContent: string, // The raw/cleaned content from AI for logging
+		changeType: "created" | "modified",
+		stepIndex: number,
+		totalSteps: number,
+		affectedFileUris: Set<vscode.Uri>,
+		token: vscode.CancellationToken
+	): Promise<string> {
+		let originalContent = "";
+		let newContentAfterApply = desiredContent; // Default to desired content if creating or full overwrite
+
+		try {
+			// Check if file exists to determine if it's truly a creation or a modification
+			const fileStat = await vscode.workspace.fs.stat(fileUri);
+			if (fileStat.type === vscode.FileType.File) {
+				originalContent = Buffer.from(
+					await vscode.workspace.fs.readFile(fileUri)
+				).toString("utf-8");
+				changeType = "modified"; // Override to modified if file already exists
+			}
+		} catch (error: any) {
+			// File not found, so it's a creation
+			if (
+				!(
+					error instanceof vscode.FileSystemError &&
+					(error.code === "FileNotFound" || error.code === "EntryNotFound")
+				)
+			) {
+				// Re-throw if it's an unexpected file system error
+				const errorMessage =
+					error instanceof Error ? error.message : String(error);
+				console.debug(
+					`[Generate/Apply Trace] File: ${relativePath}, AI Output: ${aiGeneratedContent}, Applied Content: None (failed to stat), Error: ${errorMessage}`
+				);
+				throw error;
+			}
+			changeType = "created"; // Explicitly set if file was not found
+		}
+
+		let document: vscode.TextDocument;
+		let editor: vscode.TextEditor;
+
+		try {
+			// Try to open the document; if it's already open, this gets the current editor state.
+			document = await vscode.workspace.openTextDocument(fileUri);
+			editor = await vscode.window.showTextDocument(document);
+			// Use the content from the editor's buffer as the true "original" content for diffing
+			// if the file was already open and potentially modified.
+			originalContent = editor.document.getText();
+		} catch (docError: any) {
+			// If opening the document fails (e.g., file not readable, permissions),
+			// but we still want to attempt to write it.
+			const errorMessage =
+				docError instanceof Error ? docError.message : String(docError);
+			console.debug(
+				`[Generate/Apply Trace] File: ${relativePath}, AI Output: ${aiGeneratedContent}, Applied Content: None (failed to open doc for apply), Error: ${errorMessage}`
+			);
+			// Fallback: If document cannot be opened, directly write using fs.writeFile.
+			// This might bypass editor events and undo stack, but ensures content is written.
+			await vscode.workspace.fs.writeFile(fileUri, Buffer.from(desiredContent));
+			newContentAfterApply = desiredContent; // Since we directly wrote it
+
+			const { formattedDiff, summary } = await generateFileChangeSummary(
+				originalContent,
+				newContentAfterApply,
+				relativePath
+			);
+			this._reportCorrectionStepProgress(
+				`Step ${stepIndex + 1} OK: ${
+					changeType === "created" ? "Created" : "Modified"
+				} file \`${relativePath}\` (via direct write)`,
+				stepIndex,
+				totalSteps, // Pass index and totalSteps
+				false,
+				formattedDiff
+			);
+			this.changeLogger.logChange({
+				filePath: relativePath,
+				changeType: changeType,
+				summary,
+				diffContent: formattedDiff,
+				timestamp: Date.now(),
+				originalContent: originalContent,
+				newContent: newContentAfterApply,
+			});
+			affectedFileUris.add(fileUri);
+			console.debug(
+				`[Generate/Apply Trace] File: ${relativePath}, AI Output: ${aiGeneratedContent}, Applied Content: ${newContentAfterApply}, Error: None (direct write)`
+			);
+			return newContentAfterApply;
+		}
+
+		try {
+			await applyAITextEdits(editor, originalContent, desiredContent, token);
+			newContentAfterApply = editor.document.getText();
+		} catch (applyError: any) {
+			const errorMessage =
+				applyError instanceof Error ? applyError.message : String(applyError);
+			console.debug(
+				`[Generate/Apply Trace] File: ${relativePath}, AI Output: ${aiGeneratedContent}, Applied Content: ${newContentAfterApply}, Error: ${errorMessage}`
+			);
+			throw applyError; // Re-throw the error for higher-level handling
+		}
+
+		const { formattedDiff, summary, addedLines, removedLines } =
+			await generateFileChangeSummary(
+				originalContent,
+				newContentAfterApply,
+				relativePath
+			);
+
+		if (
+			addedLines.length > 0 ||
+			removedLines.length > 0 ||
+			changeType === "created"
+		) {
+			affectedFileUris.add(fileUri);
+			this._reportCorrectionStepProgress(
+				`Step ${stepIndex + 1}/${totalSteps} OK: ${
+					changeType === "created" ? "Created" : "Modified"
+				} file \`${relativePath}\``,
+				stepIndex,
+				totalSteps, // Pass index and totalSteps
+				false,
+				formattedDiff
+			);
+			this.changeLogger.logChange({
+				filePath: relativePath,
+				changeType: changeType,
+				summary,
+				diffContent: formattedDiff,
+				timestamp: Date.now(),
+				originalContent: originalContent,
+				newContent: newContentAfterApply,
+			});
+			console.debug(
+				`[Generate/Apply Trace] File: ${relativePath}, AI Output: ${aiGeneratedContent}, Applied Content: ${newContentAfterApply}, Error: None`
+			);
+		} else {
+			this._reportCorrectionStepProgress(
+				`Step ${
+					stepIndex + 1
+				}/${totalSteps} OK: File \`${relativePath}\` content is already as desired, no substantial modifications needed.`,
+				stepIndex,
+				totalSteps, // Pass index and totalSteps
+				false // Explicitly pass isError
+			);
+			console.debug(
+				`[Generate/Apply Trace] File: ${relativePath}, AI Output: ${aiGeneratedContent}, Applied Content: ${newContentAfterApply}, Error: None (no substantial change)`
+			);
+		}
+		return newContentAfterApply;
+	}
+
+	/**
 	 * Executes the steps of a correction plan.
-	 * This method is adapted from PlanService._executePlanSteps.
 	 * @returns The set of URIs of files that were actually modified or created.
 	 */
 	private async _executeCorrectionPlanSteps(
 		steps: PlanStep[],
 		rootUri: vscode.Uri,
-		originalUserInstruction: string, // This is the root instruction from generatePrompt/modificationPrompt
-		originalContext: EnhancedGenerationContext, // Broader context for prompt generation
+		originalUserInstruction: string,
+		originalContext: EnhancedGenerationContext,
 		modelName: string,
 		streamId: string,
 		token: vscode.CancellationToken,
@@ -627,10 +814,8 @@ export class EnhancedCodeGenerator {
 	): Promise<Set<vscode.Uri>> {
 		const affectedFileUris = new Set<vscode.Uri>();
 		const totalSteps = steps.length;
-		const MAX_TRANSIENT_STEP_RETRIES = 3; // Define locally or as class constant
+		const MAX_TRANSIENT_STEP_RETRIES = 3;
 
-		// Pre-compute relevant snippets once before the step execution loop.
-		// Use originalContext.relevantFiles for this, as it should contain the broader project context.
 		const relevantFilesToFormat = Array.isArray(originalContext.relevantFiles)
 			? originalContext.relevantFiles
 			: originalContext.relevantFiles
@@ -688,7 +873,9 @@ export class EnhancedCodeGenerator {
 						currentTransientAttempt > 0
 							? ` (Auto-retry ${currentTransientAttempt}/${MAX_TRANSIENT_STEP_RETRIES})`
 							: ""
-					}`
+					}`,
+					index,
+					totalSteps // Pass index and totalSteps
 				);
 
 				try {
@@ -706,19 +893,17 @@ export class EnhancedCodeGenerator {
 					} else if (isCreateFileStep(step)) {
 						const fileUri = vscode.Uri.joinPath(rootUri, step.path);
 						let desiredContent: string | undefined = step.content;
-						let aiGeneratedContentForFile: string = ""; // To store AI's raw/cleaned content for this file
+						let aiGeneratedContentForFile: string = "";
 
 						if (step.generate_prompt) {
-							// Use the original context for content generation
 							const generationContext: EnhancedGenerationContext = {
 								...originalContext,
-								relevantSnippets: relevantSnippets, // Use updated relevant snippets
-								// editorContext might need to be specific to this file if applicable
-								editorContext: originalContext.editorContext, // For initial generation context, use the broad editor context
+								relevantSnippets: relevantSnippets,
+								editorContext: originalContext.editorContext,
 							};
 
 							const generatedResult = await this.generateFileContent(
-								step.path, // relative path
+								step.path,
 								step.generate_prompt,
 								generationContext,
 								modelName,
@@ -727,153 +912,54 @@ export class EnhancedCodeGenerator {
 								onCodeChunkCallback
 							);
 							desiredContent = generatedResult.content;
-							aiGeneratedContentForFile = generatedResult.content; // Capture AI's content
+							aiGeneratedContentForFile = generatedResult.content;
 						}
 
 						const cleanedDesiredContent = cleanCodeOutput(desiredContent ?? "");
-						// Update with cleaned content, as this is what's intended to be applied
-						aiGeneratedContentForFile = cleanedDesiredContent;
+						aiGeneratedContentForFile = cleanedDesiredContent; // Capture final cleaned content for logging
 
-						try {
-							await vscode.workspace.fs.stat(fileUri);
-							const existingContent = Buffer.from(
-								await vscode.workspace.fs.readFile(fileUri)
-							).toString("utf-8");
-
-							if (existingContent === cleanedDesiredContent) {
-								this._reportCorrectionStepProgress(
-									`Step ${index + 1} OK: File \`${
-										step.path
-									}\` already has the desired content. Skipping.`
-								);
-								currentStepCompletedSuccessfullyOrSkipped = true;
-								// Instruction 3: Logging for no-op modification
-								console.debug(
-									`[Generate/Apply Trace] File: ${step.path}, AI Output: ${aiGeneratedContentForFile}, Applied Content: ${existingContent}, Error: None (no substantial change)`
-								);
-							} else {
-								const document = await vscode.workspace.openTextDocument(
-									fileUri
-								);
-								const editor = await vscode.window.showTextDocument(document);
-
-								await applyAITextEdits(
-									editor,
-									existingContent,
-									cleanedDesiredContent,
-									token
-								);
-								const newContentAfterApply = editor.document.getText();
-
-								const { formattedDiff, summary } =
-									await generateFileChangeSummary(
-										existingContent,
-										newContentAfterApply,
-										step.path
-									);
-
-								this._reportCorrectionStepProgress(
-									`Step ${index + 1} OK: Modified file \`${step.path}\``,
-									false,
-									formattedDiff
-								);
-								this.changeLogger.logChange({
-									filePath: step.path,
-									changeType: "modified",
-									summary,
-									diffContent: formattedDiff,
-									timestamp: Date.now(),
-									originalContent: existingContent,
-									newContent: newContentAfterApply,
-								});
-								currentStepCompletedSuccessfullyOrSkipped = true;
-								affectedFileUris.add(fileUri);
-								// Instruction 3: Logging for successful modification
-								console.debug(
-									`[Generate/Apply Trace] File: ${step.path}, AI Output: ${aiGeneratedContentForFile}, Applied Content: ${newContentAfterApply}, Error: None`
-								);
-							}
-						} catch (error: any) {
-							const errorMessage =
-								error instanceof Error ? error.message : String(error);
-							// Instruction 3: Logging for error during apply/stat
-							console.debug(
-								`[Generate/Apply Trace] File: ${step.path}, AI Output: ${aiGeneratedContentForFile}, Applied Content: None (failed to apply), Error: ${errorMessage}`
-							);
-
-							if (
-								error instanceof vscode.FileSystemError &&
-								(error.code === "FileNotFound" ||
-									error.code === "EntryNotFound")
-							) {
-								await vscode.workspace.fs.writeFile(
-									fileUri,
-									Buffer.from(cleanedDesiredContent)
-								);
-
-								const document = await vscode.workspace.openTextDocument(
-									fileUri
-								);
-								await vscode.window.showTextDocument(document);
-
-								const { formattedDiff, summary } =
-									await generateFileChangeSummary(
-										"",
-										cleanedDesiredContent,
-										step.path
-									);
-
-								this._reportCorrectionStepProgress(
-									`Step ${index + 1} OK: Created file \`${step.path}\``,
-									false,
-									formattedDiff
-								);
-								this.changeLogger.logChange({
-									filePath: step.path,
-									changeType: "created",
-									summary,
-									diffContent: formattedDiff,
-									timestamp: Date.now(),
-									originalContent: "",
-									newContent: cleanedDesiredContent,
-								});
-								currentStepCompletedSuccessfullyOrSkipped = true;
-								affectedFileUris.add(fileUri);
-								// Instruction 3: Logging for successful creation
-								console.debug(
-									`[Generate/Apply Trace] File: ${step.path}, AI Output: ${aiGeneratedContentForFile}, Applied Content: ${cleanedDesiredContent}, Error: None`
-								);
-							} else {
-								throw error;
-							}
-						}
+						await this._applyFileOperationAndLog(
+							fileUri,
+							step.path,
+							cleanedDesiredContent,
+							aiGeneratedContentForFile,
+							"created", // Initially assume created, helper will refine
+							index,
+							totalSteps,
+							affectedFileUris,
+							token
+						);
+						currentStepCompletedSuccessfullyOrSkipped = true;
 					} else if (isModifyFileStep(step)) {
 						const fileUri = vscode.Uri.joinPath(rootUri, step.path);
-						const existingContent = Buffer.from(
-							await vscode.workspace.fs.readFile(fileUri)
-						).toString("utf-8");
+						// Ensure existingContent is read from the open document if possible
+						let existingContent: string;
+						try {
+							const document = await vscode.workspace.openTextDocument(fileUri);
+							existingContent = document.getText();
+						} catch {
+							// Fallback to reading from file system if document cannot be opened
+							existingContent = Buffer.from(
+								await vscode.workspace.fs.readFile(fileUri)
+							).toString("utf-8");
+						}
 
-						// For modification, context should also reflect the broader situation
 						const modificationContext: EnhancedGenerationContext = {
 							...originalContext,
 							relevantSnippets: relevantSnippets,
-							// editorContext might need to be specific to this file if applicable.
-							// For modifyFileContent, it usually uses editorContext for the *current* file open.
-							// Here, the file being modified might not be the "editorContext.documentUri" initially.
-							// Pass a specific editorContext for the file being modified if necessary, otherwise the general one.
 							editorContext: {
-								...((originalContext.editorContext || {}) as EditorContext), // Base from context, ensuring it's an object
-								filePath: step.path, // Override filePath with the one being modified
-								documentUri: fileUri, // Override documentUri
-								fullText: existingContent, // Ensure fullText is current content of this file
-							} as EditorContext, // Cast to EditorContext for clarity
+								...((originalContext.editorContext || {}) as EditorContext),
+								filePath: step.path,
+								documentUri: fileUri,
+								fullText: existingContent,
+							} as EditorContext,
 						};
 
 						let aiGeneratedContentForFile = (
 							await this.modifyFileContent(
 								step.path,
 								step.modification_prompt,
-								existingContent,
+								existingContent, // Pass the most current content to modification prompt
 								modificationContext,
 								modelName,
 								token,
@@ -881,83 +967,17 @@ export class EnhancedCodeGenerator {
 							)
 						).content;
 
-						let document: vscode.TextDocument;
-						let editor: vscode.TextEditor;
-						try {
-							document = await vscode.workspace.openTextDocument(fileUri);
-							editor = await vscode.window.showTextDocument(document);
-						} catch (docError: any) {
-							const errorMessage =
-								docError instanceof Error ? docError.message : String(docError);
-							// Instruction 3: Logging for error opening document
-							console.debug(
-								`[Generate/Apply Trace] File: ${step.path}, AI Output: ${aiGeneratedContentForFile}, Applied Content: None (failed to open doc), Error: ${errorMessage}`
-							);
-							throw new Error(
-								`Failed to open document ${fileUri.fsPath} for modification: ${docError.message}`
-							);
-						}
-
-						let newContentAfterApply = editor.document.getText(); // Initialize with current editor content
-						try {
-							await applyAITextEdits(
-								editor,
-								editor.document.getText(),
-								aiGeneratedContentForFile,
-								token
-							);
-							newContentAfterApply = editor.document.getText();
-							// Instruction 3: Logging for successful modification
-							console.debug(
-								`[Generate/Apply Trace] File: ${step.path}, AI Output: ${aiGeneratedContentForFile}, Applied Content: ${newContentAfterApply}, Error: None`
-							);
-						} catch (applyError: any) {
-							const errorMessage =
-								applyError instanceof Error
-									? applyError.message
-									: String(applyError);
-							// Instruction 3: Logging for error during applyAITextEdits
-							console.debug(
-								`[Generate/Apply Trace] File: ${step.path}, AI Output: ${aiGeneratedContentForFile}, Applied Content: ${newContentAfterApply}, Error: ${errorMessage}`
-							);
-							throw applyError; // Re-throw the error
-						}
-
-						const { formattedDiff, summary, addedLines, removedLines } =
-							await generateFileChangeSummary(
-								existingContent,
-								newContentAfterApply,
-								step.path
-							);
-
-						if (addedLines.length > 0 || removedLines.length > 0) {
-							affectedFileUris.add(fileUri);
-
-							this._reportCorrectionStepProgress(
-								`Step ${index + 1} OK: Modified file \`${step.path}\``,
-								false,
-								formattedDiff
-							);
-							this.changeLogger.logChange({
-								filePath: step.path,
-								changeType: "modified",
-								summary,
-								diffContent: formattedDiff,
-								timestamp: Date.now(),
-								originalContent: existingContent,
-								newContent: newContentAfterApply,
-							});
-						} else {
-							this._reportCorrectionStepProgress(
-								`Step ${index + 1} OK: File \`${
-									step.path
-								}\` content is already as desired, no substantial modifications needed.`
-							);
-							// Instruction 3: Logging for no-op modification (already handled above, but good to double check)
-							console.debug(
-								`[Generate/Apply Trace] File: ${step.path}, AI Output: ${aiGeneratedContentForFile}, Applied Content: ${newContentAfterApply}, Error: None (no substantial change)`
-							);
-						}
+						await this._applyFileOperationAndLog(
+							fileUri,
+							step.path,
+							aiGeneratedContentForFile,
+							aiGeneratedContentForFile,
+							"modified",
+							index,
+							totalSteps,
+							affectedFileUris,
+							token
+						);
 						currentStepCompletedSuccessfullyOrSkipped = true;
 					} else if (isRunCommandStep(step)) {
 						const userChoice = await vscode.window.showWarningMessage(
@@ -972,7 +992,7 @@ export class EnhancedCodeGenerator {
 									step.command,
 									rootUri.fsPath,
 									token,
-									[] // No activeChildProcesses management in EnhancedCodeGenerator
+									[]
 								);
 
 								if (commandResult.exitCode !== 0) {
@@ -982,11 +1002,12 @@ export class EnhancedCodeGenerator {
 
 									this._reportCorrectionStepProgress(
 										`Step ${index + 1} FAILED: Command execution error.`,
+										index,
+										totalSteps, // Pass index and totalSteps
 										true,
 										errorMessage
 									);
 
-									// If a command fails within a correction plan, the correction plan itself failed.
 									throw new Error(
 										`Command execution failed: ${step.command}. Output: ${errorMessage}`
 									);
@@ -997,6 +1018,8 @@ export class EnhancedCodeGenerator {
 
 									this._reportCorrectionStepProgress(
 										`Step ${index + 1} OK: Command executed.`,
+										index,
+										totalSteps, // Pass index and totalSteps
 										false,
 										successMessage
 									);
@@ -1009,15 +1032,18 @@ export class EnhancedCodeGenerator {
 								let detailedError = `Error executing command \`${step.command}\`: ${commandExecError.message}`;
 								this._reportCorrectionStepProgress(
 									`Step ${index + 1} FAILED: ${detailedError}`,
+									index,
+									totalSteps, // Pass index and totalSteps
 									true
 								);
-								// Re-throw to indicate step failure to the orchestration method
 								throw detailedError;
 							}
 						} else {
 							currentStepCompletedSuccessfullyOrSkipped = true;
 							this._reportCorrectionStepProgress(
-								`Step ${index + 1} SKIPPED by user.`
+								`Step ${index + 1} SKIPPED by user.`,
+								index,
+								totalSteps // Pass index and totalSteps
 							);
 						}
 					}
@@ -1026,7 +1052,7 @@ export class EnhancedCodeGenerator {
 						error,
 						"Failed to execute correction plan step. Please review the details.",
 						"Step execution failed: ",
-						rootUri // Pass rootUri for proper formatting
+						rootUri
 					);
 
 					let isRetryableTransientError = false;
@@ -1034,7 +1060,6 @@ export class EnhancedCodeGenerator {
 						throw error;
 					}
 
-					// Implement transient error identification
 					if (
 						errorMsg.includes("quota exceeded") ||
 						errorMsg.includes("rate limit exceeded") ||
@@ -1053,6 +1078,8 @@ export class EnhancedCodeGenerator {
 							`Step ${
 								index + 1
 							} FAILED (transient, auto-retrying): ${errorMsg}`,
+							index,
+							totalSteps, // Pass index and totalSteps
 							true
 						);
 						console.warn(
@@ -1069,9 +1096,10 @@ export class EnhancedCodeGenerator {
 							`Step ${
 								index + 1
 							} FAILED: ${errorMsg}. Requires manual review or retry of the overall correction.`,
+							index,
+							totalSteps, // Pass index and totalSteps
 							true
 						);
-						// For steps within a correction plan, if they fail critically, we bubble up.
 						throw new Error(
 							`Correction plan step failed: ${detailedStepDescription}. Error: ${errorMsg}`
 						);
@@ -1113,7 +1141,7 @@ export class EnhancedCodeGenerator {
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<CodeValidationResult> {
 		let iteration = 0;
-		let currentContent = initialContent; // This will be updated within the loop
+		let currentContent = initialContent;
 		let validationResult: CodeValidationResult = {
 			isValid: false,
 			finalContent: currentContent,
@@ -1127,7 +1155,6 @@ export class EnhancedCodeGenerator {
 			isOscillating: context.isOscillating || false,
 		};
 
-		// Initial progress for correction loop
 		this._sendFeedback(feedbackCallback, {
 			stage: "correction",
 			message: "Starting code correction...",
@@ -1149,36 +1176,31 @@ export class EnhancedCodeGenerator {
 			}
 
 			iteration++;
-			const contentBeforeAttempt = currentContent; // Capture content state BEFORE this attempt
+			const contentBeforeAttempt = currentContent;
 			const issuesBeforeAttempt = [...validationResult.issues];
 			const issuesBeforeAttemptCount = issuesBeforeAttempt.length;
 
-			this._sendFeedback(feedbackCallback, {
-				stage: "correction",
-				message: `Generating correction plan (attempt ${iteration})...`,
-				issues: issuesBeforeAttempt,
-				suggestions: [],
-				progress: 20 + iteration * (60 / this.config.maxFeedbackIterations!), // Allocate 60% of progress for corrections
-			});
+			this._reportCorrectionStepProgress(
+				`Generating correction plan (attempt ${iteration})...`,
+				iteration,
+				this.config.maxFeedbackIterations! // Pass index and totalSteps
+			);
 
-			// Instruction 2: Refresh AI context variables (currentContent, projectContext, relevantSnippets, EditorContext)
 			currentContext.fileStructureAnalysis = await analyzeFileStructure(
 				filePath,
 				currentContent
-			); // Refresh file structure with latest content
+			);
 			currentContext =
 				await this.contextRefresherService.refreshErrorFocusedContext(
 					filePath,
-					currentContent, // Pass the *latest* content
+					currentContent,
 					issuesBeforeAttempt,
 					currentContext,
 					token
 				);
 
-			// Re-format relevant files into snippets for each correction attempt.
 			let relevantFilesToFormat: string[] = [];
 			if (context.relevantFiles) {
-				// Use the original context's relevant files list
 				if (Array.isArray(context.relevantFiles)) {
 					relevantFilesToFormat = context.relevantFiles;
 				} else if (typeof context.relevantFiles === "string") {
@@ -1190,23 +1212,19 @@ export class EnhancedCodeGenerator {
 				rootUri,
 				token
 			);
-			currentContext.relevantSnippets = updatedRelevantSnippets; // Update currentContext with new snippets
+			currentContext.relevantSnippets = updatedRelevantSnippets;
 
-			// Prepare editorContext specific to the current file for the prompt.
 			const fileSpecificEditorContext: EditorContext = {
-				...((context.editorContext || {}) as EditorContext), // Base from context, ensuring it's an object
+				...((context.editorContext || {}) as EditorContext),
 				filePath: filePath,
 				documentUri: vscode.Uri.file(filePath),
-				fullText: currentContent, // Ensure fullText reflects the latest state
-				// selection and selectedText might not be relevant here for auto-correction,
-				// but keep them if they exist in the original editorContext.
+				fullText: currentContent,
 			};
-			currentContext.editorContext = fileSpecificEditorContext; // Update editorContext in currentContext
+			currentContext.editorContext = fileSpecificEditorContext;
 
 			let correctionFeedbackForPrompt: CorrectionFeedback | undefined;
 			let parsingFailedForThisAttempt = false;
 
-			// Check for oscillation from previous attempts
 			if (
 				currentContext.recentCorrectionAttemptOutcomes &&
 				currentContext.recentCorrectionAttemptOutcomes.length >= 2
@@ -1228,7 +1246,6 @@ export class EnhancedCodeGenerator {
 					)
 				) {
 					currentContext.isOscillating = true;
-					// Instruction 1: Enrich CorrectionFeedback: Set type to 'oscillation_detected'
 					correctionFeedbackForPrompt = {
 						type: "oscillation_detected",
 						message: `Detected oscillation: previous two attempts resulted in similar unresolved issues.`,
@@ -1236,9 +1253,9 @@ export class EnhancedCodeGenerator {
 						details: {
 							previousIssues: lastOutcome.issuesRemaining,
 							currentIssues: lastOutcome.issuesRemaining,
-							// relevantDiff: lastOutcome.relevantDiff, // Removed as per instruction
 						},
 						issuesRemaining: lastOutcome.issuesRemaining,
+						issuesIntroduced: lastOutcome.issuesIntroduced,
 					};
 					this._sendFeedback(feedbackCallback, {
 						stage: "correction",
@@ -1251,7 +1268,6 @@ export class EnhancedCodeGenerator {
 				}
 			}
 
-			// If last attempt specifically failed due to parsing, provide that specific feedback
 			if (
 				currentContext.lastCorrectionAttemptOutcome?.type === "parsing_failed"
 			) {
@@ -1268,7 +1284,6 @@ export class EnhancedCodeGenerator {
 				this.changeLogger.getCompletedPlanChangeSets()
 			);
 
-			// Diagnostics string for the prompt
 			await DiagnosticService.waitForDiagnosticsToStabilize(
 				vscode.Uri.file(filePath),
 				token,
@@ -1276,7 +1291,6 @@ export class EnhancedCodeGenerator {
 				100
 			);
 
-			// 1. Fetch standard VS Code diagnostics
 			const diagnosticsFromVsCode =
 				(await DiagnosticService.formatContextualDiagnostics(
 					vscode.Uri.file(filePath),
@@ -1292,12 +1306,10 @@ export class EnhancedCodeGenerator {
 					]
 				)) || null;
 
-			// 2. Retrieve custom `format_error` issues
-			const customFormatIssues = currentDiagnostics.filter(
+			const customFormatIssues = issuesBeforeAttempt.filter(
 				(issue) => issue.type === "format_error"
 			);
 
-			// 3. Format these `customFormatIssues` into a readable string.
 			let formattedCustomIssues = "";
 			if (customFormatIssues.length > 0) {
 				formattedCustomIssues = "--- AI Response Format Issues ---\n";
@@ -1315,7 +1327,7 @@ export class EnhancedCodeGenerator {
 								severityVscode = vscode.DiagnosticSeverity.Information;
 								break;
 							default:
-								severityVscode = vscode.DiagnosticSeverity.Information; // Default to info
+								severityVscode = vscode.DiagnosticSeverity.Information;
 						}
 						const severityName = getSeverityName(severityVscode);
 						return `  - [${severityName.toUpperCase()}] ${
@@ -1328,7 +1340,6 @@ export class EnhancedCodeGenerator {
 				formattedCustomIssues += "\n--- End AI Response Format Issues ---";
 			}
 
-			// 4. Combine the diagnostics strings.
 			let combinedDiagnosticsString = "";
 			if (
 				diagnosticsFromVsCode !== null &&
@@ -1339,12 +1350,11 @@ export class EnhancedCodeGenerator {
 
 			if (formattedCustomIssues !== "") {
 				if (combinedDiagnosticsString !== "") {
-					combinedDiagnosticsString += "\n\n"; // Separator
+					combinedDiagnosticsString += "\n\n";
 				}
 				combinedDiagnosticsString += formattedCustomIssues;
 			}
 
-			// 5. Assign the final `combinedDiagnosticsString` to the `diagnosticsForPrompt` variable.
 			const diagnosticsForPrompt =
 				combinedDiagnosticsString !== ""
 					? combinedDiagnosticsString
@@ -1364,8 +1374,8 @@ export class EnhancedCodeGenerator {
 			const correctionPlanPrompt = createCorrectionPlanPrompt(
 				originalUserInstruction,
 				currentContext.projectContext,
-				fileSpecificEditorContext, // Use the file-specific editor context
-				[], // Chat history is not managed by EnhancedCodeGenerator
+				fileSpecificEditorContext,
+				[],
 				currentContext.relevantSnippets,
 				diagnosticsForPrompt,
 				formattedRecentChanges,
@@ -1374,7 +1384,7 @@ export class EnhancedCodeGenerator {
 				jsonEscapingInstructionsForPrompt
 			);
 
-			let aiGeneratedPlanContent: string = ""; // Initialized with empty string for logging
+			let aiGeneratedPlanContent: string = "";
 			let parsedPlan: ExecutionPlan | null = null;
 			let parsingError: string | undefined;
 
@@ -1393,7 +1403,6 @@ export class EnhancedCodeGenerator {
 					aiGeneratedPlanContent,
 					rootUri
 				);
-				// This assignment is now type-safe
 				parsedPlan = parsedResult.plan;
 				parsingError = parsedResult.error;
 
@@ -1401,27 +1410,25 @@ export class EnhancedCodeGenerator {
 					parsingFailedForThisAttempt = true;
 					this._reportCorrectionStepProgress(
 						`AI generated a malformed correction plan (iteration ${iteration}). Error: ${parsingError}`,
+						iteration,
+						this.config.maxFeedbackIterations!, // Pass index and totalSteps
 						true,
 						aiGeneratedPlanContent
 					);
 					console.error(`Malformed plan from AI:\n`, aiGeneratedPlanContent);
-					// Instruction 3: Logging AI content vs Applied content during errors
 					console.debug(
 						`[Generate/Apply Trace] File: ${filePath}, AI Output: ${aiGeneratedPlanContent}, Applied Content: ${currentContent}, Error: ${parsingError}`
 					);
-					throw new Error(parsingError); // Throw to be caught by outer catch for logging
+					throw new Error(parsingError);
 				}
 			} catch (e: any) {
-				// This catch handles AI generation failure or direct parsing errors thrown by _parseAndValidateCorrectionPlan
 				parsingFailedForThisAttempt = true;
 				const errorMessage = `Failed to generate/parse correction plan: ${e.message}`;
 				console.error(`[EnhancedCodeGenerator] ${errorMessage}`, e);
-				// Instruction 3: Logging AI content vs Applied content during errors
 				console.debug(
 					`[Generate/Apply Trace] File: ${filePath}, AI Output: ${aiGeneratedPlanContent}, Applied Content: ${currentContent}, Error: ${errorMessage}`
 				);
 
-				// Instruction 1: Enrich CorrectionFeedback for parsing_failed
 				correctionFeedbackForPrompt = {
 					type: "parsing_failed",
 					message: errorMessage,
@@ -1429,12 +1436,11 @@ export class EnhancedCodeGenerator {
 						parsingError: e.message,
 						failedJson: aiGeneratedPlanContent || "N/A",
 						previousIssues: issuesBeforeAttempt,
-						currentIssues: issuesBeforeAttempt, // No change as parsing failed
-						// relevantDiff: "", // Removed from details as it's top-level
+						currentIssues: issuesBeforeAttempt,
 					},
 					issuesRemaining: issuesBeforeAttempt,
-					relevantDiff: "", // No diff if parsing failed, ensure top-level
-					issuesIntroduced: [], // Add if not explicitly there, to conform to type
+					relevantDiff: "",
+					issuesIntroduced: [],
 				};
 				currentContext.lastCorrectionAttemptOutcome = {
 					iteration: iteration,
@@ -1446,20 +1452,20 @@ export class EnhancedCodeGenerator {
 					relevantDiff: "",
 					aiFailureAnalysis: errorMessage,
 					type: "parsing_failed",
-					failureType: "parsing_failed", // Added: failureType
+					failureType: "parsing_failed",
 					feedbackUsed: correctionFeedbackForPrompt,
-					aiGeneratedContent: aiGeneratedPlanContent, // Capture AI output
+					aiGeneratedContent: aiGeneratedPlanContent,
 				};
-				// Continue to next iteration if retries are available
 				continue;
 			}
 
-			// If plan parsed successfully, execute it
 			let didPlanExecuteSuccessfully = true;
 			try {
 				if (parsedPlan && parsedPlan.steps && parsedPlan.steps.length > 0) {
 					this._reportCorrectionStepProgress(
-						`Executing correction plan for '${filePath}' (iteration ${iteration})...`
+						`Executing correction plan for '${filePath}' (iteration ${iteration})...`,
+						iteration,
+						this.config.maxFeedbackIterations! // Pass index and totalSteps
 					);
 					await this._executeCorrectionPlanSteps(
 						parsedPlan.steps,
@@ -1472,49 +1478,50 @@ export class EnhancedCodeGenerator {
 						feedbackCallback,
 						onCodeChunkCallback
 					);
-					// After plan execution, refresh content and diagnostics for the target file
-					// It's possible the plan modified other files, but our primary loop is for `filePath`
 					const contentBuffer = await vscode.workspace.fs.readFile(
 						vscode.Uri.file(filePath)
 					);
 					currentContent = Buffer.from(contentBuffer).toString("utf-8");
 				} else {
-					didPlanExecuteSuccessfully = false; // Flag that execution was not successful (due to empty plan)
+					didPlanExecuteSuccessfully = false;
 					this._reportCorrectionStepProgress(
 						`AI generated an empty or no-op correction plan for '${filePath}' (iteration ${iteration}).`,
+						iteration,
+						this.config.maxFeedbackIterations!, // Pass index and totalSteps
 						true
 					);
-					// Treat as no improvement if no steps were executed
 					throw new Error("Empty or no-op correction plan generated.");
 				}
 			} catch (executionError: any) {
 				didPlanExecuteSuccessfully = false;
 				if (executionError.message === ERROR_OPERATION_CANCELLED) {
-					throw executionError; // Bubble up cancellation
+					throw executionError;
 				}
 				const errorMessage = `Correction plan execution failed: ${executionError.message}`;
-				this._reportCorrectionStepProgress(errorMessage, true);
+				this._reportCorrectionStepProgress(
+					errorMessage,
+					iteration,
+					this.config.maxFeedbackIterations!, // Pass index and totalSteps
+					true
+				);
 				console.error(
 					`[EnhancedCodeGenerator] ${errorMessage}`,
 					executionError
 				);
-				// Instruction 3: Logging AI content vs Applied content during errors
 				console.debug(
 					`[Generate/Apply Trace] File: ${filePath}, AI Output: ${aiGeneratedPlanContent}, Applied Content: ${currentContent}, Error: ${errorMessage}`
 				);
 
-				// Instruction 1: Enrich CorrectionFeedback for command_failed
 				correctionFeedbackForPrompt = {
-					type: "command_failed", // Generalizing execution failures to 'command_failed' for now. Could be 'unknown' or 'unreasonable_diff'
+					type: "command_failed",
 					message: errorMessage,
 					details: {
 						previousIssues: issuesBeforeAttempt,
-						currentIssues: issuesBeforeAttempt, // No change if execution failed
-						// relevantDiff: "", // Removed from details as it's top-level
+						currentIssues: issuesBeforeAttempt,
 					},
 					issuesRemaining: issuesBeforeAttempt,
-					relevantDiff: "", // Difficult to capture diff on execution failure, ensure top-level
-					issuesIntroduced: [], // Add if not explicitly there, to conform to type
+					relevantDiff: "",
+					issuesIntroduced: [],
 				};
 				currentContext.lastCorrectionAttemptOutcome = {
 					iteration: iteration,
@@ -1525,16 +1532,14 @@ export class EnhancedCodeGenerator {
 					issuesIntroduced: [],
 					relevantDiff: "",
 					aiFailureAnalysis: errorMessage,
-					type: "command_failed", // Adjust type if specific failure is known
-					failureType: "command_failed", // Added: failureType
+					type: "command_failed",
+					failureType: "command_failed",
 					feedbackUsed: correctionFeedbackForPrompt,
-					aiGeneratedContent: aiGeneratedPlanContent, // Capture AI output
+					aiGeneratedContent: aiGeneratedPlanContent,
 				};
-				// Continue to next iteration if retries are available
 				continue;
 			}
 
-			// Re-validate after applying changes
 			await DiagnosticService.waitForDiagnosticsToStabilize(
 				vscode.Uri.file(filePath),
 				token,
@@ -1549,29 +1554,25 @@ export class EnhancedCodeGenerator {
 			const issuesAfterAttemptCount = issuesAfterAttempt.length;
 
 			const wasImprovement = issuesAfterAttemptCount < issuesBeforeAttemptCount;
-			// Instruction 1: Calculate issuesIntroduced
 			const issuesIntroduced = issuesAfterAttempt.filter(
 				(newIssue) =>
 					!issuesBeforeAttempt.some((oldIssue) =>
 						areIssuesSimilar([newIssue], [oldIssue])
 					)
 			);
-			// Instruction 1: Generate relevantDiff for the entire iteration
 			const { formattedDiff: relevantDiff } = await generateFileChangeSummary(
-				contentBeforeAttempt, // Content before this iteration
-				currentContent, // Content after this iteration
+				contentBeforeAttempt,
+				currentContent,
 				filePath
 			);
 
-			// Instruction 1: Determine outcome and failureType
 			let outcomeType: CorrectionAttemptOutcome["type"];
 			let failureType: CorrectionAttemptOutcome["failureType"];
 			let aiFailureAnalysisMessage: string;
 
-			// Explicitly set `failureType = "unknown"` in the success case (`issuesAfterAttemptCount === 0`).
 			if (issuesAfterAttemptCount === 0) {
-				outcomeType = "unknown"; // Success, so not really a "type" of failure
-				failureType = "unknown"; // Success, so not a failure type
+				outcomeType = "unknown";
+				failureType = "unknown";
 				aiFailureAnalysisMessage = "Success";
 			} else if (issuesIntroduced.length > 0) {
 				failureType = "new_errors_introduced";
@@ -1582,8 +1583,6 @@ export class EnhancedCodeGenerator {
 				outcomeType = "oscillation_detected";
 				aiFailureAnalysisMessage = `Correction failed: detected oscillation, issues remain similar.`;
 			} else {
-				// If issues still exist and no new errors, no oscillation, and not a success
-				// This implies !wasImprovement and issuesAfterAttemptCount > 0
 				failureType = "no_improvement";
 				outcomeType = "no_improvement";
 				aiFailureAnalysisMessage = `Correction failed: no improvement in issues.`;
@@ -1595,13 +1594,13 @@ export class EnhancedCodeGenerator {
 				originalIssuesCount: issuesBeforeAttemptCount,
 				issuesAfterAttemptCount: issuesAfterAttemptCount,
 				issuesRemaining: issuesAfterAttempt,
-				issuesIntroduced: issuesIntroduced, // Populate issuesIntroduced
-				relevantDiff: relevantDiff, // Populate relevantDiff
+				issuesIntroduced: issuesIntroduced,
+				relevantDiff: relevantDiff,
 				aiFailureAnalysis: aiFailureAnalysisMessage,
 				type: outcomeType,
-				failureType: failureType, // Set the determined failureType
-				feedbackUsed: correctionFeedbackForPrompt, // Store the feedback used to generate THIS plan
-				aiGeneratedContent: aiGeneratedPlanContent, // Capture AI output
+				failureType: failureType,
+				feedbackUsed: correctionFeedbackForPrompt,
+				aiGeneratedContent: aiGeneratedPlanContent,
 			};
 			currentContext.recentCorrectionAttemptOutcomes?.push(
 				currentAttemptOutcome
@@ -1616,14 +1615,7 @@ export class EnhancedCodeGenerator {
 			};
 
 			if (issuesAfterAttempt.length === 0) {
-				this._sendFeedback(feedbackCallback, {
-					stage: "completion",
-					message: `Correction successful (iteration ${iteration})!`,
-					issues: [],
-					suggestions: [],
-					progress: 100,
-				});
-				currentContext.recentCorrectionAttemptOutcomes = []; // Clear history on success
+				currentContext.recentCorrectionAttemptOutcomes = [];
 				currentContext.isOscillating = false;
 				return validationResult;
 			} else if (iteration === this.config.maxFeedbackIterations!) {
@@ -1639,10 +1631,8 @@ export class EnhancedCodeGenerator {
 				});
 				return validationResult;
 			} else {
-				// Issues remain, or new errors introduced. Update feedback for next iteration.
-				// Instruction 1: Enrich CorrectionFeedback for the next AI prompt
 				correctionFeedbackForPrompt = {
-					type: failureType, // Set type appropriately
+					type: failureType,
 					message: aiFailureAnalysisMessage,
 					details: {
 						previousIssues: issuesBeforeAttempt,
@@ -1683,9 +1673,6 @@ export class EnhancedCodeGenerator {
 							20 + iteration * (60 / this.config.maxFeedbackIterations!),
 					});
 				}
-				// Note: 'parsing_failed' and 'command_failed' feedback is sent in their respective catch blocks,
-				// which then causes a 'continue' in the loop, preventing this section from being reached.
-				// So, no explicit 'else if' for those types is needed here.
 			}
 		}
 
@@ -1774,7 +1761,6 @@ export class EnhancedCodeGenerator {
 			),
 		];
 
-		// If initial generation is perfect, return early
 		if (combinedIssues.length === 0) {
 			this._sendFeedback(feedbackCallback, {
 				stage: "completion",
@@ -1788,12 +1774,11 @@ export class EnhancedCodeGenerator {
 				validation: {
 					...diagnosticValidation,
 					finalContent: currentContent,
-					iterations: 1, // First iteration was success
+					iterations: 1,
 				},
 			};
 		}
 
-		// Proceed to correction phase if issues exist
 		this._sendFeedback(feedbackCallback, {
 			stage: "validation",
 			message: `Initial generation has issues. Starting correction loop...`,
@@ -1804,14 +1789,14 @@ export class EnhancedCodeGenerator {
 
 		const finalCorrectionResult = await this._generateAndExecuteCorrectionPlan(
 			filePath,
-			currentContent, // Pass the initial content to the correction loop
-			combinedIssues, // Issues from initial generation
+			currentContent,
+			combinedIssues,
 			currentContext,
 			modelName,
 			streamId,
-			token!, // Token is guaranteed by public API
-			feedbackCallback!, // Callback is guaranteed by public API
-			generatePrompt, // Pass the original prompt as instruction for the plan generation
+			token!,
+			feedbackCallback!,
+			generatePrompt,
 			rootUri,
 			onCodeChunkCallback
 		);

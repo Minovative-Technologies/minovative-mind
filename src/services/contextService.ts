@@ -594,8 +594,8 @@ export class ContextService {
 			) {
 				this.postMessageToWebview({
 					type: "statusUpdate",
-					value: "Identifying relevant files", // Updated message
-					showLoadingDots: true, // ADDED
+					value: "Identifying relevant files",
+					showLoadingDots: true,
 				});
 				try {
 					const selectionOptions: SelectRelevantFilesAIOptions = {
@@ -604,7 +604,7 @@ export class ContextService {
 						allScannedFiles,
 						projectRoot: rootFolder.uri,
 						activeEditorContext: editorContext,
-						diagnostics: effectiveDiagnosticsString, // UPDATED: Use effectiveDiagnosticsString
+						diagnostics: effectiveDiagnosticsString,
 						activeEditorSymbols: editorContext?.documentUri
 							? documentSymbolsMap.get(
 									path
