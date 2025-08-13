@@ -5,7 +5,6 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 ## 🚀 Key Capabilities for Developers
 
 - **Seamless Gemini Integration**: Leverage powerful Google Gemini models directly within your VS Code workflow for intelligent assistance.
-- **AI-Powered Code Modification**: Benefit from self-correcting code generation driven by real-time diagnostics and deep symbol awareness, ensuring robust and accurate changes.
 - **Automated Workflows & Planning**: Streamline tasks with AI-driven structured planning, file manipulation, and automated Git commit message generation.
 - **Enhanced Contextual Understanding**: Gain deeper insights into your codebase through symbol and dependency graphing, enabling more relevant and accurate AI interactions.
 
@@ -43,7 +42,6 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 - **Triggered by Commands**: Modifications are initiated through the `minovative-mind.modifySelection` command, offering options for `/fix`, `/docs`, `/merge`, or custom prompts.
 - **Symbol-Aware Context**: Leverages rich symbol information from the codebase to provide the AI with a deep understanding of functions, classes, and types, enabling more accurate and contextually relevant code modifications.
 - **Modular, Maintainable Code Generation**: Emphasizes generating high-quality, readable, and production-ready code.
-- **Self-Correction Loop with Real-time Diagnostics**: Employs an iterative, multi-step correction process, leveraging real-time error information from VS Code's `DiagnosticService` to feed critical debugging context. This loop identifies and addresses issues from syntax errors to logical flaws, monitors progress, and includes mechanisms to prevent infinite correction loops, ensuring robust and functional AI-generated output.
 - **Diff Analysis for Quality Assurance**: Compares generated code against original content to validate output quality and suggest necessary refinements.
 - **Focus on Production-Ready, Secure Code**: All modifications prioritize robust and secure coding practices.
 - **Note on Modification Strategy**: The free, open-source version of Minovative Mind performs AI-powered code modifications by regenerating the _full file content_, as detailed in `ROADMAP.md`. Advanced "surgical edits" are not included but can be implemented by contributors.
@@ -129,7 +127,6 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 
 - **Context Fallback Strategy**: Implements a layered fallback mechanism for context building (smart → heuristic → minimal) to ensure AI always receives some relevant information.
 - **Status Feedback**: Provides clear status feedback on the progress of plan generation and context building to the user.
-- **Error Integration**: Leverages `DiagnosticService` for real-time error information, feeding critical debugging context to the AI for self-correction.
 
 ---
 

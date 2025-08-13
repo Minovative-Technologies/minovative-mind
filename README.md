@@ -14,7 +14,7 @@ This isn't just another AI assistant. Minovative Mind is a living testament to t
 
 > **This entire project—over 35,000 lines of robust, production-ready code—was developed with ~90% contribution from the AI agent itself (Minovative Mind), mostly using gemini-2.5-flash, with zero unit testing, no funding ($0), and by one [developer](https://github.com/Quarantiine)...**
 
-It masterfully orchestrated its own creation, architecting intricate and complex systems, generated tens of thousands of lines of code, and seamlessly integrated within VS Code's core APIs while autonomously refining its own work through self-correction. The [Creator](https://github.com/Quarantiine), of this project, didn’t merely build an AI agent; He guided its self-construction, leveraging natural language and the power of the Gemini 2.5 models (Thinking Mode) to bring it to life.
+It masterfully orchestrated its own creation, architecting intricate and complex systems, generated tens of thousands of lines of code, and seamlessly integrated within VS Code's core APIs while autonomously refining its own work. The [Creator](https://github.com/Quarantiine), of this project, didn’t merely build an AI agent; He guided its self-construction, leveraging natural language and the power of the Gemini 2.5 models (Thinking Mode) to bring it to life.
 
 Now...that same power is available to you. Completely for free.
 
@@ -27,8 +27,6 @@ Now...that same power is available to you. Completely for free.
 - 🧠 **Autonomous Planning & Execution:** Give Minovative Mind a high-level goal. It generates a structured, multi-step plan and executes it, creating files, writing code, and running commands until the job is done.
 
 - 🧩 **Full Workspace Context:** The agent intelligently scans your entire project—respecting your `.gitignore`—to build a deep, accurate understanding of your codebase, ensuring its actions are smart and relevant.
-
-- 🔁 **Automated Self-Correction:** Minovative Mind doesn't just write code; it validates it. By integrating with VS Code's diagnostics, it identifies its own errors and iteratively refines its output until it's functional and error-free.
 
 - 💾 **Integrated Git Automation:** Let the AI do the tedious work. It can automatically stage the changes it makes and generate insightful, descriptive commit messages based on the code diffs.
 

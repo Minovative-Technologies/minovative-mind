@@ -105,13 +105,13 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 16. **Plan Execution & Workflow Automation**:
 
-    - **Responsibility**: Interprets and executes the concrete steps defined in an AI-generated structured plan. This includes performing file system operations (creating/modifying files and directories), executing external commands (with user confirmation), and managing step-level retries and AI-driven corrections for failed steps. It orchestrates the entire automated workflow.
+    - **Responsibility**: Interprets and executes the concrete steps defined in an AI-generated structured plan. This includes performing file system operations (creating/modifying files and directories), executing external commands (with user confirmation), and managing step-level retries. It orchestrates the entire automated workflow.
     - **Key Files**: `src/services/planService.ts` (orchestration logic), `src/sidebar/services/planExecutionService.ts` (implied utility for specific step execution).
     - **AI Usage**: Yes
 
-17. **Enhanced Code Generation & Self-Correction**:
+17. **Enhanced Code Generation**:
 
-    - **Responsibility**: A sophisticated system dedicated to generating, modifying, and refining code files. It incorporates real-time validation against VS Code's language services (diagnostics), and employs iterative AI-driven self-correction loops to produce functional, error-free, and well-formatted code. The self-correction process now includes re-formatting relevant files at the start of each correction attempt, ensuring the AI operates with the most current context derived from the initial workspace scan.
+    - **Responsibility**: A sophisticated system dedicated to generating, modifying, and refining code files. It incorporates real-time validation against VS Code's language services (diagnostics).
     - **Key Files**: `src/ai/enhancedCodeGeneration.ts`.
     - **AI Usage**: Yes
 
@@ -138,7 +138,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
     - **Responsibility**: This system is responsible for the definition, generation, structuring, and management of prompts sent to the AI models, ensuring they are contextually relevant, effectively formatted, and aligned with specific AI tasks.
     - **Key Files and Components**:
       - Prompt Definition & Templates: `src/ai/prompts/` (e.g., `correctionPrompts.ts`, `enhancedCodeGenerationPrompts.ts`, `lightweightPrompts.ts`, `planningPrompts.ts`)
-      - Task-Specific Prompt Generation: `src/ai/enhancedCodeGeneration.ts` (`EnhancedCodeGenerator` class's role in creating prompts for code generation and self-correction tasks)
+      - Task-Specific Prompt Generation: `src/ai/enhancedCodeGeneration.ts` (`EnhancedCodeGenerator` class's role in creating prompts for code generation.)
       - Workflow Planning Prompts: `src/services/planService.ts` (generating planning-related prompts, e.g., `createInitialPlanningExplanationPrompt`, `createPlanningPrompt`)
       - AI Request Interface: `src/services/aiRequestService.ts` (function as the primary interface for sending prepared prompt content as `HistoryEntryPart` arrays to the AI model, including prompt encapsulation and transmission)
     - **AI Usage**: Yes

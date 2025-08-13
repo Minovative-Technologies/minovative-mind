@@ -185,12 +185,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.postMessageToWebview.bind(this), // 2. postMessageToWebview function
 			this.changeLogger, // 3. ProjectChangeLogger
 			this.codeValidationService, // 4. CodeValidationService
-			this.contextRefresherService, // 5. ContextRefresherService
-			{
-				// 6. Config object
-				enableRealTimeFeedback: true,
-				maxFeedbackIterations: 5,
-			}
+			this.contextRefresherService // 5. ContextRefresherService
 		);
 
 		// Instantiate RevertService

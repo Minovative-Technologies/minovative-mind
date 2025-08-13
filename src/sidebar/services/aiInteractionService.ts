@@ -80,22 +80,13 @@ export async function _performModification(
 			relevantSnippets: "",
 			editorContext: undefined,
 			activeSymbolInfo: undefined,
-			recentCorrectionAttemptOutcomes: [], // Added as per instruction
 		};
 		const genResult = await enhancedCodeGenerator.generateFileContent(
 			filePath,
 			modificationPrompt,
 			generationContext,
 			modelName,
-			token,
-			undefined, // feedbackCallback
-			async (chunk: string) => {
-				// onCodeChunkCallback that sends messages
-				postMessageToWebview({
-					type: "codeFileStreamChunk",
-					value: { streamId: streamId, filePath: filePath, chunk: chunk }, // Modified as per instruction 3
-				});
-			}
+			token
 		);
 		modifiedContent = genResult.content;
 

@@ -565,9 +565,7 @@ export async function executePlanStep(
 								step.generate_prompt!,
 								generationContext,
 								modelName,
-								token,
-								undefined,
-								onCodeChunkCallback
+								token
 							);
 
 						contentToProcess = cleanCodeOutput(generatedContentResult.content);
