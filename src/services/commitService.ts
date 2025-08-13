@@ -119,9 +119,12 @@ export class CommitService {
 
 			const commitMessagePrompt = `
 			
-			You are an expert using Git. Your task is to generate a short, but highly accurate commit message based on the provided staged changes. Make the commit messages in past tense (e.g., Implemented, Added, Removed, Refactored).
+			You are an expert using Git. Your task is to generate a short, but highly accurate commit message based on the provided staged changes. Make your commit messages in past tense only.
+
 Only provide the commit message in simple sentences, paragraphs, or lists.
+
 Do not use Markdown formatting or special symbols like backticks (\`) or escape characters. Replace them with plain text instead.
+
 Prioritize file-by-file summaries, use the overall diff for additional context, and follow git commit message best practices.
 
 			${detailedSummaries} Overall Staged Diff:

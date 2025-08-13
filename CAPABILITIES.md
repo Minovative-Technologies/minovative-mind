@@ -20,7 +20,7 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 - **Chat from Editor**: Initiate a chat directly from the active editor via right-click context menu or `Ctrl/Cmd+M` command (`minovative-mind.modifySelection` with "chat" instruction), sending selected code or the full file to the `chatService` for discussion.
 - **HTML Rendering in Markdown Responses**: AI-generated Markdown responses are rendered with rich HTML support in the `SidebarProvider`'s webview.
 - **Inline Code Copy and Edit**: Easily copy code snippets from AI responses or use an "Apply to Editor" feature to insert/modify code directly into your active file.
-- **Slash Command Suggestions**: Smart suggestions for AI commands like `/plan`, `/fix`, `/docs`, and `/merge` are available in the chat input.
+- **Slash Command Suggestions**: Smart suggestions for AI commands like `/plan`, `/fix`, and `/merge` are available in the chat input.
 - **Edit Message & Chat History Re-evaluation**: Users can edit previous messages, triggering `chatService` to re-evaluate the conversation with the updated context.
 - **Robust Confirmation Dialogs**: Clear chat history with explicit user confirmation, managed by the `SidebarProvider`.
 - **Convert AI Responses to Executable Plans**: AI-generated responses can be seamlessly converted into actionable `/plan` commands for structured execution.
@@ -39,7 +39,7 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 ### 1.4 Intelligent Code Modification
 
 - **Flexible Modification Scope**: AI can refactor, edit, or modify selected code or the entire active file, as instructed via commands.
-- **Triggered by Commands**: Modifications are initiated through the `minovative-mind.modifySelection` command, offering options for `/fix`, `/docs`, `/merge`, or custom prompts.
+- **Triggered by Commands**: Modifications are initiated through the `minovative-mind.modifySelection` command, offering options for `/fix`, `/merge`, or custom prompts.
 - **Symbol-Aware Context**: Leverages rich symbol information from the codebase to provide the AI with a deep understanding of functions, classes, and types, enabling more accurate and contextually relevant code modifications.
 - **Modular, Maintainable Code Generation**: Emphasizes generating high-quality, readable, and production-ready code.
 - **Diff Analysis for Quality Assurance**: Compares generated code against original content to validate output quality and suggest necessary refinements.

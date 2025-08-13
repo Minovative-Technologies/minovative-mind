@@ -121,94 +121,6 @@ async function executeExplainAction(
 	}
 }
 
-// --- Helper Function for Documentation Generation ---
-async function executeDocsAction(
-	sidebarProvider: SidebarProvider,
-	selectedText: string,
-	fullText: string,
-	languageId: string,
-	fileName: string,
-	effectiveRange: vscode.Range // Renamed from selectionRange
-): Promise<ActionResult> {
-	const activeApiKey = sidebarProvider.apiKeyManager.getActiveApiKey();
-	const selectedModel = DEFAULT_FLASH_LITE_MODEL; // Use default model for documentation generation
-
-	if (!activeApiKey) {
-		return {
-			success: false,
-			error: "No active API Key set. Please configure it in the sidebar.",
-		};
-	}
-	if (!selectedModel) {
-		return {
-			success: false,
-			error: "No AI model selected. Please check the sidebar.",
-		};
-	}
-
-	const userInstruction = `Generate comprehensive documentation for the selected code block. The documentation should explain its purpose, functionality, parameters (if any), return values (if any), and any significant side effects or dependencies. Structure the documentation clearly using the native comment syntax for ${languageId} (e.g., JSDoc for TypeScript/JavaScript, Python doc strings for Python, and other docs for other languages). Provide ONLY the raw documentation block. ABSOLUTELY DO NOT include any markdown language fences (e.g., \`\`\`language), code examples within fences, conversational text, or explanations. Provide only the raw documentation comments ready for direct insertion into the code.`;
-	const systemPrompt = `You are an expert AI programmer and technical writer assisting within VS Code. Generate documentation for the provided code selection within the context of the full file. Language: ${languageId}. File: ${fileName}.`;
-
-	const prompt = `
-	${systemPrompt}
-
-	--- Full File Content (${fileName}) ---
-	\`\`\`${languageId}
-	${fullText}
-	\`\`\`
-	--- End Full File Content ---
-
-	--- Code Selection to Document ---
-	\`\`\`${languageId}
-	${selectedText}
-	\`\`\`
-	--- End Code Selection to Document ---
-
-	--- User Instruction ---
-	${userInstruction}
-	--- End User Instruction ---
-
-	Assistant Response:
-`;
-
-	console.log(
-		`--- Sending generate documentation Action Prompt (Model: ${selectedModel}) ---`
-	);
-	console.log(`--- End generate documentation Action Prompt ---`);
-
-	try {
-		const result = await sidebarProvider.aiRequestService.generateWithRetry(
-			[{ text: prompt }],
-			selectedModel,
-			undefined, // No history needed for single documentation generation
-			"generate documentation"
-		);
-
-		if (
-			!result ||
-			result.toLowerCase().startsWith("error:") ||
-			result === ERROR_QUOTA_EXCEEDED
-		) {
-			throw new Error(result || `Empty response from AI (${selectedModel}).`);
-		}
-
-		// Documentation can contain markdown, so no aggressive cleaning like explain.
-		// However, we might trim whitespace for consistency.
-		const cleanedResult = cleanCodeOutput(result);
-		return { success: true, content: cleanedResult };
-	} catch (error) {
-		console.error(
-			`Error during generate documentation action (${selectedModel}):`,
-			error
-		);
-		const message = error instanceof Error ? error.message : String(error);
-		return {
-			success: false,
-			error: `Failed to generate documentation: ${message}`,
-		};
-	}
-}
-
 // --- Helper Function for Diagnostics Formatting ---
 // --- End Helper Function ---
 
@@ -282,10 +194,6 @@ export async function activate(context: vscode.ExtensionContext) {
 					description: "Fix bugs",
 				},
 				{
-					label: "/docs",
-					description: "Generate documentations",
-				},
-				{
 					label: "/merge",
 					description: "Resolve merge conflicts",
 				},
@@ -354,16 +262,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 			}
 
-			if (instruction === "/docs") {
-				if (originalSelection.isEmpty) {
-					vscode.window.showWarningMessage(
-						"Please select the code you want to document."
-					);
-					return;
-				}
-				selectedText = editor.document.getText(originalSelection);
-				effectiveRange = originalSelection;
-			} else if (instruction === "chat") {
+			if (instruction === "chat") {
 				let codeContentForAI: string;
 				let codeContextDescription: string;
 				const codeContextLanguageId = languageId; // Language ID is always from the document.
@@ -710,61 +609,6 @@ Above all, keep your responses **precise, well-structured, and context-aware**.
 
 			// The original diagnosticsString calculation block that was here is now moved into the withProgress block.
 
-			// /docs instruction handling (now using the upfront logic, this block still handles execution)
-			if (instruction === "/docs") {
-				const selectedModel = DEFAULT_FLASH_LITE_MODEL; // Use default model for documentation generation
-				if (!selectedModel) {
-					vscode.window.showErrorMessage(
-						"Minovative Mind: No AI model selected. Please check the sidebar."
-					);
-					return;
-				}
-
-				await vscode.window.withProgress(
-					{
-						location: vscode.ProgressLocation.Notification,
-						title: `Minovative Mind: Generating documentation (${selectedModel})...`,
-						cancellable: false, // Documentation generation is not cancellable by user
-					},
-					async (progress) => {
-						progress.report({
-							increment: 20,
-							message: "Minovative Mind: Preparing request...",
-						});
-						const result = await executeDocsAction(
-							sidebarProvider,
-							selectedText, // Now correctly set from the conditional logic above
-							fullText,
-							languageId,
-							fileName,
-							effectiveRange // Use effectiveRange
-						);
-						progress.report({
-							increment: 80,
-							message: result.success
-								? "Minovative Mind: Processing AI response..."
-								: "Minovative Mind: Handling error...",
-						});
-
-						if (result.success) {
-							await editor.edit((editBuilder) => {
-								// Insert at the start of the effective range, followed by a newline
-								editBuilder.insert(effectiveRange.start, result.content + "\n");
-							});
-							vscode.window.showInformationMessage(
-								"Minovative Mind: Documentation successfully added at the start of your selection."
-							);
-						} else {
-							vscode.window.showErrorMessage(
-								`Minovative Mind: ${result.error}`
-							);
-						}
-						progress.report({ increment: 100, message: "Done." });
-					}
-				);
-				return; // Crucially return here to prevent falling through to planning logic
-			}
-
 			// Handle /fix instruction: Prefill chat input and return
 			if (instruction === "/fix") {
 				// The preceding logic ensures `selectedText` is assigned. The faulty check is removed.
@@ -816,9 +660,6 @@ Above all, keep your responses **precise, well-structured, and context-aware**.
 					cancellable: true, // Allow cancellation
 				},
 				async (progress, token) => {
-					// Centralize Diagnostics String Calculation:
-					// For /fix, diagnosticsString is already calculated above.
-					// For other commands (/docs, /merge, custom prompt), use the determined effectiveRange.
 					if (instruction !== "/fix") {
 						// Only calculate if not /fix
 						diagnosticsString =
@@ -855,7 +696,6 @@ Above all, keep your responses **precise, well-structured, and context-aware**.
 					result.context
 				);
 			} else {
-				// Handle cases where the initial textual plan generation failed or was cancelled
 				vscode.window.showErrorMessage(
 					`Minovative Mind: ${
 						result.error ||
