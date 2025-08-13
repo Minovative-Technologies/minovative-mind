@@ -253,6 +253,9 @@ export async function scanWorkspace(
 		});
 	}
 
+	console.log(
+		`[WorkspaceScanner] Final scan results: Found ${relevantFiles.length} relevant files in ${rootFolder.uri.fsPath}.`
+	);
 	return relevantFiles;
 }
 

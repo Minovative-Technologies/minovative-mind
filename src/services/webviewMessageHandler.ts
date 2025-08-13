@@ -826,62 +826,41 @@ export async function handleWebviewMessage(
 			break; // break from the switch case
 		}
 
-		case "requestWorkspaceFiles": {
-			// Request Workspace Files
-			console.log("[MessageHandler] Received requestWorkspaceFiles.");
+		case "requestWorkspaceFiles":
+			console.log("[WebviewMessageHandler] Webview requested workspace files.");
 			try {
-				const workspaceFolders = vscode.workspace.workspaceFolders;
-				if (!workspaceFolders || workspaceFolders.length === 0) {
-					provider.postMessageToWebview({
-						type: "statusUpdate",
-						value: "No workspace folder is currently open.",
-						isError: true,
-					});
-					await provider.endUserOperation("failed");
-					return;
-				}
-
-				// For simplicity, use the first workspace folder
-				const rootFolder = workspaceFolders[0];
-				const workspaceRootPath = rootFolder.uri.fsPath;
-
-				provider.postMessageToWebview({
-					type: "statusUpdate",
-					value: "Scanning workspace for relevant files...",
-				});
-
-				const files = await scanWorkspace({ useCache: true });
-
-				// Convert URIs to relative paths
-				const relativePaths = files.map((fileUri) =>
-					path.relative(workspaceRootPath, fileUri.fsPath)
+				const allScannedFilesUris = await scanWorkspace({ useCache: true });
+				const allScannedFilesRelativePaths = allScannedFilesUris.map((uri) =>
+					vscode.workspace.asRelativePath(uri)
 				);
-
+				// Use `provider` as shown in the surrounding context, not `sidebarProvider` from prompt context if different
 				provider.postMessageToWebview({
-					type: "receiveWorkspaceFiles", // Assuming this message type exists on the webview side
-					value: relativePaths,
+					type: "receiveWorkspaceFiles", // Correct message type as specified
+					value: allScannedFilesRelativePaths, // Changed to match expected string[] type
 				});
-				provider.postMessageToWebview({
-					type: "statusUpdate",
-					value: `Found ${relativePaths.length} workspace files.`,
-				});
-				// Removed: await provider.endUserOperation('success');
+				console.log(
+					`[WebviewMessageHandler] Sent ${allScannedFilesRelativePaths.length} workspace file paths to webview.`
+				);
 			} catch (error: any) {
 				console.error(
-					"[MessageHandler] Error handling requestWorkspaceFiles:",
+					"[WebviewMessageHandler] Error scanning workspace files for webview:",
 					error
 				);
+				// Send receiveWorkspaceFiles with empty array to signify no files were returned
 				provider.postMessageToWebview({
-					type: "statusUpdate",
-					value: `Failed to scan workspace files: ${
-						error.message || String(error)
-					}`,
-					isError: true,
+					type: "receiveWorkspaceFiles", // Correct message type for empty result
+					value: [], // Indicate no files were received
 				});
-				await provider.endUserOperation("failed");
+				// Send a separate statusUpdate message to inform the user about the specific error
+				provider.postMessageToWebview({
+					type: "statusUpdate", // Use a general status update message for errors
+					value: `Error scanning workspace files: ${
+						error.message || "An unknown error occurred."
+					}`,
+					isError: true, // Mark this status update as an error
+				});
 			}
 			break;
-		}
 
 		case "aiResponseEnd": {
 			// `validatedData` is now inferred to have `success: boolean`, `isPlanResponse: boolean`, `requiresConfirmation: boolean`

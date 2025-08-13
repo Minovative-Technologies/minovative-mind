@@ -89,6 +89,30 @@ export function initializeMessageBusHandler(
 				break;
 			}
 
+			case "receiveWorkspaceFiles": // Changed case name
+				console.log("[MessageBusHandler] Received receiveWorkspaceFiles."); // Updated log message
+				if (Array.isArray(message.value)) {
+					// Modified conditional logic
+					appState.allWorkspaceFiles = message.value as string[]; // Updated data assignment and type cast
+					appState.isRequestingWorkspaceFiles = false;
+					const chatInput = elements.chatInput;
+					if (chatInput && chatInput.value.includes("@")) {
+						const event = new Event("input", { bubbles: true });
+						chatInput.dispatchEvent(event);
+					}
+					setLoadingState(appState.isLoading, elements);
+				} else {
+					// Added new else block for unexpected payload format
+					console.error(
+						"[MessageBusHandler] Received unexpected payload for receiveWorkspaceFiles:",
+						message.value
+					);
+					appState.allWorkspaceFiles = []; // Clear files on unexpected format
+					appState.isRequestingWorkspaceFiles = false; // Reset request status
+					setLoadingState(appState.isLoading, elements); // Reset loading state
+				}
+				break;
+
 			case "codeFileStreamStart": {
 				const { streamId, filePath, languageId } =
 					message.value as CodeFileStreamStartMessage["value"];
