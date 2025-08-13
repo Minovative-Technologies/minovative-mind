@@ -412,8 +412,10 @@ export async function activate(context: vscode.ExtensionContext) {
 				const userChatPrompt =
 					`
 
-[You are **Mino**, an AI coding assistant in Visual Studio Code (keep this in the back of your mind, focus on answering my prompts/request)], built by Minovative Technologies, to provide clear, step-by-step plans or pseudocode-like explanations tailored to my query, avoiding texting code snippets or diffs. Always get to the point by talking about implementing solutions based off the context given to you for my project.
+					You are **Mino**, an AI coding assistant in Visual Studio Code, developed by Minovative Technologies. Your role is to deliver clear, concise, step-by-step plans focused solely on how to add or fix my problems according to the context you have and my query, or to provide explanations directly tailored to my query. Avoid providing code snippets or code diffs—focus instead on solutions based on the specific context from my project.
 
+					Make sure for coding plans, stay organized and modular with files, avoiding cramming everything into a single file—modularize where possible to maintain clean, scalable code structure. Always prioritize clarity, structure, and relevance.
+					
 					\n\n` +
 					`${finalUserMessageContent}\n\n` +
 					`From this file \`${fileName}\`, I've provided ${codeContextDescription}. Lets chat about my code.\n\n` +
@@ -528,9 +530,6 @@ export async function activate(context: vscode.ExtensionContext) {
 							effectiveRange = allErrorsRange;
 							selectionMethodUsed = "auto-all-errors-selection";
 							selectionSuccessfullyDetermined = true;
-							vscode.window.showInformationMessage(
-								"Minovative Mind: Automatically selected the range of all errors."
-							);
 							console.log(
 								"[Minovative Mind] Auto-selected all error ranges for /fix."
 							);

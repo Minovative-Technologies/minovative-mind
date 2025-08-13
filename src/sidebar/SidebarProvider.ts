@@ -314,9 +314,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	public async handleWebviewReady(): Promise<void> {
+		// Always load essential data first, regardless of active operations
+		this.apiKeyManager.loadKeysFromStorage();
+		this.settingsManager.updateWebviewModelList();
+		this.chatHistoryManager.restoreChatHistoryToWebview();
+
+		// Variable to track if any specific operation state was restored.
 		let isAnyOperationBeingRestored = false;
 
 		if (this.isPlanExecutionActive) {
+			// #1: Plan execution is actively running
 			console.log(
 				"[SidebarProvider] Detected active plan execution. Restoring UI state."
 			);
@@ -326,13 +333,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "statusUpdate",
 				value: "A plan execution is currently in progress. Please wait.",
 			});
-		}
-
-		this.apiKeyManager.loadKeysFromStorage();
-		this.settingsManager.updateWebviewModelList();
-		this.chatHistoryManager.restoreChatHistoryToWebview();
-
-		if (this._persistedPendingPlanData) {
+			isAnyOperationBeingRestored = true;
+		} else if (this._persistedPendingPlanData) {
+			// #2: A plan has been generated and is awaiting user confirmation/review
 			console.log(
 				"[SidebarProvider] Restoring pending plan confirmation to webview from persisted data."
 			);
@@ -349,8 +352,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "restorePendingPlanConfirmation",
 				value: planDataForRestore,
 			});
-			this.postMessageToWebview({ type: "updateLoadingState", value: false });
-			this.isGeneratingUserRequest = false;
+			this.postMessageToWebview({ type: "updateLoadingState", value: false }); // Not a loading state
+			this.isGeneratingUserRequest = false; // Ensure this is reset if we're in a persisted plan state
 			await this.workspaceState.update(
 				"minovativeMind.isGeneratingUserRequest",
 				false
@@ -360,6 +363,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.currentAiStreamingState &&
 			!this.currentAiStreamingState.isComplete
 		) {
+			// #3: AI is actively streaming a response
 			console.log(
 				"[SidebarProvider] Restoring active AI streaming progress to webview."
 			);
@@ -367,9 +371,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "restoreStreamingProgress",
 				value: this.currentAiStreamingState,
 			});
-			this.postMessageToWebview({ type: "updateLoadingState", value: true });
+			this.postMessageToWebview({ type: "updateLoadingState", value: true }); // Is a loading state
 			isAnyOperationBeingRestored = true;
 		} else if (this.pendingCommitReviewData) {
+			// #4: A commit is awaiting user review
 			console.log(
 				"[SidebarProvider] Restoring pending commit review to webview."
 			);
@@ -377,34 +382,34 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				type: "restorePendingCommitReview",
 				value: this.pendingCommitReviewData,
 			});
-			this.isGeneratingUserRequest = false;
+			this.postMessageToWebview({ type: "updateLoadingState", value: false }); // Not a loading state
+			this.isGeneratingUserRequest = false; // Ensure this is reset if we're in a pending commit state
 			await this.workspaceState.update(
 				"minovativeMind.isGeneratingUserRequest",
 				false
 			);
 			isAnyOperationBeingRestored = true;
 		} else if (this.isGeneratingUserRequest) {
+			// #5: Generic `isGeneratingUserRequest` is true, but no specific active operation found above.
+			// This indicates a stale state that needs to be reset.
 			console.log(
-				"[SidebarProvider] Detected stale generic loading state (isGeneratingUserRequest is true, but no active streaming or pending review). Resetting."
+				"[SidebarProvider] Detected stale generic loading state. Resetting."
 			);
+			// `endUserOperation` handles clearing state, re-enabling inputs, and sending status.
 			await this.endUserOperation("success", "Inputs re-enabled.");
+			isAnyOperationBeingRestored = true; // Mark as handled (reset)
 		} else {
+			// #6: No active or pending operations detected. Ensure UI is fully re-enabled.
+			console.log(
+				"[SidebarProvider] No active operations, re-enabling inputs."
+			);
 			this.postMessageToWebview({ type: "reenableInput" });
-			this.clearActiveOperationState();
+			this.postMessageToWebview({ type: "updateLoadingState", value: false });
+			this.postMessageToWebview({ type: "statusUpdate", value: "" }); // Clear any stale status message
+			this.clearActiveOperationState(); // Ensure cancellation token and streaming state are null
 		}
 
-		if (!isAnyOperationBeingRestored) {
-			if (this.isPlanExecutionActive) {
-				console.log(
-					"[SidebarProvider] No specific operation restored. Resetting stale isPlanExecutionActive flag."
-				);
-				await this.setPlanExecutionActive(false);
-				this.postMessageToWebview({ type: "updateLoadingState", value: false });
-				this.postMessageToWebview({ type: "reenableInput" });
-				this.postMessageToWebview({ type: "statusUpdate", value: "" });
-			}
-		}
-
+		// Send final message about revertible changes
 		const hasRevertibleChanges = this.completedPlanChangeSets.length > 0;
 		this.postMessageToWebview({
 			type: "planExecutionFinished",
@@ -466,6 +471,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		// UI feedback after state cleanup
 		if (shouldReenableInputs) {
 			this.postMessageToWebview({ type: "reenableInput" });
+		}
+		// Always send updateLoadingState: false when an operation ends, unless it's a review state
+		if (outcome !== "review") {
+			this.postMessageToWebview({ type: "updateLoadingState", value: false });
 		}
 
 		let statusMessage = "";

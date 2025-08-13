@@ -10,13 +10,12 @@ import {
 } from "./ui/statusManager";
 import {
 	createPlanConfirmationUI,
-	createClearChatConfirmationUI, // Add this import
+	createClearChatConfirmationUI,
 } from "./ui/confirmationAndReviewUIs";
 import {
 	reenableAllMessageActionButtons,
 	setGlobalSetLoadingState,
 	disableAllMessageActionButtons,
-	finalizeStreamingMessage, // Add this import
 } from "./ui/chatMessageRenderer";
 import { RequiredDomElements } from "./types/webviewTypes";
 import { setIconForButton } from "./utils/iconHelpers";
@@ -80,7 +79,8 @@ function setLoadingState(
 		!loading &&
 		appState.isApiKeySet &&
 		!appState.isAwaitingUserReview && // Refactored
-		!appState.isCancellationInProgress;
+		!appState.isCancellationInProgress &&
+		!appState.isPlanExecutionInProgress;
 
 	const canSendCurrentInput =
 		canInteractWithMainChatControls && !appState.isCommandSuggestionsVisible;
@@ -90,13 +90,15 @@ function setLoadingState(
 		!loading &&
 		!appState.isAwaitingUserReview && // Refactored
 		!appState.isCommandSuggestionsVisible &&
-		!appState.isCancellationInProgress;
+		!appState.isCancellationInProgress &&
+		!appState.isPlanExecutionInProgress;
 
 	// Define enablement for image upload controls
 	const canInteractWithImageControls =
 		!loading &&
 		!appState.isAwaitingUserReview &&
-		!appState.isCancellationInProgress;
+		!appState.isCancellationInProgress &&
+		!appState.isPlanExecutionInProgress;
 
 	console.log(
 		`[setLoadingState] Final computed canInteractWithMainChatControls=${canInteractWithMainChatControls}, canSendCurrentInput=${canSendCurrentInput}, canInteractWithChatHistoryButtons=${canInteractWithChatHistoryButtons}`
@@ -113,7 +115,8 @@ function setLoadingState(
 		!appState.isAwaitingUserReview && // Refactored
 		!appState.isCommandSuggestionsVisible &&
 		appState.totalKeys > 0 &&
-		!appState.isCancellationInProgress;
+		!appState.isCancellationInProgress &&
+		!appState.isPlanExecutionInProgress;
 	elements.prevKeyButton.disabled =
 		!enableApiKeyControls || appState.totalKeys <= 1;
 	elements.nextKeyButton.disabled =
@@ -125,7 +128,8 @@ function setLoadingState(
 		!loading &&
 		!appState.isAwaitingUserReview && // Refactored
 		!appState.isCommandSuggestionsVisible &&
-		!appState.isCancellationInProgress;
+		!appState.isCancellationInProgress &&
+		!appState.isPlanExecutionInProgress;
 	elements.addKeyInput.disabled = !enableAddKeyInputControls;
 	elements.addKeyButton.disabled = !enableAddKeyInputControls;
 
@@ -203,10 +207,9 @@ function setLoadingState(
 
 	// Control visibility of the cancel generation button
 	if (
-		loading &&
-		!appState.isAwaitingUserReview && // Refactored
+		(loading || appState.isPlanExecutionInProgress) &&
 		!appState.isCancellationInProgress &&
-		!appState.isPlanExecutionInProgress // Hide stop button during plan execution
+		!appState.isAwaitingUserReview
 	) {
 		elements.cancelGenerationButton.style.display = "inline-flex";
 	} else {

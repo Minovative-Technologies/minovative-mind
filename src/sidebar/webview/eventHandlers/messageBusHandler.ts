@@ -222,7 +222,7 @@ export function initializeMessageBusHandler(
 			}
 
 			case "restoreStreamingProgress": {
-				finalizeStreamingMessage(elements); // New: Call finalizeStreamingMessage
+				finalizeStreamingMessage(elements);
 				const { content, relevantFiles, isComplete, isError } =
 					message.value as AiStreamingState;
 				console.log(
@@ -282,6 +282,15 @@ export function initializeMessageBusHandler(
 							// Store the original markdown text for copy functionality
 							appState.currentAiMessageContentElement.dataset.originalMarkdown =
 								appState.currentAccumulatedText;
+							stopTypingAnimation(); // Ensure animation is stopped
+							// Re-enable action buttons and the UI
+							if (!appState.isCancellationInProgress) {
+								setLoadingState(false, elements);
+							} else {
+								console.log(
+									"[Guard] UI remains disabled due to ongoing cancellation (restoreStreamingProgress completed)."
+								);
+							}
 							if (copyButton) {
 								copyButton.disabled = false;
 							}
@@ -291,13 +300,14 @@ export function initializeMessageBusHandler(
 							if (editButton) {
 								editButton.disabled = false;
 							}
-							stopTypingAnimation(); // Ensure animation is stopped
 						} else {
 							// If the stream is NOT complete, render accumulated content PLUS the loading dots.
 							appState.currentAiMessageContentElement.innerHTML =
 								md.render(appState.currentAccumulatedText) +
 								'<span class="loading-text">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
 							startTypingAnimation(elements); // Re-activate the typing animation for the dots
+							// Disable action buttons and indicate a loading state
+							setLoadingState(true, elements);
 							if (copyButton) {
 								copyButton.disabled = true;
 							} // Disable buttons while generating
@@ -319,7 +329,7 @@ export function initializeMessageBusHandler(
 							"[Webview] Failed to find .message-text-content in restored AI message. Fallback to direct append."
 						);
 						// Fallback if the content element isn't found after appendMessage.
-						// Append the full content, assuming it's an error or complete state.
+						// Append the full content, ensuring it's treated as a history message.
 						appendMessage(
 							elements,
 							"Model",
@@ -332,6 +342,10 @@ export function initializeMessageBusHandler(
 							undefined, // isRelevantFilesExpandedForHistory
 							false // isPlanExplanationForRender
 						);
+						// If isComplete was false, call setLoadingState(false, elements) as animation setup failed.
+						if (!isComplete) {
+							setLoadingState(false, elements);
+						}
 					}
 				} else {
 					console.warn(
@@ -350,19 +364,10 @@ export function initializeMessageBusHandler(
 						undefined, // isRelevantFilesExpandedForHistory
 						false // isPlanExplanationForRender
 					);
-				}
-
-				// Update the overall loading state of the UI (disables/enables inputs, shows/hides cancel button)
-				if (isComplete) {
-					if (!appState.isCancellationInProgress) {
+					// If isComplete was false, call setLoadingState(false, elements) as animation setup failed.
+					if (!isComplete) {
 						setLoadingState(false, elements);
-					} else {
-						console.log(
-							"[Guard] UI remains disabled due to ongoing cancellation (restoreStreamingProgress completed)."
-						);
 					}
-				} else {
-					setLoadingState(true, elements);
 				}
 				break;
 			}
