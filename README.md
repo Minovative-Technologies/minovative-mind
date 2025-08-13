@@ -108,6 +108,8 @@ code --install-extension minovative-mind-1.2.3.vsix
 
 > **TIP:** For a better experience, you could move the Minovative Mind extension from the primary bar to the secondary bar by right clicking the Minovative Mind icon. After right clicking, go to "Move To" > "Secondary Side Bar".
 
+Learn how to use the AI Agent here: [USER_GUIDE](./USER_GUIDE)
+
 ## More Than a Tool—It's A Platform
 
 Minovative Mind was architected from day one to be an extensible tool. We don't just want you to _use_ it; We want you to _build on it_. Fork/Clone the repository, create your own specialized agents, integrate proprietary tools, MCPs, or anything else you can think of and push the boundaries of what's possible.
