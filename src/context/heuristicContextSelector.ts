@@ -3,12 +3,31 @@ import * as path from "path";
 import { PlanGenerationContext } from "../sidebar/common/sidebarTypes";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 
+// Scoring weights constants
+const HIGH_RELEVANCE = 10;
+const MEDIUM_RELEVANCE = 5;
+const LOW_RELEVANCE = 1;
+const ACTIVE_FILE_SCORE_BOOST = 1000; // Ensures active file is highly prioritized
+
 export interface HeuristicSelectionOptions {
 	maxHeuristicFilesTotal: number;
 	maxSameDirectoryFiles: number;
 	maxDirectDependencies: number;
 	maxReverseDependencies: number;
 	maxCallHierarchyFiles: number;
+	sameDirectoryWeight: number;
+	directDependencyWeight: number;
+	reverseDependencyWeight: number;
+	callHierarchyWeight: number;
+	definitionWeight: number;
+	implementationWeight: number;
+	typeDefinitionWeight: number;
+	referencedTypeDefinitionWeight: number;
+	generalSymbolRelatedBoost: number;
+	dependencyWeight: number;
+	directoryWeight: number;
+	neighborDirectoryWeight: number;
+	sharedAncestorWeight: number;
 }
 
 export async function getHeuristicRelevantFiles(
@@ -21,322 +40,236 @@ export async function getHeuristicRelevantFiles(
 	cancellationToken?: vscode.CancellationToken,
 	options?: Partial<HeuristicSelectionOptions>
 ): Promise<vscode.Uri[]> {
-	const relevantFilesSet = new Set<vscode.Uri>();
-
+	// Initialize effective options with provided options or default weights
 	const effectiveOptions: HeuristicSelectionOptions = {
 		maxHeuristicFilesTotal: options?.maxHeuristicFilesTotal ?? 7,
-		maxSameDirectoryFiles: options?.maxSameDirectoryFiles ?? 3,
-		maxDirectDependencies: options?.maxDirectDependencies ?? 3,
-		maxReverseDependencies: options?.maxReverseDependencies ?? 2,
-		maxCallHierarchyFiles: options?.maxCallHierarchyFiles ?? 2,
+		maxSameDirectoryFiles: options?.maxSameDirectoryFiles ?? 3, // Default value
+		maxDirectDependencies: options?.maxDirectDependencies ?? 5, // Default value
+		maxReverseDependencies: options?.maxReverseDependencies ?? 5, // Default value
+		maxCallHierarchyFiles: options?.maxCallHierarchyFiles ?? 5, // Default value
+		sameDirectoryWeight: options?.sameDirectoryWeight ?? LOW_RELEVANCE,
+		directDependencyWeight: options?.directDependencyWeight ?? MEDIUM_RELEVANCE,
+		reverseDependencyWeight:
+			options?.reverseDependencyWeight ?? MEDIUM_RELEVANCE,
+		callHierarchyWeight: options?.callHierarchyWeight ?? HIGH_RELEVANCE,
+		definitionWeight: options?.definitionWeight ?? HIGH_RELEVANCE * 2, // Definition is often very important
+		implementationWeight: options?.implementationWeight ?? HIGH_RELEVANCE,
+		typeDefinitionWeight: options?.typeDefinitionWeight ?? HIGH_RELEVANCE,
+		referencedTypeDefinitionWeight:
+			options?.referencedTypeDefinitionWeight ?? MEDIUM_RELEVANCE,
+		generalSymbolRelatedBoost:
+			options?.generalSymbolRelatedBoost ?? MEDIUM_RELEVANCE,
+		dependencyWeight: options?.dependencyWeight ?? MEDIUM_RELEVANCE, // Default value
+		directoryWeight: options?.directoryWeight ?? LOW_RELEVANCE, // Default value
+		neighborDirectoryWeight: options?.neighborDirectoryWeight ?? LOW_RELEVANCE, // New default value
+		sharedAncestorWeight: options?.sharedAncestorWeight ?? LOW_RELEVANCE, // New default value
 	};
 
-	// Identify files strongly related to the active symbol for biasing
-	const symbolRelatedRelativePaths = new Set<string>();
-	if (activeSymbolDetailedInfo) {
-		// Helper to add URI to symbolRelatedRelativePaths set
-		const addUriToSymbolRelated = (
-			location: vscode.Uri | vscode.Location | vscode.Location[] | undefined
-		) => {
-			if (!location) {
-				return;
-			}
-			let actualUri: vscode.Uri | undefined;
-			if (location instanceof vscode.Uri) {
-				actualUri = location;
-			} else if ("uri" in location) {
-				// For vscode.Location
-				actualUri = location.uri;
-			} else if (Array.isArray(location) && location.length > 0) {
-				// For vscode.Location[]
-				actualUri = location[0].uri; // Take the first one, assuming relevance
-			}
+	const fileScores = new Map<vscode.Uri, number>();
 
-			if (actualUri && actualUri.scheme === "file") {
-				symbolRelatedRelativePaths.add(
-					path
-						.relative(projectRoot.fsPath, actualUri.fsPath)
-						.replace(/\\/g, "/")
-				);
-			}
-		};
+	// Pre-process symbol-related URIs for direct lookups
+	const symbolRelatedRelativePaths = new Set<string>(); // General set for any symbol relation
+	const definitionRelativePaths = new Set<string>();
+	const typeDefinitionRelativePaths = new Set<string>();
+	const implementationRelativePaths = new Set<string>();
+	const referencedTypeDefinitionRelativePaths = new Set<string>();
+	const incomingCallRelativePaths = new Set<string>();
+	const outgoingCallRelativePaths = new Set<string>();
 
-		// Add definition, type definition, and implementations URIs
-		addUriToSymbolRelated(activeSymbolDetailedInfo.definition);
-		addUriToSymbolRelated(activeSymbolDetailedInfo.typeDefinition);
-		if (activeSymbolDetailedInfo.implementations) {
-			activeSymbolDetailedInfo.implementations.forEach((loc) =>
-				addUriToSymbolRelated(loc)
-			);
+	// Helper to add URI from a location to various symbol-related sets
+	const addUriToSymbolSets = (
+		location: vscode.Uri | vscode.Location | vscode.Location[] | undefined,
+		specificSet?: Set<string> // Optional specific set to add to
+	) => {
+		if (!location) {
+			return;
+		}
+		let actualUris: vscode.Uri[] = [];
+		if (location instanceof vscode.Uri) {
+			actualUris = [location];
+		} else if ("uri" in location) {
+			// For vscode.Location
+			actualUris = [location.uri];
+		} else if (Array.isArray(location) && location.length > 0) {
+			// For vscode.Location[]
+			actualUris = location.map((loc) => loc.uri);
 		}
 
-		// Add referenced type definitions URIs
+		actualUris.forEach((uri) => {
+			if (uri && uri.scheme === "file") {
+				const relativePath = path
+					.relative(projectRoot.fsPath, uri.fsPath)
+					.replace(/\\/g, "/");
+				symbolRelatedRelativePaths.add(relativePath); // Add to general set
+				specificSet?.add(relativePath); // Add to specific set if provided
+			}
+		});
+	};
+
+	if (activeSymbolDetailedInfo) {
+		addUriToSymbolSets(
+			activeSymbolDetailedInfo.definition,
+			definitionRelativePaths
+		);
+		addUriToSymbolSets(
+			activeSymbolDetailedInfo.typeDefinition,
+			typeDefinitionRelativePaths
+		);
+		if (activeSymbolDetailedInfo.implementations) {
+			activeSymbolDetailedInfo.implementations.forEach((loc) =>
+				addUriToSymbolSets(loc, implementationRelativePaths)
+			);
+		}
 		if (activeSymbolDetailedInfo.referencedTypeDefinitions) {
 			for (const relativePath of activeSymbolDetailedInfo.referencedTypeDefinitions.keys()) {
 				// The key is already a relative path, so add directly
 				symbolRelatedRelativePaths.add(relativePath);
+				referencedTypeDefinitionRelativePaths.add(relativePath);
 			}
 		}
-
-		// Add call hierarchy URIs (from the call objects themselves)
 		if (activeSymbolDetailedInfo.incomingCalls) {
-			for (const call of activeSymbolDetailedInfo.incomingCalls) {
-				addUriToSymbolRelated(call.from.uri);
-			}
+			activeSymbolDetailedInfo.incomingCalls.forEach((call) =>
+				addUriToSymbolSets(call.from.uri, incomingCallRelativePaths)
+			);
 		}
 		if (activeSymbolDetailedInfo.outgoingCalls) {
-			for (const call of activeSymbolDetailedInfo.outgoingCalls) {
-				addUriToSymbolRelated(call.to.uri);
-			}
-		}
-	}
-
-	// 1. Always include the active file if present
-	if (activeEditorContext?.documentUri) {
-		relevantFilesSet.add(activeEditorContext.documentUri);
-	}
-
-	// 2. Include files in the same directory as the active file, biased by symbol relevance
-	if (activeEditorContext?.filePath) {
-		const activeFileDir = path.dirname(activeEditorContext.filePath);
-		const sameDirFilesWithBias: {
-			uri: vscode.Uri;
-			isSymbolRelated: boolean;
-		}[] = [];
-
-		for (const fileUri of allScannedFiles) {
-			if (cancellationToken?.isCancellationRequested) {
-				break;
-			}
-			const relativePath = path
-				.relative(projectRoot.fsPath, fileUri.fsPath)
-				.replace(/\\/g, "/");
-			if (path.dirname(relativePath) === activeFileDir) {
-				const isSymbolRelated = symbolRelatedRelativePaths.has(relativePath);
-				sameDirFilesWithBias.push({ uri: fileUri, isSymbolRelated });
-			}
-		}
-
-		// Prioritize symbol-related files within the same directory
-		sameDirFilesWithBias.sort(
-			(a, b) => (b.isSymbolRelated ? 1 : 0) - (a.isSymbolRelated ? 1 : 0)
-		); // Move symbol-related files to front
-
-		let sameDirCount = 0;
-		for (const fileEntry of sameDirFilesWithBias) {
-			if (cancellationToken?.isCancellationRequested) {
-				break;
-			}
-			if (sameDirCount >= effectiveOptions.maxSameDirectoryFiles) {
-				break;
-			}
-			if (!relevantFilesSet.has(fileEntry.uri)) {
-				relevantFilesSet.add(fileEntry.uri);
-				sameDirCount++;
-			}
-		}
-	}
-
-	// 3. Include direct dependencies of the active file, biased by symbol relevance
-	if (
-		activeEditorContext?.filePath &&
-		activeEditorContext?.documentUri && // Ensure documentUri is present for relative path conversion
-		fileDependencies &&
-		fileDependencies.size > 0
-	) {
-		const activeFileRelativePath = path
-			.relative(projectRoot.fsPath, activeEditorContext.documentUri.fsPath)
-			.replace(/\\/g, "/");
-		const importedByActiveFile = fileDependencies.get(activeFileRelativePath);
-
-		if (importedByActiveFile) {
-			const directDependenciesWithBias: {
-				uri: vscode.Uri;
-				isSymbolRelated: boolean;
-			}[] = [];
-			for (const depPath of importedByActiveFile) {
-				if (cancellationToken?.isCancellationRequested) {
-					break;
-				}
-				// Find the original URI for the dependency from allScannedFiles
-				const depUri = allScannedFiles.find(
-					(uri) =>
-						path
-							.relative(projectRoot.fsPath, uri.fsPath)
-							.replace(/\\/g, "/") === depPath
-				);
-				if (depUri) {
-					const isSymbolRelated = symbolRelatedRelativePaths.has(depPath);
-					directDependenciesWithBias.push({ uri: depUri, isSymbolRelated });
-				}
-			}
-
-			// Prioritize symbol-related direct dependencies
-			directDependenciesWithBias.sort(
-				(a, b) => (b.isSymbolRelated ? 1 : 0) - (a.isSymbolRelated ? 1 : 0)
+			activeSymbolDetailedInfo.outgoingCalls.forEach((call) =>
+				addUriToSymbolSets(call.to.uri, outgoingCallRelativePaths)
 			);
-
-			let directDepCount = 0;
-			for (const depEntry of directDependenciesWithBias) {
-				if (cancellationToken?.isCancellationRequested) {
-					break;
-				}
-				if (directDepCount >= effectiveOptions.maxDirectDependencies) {
-					break;
-				}
-				if (!relevantFilesSet.has(depEntry.uri)) {
-					relevantFilesSet.add(depEntry.uri);
-					directDepCount++;
-				}
-			}
 		}
 	}
 
-	// 4. Include files that directly import the active file (reverse dependencies), biased by symbol relevance
-	if (
-		activeEditorContext?.filePath &&
-		activeEditorContext?.documentUri && // Ensure documentUri is also present for relative path conversion
-		reverseFileDependencies &&
-		reverseFileDependencies.size > 0
-	) {
-		const activeFileRelativePath = path
-			.relative(projectRoot.fsPath, activeEditorContext.documentUri.fsPath)
+	const activeFileRelativePath = activeEditorContext?.documentUri
+		? path
+				.relative(projectRoot.fsPath, activeEditorContext.documentUri.fsPath)
+				.replace(/\\/g, "/")
+		: undefined;
+
+	const activeFileDirRelativePath = activeEditorContext?.filePath
+		? path
+				.dirname(
+					path.relative(projectRoot.fsPath, activeEditorContext.filePath)
+				)
+				.replace(/\\/g, "/")
+		: undefined;
+
+	for (const fileUri of allScannedFiles) {
+		if (cancellationToken?.isCancellationRequested) {
+			break;
+		}
+
+		const relativePath = path
+			.relative(projectRoot.fsPath, fileUri.fsPath)
 			.replace(/\\/g, "/");
+		let score = 0;
 
-		const importersOfActiveFile = reverseFileDependencies.get(
-			activeFileRelativePath
-		);
+		// 1. Prioritize active file with a very high boost
+		if (activeEditorContext?.documentUri?.fsPath === fileUri.fsPath) {
+			score += ACTIVE_FILE_SCORE_BOOST;
+		}
 
-		if (importersOfActiveFile && importersOfActiveFile.length > 0) {
-			const reverseDependenciesWithBias: {
-				uri: vscode.Uri;
-				isSymbolRelated: boolean;
-			}[] = [];
-			for (const importerPath of importersOfActiveFile) {
-				if (cancellationToken?.isCancellationRequested) {
-					break;
-				}
-				// Find the original URI for the importer from allScannedFiles
-				const importerUri = allScannedFiles.find(
-					(uri) =>
-						path
-							.relative(projectRoot.fsPath, uri.fsPath)
-							.replace(/\\/g, "/") === importerPath
-				);
-				if (importerUri) {
-					const isSymbolRelated = symbolRelatedRelativePaths.has(importerPath);
-					reverseDependenciesWithBias.push({
-						uri: importerUri,
-						isSymbolRelated,
-					});
-				}
+		// 2. Score based on specific symbol relationships
+		if (definitionRelativePaths.has(relativePath)) {
+			score += effectiveOptions.definitionWeight;
+		}
+		if (typeDefinitionRelativePaths.has(relativePath)) {
+			score += effectiveOptions.typeDefinitionWeight;
+		}
+		if (implementationRelativePaths.has(relativePath)) {
+			score += effectiveOptions.implementationWeight;
+		}
+		if (referencedTypeDefinitionRelativePaths.has(relativePath)) {
+			score += effectiveOptions.referencedTypeDefinitionWeight;
+		}
+		// Combine incoming and outgoing calls into one "call hierarchy" weight
+		if (
+			incomingCallRelativePaths.has(relativePath) ||
+			outgoingCallRelativePaths.has(relativePath)
+		) {
+			score += effectiveOptions.callHierarchyWeight;
+		}
+
+		// 3. General symbol related boost (if it's related to any symbol)
+		if (symbolRelatedRelativePaths.has(relativePath)) {
+			score += effectiveOptions.generalSymbolRelatedBoost;
+		}
+
+		// 4. Score for direct dependencies
+		if (
+			activeFileRelativePath &&
+			fileDependencies?.has(activeFileRelativePath)
+		) {
+			const importedByActiveFile = fileDependencies.get(activeFileRelativePath);
+			if (importedByActiveFile?.includes(relativePath)) {
+				score += effectiveOptions.directDependencyWeight;
 			}
+		}
 
-			// Prioritize symbol-related reverse dependencies
-			reverseDependenciesWithBias.sort(
-				(a, b) => (b.isSymbolRelated ? 1 : 0) - (a.isSymbolRelated ? 1 : 0)
+		// 5. Score for reverse dependencies
+		if (
+			activeFileRelativePath &&
+			reverseFileDependencies?.has(activeFileRelativePath)
+		) {
+			const importersOfActiveFile = reverseFileDependencies.get(
+				activeFileRelativePath
 			);
+			if (importersOfActiveFile?.includes(relativePath)) {
+				score += effectiveOptions.reverseDependencyWeight;
+			}
+		}
 
-			let countAdded = 0;
-			for (const importerEntry of reverseDependenciesWithBias) {
-				if (cancellationToken?.isCancellationRequested) {
+		// 6. Score for files in the same directory
+		if (activeFileDirRelativePath) {
+			if (path.dirname(relativePath) === activeFileDirRelativePath) {
+				score += effectiveOptions.sameDirectoryWeight;
+			}
+			// 7. Score for files in neighbor directories (sibling directories)
+			const fileDir = path.dirname(relativePath);
+			const activeFileParentDir = path.dirname(activeFileDirRelativePath);
+			if (
+				activeFileParentDir !== "." && // Not root
+				fileDir !== activeFileDirRelativePath && // Not same directory
+				path.dirname(fileDir) === activeFileParentDir // Sibling directory
+			) {
+				score += effectiveOptions.neighborDirectoryWeight;
+			}
+
+			// 8. Score for files sharing a significant common ancestor directory (e.g., within 2-3 levels up)
+			const activeFileComponents = activeFileDirRelativePath.split("/");
+			const fileComponents = fileDir.split("/");
+			let commonAncestorLength = 0;
+			for (
+				let i = 0;
+				i < Math.min(activeFileComponents.length, fileComponents.length);
+				i++
+			) {
+				if (activeFileComponents[i] === fileComponents[i]) {
+					commonAncestorLength++;
+				} else {
 					break;
 				}
-				if (countAdded >= effectiveOptions.maxReverseDependencies) {
-					break; // Stop if cancelled or limit reached
-				}
-				if (!relevantFilesSet.has(importerEntry.uri)) {
-					relevantFilesSet.add(importerEntry.uri);
-					countAdded++;
-				}
 			}
+
+			// Apply shared ancestor weight if there's a significant common path, but not the same directory
+			if (commonAncestorLength > 0 && fileDir !== activeFileDirRelativePath) {
+				// The deeper the common ancestor, the higher the base weight might be.
+				// This is a simple linear scale; more complex logic could be applied.
+				score += effectiveOptions.sharedAncestorWeight * commonAncestorLength;
+			}
+		}
+
+		// Only add to map if score is greater than 0
+		if (score > 0) {
+			// Accumulate scores for a file if it matches multiple criteria
+			fileScores.set(fileUri, (fileScores.get(fileUri) || 0) + score);
 		}
 	}
 
-	// 5. Include files from active symbol's call hierarchy (incoming and outgoing calls)
-	// This section inherently deals with symbol-relevant files, so no additional 'biasing' logic is needed here.
-	if (
-		activeEditorContext?.documentUri && // Ensure there's an active file
-		activeSymbolDetailedInfo // Ensure detailed symbol info is available
-	) {
-		let callHierarchyFilesAdded = 0; // Single counter for combined call hierarchy
+	let resultFiles = Array.from(fileScores.entries())
+		.sort(([, scoreA], [, scoreB]) => scoreB - scoreA) // Sort by score descending
+		.map(([uri]) => uri); // Get back just the URIs
 
-		// Helper function to process calls and add URIs to the set
-		const addCallHierarchyUris = (
-			calls:
-				| vscode.CallHierarchyIncomingCall[]
-				| vscode.CallHierarchyOutgoingCall[]
-				| undefined
-		) => {
-			if (!calls || calls.length === 0) {
-				return;
-			}
-			for (const call of calls) {
-				if (cancellationToken?.isCancellationRequested) {
-					return; // Return early if cancelled
-				}
-				if (callHierarchyFilesAdded >= effectiveOptions.maxCallHierarchyFiles) {
-					return; // Limit reached, return from helper
-				}
-				let callUri: vscode.Uri | undefined;
-				// Differentiate based on CallHierarchy type to get the correct URI
-				if ("from" in call) {
-					// IncomingCall
-					callUri = call.from.uri;
-				} else if ("to" in call) {
-					// OutgoingCall
-					callUri = call.to.uri;
-				}
-
-				if (callUri && callUri.scheme === "file") {
-					// Ensure it's a file URI
-					// Find the original URI from allScannedFiles to ensure it's a known project file
-					const relativeCallPath = path
-						.relative(projectRoot.fsPath, callUri.fsPath)
-						.replace(/\\/g, "/");
-					const projectFileUri = allScannedFiles.find(
-						(uri) =>
-							path
-								.relative(projectRoot.fsPath, uri.fsPath)
-								.replace(/\\/g, "/") === relativeCallPath
-					);
-
-					if (projectFileUri && !relevantFilesSet.has(projectFileUri)) {
-						relevantFilesSet.add(projectFileUri);
-						callHierarchyFilesAdded++; // Increment the global counter
-					}
-				}
-			}
-		};
-
-		// Process incoming calls
-		if (activeSymbolDetailedInfo.incomingCalls) {
-			addCallHierarchyUris(activeSymbolDetailedInfo.incomingCalls);
-		}
-
-		// Process outgoing calls
-		if (activeSymbolDetailedInfo.outgoingCalls) {
-			addCallHierarchyUris(activeSymbolDetailedInfo.outgoingCalls);
-		}
-	}
-
-	let resultFiles = Array.from(relevantFilesSet);
-
-	// Prioritize active editor context document URI if it exists and is in the set
-	if (activeEditorContext?.documentUri) {
-		const activeFileUri = activeEditorContext.documentUri;
-		const activeFileIndex = resultFiles.findIndex(
-			(uri) => uri.fsPath === activeFileUri.fsPath
-		);
-		if (activeFileIndex !== -1) {
-			// Remove the active file from its current position
-			resultFiles.splice(activeFileIndex, 1);
-			// Add it to the beginning of the array
-			resultFiles.unshift(activeFileUri);
-		}
-	}
-
-	// Enforce overall total limit after prioritizing active file
+	// Enforce overall total limit after sorting
 	if (resultFiles.length > effectiveOptions.maxHeuristicFilesTotal) {
 		resultFiles = resultFiles.slice(0, effectiveOptions.maxHeuristicFilesTotal);
 	}

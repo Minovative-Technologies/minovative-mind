@@ -75,7 +75,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 11. **Workspace File Scanning**:
 
-    - **Responsibility**: Efficiently scans the VS Code workspace to discover and identify relevant project files and directories, respecting `.gitignore` rules, applying size and type filters, and utilizing caching for performance.
+    - **Responsibility**: Efficiently scans the VS Code workspace to discover and identify relevant project files and directories. It rigorously respects `.gitignore` rules, applies configurable size and file type filters (supporting user-defined relevant file extensions), and allows for the provision of custom ignore patterns for granular control over the scan scope. It also utilizes caching for performance optimization.
     - **Key Files**: `src/context/workspaceScanner.ts`.
     - **AI Usage**: No
 
@@ -87,9 +87,12 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 13. **Intelligent Context Selection & Assembly**:
 
-    - **Responsibility**: Determines the most relevant portions of the project (specific files, code snippets, summaries, active symbols) to provide as context to the AI. This system employs both heuristic (rule-based) and AI-driven (smart) selection strategies, and then assembles this disparate information into a cohesive, token-optimized prompt string. Includes a sequential processing mode for very large contexts.
+    - **Responsibility**: This sophisticated system is central to providing the AI with semantic-aware, highly relevant contextual data from the project. It determines the most pertinent portions of the project (specific files, code snippets, summaries, and detailed active symbols) using a dual strategy:
+      - **Heuristic Selection**: A rule-based approach that quickly identifies strong candidates by weighted scoring based on factors like active file proximity, call hierarchy, direct and reverse dependencies, and directory proximity. User-configurable parameters (e.g., weights for each factor, limits on file counts) allow for tailored behavior.
+      - **AI-Driven Selection**: An AI-augmented approach that refines the heuristic selection. It receives richer contextual data, including detailed symbol information (definitions, implementations, type references, call hierarchies) and enhanced file summaries. The AI uses this data to make more nuanced decisions, prioritizing truly essential files and actively discarding less relevant ones, even if they were initially suggested by heuristics.
+    - The system then intelligently assembles this disparate information into a cohesive, token-optimized prompt string. Performance optimizations, such as caching selected files and propagating cancellation tokens, are integrated throughout the process. For very large contexts, a sequential processing mode is available to efficiently handle and summarize files in batches, preventing memory and token overflow. The final output format is always 'token-optimized'.
     - **Key Files**: `src/services/contextService.ts`, `src/context/heuristicContextSelector.ts`, `src/context/smartContextSelector.ts`, `src/context/fileContentProcessor.ts`, `src/context/contextBuilder.ts`, `src/services/sequentialContextService.ts`.
-    - **AI Usage**: Yes
+    - **AI Usage**: Yes (Powered by Gemini 2.5 Flash-lite)
 
 14. **External URL Content Fetching**:
 

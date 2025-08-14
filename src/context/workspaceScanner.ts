@@ -23,7 +23,7 @@ interface ScanCache {
 	workspacePath: string;
 }
 
-// File type patterns for better filtering
+// File type patterns for better filtering (default fallback)
 const RELEVANT_FILE_EXTENSIONS = [
 	// Source code files
 	".ts",
@@ -126,7 +126,8 @@ export async function scanWorkspace(
 
 	// Check cache first
 	const useCache = options?.useCache ?? true;
-	const cacheTimeout = options?.cacheTimeout ?? 5 * 60 * 1000; // 5 minutes default
+	// Tune cacheTimeout to 15 minutes (was 5 minutes)
+	const cacheTimeout = options?.cacheTimeout ?? 15 * 60 * 1000; // 15 minutes default
 
 	if (useCache) {
 		const cached = scanCache.get(workspacePath);
@@ -146,31 +147,46 @@ export async function scanWorkspace(
 		ig.add(options.additionalIgnorePatterns);
 	}
 
-	// Define concurrency (default to a reasonable number, e.g., 10)
-	const concurrency = options?.maxConcurrentReads ?? 10;
+	// Define concurrency. Tune to 15 (was 10) to align with common usage in ContextService.
+	const concurrency = options?.maxConcurrentReads ?? 15;
 	const maxFileSize = options?.maxFileSize ?? 1024 * 1024 * 1; // 1MB default
-	const fileTypeFilter = options?.fileTypeFilter ?? RELEVANT_FILE_EXTENSIONS;
+
+	// Make RELEVANT_FILE_EXTENSIONS configurable via VS Code settings
+	const config = vscode.workspace.getConfiguration(
+		"minovativeMind.workspaceScanner"
+	);
+	const userDefinedFileExtensions = config.get<string[]>(
+		"relevantFileExtensions"
+	);
+
+	// Use user-defined extensions from settings, fallback to options filter, then to hardcoded default
+	const fileTypeFilter =
+		options?.fileTypeFilter ??
+		userDefinedFileExtensions ??
+		RELEVANT_FILE_EXTENSIONS;
 
 	/**
-	 * Check if a file should be included based on size and type
+	 * Check if a file's name or extension matches the filter.
+	 * This is applied early to minimize I/O.
 	 */
-	function shouldIncludeFile(filePath: string, fileSize?: number): boolean {
-		// Check file size
-		if (fileSize !== undefined && fileSize > maxFileSize) {
-			return false;
-		}
-
-		// Check file extension
+	function passesNameAndExtensionFilter(filePath: string): boolean {
 		const ext = path.extname(filePath).toLowerCase();
 		const fileName = path.basename(filePath).toLowerCase();
 
-		// Include files with relevant extensions or specific filenames
 		return fileTypeFilter.some((pattern) => {
 			if (pattern.startsWith(".")) {
 				return ext === pattern;
 			}
 			return fileName === pattern;
 		});
+	}
+
+	/**
+	 * Check if a file's size is within the allowed limit.
+	 * This is applied after initial name/extension filter and stat call.
+	 */
+	function passesSizeFilter(fileSize: number): boolean {
+		return fileSize <= maxFileSize;
 	}
 
 	/**
@@ -187,7 +203,7 @@ export async function scanWorkspace(
 				const fullPath = path.join(dirUri.fsPath, name);
 				const relativePath = path.relative(workspacePath, fullPath);
 
-				// Skip ignored paths early
+				// Skip ignored paths early (minimize I/O)
 				if (
 					ig.ignores(relativePath) ||
 					(type === vscode.FileType.Directory && ig.ignores(relativePath + "/"))
@@ -195,9 +211,9 @@ export async function scanWorkspace(
 					return false;
 				}
 
-				// For files, check if they should be included
+				// For files, apply name/extension filter immediately (minimize I/O)
 				if (type === vscode.FileType.File) {
-					return shouldIncludeFile(relativePath);
+					return passesNameAndExtensionFilter(relativePath);
 				}
 
 				return true; // Include directories for further scanning
@@ -208,18 +224,17 @@ export async function scanWorkspace(
 				relevantEntries,
 				async ([name, type]) => {
 					const fullUri = vscode.Uri.joinPath(dirUri, name);
-					const relativePath = path.relative(workspacePath, fullUri.fsPath);
 
 					if (type === vscode.FileType.File) {
-						// Check file size before adding
+						// Check file size before adding. This is done after initial filtering.
 						try {
 							const stat = await vscode.workspace.fs.stat(fullUri);
-							if (shouldIncludeFile(relativePath, stat.size)) {
+							if (passesSizeFilter(stat.size)) {
 								relevantFiles.push(fullUri);
 							}
 						} catch (statError) {
-							// If we can't get file size, include it anyway
-							relevantFiles.push(fullUri);
+							// If we can't get file size (e.g., file disappeared, permission denied), skip it.
+							console.warn(`Could not stat file ${fullUri.fsPath}, skipping.`);
 						}
 					} else if (type === vscode.FileType.Directory) {
 						// Recursively scan subdirectories

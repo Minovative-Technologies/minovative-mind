@@ -347,6 +347,20 @@ export class SequentialContextService {
 			maxDirectDependencies: optimizationSettings.maxDirectDependencies,
 			maxReverseDependencies: optimizationSettings.maxReverseDependencies,
 			maxCallHierarchyFiles: optimizationSettings.maxCallHierarchyFiles,
+			sameDirectoryWeight: optimizationSettings.sameDirectoryWeight,
+			directDependencyWeight: optimizationSettings.directDependencyWeight,
+			reverseDependencyWeight: optimizationSettings.reverseDependencyWeight,
+			callHierarchyWeight: optimizationSettings.callHierarchyWeight,
+			definitionWeight: optimizationSettings.definitionWeight,
+			implementationWeight: optimizationSettings.implementationWeight,
+			typeDefinitionWeight: optimizationSettings.typeDefinitionWeight,
+			referencedTypeDefinitionWeight:
+				optimizationSettings.referencedTypeDefinitionWeight,
+			generalSymbolRelatedBoost: optimizationSettings.generalSymbolRelatedBoost,
+			dependencyWeight: optimizationSettings.dependencyWeight,
+			directoryWeight: optimizationSettings.directoryWeight,
+			neighborDirectoryWeight: optimizationSettings.neighborDirectoryWeight,
+			sharedAncestorWeight: optimizationSettings.sharedAncestorWeight,
 		};
 
 		// First, use heuristic selection to get initial relevant files

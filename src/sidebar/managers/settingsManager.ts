@@ -31,6 +31,21 @@ const OPTIMIZATION_SETTINGS_KEYS = {
 	MAX_DIRECT_DEPENDENCIES: "optimization.maxDirectDependencies",
 	MAX_REVERSE_DEPENDENCIES: "optimization.maxReverseDependencies",
 	MAX_CALL_HIERARCHY_FILES: "optimization.maxCallHierarchyFiles",
+	SAME_DIRECTORY_WEIGHT: "optimization.heuristic.sameDirectoryWeight",
+	DIRECT_DEPENDENCY_WEIGHT: "optimization.heuristic.directDependencyWeight",
+	REVERSE_DEPENDENCY_WEIGHT: "optimization.heuristic.reverseDependencyWeight",
+	CALL_HIERARCHY_WEIGHT: "optimization.heuristic.callHierarchyWeight",
+	DEFINITION_WEIGHT: "optimization.heuristic.definitionWeight",
+	IMPLEMENTATION_WEIGHT: "optimization.heuristic.implementationWeight",
+	TYPE_DEFINITION_WEIGHT: "optimization.heuristic.typeDefinitionWeight",
+	NEIGHBOR_DIRECTORY_WEIGHT: "optimization.heuristic.neighborDirectoryWeight",
+	SHARED_ANCESTOR_WEIGHT: "optimization.heuristic.sharedAncestorWeight",
+	REFERENCED_TYPE_DEFINITION_WEIGHT:
+		"optimization.heuristic.referencedTypeDefinitionWeight",
+	GENERAL_SYMBOL_RELATED_BOOST:
+		"optimization.heuristic.generalSymbolRelatedBoost",
+	DEPENDENCY_WEIGHT: "optimization.heuristic.dependencyWeight",
+	DIRECTORY_WEIGHT: "optimization.heuristic.directoryWeight",
 };
 
 // Default optimization settings
@@ -56,6 +71,19 @@ const DEFAULT_OPTIMIZATION_SETTINGS = {
 	maxDirectDependencies: 20,
 	maxReverseDependencies: 10,
 	maxCallHierarchyFiles: 15,
+	sameDirectoryWeight: 5,
+	directDependencyWeight: 15,
+	reverseDependencyWeight: 10,
+	callHierarchyWeight: 20,
+	definitionWeight: 50,
+	implementationWeight: 40,
+	typeDefinitionWeight: 30,
+	neighborDirectoryWeight: 5,
+	sharedAncestorWeight: 10,
+	referencedTypeDefinitionWeight: 25,
+	generalSymbolRelatedBoost: 15,
+	dependencyWeight: 5, // Equivalent to MEDIUM_RELEVANCE in heuristicContextSelector
+	directoryWeight: 1, // Equivalent to LOW_RELEVANCE in heuristicContextSelector
 };
 
 export class SettingsManager {
@@ -164,6 +192,58 @@ export class SettingsManager {
 			maxCallHierarchyFiles: this.getSetting(
 				OPTIMIZATION_SETTINGS_KEYS.MAX_CALL_HIERARCHY_FILES,
 				DEFAULT_OPTIMIZATION_SETTINGS.maxCallHierarchyFiles
+			),
+			sameDirectoryWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.SAME_DIRECTORY_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.sameDirectoryWeight
+			),
+			directDependencyWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.DIRECT_DEPENDENCY_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.directDependencyWeight
+			),
+			reverseDependencyWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.REVERSE_DEPENDENCY_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.reverseDependencyWeight
+			),
+			callHierarchyWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.CALL_HIERARCHY_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.callHierarchyWeight
+			),
+			definitionWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.DEFINITION_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.definitionWeight
+			),
+			implementationWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.IMPLEMENTATION_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.implementationWeight
+			),
+			typeDefinitionWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.TYPE_DEFINITION_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.typeDefinitionWeight
+			),
+			neighborDirectoryWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.NEIGHBOR_DIRECTORY_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.neighborDirectoryWeight
+			),
+			sharedAncestorWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.SHARED_ANCESTOR_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.sharedAncestorWeight
+			),
+			referencedTypeDefinitionWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.REFERENCED_TYPE_DEFINITION_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.referencedTypeDefinitionWeight
+			),
+			generalSymbolRelatedBoost: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.GENERAL_SYMBOL_RELATED_BOOST,
+				DEFAULT_OPTIMIZATION_SETTINGS.generalSymbolRelatedBoost
+			),
+			dependencyWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.DEPENDENCY_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.dependencyWeight
+			),
+			directoryWeight: this.getSetting(
+				OPTIMIZATION_SETTINGS_KEYS.DIRECTORY_WEIGHT,
+				DEFAULT_OPTIMIZATION_SETTINGS.directoryWeight
 			),
 		};
 	}

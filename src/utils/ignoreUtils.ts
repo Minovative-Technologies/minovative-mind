@@ -336,11 +336,23 @@ export const DEFAULT_IGNORE_PATTERNS: string[] = [
  * Loads .gitignore rules from the workspace root and combines them with default ignore patterns.
  * Returns an 'ignore' instance configured with these rules.
  * @param workspaceRootUri The URI of the workspace root.
+ * @param additionalIgnorePatterns Optional array of additional patterns to ignore.
  * @returns A configured 'ignore' instance.
  */
-export async function loadGitIgnoreMatcher(workspaceRootUri: vscode.Uri) {
+export async function loadGitIgnoreMatcher(
+	workspaceRootUri: vscode.Uri,
+	additionalIgnorePatterns?: string[]
+) {
 	const ig = ignore();
 	ig.add(DEFAULT_IGNORE_PATTERNS);
+
+	if (additionalIgnorePatterns && additionalIgnorePatterns.length > 0) {
+		console.log(
+			"Adding additional ignore patterns:",
+			additionalIgnorePatterns.join(", ")
+		);
+		ig.add(additionalIgnorePatterns);
+	}
 
 	const gitIgnoreUri = vscode.Uri.joinPath(workspaceRootUri, ".gitignore");
 	try {

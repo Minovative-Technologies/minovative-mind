@@ -37,13 +37,9 @@ import {
 	detectProjectType,
 	formatProjectProfileForPrompt,
 } from "./projectTypeDetector"; // Import project type detection and formatting
-import {
-	DEFAULT_FLASH_LITE_MODEL,
-	DEFAULT_MODEL,
-} from "../sidebar/common/sidebarConstants";
+import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 
 // Constants for symbol processing
-const MAX_SYMBOL_HIERARCHY_DEPTH_CONSTANT = 6; // Example depth for symbol hierarchy serialization
 export const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 5000;
 
 // Performance monitoring constants
@@ -275,7 +271,10 @@ export class ContextService {
 						return;
 					}
 					try {
-						const symbols = await SymbolService.getSymbolsInDocument(fileUri);
+						const symbols = await SymbolService.getSymbolsInDocument(
+							fileUri,
+							cancellationToken
+						);
 						const relativePath = path
 							.relative(rootFolder.uri.fsPath, fileUri.fsPath)
 							.replace(/\\/g, "/");
@@ -341,6 +340,11 @@ export class ContextService {
 						if (symbolAtCursor) {
 							// 2b.v. Initialize activeSymbolDetailedInfo
 							activeSymbolDetailedInfo = {
+								name: symbolAtCursor.name,
+								kind: vscode.SymbolKind[symbolAtCursor.kind],
+								detail: symbolAtCursor.detail,
+								fullRange: symbolAtCursor.range,
+								filePath: activeFileUri.fsPath,
 								referencedTypeDefinitions: new Map<string, string[]>(),
 							};
 

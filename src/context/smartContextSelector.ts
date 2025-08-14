@@ -181,7 +181,7 @@ export async function selectRelevantFilesAI(
 
 	// Check cache first
 	const useCache = selectionOptions?.useCache ?? true;
-	const cacheTimeout = selectionOptions?.cacheTimeout ?? 5 * 60 * 1000; // 5 minutes default
+	const cacheTimeout = selectionOptions?.cacheTimeout ?? 20 * 60 * 1000; // 20 minutes default
 
 	if (useCache) {
 		const cacheKey = generateAISelectionCacheKey(
@@ -214,7 +214,7 @@ export async function selectRelevantFilesAI(
 		const heuristicPaths = preSelectedHeuristicFiles.map((uri) =>
 			path.relative(projectRoot.fsPath, uri.fsPath).replace(/\\/g, "/")
 		);
-		contextPrompt += `\nHeuristically Pre-selected Files (based on active file directory, direct dependencies, etc. These are strong candidates for relevance.): ${heuristicPaths
+		contextPrompt += `\nHeuristically Pre-selected Files (based on active file directory, direct dependencies, etc. These are strong candidates for relevance. You should critically evaluate these and discard any that are not directly essential.): ${heuristicPaths
 			.map((p) => `"${p}"`)
 			.join(", ")}\n`;
 	}
@@ -237,6 +237,7 @@ export async function selectRelevantFilesAI(
 				symbolInfo.kind || "Unknown"
 			})\n`;
 			if (symbolInfo.detail) {
+				contextPrompt += `Detail: ${symbolInfo.detail}\n`;
 				contextPrompt += `Detail: ${symbolInfo.detail}\n`;
 			}
 			if (symbolInfo.filePath) {
@@ -494,10 +495,10 @@ export async function selectRelevantFilesAI(
 
 	Instructions for your response:
 	1.  Analyze all the provided information to understand the user's goal.
-	2.  Review the 'Heuristically Pre-selected Files' if present. While these files are initial candidates based on proximity, **your critical task is to select *only* the most directly relevant subset of files** from *all* available files (including and beyond the heuristically pre-selected ones) to address the user's request and provided diagnostics. **Actively discard any heuristically suggested files that do not directly contribute to solving the problem or fulfilling the request.** Prioritize files essential for the task over simply related ones.
-	3.  If 'Active Symbol Detailed Information' is present, **pay close attention to the symbol's definitions, general references, incoming/outgoing calls, and referenced type definitions**. These relationships are crucial indicators of file relevance; prioritize files that define, implement, or are closely related via the call hierarchy or type definitions to the active symbol.
+	2.  Review the 'Heuristically Pre-selected Files' if present. While these files are initial candidates based on proximity, **your critical task is to select *only* the most directly relevant and essential subset of files** from *all* available files (including and beyond the heuristically pre-selected ones) to address the user's request and provided diagnostics. **Actively discard any heuristically suggested files that do not directly contribute to solving the problem or fulfilling the request.** Prioritize files that are *essential* for the task over those that are merely peripherally related.
+	3.  If 'Active Symbol Detailed Information' is present, **this is paramount.** Pay extremely close attention to the symbol's definitions, implementations, general references, incoming/outgoing calls, and referenced type definitions. These relationships are the **most crucial indicators of file relevance**. Prioritize files that directly define, implement, or are fundamentally interconnected via the call hierarchy or type definitions to the active symbol.
 	4.  Carefully examine the 'Internal File Relationships' section if present, as it provides crucial context on how files relate to each other, forming logical modules or feature areas.
-	5.  Identify which of the "Available Project Files" are most likely to be needed to understand the context or make the required changes. Prioritize files that are imported by the active file, or by other files you deem highly relevant to the user's request.
+	5.  For each file in the "Available Project Files" list, consider its path, its summary, and its relationship to the active file, active symbol, and other relevant files. Prioritize files whose summaries indicate high semantic similarity to the user's request or the problem domain, and files that are directly imported by the active file, or by other files you deem highly relevant.
 	6.  Return your selection as a JSON array of strings. Each string in the array must be an exact relative file path from the "Available Project Files" list.
 	7.  If no specific files from the list seem particularly relevant *beyond the heuristically pre-selected ones* (e.g., the request is very general or can be answered without looking at other files beyond the active one and its immediate module), return an empty JSON array \`[]\`
 	8.  Do NOT include any files not present in the "Available Project Files" list.
