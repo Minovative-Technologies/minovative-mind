@@ -32,6 +32,12 @@ export function createInitialPlanningExplanationPrompt(
         \`\`\`
         --- End Selected Code ---
 
+        ${
+					diagnosticsString
+						? `\n--- Relevant Diagnostics in Selection ---\n${diagnosticsString}\n--- End Relevant Diagnostics ---\n`
+						: ""
+				}
+
         --- Full Content of Affected File (${editorContext.filePath}) ---
         \`\`\`${editorContext.languageId}
         ${editorContext.fullText}
@@ -83,6 +89,12 @@ export function createInitialPlanningExplanationPrompt(
         ${editorContext.selectedText}
         \`\`\`
         --- End Selected Code ---
+
+        ${
+					diagnosticsString
+						? `\n--- Relevant Diagnostics in Selection ---\n${diagnosticsString}\n--- End Relevant Diagnostics ---\n`
+						: ""
+				}
 
         --- Full Content of Affected File (${editorContext.filePath}) ---
         \`\`\`${editorContext.languageId}
@@ -237,6 +249,12 @@ export function createPlanningPrompt(
         \`\`\`
         --- End Selected Code ---
 
+        ${
+					actualDiagnosticsString
+						? `\n--- Relevant Diagnostics in Selection ---\n${actualDiagnosticsString}\n--- End Relevant Diagnostics ---`
+						: ""
+				}
+
         --- Full Content of Affected File (${editorContext.filePath}) ---
         \`\`\`${editorContext.languageId}
         ${editorContext.fullText}
@@ -278,7 +296,9 @@ export function createPlanningPrompt(
         Language: ${editorContext.languageId}
         
         --- Instruction Type ---
-        I provided the custom instruction for you to complete: "${editorContext.instruction}".
+        I provided the custom instruction for you to complete: "${
+					editorContext.instruction
+				}".
         --- End Instruction Type ---
 
         --- Selected Code in Editor ---
@@ -286,6 +306,12 @@ export function createPlanningPrompt(
         ${editorContext.selectedText}
         \`\`\`
         --- End Selected Code ---
+
+        ${
+					actualDiagnosticsString
+						? `\n--- Relevant Diagnostics in Selection ---\n${actualDiagnosticsString}\n--- End Relevant Diagnostics ---`
+						: ""
+				}
 
         --- Full Content of Affected File (${editorContext.filePath}) ---
         \`\`\`${editorContext.languageId}

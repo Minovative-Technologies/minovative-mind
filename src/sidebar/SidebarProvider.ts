@@ -610,6 +610,36 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	}
 
 	// --- OPERATION & STATE HELPERS ---
+
+	public async startUserOperation(): Promise<void> {
+		// Set Generation State
+		this.isGeneratingUserRequest = true;
+		await this.workspaceState.update(
+			"minovativeMind.isGeneratingUserRequest",
+			true
+		);
+
+		// Manage Cancellation Token
+		console.log("[SidebarProvider] Starting user operation.");
+
+		// Check if an activeOperationCancellationTokenSource already exists
+		if (this.activeOperationCancellationTokenSource) {
+			// Cancel the existing token source
+			this.activeOperationCancellationTokenSource.cancel();
+			// Dispose of the existing token source to release resources
+			this.activeOperationCancellationTokenSource.dispose();
+		}
+
+		// Create a new vscode.CancellationTokenSource instance
+		this.activeOperationCancellationTokenSource =
+			new vscode.CancellationTokenSource();
+
+		// Log the creation of the new token source for debugging purposes
+		console.log(
+			"[SidebarProvider] Created new CancellationTokenSource for the operation."
+		);
+	}
+
 	public isOperationInProgress(): boolean {
 		return (
 			!!this.activeOperationCancellationTokenSource ||

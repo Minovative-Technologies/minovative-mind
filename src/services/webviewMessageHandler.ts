@@ -5,8 +5,7 @@ import {
 	ImageInlineData,
 	HistoryEntryPart,
 } from "../sidebar/common/sidebarTypes";
-// Zod imports
-import { z } from "zod";
+
 import { allMessageSchemas } from "./messageSchemas";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
@@ -40,6 +39,8 @@ export async function handleWebviewMessage(
 	const validatedData = parseResult.data; // Use validated data from now on
 
 	// Prevent new operations if one is ongoing
+	// `allowedDuringBackground` includes messages that can run concurrently,
+	// are follow-up actions, or are designed to interrupt/redirect existing operations.
 	const allowedDuringBackground = [
 		"webviewReady",
 		"requestDeleteConfirmation",
@@ -48,20 +49,20 @@ export async function handleWebviewMessage(
 		"selectModel",
 		"requestAuthState",
 		"deleteSpecificMessage",
-		"confirmCommit",
-		"cancelCommit",
+		"confirmCommit", // Follow-up to commit generation
+		"cancelCommit", // Follow-up to commit generation
 		"openExternalLink",
-		"confirmPlanExecution", // Allowed as a follow-up
-		"retryStructuredPlanGeneration", // Allowed as a follow-up
+		"confirmPlanExecution", // Allowed as a follow-up action to a pending plan
+		"retryStructuredPlanGeneration", // Allowed as a follow-up action to a failed/declined plan
 		"openFile", // Allowed as a direct user interaction
 		"toggleRelevantFilesDisplay", // Allowed as a UI interaction
 		"openSettingsPanel",
 		"universalCancel", // Universal cancellation message, must be allowed during background operations
-		"editChatMessage", // 1. Added "editChatMessage" to the allowedDuringBackground array
+		"editChatMessage", // Allowed to interrupt/redirect existing operations
 		"getTokenStatistics", // Allow token statistics requests during background operations
 		"getCurrentTokenEstimates", // Allow current token estimates during background operations
 		"openSidebar", // Allow opening sidebar during background operations
-		"generatePlanPromptFromAIMessage", // CRITICAL CHANGE: Allow this new message type during background operations
+		"generatePlanPromptFromAIMessage", // Allow this new message type during background operations
 		"revertRequest",
 		"requestClearChatConfirmation", // Allowed for user confirmation flow
 		"confirmClearChatAndRevert", // Allowed as a direct user interaction during clear chat flow
@@ -96,14 +97,11 @@ export async function handleWebviewMessage(
 			console.log(
 				"[WebviewMessageHandler] Received operationCancelledConfirmation from extension."
 			);
-			// When the extension confirms cancellation and potentially collapses the sidebar,
-			// the webview should update its UI state. This typically means resetting
-			// loading indicators and re-enabling user input fields.
+			// When the extension confirms cancellation, the webview updates its UI state.
 			provider.postMessageToWebview({
 				type: "updateLoadingState",
 				value: false,
 			});
-
 			provider.postMessageToWebview({ type: "reenableInput" });
 			break;
 
@@ -114,30 +112,18 @@ export async function handleWebviewMessage(
 
 		case "planRequest": {
 			const userRequest = validatedData.value;
-			// This addHistoryEntry call might need to be updated to support HistoryEntryPart[] if userRequest is changed to such.
-			// For now, it remains as a string because /plan is a command, not multi-modal input.
+			await provider.startUserOperation(); // Start the operation and set generating state
 			provider.chatHistoryManager.addHistoryEntry(
 				"user",
 				`/plan ${userRequest}`
-			);
-			provider.isGeneratingUserRequest = true;
-			await provider.workspaceState.update(
-				"minovativeMind.isGeneratingUserRequest",
-				true
 			);
 			// The planService will handle the rest, including UI updates
 			await provider.planService.handleInitialPlanRequest(userRequest);
 			break;
 		}
 
-		case "confirmPlanExecution":
-			// Ensure isGeneratingUserRequest is true at the very beginning
-			provider.isGeneratingUserRequest = true;
-			await provider.workspaceState.update(
-				"minovativeMind.isGeneratingUserRequest",
-				true
-			);
-
+		case "confirmPlanExecution": {
+			await provider.startUserOperation(); // Start the operation and set generating state
 			if (provider.pendingPlanGenerationContext) {
 				const contextForExecution = {
 					...provider.pendingPlanGenerationContext,
@@ -147,28 +133,23 @@ export async function handleWebviewMessage(
 					contextForExecution
 				);
 			} else {
+				const errorMessage =
+					"No plan is currently awaiting confirmation. Please generate a new plan.";
+				console.error(`[MessageHandler] ${errorMessage}`);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value:
-						"No plan is currently awaiting confirmation. Please generate a new plan.",
+					value: errorMessage,
 					isError: true,
 				});
-				await provider.endUserOperation("failed"); // Signal failure and re-enable inputs
-				return; // Add return to prevent further execution in this branch
+				await provider.endUserOperation("failed", errorMessage); // Signal failure and re-enable inputs
 			}
 			break;
+		}
 
-		case "retryStructuredPlanGeneration":
-			// Ensure isGeneratingUserRequest is true at the very beginning
-			provider.isGeneratingUserRequest = true;
-			await provider.workspaceState.update(
-				"minovativeMind.isGeneratingUserRequest",
-				true
-			);
-
+		case "retryStructuredPlanGeneration": {
+			await provider.startUserOperation(); // Start the operation and set generating state
 			if (provider.lastPlanGenerationContext) {
 				const contextForRetry = { ...provider.lastPlanGenerationContext };
-				// This addHistoryEntry call remains as a string because it's an internal message.
 				provider.chatHistoryManager.addHistoryEntry(
 					"model",
 					"User requested retry of structured plan generation."
@@ -177,16 +158,18 @@ export async function handleWebviewMessage(
 					contextForRetry
 				);
 			} else {
+				const errorMessage =
+					"No previously generated plan is available for retry. Please initiate a new plan request.";
+				console.error(`[MessageHandler] ${errorMessage}`);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value:
-						"No previously generated plan is available for retry. Please initiate a new plan request.",
+					value: errorMessage,
 					isError: true,
 				});
-				await provider.endUserOperation("failed"); // Signal failure and re-enable inputs
-				return; // Add return to prevent further execution in this branch
+				await provider.endUserOperation("failed", errorMessage); // Signal failure and re-enable inputs
 			}
 			break;
+		}
 
 		case "revertRequest":
 			console.log("[MessageHandler] Received revertRequest.");
@@ -194,19 +177,16 @@ export async function handleWebviewMessage(
 			break;
 
 		case "chatMessage": {
-			// Type assertion 'data as WebviewToExtensionChatMessageType' removed due to Zod validation
+			await provider.startUserOperation(); // Start the operation and set generating state
 			const userMessageText = validatedData.value;
 			const groundingEnabled = validatedData.groundingEnabled ?? false;
 			const incomingImageParts = validatedData.imageParts; // Array of ImageInlineData | undefined
 
 			// Handle /commit command first (existing logic)
 			if (userMessageText.trim().toLowerCase() === "/commit") {
-				if (!provider.activeOperationCancellationTokenSource) {
-					provider.activeOperationCancellationTokenSource =
-						new vscode.CancellationTokenSource();
-				}
+				// The token is already available via provider.activeOperationCancellationTokenSource
 				await provider.commitService.handleCommitCommand(
-					provider.activeOperationCancellationTokenSource.token
+					provider.activeOperationCancellationTokenSource!.token
 				);
 				break; // Exit case after handling /commit
 			}
@@ -245,21 +225,18 @@ export async function handleWebviewMessage(
 
 			// Handle cases where no text or images are provided
 			if (userHistoryParts.length === 0) {
+				const errorMessage = "Please provide a message or images to send.";
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: "Please provide a message or images to send.",
+					value: errorMessage,
 					isError: true,
 				});
-				await provider.endUserOperation("failed");
+				await provider.endUserOperation("failed", errorMessage);
 				break;
 			}
 
-			// Update the provider.chatHistoryManager.addHistoryEntry call
-			// Pass userHistoryParts to addHistoryEntry
 			provider.chatHistoryManager.addHistoryEntry("user", userHistoryParts);
 
-			// Update the await provider.chatService.handleRegularChat call
-			// Pass userHistoryParts as the first argument instead of userMessage
 			await provider.chatService.handleRegularChat(
 				userHistoryParts,
 				groundingEnabled
@@ -267,25 +244,16 @@ export async function handleWebviewMessage(
 			break;
 		}
 
-		case "commitRequest":
-			// If a direct commitRequest message, ensure a cancellation token is prepared and passed.
-			if (!provider.activeOperationCancellationTokenSource) {
-				provider.activeOperationCancellationTokenSource =
-					new vscode.CancellationTokenSource();
-			}
-			provider.isGeneratingUserRequest = true;
-			await provider.workspaceState.update(
-				"minovativeMind.isGeneratingUserRequest",
-				true
-			);
+		case "commitRequest": {
+			await provider.startUserOperation(); // Start the operation and set generating state
 			await provider.commitService.handleCommitCommand(
-				provider.activeOperationCancellationTokenSource.token
+				provider.activeOperationCancellationTokenSource!.token
 			);
 			break;
+		}
 
 		case "confirmCommit":
-			// `validatedData` is now inferred to have `value: string`
-			const editedCommitMessage = validatedData.value; // Retrieve the edited message
+			const editedCommitMessage = validatedData.value;
 			// No explicit provider.endUserOperation() here; CommitService will handle it
 			await provider.commitService.confirmCommit(editedCommitMessage);
 			break;
@@ -296,7 +264,6 @@ export async function handleWebviewMessage(
 			break;
 
 		case "getTokenStatistics":
-			// Send token statistics to webview
 			const stats = provider.tokenTrackingService.getFormattedStatistics();
 			provider.postMessageToWebview({
 				type: "updateTokenStatistics",
@@ -305,7 +272,6 @@ export async function handleWebviewMessage(
 			break;
 
 		case "getCurrentTokenEstimates":
-			// `validatedData.value` is now inferred to have `inputText` and `outputText`
 			const { inputText, outputText } = validatedData.value;
 			const currentEstimates =
 				provider.tokenTrackingService.getCurrentStreamingEstimates(
@@ -319,7 +285,6 @@ export async function handleWebviewMessage(
 			break;
 
 		case "openSidebar":
-			// Open the Minovative Mind sidebar when a plan is completed
 			try {
 				await vscode.commands.executeCommand(
 					"minovative-mind.activitybar.focus"
@@ -327,13 +292,21 @@ export async function handleWebviewMessage(
 				console.log(
 					"[MessageHandler] Sidebar opened automatically after plan completion."
 				);
-			} catch (error) {
+			} catch (error: any) {
 				console.error("[MessageHandler] Failed to open sidebar:", error);
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: formatUserFacingErrorMessage(
+						error,
+						"Failed to open sidebar.",
+						"Error: "
+					),
+					isError: true,
+				});
 			}
 			break;
 
 		case "addApiKey":
-			// `validatedData.value` is now inferred to be string
 			await provider.apiKeyManager.addApiKey(validatedData.value.trim());
 			break;
 
@@ -347,7 +320,6 @@ export async function handleWebviewMessage(
 			if (result === "Yes") {
 				await provider.apiKeyManager.deleteActiveApiKey();
 			} else {
-				// User chose "No" or dismissed the dialog (result is undefined)
 				provider.postMessageToWebview({
 					type: "statusUpdate",
 					value: "API key deletion cancelled.",
@@ -356,7 +328,6 @@ export async function handleWebviewMessage(
 			}
 			break;
 
-		// Clear chat confirmation flow
 		case "requestClearChatConfirmation":
 			console.log("[MessageHandler] Received requestClearChatConfirmation.");
 			provider.postMessageToWebview({ type: "requestClearChatConfirmation" });
@@ -365,14 +336,10 @@ export async function handleWebviewMessage(
 		case "confirmClearChatAndRevert":
 			console.log("[MessageHandler] Received confirmClearChatAndRevert.");
 			try {
-				// Clear chat history
 				await provider.chatHistoryManager.clearChat();
-				// Clear project change logger history (all completed plans)
 				provider.changeLogger.clearAllCompletedPlanChanges();
-				// Clear persisted completed change sets from workspace state
 				await provider.updatePersistedCompletedPlanChangeSets(null);
 
-				// Send success messages to webview
 				provider.postMessageToWebview({ type: "chatCleared" });
 				provider.postMessageToWebview({
 					type: "planExecutionFinished",
@@ -388,19 +355,16 @@ export async function handleWebviewMessage(
 					"[MessageHandler] Error clearing chat or reverting changes:",
 					error
 				);
-				const errorMessage = `Failed to clear chat and revert changes: ${
-					error.message || String(error)
-				}`;
-
-				// Send error messages to webview
+				const errorMessage = formatUserFacingErrorMessage(
+					error,
+					"Failed to clear chat and revert changes."
+				);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
 					value: errorMessage,
 					isError: true,
 				});
 				provider.postMessageToWebview({ type: "reenableInput" });
-
-				// Show VS Code error notification
 				vscode.window.showErrorMessage(errorMessage);
 			}
 			break;
@@ -414,8 +378,6 @@ export async function handleWebviewMessage(
 			provider.postMessageToWebview({ type: "reenableInput" });
 			break;
 
-		// Old "clearChatRequest" case removed from here
-
 		case "saveChatRequest":
 			await provider.chatHistoryManager.saveChat();
 			break;
@@ -425,14 +387,12 @@ export async function handleWebviewMessage(
 			break;
 
 		case "deleteSpecificMessage":
-			// `validatedData` is now inferred to have `messageIndex: number`
 			provider.chatHistoryManager.deleteHistoryEntry(
 				validatedData.messageIndex
 			);
 			break;
 
 		case "toggleRelevantFilesDisplay": {
-			// Type assertion 'data as ToggleRelevantFilesDisplayMessage' removed due to Zod validation
 			provider.chatHistoryManager.updateMessageRelevantFilesExpandedState(
 				validatedData.messageIndex,
 				validatedData.isExpanded
@@ -441,12 +401,10 @@ export async function handleWebviewMessage(
 		}
 
 		case "selectModel":
-			// `validatedData.value` is now inferred to be string
 			await provider.settingsManager.handleModelSelection(validatedData.value);
 			break;
 
 		case "openExternalLink": {
-			// Type assertion 'data.url as string' removed due to Zod validation
 			const url = validatedData.url;
 			if (url) {
 				await vscode.env.openExternal(vscode.Uri.parse(url, true));
@@ -455,7 +413,6 @@ export async function handleWebviewMessage(
 		}
 
 		case "openSettingsPanel": {
-			// Type assertion 'data.panelId as string' removed due to Zod validation
 			const panelId = validatedData.panelId;
 			if (panelId) {
 				try {
@@ -473,9 +430,11 @@ export async function handleWebviewMessage(
 					);
 					provider.postMessageToWebview({
 						type: "statusUpdate",
-						value: `Failed to open settings panel: ${
-							error.message || String(error)
-						}`,
+						value: formatUserFacingErrorMessage(
+							error,
+							"Failed to open settings panel.",
+							"Error: "
+						),
 						isError: true,
 					});
 				}
@@ -491,24 +450,21 @@ export async function handleWebviewMessage(
 		}
 
 		case "openFile": {
-			const relativeFilePathFromWebview = validatedData.value; // Renamed for clarity, now directly from validatedData
+			const relativeFilePathFromWebview = validatedData.value;
 
-			// Crucial Security Check:
-			// 1. Verify filePath is a string. (Zod ensures type, but still check for empty string for functional/security reasons)
 			if (relativeFilePathFromWebview.trim() === "") {
-				console.warn(
-					`[MessageHandler] Security Alert: Invalid filePath received for openFile: "${relativeFilePathFromWebview}"`
+				const errorMessage = formatUserFacingErrorMessage(
+					new Error(
+						`The provided file path is invalid or malformed: "${relativeFilePathFromWebview}".`
+					),
+					"Security alert: The provided file path is invalid or malformed. Operation blocked.",
+					"Security alert: ",
+					vscode.workspace.workspaceFolders?.[0]?.uri
 				);
+				console.warn(`[MessageHandler] ${errorMessage}`);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: formatUserFacingErrorMessage(
-						new Error(
-							`The provided file path is invalid or malformed: "${relativeFilePathFromWebview}".`
-						),
-						"Security alert: The provided file path is invalid or malformed. Operation blocked.",
-						"Security alert: ",
-						vscode.workspace.workspaceFolders?.[0]?.uri
-					),
+					value: errorMessage,
 					isError: true,
 				});
 				return;
@@ -516,46 +472,40 @@ export async function handleWebviewMessage(
 
 			let isPathWithinWorkspace = false;
 			let absoluteFileUri: vscode.Uri | undefined;
-			let workspaceRoot: string | undefined; // Declare to hold the normalized workspace root
+			let workspaceRoot: string | undefined;
 
 			if (
 				vscode.workspace.workspaceFolders &&
 				vscode.workspace.workspaceFolders.length > 0
 			) {
-				const rootFolder = vscode.workspace.workspaceFolders[0]; // Assuming the first workspace folder is the relevant one
+				const rootFolder = vscode.workspace.workspaceFolders[0];
 				workspaceRoot = path.normalize(rootFolder.uri.fsPath);
 
 				try {
-					// Resolve the relative path from webview against the workspace root
 					absoluteFileUri = vscode.Uri.joinPath(
 						rootFolder.uri,
 						relativeFilePathFromWebview
 					);
 				} catch (uriError: any) {
-					console.error(
-						`[MessageHandler] Error resolving relative path to URI for ${relativeFilePathFromWebview}:`,
-						uriError
+					const errorMessage = formatUserFacingErrorMessage(
+						uriError,
+						"Error: The file path could not be resolved. Please ensure the path is valid and accessible.",
+						"Error: ",
+						vscode.workspace.workspaceFolders?.[0]?.uri
 					);
+					console.error(`[MessageHandler] ${errorMessage}`, uriError);
 					provider.postMessageToWebview({
 						type: "statusUpdate",
-						value: formatUserFacingErrorMessage(
-							uriError,
-							"Error: The file path could not be resolved. Please ensure the path is valid and accessible.",
-							"Error: ",
-							vscode.workspace.workspaceFolders?.[0]?.uri
-						),
+						value: errorMessage,
 						isError: true,
 					});
 					return;
 				}
 
-				// Normalize the absolute file path for comparison
 				const absoluteNormalizedFilePath = path.normalize(
 					absoluteFileUri.fsPath
 				);
 
-				// Check if the absolute normalized file path is identical to the workspace root,
-				// or if it starts with the workspace root followed by a path separator.
 				if (
 					absoluteNormalizedFilePath === workspaceRoot ||
 					absoluteNormalizedFilePath.startsWith(workspaceRoot + path.sep)
@@ -563,47 +513,40 @@ export async function handleWebviewMessage(
 					isPathWithinWorkspace = true;
 				}
 			} else {
-				// If no workspace is open, the file cannot be "within the current VS Code workspace".
-				console.warn(
-					`[MessageHandler] Security Alert: Cannot verify file path as no workspace is open. Attempted path: ${relativeFilePathFromWebview}`
+				const errorMessage = formatUserFacingErrorMessage(
+					new Error("No VS Code workspace folder is currently open."),
+					"Security alert: Cannot open file. No VS Code workspace is currently open. Please open a project folder to proceed.",
+					"Security alert: "
 				);
+				console.warn(`[MessageHandler] ${errorMessage}`);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: formatUserFacingErrorMessage(
-						new Error("No VS Code workspace folder is currently open."),
-						"Security alert: Cannot open file. No VS Code workspace is currently open. Please open a project folder to proceed.",
-						"Security alert: "
-					),
+					value: errorMessage,
 					isError: true,
 				});
 				return;
 			}
 
 			if (!isPathWithinWorkspace || !absoluteFileUri) {
-				// Ensure absoluteFileUri is defined here
-				console.warn(
-					`[MessageHandler] Security Alert: Attempt to open file outside workspace: ${relativeFilePathFromWebview} (resolved to ${
-						absoluteFileUri?.fsPath || "N/A"
-					})`
+				const errorMessage = formatUserFacingErrorMessage(
+					new Error(
+						`Attempted to open a file located outside the current VS Code workspace: "${relativeFilePathFromWebview}".`
+					),
+					"Security alert: Attempted to open a file located outside the current VS Code workspace. This operation is blocked for security reasons.",
+					"Security alert: ",
+					vscode.workspace.workspaceFolders?.[0]?.uri
 				);
+				console.warn(`[MessageHandler] ${errorMessage}`);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: formatUserFacingErrorMessage(
-						new Error(
-							`Attempted to open a file located outside the current VS Code workspace: "${relativeFilePathFromWebview}".`
-						),
-						"Security alert: Attempted to open a file located outside the current VS Code workspace. This operation is blocked for security reasons.",
-						"Security alert: ",
-						vscode.workspace.workspaceFolders?.[0]?.uri
-					),
+					value: errorMessage,
 					isError: true,
 				});
 				return;
 			}
 
-			// If the path passes the security check, execute the VS Code command to open the file
 			try {
-				await vscode.commands.executeCommand("vscode.open", absoluteFileUri); // Use the absolute URI here
+				await vscode.commands.executeCommand("vscode.open", absoluteFileUri);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
 					value: `File opened successfully: ${path.basename(
@@ -631,10 +574,7 @@ export async function handleWebviewMessage(
 		}
 
 		case "editChatMessage": {
-			// Type assertion 'data as EditChatMessage' removed due to Zod validation
-			const { messageIndex, newContent } = validatedData; // Destructure directly from validatedData
-
-			// Removed redundant manual type and content validation as Zod handles this
+			const { messageIndex, newContent } = validatedData;
 			console.log(
 				`[MessageHandler] Received editChatMessage for index ${messageIndex}: "${newContent.substring(
 					0,
@@ -642,111 +582,130 @@ export async function handleWebviewMessage(
 				)}..."`
 			);
 
-			// 3.c. Call provider.triggerUniversalCancellation()
-			provider.isEditingMessageActive = true;
-			await provider.triggerUniversalCancellation();
-			provider.isGeneratingUserRequest = true;
-			await provider.workspaceState.update(
-				"minovativeMind.isGeneratingUserRequest",
-				true
-			);
+			provider.isEditingMessageActive = true; // Set flag at the start of the edit operation
+			await provider.triggerUniversalCancellation(); // Cancel any ongoing operations
 
-			// 3.d. Post a statusUpdate message to the webview
-			provider.postMessageToWebview({
-				type: "statusUpdate",
-				value: "Message edited. Processing new request...",
-			});
+			try {
+				await provider.startUserOperation(); // Start new operation and set `isGeneratingUserRequest`
 
-			// 3.e. Call provider.chatHistoryManager.editMessageAndTruncate()
-			provider.chatHistoryManager.editMessageAndTruncate(
-				messageIndex,
-				newContent
-			);
-			provider.chatHistoryManager.restoreChatHistoryToWebview();
+				provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: "Message edited. Processing new request...",
+				});
 
-			const lowerCaseNewContent = newContent.trim().toLowerCase();
+				provider.chatHistoryManager.editMessageAndTruncate(
+					messageIndex,
+					newContent
+				);
+				provider.chatHistoryManager.restoreChatHistoryToWebview(); // Restore history to reflect the edit
 
-			if (lowerCaseNewContent.startsWith("/plan ")) {
-				const planRequest = newContent.trim().substring("/plan ".length);
-				if (!planRequest) {
+				const lowerCaseNewContent = newContent.trim().toLowerCase();
+
+				if (lowerCaseNewContent.startsWith("/plan ")) {
+					const planRequest = newContent.trim().substring("/plan ".length);
+					if (!planRequest) {
+						const errorMessage =
+							"Please provide a description for the plan after /plan.";
+						console.error(`[MessageHandler] ${errorMessage}`);
+						provider.postMessageToWebview({
+							type: "statusUpdate",
+							value: errorMessage,
+							isError: true,
+						});
+						// End operation with failure for invalid command, outer finally will clean up isEditingMessageActive
+						await provider.endUserOperation("failed", errorMessage);
+						return; // Exit here as operation is handled
+					}
+					await provider.planService.handleInitialPlanRequest(planRequest);
+				} else if (lowerCaseNewContent === "/commit") {
+					// Use the token from the currently active operation, created by startUserOperation
+					await provider.commitService.handleCommitCommand(
+						provider.activeOperationCancellationTokenSource!.token
+					);
+				} else {
+					// If it's not a recognized command, proceed with regular chat message regeneration
+					await provider.chatService.regenerateAiResponseFromHistory(
+						messageIndex
+					);
+				}
+			} catch (error: any) {
+				const isCancellation = error.message === ERROR_OPERATION_CANCELLED;
+				if (isCancellation) {
+					console.log(
+						"[MessageHandler] editChatMessage: Operation cancelled during processing."
+					);
+					// endUserOperation("cancelled") will be called by triggerUniversalCancellation if triggered by user
+					// or here if it's an internal cancellation.
+					await provider.endUserOperation("cancelled");
+				} else {
+					const formattedError = formatUserFacingErrorMessage(
+						error,
+						"Failed to process edited message.",
+						"Error processing edit: "
+					);
+					console.error(
+						`[MessageHandler] Error processing editChatMessage:`,
+						error
+					);
 					provider.postMessageToWebview({
 						type: "statusUpdate",
-						value: "Please provide a description for the plan after /plan.",
+						value: formattedError,
 						isError: true,
 					});
-					// Re-enable inputs, as an invalid command was given
-					await provider.endUserOperation(
-						"failed",
-						"Invalid /plan command: missing description."
-					);
-					return;
+					await provider.endUserOperation("failed", formattedError);
 				}
-				// Trigger the plan generation flow, similar to a fresh "/plan" command
-				await provider.planService.handleInitialPlanRequest(planRequest);
-			} else if (lowerCaseNewContent === "/commit") {
-				// Ensure activeOperationCancellationTokenSource is re-initialized if it was disposed by triggerUniversalCancellation()
-				if (!provider.activeOperationCancellationTokenSource) {
-					provider.activeOperationCancellationTokenSource =
-						new vscode.CancellationTokenSource();
-				}
-				// Handle /commit command from an edit (if applicable, based on project needs)
-				await provider.commitService.handleCommitCommand(
-					provider.activeOperationCancellationTokenSource.token
-				);
-			} else {
-				// If it's not a recognized command, proceed with regular chat message regeneration
-				await provider.chatService.regenerateAiResponseFromHistory(
-					messageIndex
-				);
+			} finally {
+				// Ensure isEditingMessageActive is reset after the edit flow is complete (success, failure, or cancellation)
+				// The SidebarProvider's endUserOperation will handle this for the main `isGeneratingUserRequest` state.
+				// This line is redundant if `endUserOperation` handles it, but kept here for explicit clarity in this file.
+				provider.isEditingMessageActive = false;
 			}
-			break; // 3.g. Include break;
+			break;
 		}
 
 		case "generatePlanPromptFromAIMessage": {
-			// `validatedData.payload.messageIndex` is now inferred to be number
 			const messageIndex = validatedData.payload.messageIndex;
 
 			const historyEntry =
 				provider.chatHistoryManager.getChatHistory()[messageIndex];
 
 			if (!historyEntry || historyEntry.role !== "model") {
+				const errorMessage =
+					"Error: Could not generate plan prompt. Invalid AI message context.";
 				console.error(
 					`[MessageHandler] Invalid history entry for index ${messageIndex} or not an AI message.`
 				);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value:
-						"Error: Could not generate plan prompt. Invalid AI message context.",
+					value: errorMessage,
 					isError: true,
 				});
-				await provider.endUserOperation("failed");
+				await provider.endUserOperation("failed", errorMessage);
 				break;
 			}
 
-			// Concatenate all parts to get the full AI message content
 			const aiMessageContent = historyEntry.parts
 				.map((part) => ("text" in part && part.text ? part.text : ""))
-				.filter((text) => text.length > 0) // Filter out empty strings from non-text parts
+				.filter((text) => text.length > 0)
 				.join("\n");
 
 			if (!aiMessageContent || aiMessageContent.trim() === "") {
+				const errorMessage =
+					"Error: AI message content is empty, cannot generate plan prompt.";
 				console.error(
 					`[MessageHandler] AI message content is empty for index ${messageIndex}.`
 				);
 				provider.postMessageToWebview({
 					type: "statusUpdate",
-					value:
-						"Error: AI message content is empty, cannot generate plan prompt.",
+					value: errorMessage,
 					isError: true,
 				});
-				await provider.endUserOperation("failed");
+				await provider.endUserOperation("failed", errorMessage);
 				break;
 			}
 
-			// 1. Before the `try` block, add:
-			provider.activeOperationCancellationTokenSource =
-				new vscode.CancellationTokenSource();
-			const token = provider.activeOperationCancellationTokenSource.token;
+			await provider.startUserOperation(); // Start the operation and set generating state
+			const token = provider.activeOperationCancellationTokenSource!.token; // Get the token for the new operation
 
 			try {
 				provider.postMessageToWebview({
@@ -754,15 +713,13 @@ export async function handleWebviewMessage(
 					value: "Generating plan prompt from AI message...",
 				});
 
-				// 2. Modify the call to `generateLightweightPlanPrompt` inside the `try` block to pass the `token` as the fourth argument
 				const generatedPlanText = await generateLightweightPlanPrompt(
 					aiMessageContent,
 					DEFAULT_FLASH_LITE_MODEL,
 					provider.aiRequestService,
-					token // Pass the cancellation token
+					token
 				);
 
-				// 3. Immediately after the `await generateLightweightPlanPrompt(...)` call, add an `if` condition to check for cancellation:
 				if (token.isCancellationRequested) {
 					console.log(
 						"[MessageHandler] generatePlanPromptFromAIMessage: Operation cancelled after generation but before pre-fill."
@@ -779,12 +736,7 @@ export async function handleWebviewMessage(
 					type: "statusUpdate",
 					value: "Plan prompt generated and pre-filled into chat input.",
 				});
-				await provider.endUserOperation("success");
-				provider.postMessageToWebview({
-					type: "updateLoadingState",
-					value: false,
-				}); // Added
-				// 4. Refine the `catch (error: any)` block:
+				await provider.endUserOperation("success"); // endUserOperation will handle updateLoadingState(false)
 			} catch (error: any) {
 				const isCancellation = error.message === ERROR_OPERATION_CANCELLED;
 				if (isCancellation) {
@@ -792,29 +744,28 @@ export async function handleWebviewMessage(
 						"[MessageHandler] generatePlanPromptFromAIMessage: Operation cancelled during generation."
 					);
 					await provider.endUserOperation("cancelled");
-					// If it's a cancellation, `universalCancel` will handle UI reset, so suppress further status updates here.
 				} else {
+					const formattedError = formatUserFacingErrorMessage(
+						error,
+						"Failed to generate plan prompt.",
+						"Error generating plan prompt: "
+					);
 					console.error(
 						`[MessageHandler] Error generating lightweight plan prompt:`,
 						error
 					);
 					provider.postMessageToWebview({
 						type: "statusUpdate",
-						value: `Error generating plan prompt: ${
-							error.message || String(error)
-						}`,
+						value: formattedError,
 						isError: true,
 					});
-					await provider.endUserOperation("failed");
+					await provider.endUserOperation("failed", formattedError);
 				}
-				// 5. Add a `finally` block after the `try...catch` block (before `break;`)
 			} finally {
-				if (provider.activeOperationCancellationTokenSource) {
-					provider.activeOperationCancellationTokenSource.dispose();
-					provider.activeOperationCancellationTokenSource = undefined;
-				}
+				// The token source is disposed in provider.endUserOperation or triggerUniversalCancellation
+				// No need for redundant disposal here.
 			}
-			break; // break from the switch case
+			break;
 		}
 
 		case "requestWorkspaceFiles":
@@ -824,10 +775,9 @@ export async function handleWebviewMessage(
 				const allScannedFilesRelativePaths = allScannedFilesUris.map((uri) =>
 					vscode.workspace.asRelativePath(uri)
 				);
-				// Use `provider` as shown in the surrounding context, not `sidebarProvider` from prompt context if different
 				provider.postMessageToWebview({
-					type: "receiveWorkspaceFiles", // Correct message type as specified
-					value: allScannedFilesRelativePaths, // Changed to match expected string[] type
+					type: "receiveWorkspaceFiles",
+					value: allScannedFilesRelativePaths,
 				});
 				console.log(
 					`[WebviewMessageHandler] Sent ${allScannedFilesRelativePaths.length} workspace file paths to webview.`
@@ -837,25 +787,23 @@ export async function handleWebviewMessage(
 					"[WebviewMessageHandler] Error scanning workspace files for webview:",
 					error
 				);
-				// Send receiveWorkspaceFiles with empty array to signify no files were returned
 				provider.postMessageToWebview({
-					type: "receiveWorkspaceFiles", // Correct message type for empty result
-					value: [], // Indicate no files were received
+					type: "receiveWorkspaceFiles",
+					value: [],
 				});
-				// Send a separate statusUpdate message to inform the user about the specific error
 				provider.postMessageToWebview({
-					type: "statusUpdate", // Use a general status update message for errors
-					value: `Error scanning workspace files: ${
-						error.message || "An unknown error occurred."
-					}`,
-					isError: true, // Mark this status update as an error
+					type: "statusUpdate",
+					value: formatUserFacingErrorMessage(
+						error,
+						"An unknown error occurred while scanning workspace files.",
+						"Error scanning workspace files: "
+					),
+					isError: true,
 				});
 			}
 			break;
 
 		case "aiResponseEnd": {
-			// `validatedData` is now inferred to have `success: boolean`, `isPlanResponse: boolean`, `requiresConfirmation: boolean`
-			// Stop typing animation is handled in webview's messageBusHandler.ts for this message.
 			if (
 				validatedData.success &&
 				validatedData.isPlanResponse &&
@@ -871,24 +819,25 @@ export async function handleWebviewMessage(
 		}
 
 		case "structuredPlanParseFailed": {
-			// `validatedData.value` is now inferred to have `error` and `failedJson`
-			// This case indicates that AI generation for the plan has completed, but parsing failed.
-			// Removed explicit isGeneratingUserRequest reset as per instructions.
-			const { error, failedJson } = validatedData.value; // Keep extracting error/failedJson for potential logging/debugging
-			console.log("Received structuredPlanParseFailed.");
-			await provider.endUserOperation("failed"); // Add this call as per instructions
-			// The webview's messageBusHandler.ts will show the error UI based on this message.
+			const { error, failedJson } = validatedData.value;
+			console.error("Received structuredPlanParseFailed.", error, failedJson);
+			const errorMessage = formatUserFacingErrorMessage(
+				error,
+				"Failed to parse AI-generated plan structure.",
+				"Error: "
+			);
+			provider.postMessageToWebview({
+				type: "statusUpdate",
+				value: errorMessage,
+				isError: true,
+			});
+			await provider.endUserOperation("failed", errorMessage);
 			break;
 		}
 
 		case "commitReview": {
-			// `validatedData.value` is now inferred to have `commitMessage` and `stagedFiles`
-			// This case indicates that AI generation for the commit message has completed and is ready for review.
-			// Removed explicit isGeneratingUserRequest reset as per instructions.
 			console.log("Received commitReview message:", validatedData.value);
-			// Removed the manual validation check as Zod guarantees the structure here.
-			await provider.endUserOperation("review"); // Add this call as per instructions
-			// The webview's messageBusHandler.ts will show the commit review UI based on this message.
+			await provider.endUserOperation("review");
 			break;
 		}
 
