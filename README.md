@@ -1,6 +1,6 @@
 # Minovative Mind (Now Public, Easy to Use, and Free!)
 
-## An open-source AI agent that automates software development, powerful enough that it built itself with vibe coding
+## An open-source AI agent that automates software development, powerful enough that it built itself by vibe coding
 
 A showcase of implementing a feature: e.g., planning, file creation, and code generation
 
