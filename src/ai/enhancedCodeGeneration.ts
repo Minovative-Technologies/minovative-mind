@@ -19,11 +19,9 @@ import {
 	isRewriteIntentDetected,
 } from "../utils/codeAnalysisUtils";
 import { formatSuccessfulChangesForPrompt } from "../workflow/changeHistoryFormatter";
-import { analyzeDiff } from "../utils/diffingUtils";
 import {
 	createEnhancedGenerationPrompt,
 	createEnhancedModificationPrompt,
-	createRefineModificationPrompt,
 } from "./prompts/enhancedCodeGenerationPrompts";
 import { CodeValidationService } from "../services/codeValidationService";
 
@@ -346,31 +344,7 @@ export class EnhancedCodeGenerator {
 		token?: vscode.CancellationToken,
 		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
 	): Promise<CodeValidationResult> {
-		const diffAnalysis = analyzeDiff(originalContent, modifiedContent);
-		if (!diffAnalysis.isReasonable) {
-			const refinePrompt = createRefineModificationPrompt(
-				filePath,
-				originalContent,
-				modifiedContent,
-				diffAnalysis.issues,
-				context
-			);
-			const rawRefinedContent = await this.aiRequestService.generateWithRetry(
-				[{ text: refinePrompt }],
-				modelName,
-				undefined,
-				"refine modification",
-				undefined,
-				{
-					onChunk: async (chunk) =>
-						this._streamChunk(streamId, filePath, chunk, onCodeChunkCallback),
-				},
-				token
-			);
-
-			const refinedContent = cleanCodeOutput(rawRefinedContent);
-			return this.codeValidationService.validateCode(filePath, refinedContent);
-		}
+		// Removed conditional logic for AI refinement based on diff analysis.
 		return this.codeValidationService.validateCode(filePath, modifiedContent);
 	}
 

@@ -669,11 +669,7 @@ export class PlanService {
 		let structuredPlanJsonString = "";
 		const token = this.provider.activeOperationCancellationTokenSource?.token;
 
-		// Initialize retry variables
-		let retryAttempt = 0;
-		let executablePlan: ExecutionPlan | null = null;
-		let lastParsingError: string | undefined;
-		let lastFailedJson: string | undefined;
+		let executablePlan: ExecutionPlan | null = null; // Declare executablePlan here
 
 		try {
 			await this.provider.updatePersistedPendingPlanData(null); // Clear persisted data as it's no longer pending confirmation
@@ -699,195 +695,77 @@ export class PlanService {
 			const urlContextString =
 				this.urlContextService.formatUrlContexts(urlContexts);
 
-			// Initial prompt creation outside the loop. This variable will be updated for retries.
-			// Pass JSON_ESCAPING_INSTRUCTIONS for the initial prompt generation.
-			let currentJsonPlanningPrompt = createPlanningPrompt(
+			// Generate a single, standard prompt for the AI.
+			const promptForAI = createPlanningPrompt(
 				planContext.type === "chat"
 					? planContext.originalUserRequest
 					: undefined,
 				planContext.projectContext,
 				planContext.type === "editor" ? planContext.editorContext : undefined,
-				undefined,
+				undefined, // Removed arguments related to retry attempts or previous errors
 				planContext.chatHistory,
 				planContext.textualPlanExplanation,
 				formattedRecentChanges,
 				urlContextString
 			);
 
-			// Start of the retry loop
-			while (retryAttempt <= this.MAX_PLAN_PARSE_RETRIES) {
-				if (token?.isCancellationRequested) {
-					throw new Error(ERROR_OPERATION_CANCELLED);
-				}
+			console.log(`Attempting to generate and parse structured plan.`);
 
-				// Inform the user about the attempt
-				if (retryAttempt > 0) {
-					this._logStepProgress(
-						0,
-						0, // Not a specific step number
-						`JSON plan parsing failed. Retrying (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES})...`,
-						0,
-						0, // No transient attempt for this loop
-						true
-					);
-					console.log(
-						`JSON plan parsing failed. Retrying (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES})...`
-					);
-				} else {
-					console.log(`Initial attempt to generate and parse structured plan.`);
-				}
-
-				// AI Request
-				structuredPlanJsonString =
-					await this.provider.aiRequestService.generateWithRetry(
-						[{ text: currentJsonPlanningPrompt }],
-						sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
-						undefined,
-						"structured plan generation",
-						jsonGenerationConfig,
-						undefined,
-						token
-					);
-
-				if (token?.isCancellationRequested) {
-					throw new Error(ERROR_OPERATION_CANCELLED);
-				}
-				if (structuredPlanJsonString.toLowerCase().startsWith("error:")) {
-					throw new Error(
-						formatUserFacingErrorMessage(
-							new Error(structuredPlanJsonString),
-							"The AI failed to generate a valid structured plan. This might be a model issue.",
-							"AI response error: ",
-							planContext.workspaceRootUri
-						)
-					);
-				}
-
-				// Markdown stripping
-				structuredPlanJsonString = structuredPlanJsonString
-					.replace(/^\s*/im, "")
-					.replace(/\s*$/im, "")
-					.trim();
-
-				// JSON Parsing and Validation
-				let parsedPlanResult: ParsedPlanResult;
-				let currentJsonStringForParse = structuredPlanJsonString; // Start with the AI output
-				let successfulRepairOccurred = false; // Flag to indicate if repair fixed the issue
-
-				// Call the enhanced parsing function
-				parsedPlanResult = await this.parseAndValidatePlanWithFix(
-					currentJsonStringForParse,
-					planContext.workspaceRootUri
+			// Single AI generation call
+			structuredPlanJsonString =
+				await this.provider.aiRequestService.generateWithRetry(
+					[{ text: promptForAI }],
+					sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
+					undefined,
+					"structured plan generation",
+					jsonGenerationConfig,
+					undefined,
+					token
 				);
 
-				if (parsedPlanResult.plan) {
-					executablePlan = parsedPlanResult.plan;
-					// ADDED CHECK: Ensure the plan has steps before proceeding
-					if (executablePlan.steps.length === 0) {
-						const errorMsg = `Correction plan generated with no executable steps. This is not allowed.`;
-						console.error(`[PlanService] ${errorMsg}`);
-						// Treat this as a parsing/validation failure to trigger retries or final error reporting
-						parsedPlanResult.error = errorMsg; // Set error for retry logic
-						parsedPlanResult.plan = null; // Ensure no plan is used
-					} else {
-						// Success! We have a valid plan, potentially after a repair.
-						// We can break the retry loop here, as AI retries are not needed for this specific successful repair.
-						successfulRepairOccurred = true; // Mark that repair was successful
-					}
-				}
-
-				// If we reach here, it means parsing failed (either initially or after repair attempt).
-				// Capture error and failed JSON for the retry mechanism.
-				lastParsingError =
-					parsedPlanResult.error || "Failed to parse the JSON plan from AI.";
-				lastFailedJson = currentJsonStringForParse; // The JSON string that was attempted to parse (original AI output)
-
-				// Increment retry count ONLY if AI needs to regenerate the plan.
-				// If a successful repair occurred, we do NOT increment the AI retry count.
-				if (!successfulRepairOccurred) {
-					retryAttempt++;
-				}
-
-				// If more retries are available, prepare for the next AI attempt.
-				if (
-					retryAttempt <= this.MAX_PLAN_PARSE_RETRIES &&
-					!successfulRepairOccurred
-				) {
-					// Update the prompt for the next iteration, including the captured error.
-					currentJsonPlanningPrompt = createPlanningPrompt(
-						planContext.type === "chat"
-							? planContext.originalUserRequest
-							: undefined,
-						planContext.projectContext,
-						planContext.type === "editor"
-							? planContext.editorContext
-							: undefined,
-						// Inject the error message into the prompt for the AI to correct.
-						`CRITICAL ERROR: Your previous JSON output failed parsing/validation with the following error: "${lastParsingError}". You MUST correct this. Provide ONLY a valid JSON object according to the schema, with no additional text or explanations. (Attempt ${retryAttempt}/${this.MAX_PLAN_PARSE_RETRIES} to correct JSON)`,
-						planContext.chatHistory,
-						planContext.textualPlanExplanation,
-						formattedRecentChanges,
-						urlContextString
-					);
-				}
-
-				// Check if a plan was successfully obtained after all attempts or if a repair succeeded
-				if (
-					executablePlan &&
-					executablePlan.steps &&
-					executablePlan.steps.length > 0 &&
-					successfulRepairOccurred
-				) {
-					break; // Exit retry loop if plan is valid and successful repair occurred.
-				} else if (
-					retryAttempt > this.MAX_PLAN_PARSE_RETRIES &&
-					!successfulRepairOccurred
-				) {
-					// If all retries failed and no successful repair happened, break to handle final failure.
-					break;
-				}
-			} // End of while loop
-
-			// Check if a plan was successfully obtained after all attempts
-			if (!executablePlan) {
-				// All retries failed
-				const finalErrorMsg = `Failed to generate a valid plan after ${
-					this.MAX_PLAN_PARSE_RETRIES
-				} attempts. The AI response did not conform to the expected JSON format. Error: ${
-					lastParsingError || "Unknown parsing issue"
-				}`;
-				this._logStepProgress(
-					0,
-					0, // Not a specific step number
-					finalErrorMsg,
-					0,
-					0, // No transient attempt for this loop
-					true
+			if (token?.isCancellationRequested) {
+				throw new Error(ERROR_OPERATION_CANCELLED);
+			}
+			if (!structuredPlanJsonString) {
+				throw new Error("AI failed to generate any response for the plan.");
+			}
+			if (structuredPlanJsonString.toLowerCase().startsWith("error:")) {
+				throw new Error(
+					formatUserFacingErrorMessage(
+						new Error(structuredPlanJsonString),
+						"The AI failed to generate a valid structured plan. This might be a model issue.",
+						"AI response error: ",
+						planContext.workspaceRootUri
+					)
 				);
-
-				this.provider.postMessageToWebview({
-					type: "structuredPlanParseFailed",
-					value: {
-						error:
-							lastParsingError ||
-							"Failed to parse JSON plan after multiple retries.",
-						failedJson: lastFailedJson || "N/A",
-					},
-				});
-				this.provider.currentExecutionOutcome = "failed";
-
-				// Notify webview that structured plan generation has ended
-				this.provider.postMessageToWebview({
-					type: "updateLoadingState",
-					value: false,
-				});
-
-				await this.provider.endUserOperation("failed"); // Signal failure and re-enable input
-				return; // Important: return here to stop further execution
 			}
 
+			// Markdown stripping
+			structuredPlanJsonString = structuredPlanJsonString
+				.replace(/^\s*/im, "")
+				.replace(/\s*$/im, "")
+				.trim();
+
+			// Perform single parsing and validation
+			const { plan, error } = await this.parseAndValidatePlanWithFix(
+				structuredPlanJsonString,
+				planContext.workspaceRootUri
+			);
+
+			// Add error handling for single attempt
+			if (error) {
+				throw new Error(`Failed to parse or validate generated plan: ${error}`);
+			}
+
+			if (!plan || plan.steps.length === 0) {
+				throw new Error(
+					"AI generated plan content but it was empty or invalid after parsing."
+				);
+			}
+
+			executablePlan = plan; // Assign the successfully parsed and validated plan
+
 			// If we reached here, executablePlan is valid. Proceed with execution.
-			// Note: We don't set loading state to false here because _executePlan will manage it
 			this.provider.pendingPlanGenerationContext = null;
 			await this._executePlan(
 				executablePlan,
