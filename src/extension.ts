@@ -295,7 +295,6 @@ export async function activate(context: vscode.ExtensionContext) {
 				});
 
 				if (customChatPromptInput === undefined) {
-					vscode.window.showInformationMessage("Chat operation cancelled.");
 					return;
 				}
 

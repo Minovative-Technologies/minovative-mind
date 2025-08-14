@@ -9,7 +9,7 @@ import { TEMPERATURE } from "../sidebar/common/sidebarConstants";
 import * as SymbolService from "../services/symbolService";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 
-const MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION = 350;
+const MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION = 5000;
 export { MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION };
 
 // Cache interface for AI selection results

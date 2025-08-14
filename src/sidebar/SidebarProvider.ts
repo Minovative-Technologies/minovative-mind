@@ -1,34 +1,33 @@
-// src/sidebar/SidebarProvider.ts
 import * as vscode from "vscode";
-import { ChildProcess } from "child_process";
+import * as sidebarConstants from "./common/sidebarConstants";
+import * as sidebarTypes from "./common/sidebarTypes";
 
+import { ChildProcess } from "child_process";
 import { ApiKeyManager } from "./managers/apiKeyManager";
 import { SettingsManager } from "./managers/settingsManager";
 import { ChatHistoryManager } from "./managers/chatHistoryManager";
-
 import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
 import { RevertService } from "../services/RevertService";
 import { RevertibleChangeSet } from "../types/workflow";
 import { getHtmlForWebview } from "./ui/webviewHelper";
-import * as sidebarConstants from "./common/sidebarConstants";
-import * as sidebarTypes from "./common/sidebarTypes";
 import { AIRequestService } from "../services/aiRequestService";
 import { ContextService } from "../services/contextService";
 import { handleWebviewMessage } from "../services/webviewMessageHandler";
 import { PlanService } from "../services/planService";
 import { ChatService } from "../services/chatService";
 import { CommitService } from "../services/commitService";
-import { GitConflictResolutionService } from "../services/gitConflictResolutionService";
 import { TokenTrackingService } from "../services/tokenTrackingService";
 import {
 	showInfoNotification,
 	showWarningNotification,
 	showErrorNotification,
 } from "../utils/notificationUtils";
+import { GitConflictResolutionService } from "../services/gitConflictResolutionService";
 
 import { CodeValidationService } from "../services/codeValidationService";
 import { ContextRefresherService } from "../services/contextRefresherService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
+import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -79,23 +78,32 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public commitService: CommitService;
 	public gitConflictResolutionService: GitConflictResolutionService;
 	public tokenTrackingService: TokenTrackingService;
+	public revertService!: RevertService; // Added as per instructions
 	private enhancedCodeGenerator: EnhancedCodeGenerator;
-	public revertService: RevertService;
 	private codeValidationService: CodeValidationService;
 	private contextRefresherService: ContextRefresherService;
+
+	// --- State for Throttling Messages ---
+	private _postMessageThrottledQueue: {
+		message: sidebarTypes.ExtensionToWebviewMessages;
+	}[] = [];
+	private _isThrottledQueueProcessing: boolean = false;
+	private _lastThrottledMessageTime: number = 0;
+	private readonly THROTTLE_INTERVAL_MS = 50; // Default throttle interval for frequent updates
+
+	// A flag to indicate if the webview is fully loaded and ready to receive messages.
+	private _isWebviewReadyForMessages: boolean = false;
 
 	constructor(
 		extensionUri: vscode.Uri,
 		context: vscode.ExtensionContext,
 		workspaceRootUri: vscode.Uri | undefined
 	) {
-		// Add workspaceRootUri
 		this.extensionUri = extensionUri;
 		this.secretStorage = context.secrets;
 		this.workspaceState = context.workspaceState;
-		this.workspaceRootUri = workspaceRootUri; // Assign workspaceRootUri
+		this.workspaceRootUri = workspaceRootUri;
 
-		// Initialize persisted pending plan data from workspace state
 		this._persistedPendingPlanData =
 			context.workspaceState.get<sidebarTypes.PersistedPlanData | null>(
 				"minovativeMind.persistedPendingPlanData",
@@ -106,7 +114,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			RevertibleChangeSet[]
 		>("minovativeMind.completedPlanChangeSets", []);
 
-		// Initialize isPlanExecutionActive from workspace state
 		this.isPlanExecutionActive = context.workspaceState.get<boolean>(
 			"minovativeMind.isPlanExecutionActive",
 			false
@@ -156,10 +163,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		this.gitConflictResolutionService = new GitConflictResolutionService(
 			context
-		); // Instantiate before PlanService
+		);
 
-		// In src/sidebar/SidebarProvider.ts constructor...
-		// Moved: Instantiate this.contextService immediately after this.gitConflictResolutionService
 		this.contextService = new ContextService(
 			this.settingsManager,
 			this.chatHistoryManager,
@@ -168,38 +173,33 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.postMessageToWebview.bind(this)
 		);
 
-		// Added: Instantiate missing services
 		this.codeValidationService = new CodeValidationService(
 			this.workspaceRootUri || vscode.Uri.file("/")
 		);
-		// FIXED: Provide all required arguments to the ContextRefresherService constructor.
 		this.contextRefresherService = new ContextRefresherService(
 			this.contextService,
 			this.changeLogger,
-			this.workspaceRootUri || vscode.Uri.file("/") // Ensure Uri is passed
+			this.workspaceRootUri || vscode.Uri.file("/")
 		);
 
-		// Correctly instantiate EnhancedCodeGenerator with all dependencies in the right order.
 		this.enhancedCodeGenerator = new EnhancedCodeGenerator(
-			this.aiRequestService, // 1. AIRequestService
-			this.postMessageToWebview.bind(this), // 2. postMessageToWebview function
-			this.changeLogger, // 3. ProjectChangeLogger
-			this.codeValidationService, // 4. CodeValidationService
-			this.contextRefresherService // 5. ContextRefresherService
+			this.aiRequestService,
+			this.postMessageToWebview.bind(this),
+			this.changeLogger,
+			this.codeValidationService,
+			this.contextRefresherService
 		);
 
-		// Instantiate RevertService
 		this.revertService = new RevertService(
 			this.workspaceRootUri || vscode.Uri.file("/"),
 			this.changeLogger
 		);
 
-		// These services need access to the provider's state and other services.
 		this.planService = new PlanService(
 			this,
-			this.workspaceRootUri, // Pass workspaceRootUri
-			this.gitConflictResolutionService, // Pass the GitConflictResolutionService
-			this.enhancedCodeGenerator, // Pass the instance here
+			this.workspaceRootUri,
+			this.gitConflictResolutionService,
+			this.enhancedCodeGenerator,
 			this.postMessageToWebview.bind(this)
 		);
 		this.chatService = new ChatService(this);
@@ -213,12 +213,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		});
 	}
 
+	/**
+	 * Initializes essential services like API key manager and settings manager.
+	 * This method is called early in the extension's lifecycle to ensure critical dependencies are loaded.
+	 * @returns A Promise that resolves when initialization is complete.
+	 */
 	public async initialize(): Promise<void> {
+		// Load API keys and settings from storage. These are crucial for any AI operations.
 		await this.apiKeyManager.initialize();
 		this.settingsManager.initialize();
+		// Any other non-UI-blocking, critical initializations can go here.
 	}
 
-	// --- WEBVIEW ---
+	/**
+	 * Resolves the webview view, setting up its HTML, options, and message listeners.
+	 * This method is called by VS Code when the sidebar becomes visible.
+	 * @param webviewView The WebviewView instance provided by VS Code.
+	 * @returns A Promise that resolves when the webview is set up.
+	 */
 	public async resolveWebviewView(
 		webviewView: vscode.WebviewView
 	): Promise<void> {
@@ -247,50 +259,161 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			logoUri
 		);
 
-		const fileUri = vscode.Uri.parse("file://");
-		const message = { type: "fileUriLoaded", uri: fileUri.toString() };
-		webviewView.webview.postMessage(message);
+		const fileUri = vscode.Uri.parse("file://"); // This seems like a placeholder URI for the webview's internal loading
+		this.postMessageToWebview({
+			type: "fileUriLoaded",
+			uri: fileUri.toString(),
+		}); // Signal to webview that initial files are loaded
 
 		webviewView.webview.onDidReceiveMessage(async (data) => {
+			// Delegating to external message handler for separation of concerns
 			await handleWebviewMessage(data, this);
 		});
+
+		// The webview will send a "webviewReady" message after it's fully initialized and rendered.
+		// We handle actual UI state restoration in response to that message to ensure webview is ready.
+		this._isWebviewReadyForMessages = true; // Mark as ready after basic setup
 	}
 
+	/**
+	 * Sends a message to the webview, applying throttling for high-frequency updates.
+	 * @param message The message to send.
+	 * @remarks Messages are categorized into immediate (critical) and throttled (frequent UI updates) for performance.
+	 */
 	public postMessageToWebview(
 		message: sidebarTypes.ExtensionToWebviewMessages
 	): void {
-		if (message.type === "appendRealtimeModelMessage") {
-			// Safely cast to access properties, assuming the structure is consistent
-			const payload = message as any;
-			const textContent = payload.value?.text;
-			const diffContent = payload.value?.diffContent;
-			const relevantFiles = payload.value?.relevantFiles;
+		// Messages that should bypass throttling (immediate delivery)
+		const immediateTypes = new Set<
+			sidebarTypes.ExtensionToWebviewMessages["type"]
+		>([
+			"webviewReady", // Crucial for initial handshake
+			"updateKeyList", // API key updates (infrequent)
+			"restoreHistory", // Full chat history restoration (infrequent after initial load)
+			"confirmCommit", // Part of commit review flow
+			"cancelCommit", // Part of commit review flow
+			"fileUriLoaded", // Internal signal for webview readiness
+			"aiResponseStart", // Marks the beginning of an AI streaming response
+			"aiResponseChunk", // <<< Add this line
+			"reenableInput", // Critical for restoring user interaction
+			"aiResponseEnd", // Marks the end of an AI streaming response or operation result
+			"PrefillChatInput", // Prefilling chat input (critical for user workflow)
+			"operationCancelledConfirmation", // Confirmation of cancellation (critical)
+			"chatCleared", // Confirmation of chat clearing
+			"planExecutionStarted", // Marks the start of a plan execution
+			"planExecutionEnded", // Marks the end of a plan execution
+			"requestClearChatConfirmation", // Initiates user confirmation flow for chat clearing
+			"receiveWorkspaceFiles", // Result of a file scan request
+			"restorePendingPlanConfirmation", // Restores UI for pending plan review
+			"updateModelList", // Model selection changes (infrequent)
+		]);
 
-			// Only add to history if there's actual text content
-			if (textContent !== undefined && textContent !== null) {
-				this.chatHistoryManager.addHistoryEntry(
-					"model",
-					textContent,
-					diffContent,
-					relevantFiles,
-					undefined, // isRelevantFilesExpanded - not provided by this message type
-					undefined, // isPlanExplanation - not provided by this message type
-					undefined // Pass the flag if present
-				);
+		// Messages that are typically frequent and should be throttled to prevent UI overwhelming
+		const throttledTypes = new Set<
+			sidebarTypes.ExtensionToWebviewMessages["type"]
+		>([
+			"updateRelevantFilesDisplay", // Toggling relevant files display
+			"appendRealtimeModelMessage", // Used for plan step updates/logs and other non-AI-streaming status messages
+			"statusUpdate", // General progress updates (can be frequent)
+			"updateTokenStatistics", // Real-time token statistics updates
+			"updateCurrentTokenEstimates", // Real-time token estimates during streaming
+			"codeFileStreamStart", // Signals the start of code file streaming
+			"codeFileStreamChunk", // Individual chunks of streamed code content (very frequent)
+			"codeFileStreamEnd", // Signals the end of code file streaming
+			"gitProcessUpdate", // Updates from git command execution
+		]);
+
+		if (immediateTypes.has(message.type)) {
+			this._postMessageImmediateInternal(message);
+		} else if (throttledTypes.has(message.type)) {
+			// Special handling for statusUpdate: if it explicitly indicates an error, send it immediately.
+			if (message.type === "statusUpdate" && message.isError) {
+				this._postMessageImmediateInternal(message);
 			} else {
-				console.warn(
-					"[SidebarProvider] Received appendRealtimeModelMessage without text content."
-				);
+				this._queueThrottledMessage(message);
 			}
-		}
-
-		if (this._view && this._view.visible) {
-			this._view.webview.postMessage(message).then(undefined, (err) => {
-				console.warn("Failed to post message to webview:", message.type, err);
-			});
+		} else {
+			// For any other message type not explicitly categorized, default to immediate sending
+			console.warn(
+				`[SidebarProvider] Message type '${message.type}' not categorized for throttling; sending immediately.`
+			);
+			this._postMessageImmediateInternal(message);
 		}
 	}
 
+	/**
+	 * Internal method to send messages to the webview immediately without throttling.
+	 * It handles the actual `webview.postMessage` call and basic error logging.
+	 * @param message The message to send.
+	 */
+	private async _postMessageImmediateInternal(
+		message: sidebarTypes.ExtensionToWebviewMessages
+	): Promise<void> {
+		if (this._view && this._view.visible) {
+			try {
+				await this._view.webview.postMessage(message);
+			} catch (err) {
+				console.warn(
+					`[SidebarProvider] Failed to post message to webview: ${message.type}`,
+					err
+				);
+			}
+		} else {
+			console.log(
+				`[SidebarProvider] Webview not visible or not ready, skipping message: ${message.type}`
+			);
+		}
+	}
+
+	/**
+	 * Queues a message for throttled sending to the webview.
+	 * Messages in this queue are processed at a controlled rate to prevent UI overload.
+	 * @param message The message to queue.
+	 */
+	private _queueThrottledMessage(
+		message: sidebarTypes.ExtensionToWebviewMessages
+	): void {
+		this._postMessageThrottledQueue.push({ message });
+		this._processThrottledQueue(); // Attempt to process the queue
+	}
+
+	/**
+	 * Processes the throttled message queue, ensuring messages are sent at a controlled rate.
+	 * Only one queue processing loop runs at a time.
+	 */
+	private async _processThrottledQueue(): Promise<void> {
+		if (this._isThrottledQueueProcessing) {
+			return; // A loop is already running
+		}
+
+		this._isThrottledQueueProcessing = true;
+		while (this._postMessageThrottledQueue.length > 0) {
+			const now = Date.now();
+			const timeSinceLastMessage = now - this._lastThrottledMessageTime;
+
+			if (timeSinceLastMessage < this.THROTTLE_INTERVAL_MS) {
+				// Wait for the remaining throttle time before sending the next message
+				await new Promise((r) =>
+					setTimeout(r, this.THROTTLE_INTERVAL_MS - timeSinceLastMessage)
+				);
+			}
+
+			const { message } = this._postMessageThrottledQueue.shift()!;
+			try {
+				// Send the message using the immediate sender
+				await this._postMessageImmediateInternal(message);
+			} catch (err) {
+				// Error already logged by _postMessageImmediateInternal
+			}
+			this._lastThrottledMessageTime = Date.now();
+		}
+		this._isThrottledQueueProcessing = false;
+	}
+
+	/**
+	 * Updates the persisted pending plan data in workspace state.
+	 * @param data The plan data to persist, or `null` to clear.
+	 */
 	public async updatePersistedPendingPlanData(
 		data: sidebarTypes.PersistedPlanData | null
 	): Promise<void> {
@@ -306,6 +429,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 	}
 
+	/**
+	 * Updates the persisted completed plan change sets in workspace state.
+	 * @param data An array of `RevertibleChangeSet` or `null` to clear.
+	 */
 	public async updatePersistedCompletedPlanChangeSets(
 		data: RevertibleChangeSet[] | null
 	): Promise<void> {
@@ -321,6 +448,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 	}
 
+	/**
+	 * Sets the `isPlanExecutionActive` flag and persists its state.
+	 * @param isActive `true` if a plan execution is active, `false` otherwise.
+	 */
 	public async setPlanExecutionActive(isActive: boolean): Promise<void> {
 		this.isPlanExecutionActive = isActive;
 		await this.workspaceState.update(
@@ -330,100 +461,37 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		console.log(`[SidebarProvider] isPlanExecutionActive set to: ${isActive}`);
 	}
 
+	/**
+	 * Handles the `webviewReady` message, restoring the UI state based on active/pending operations.
+	 * This method is decomposed into smaller helpers for clarity.
+	 */
 	public async handleWebviewReady(): Promise<void> {
 		// Always load essential data first, regardless of active operations
 		this.apiKeyManager.loadKeysFromStorage();
 		this.settingsManager.updateWebviewModelList();
 		this.chatHistoryManager.restoreChatHistoryToWebview();
 
-		// Variable to track if any specific operation state was restored.
-		let isAnyOperationBeingRestored = false;
-
+		// Restore UI state based on potential ongoing operations
 		if (this.isPlanExecutionActive) {
-			// #1: Plan execution is actively running
-			console.log(
-				"[SidebarProvider] Detected active plan execution. Restoring UI state."
-			);
-			this.postMessageToWebview({ type: "updateLoadingState", value: true });
-			this.postMessageToWebview({ type: "planExecutionStarted" });
-			this.postMessageToWebview({
-				type: "statusUpdate",
-				value: "A plan execution is currently in progress. Please wait.",
-			});
-			isAnyOperationBeingRestored = true;
+			await this._restorePlanExecutionState();
 		} else if (this._persistedPendingPlanData) {
-			// #2: A plan has been generated and is awaiting user confirmation/review
-			console.log(
-				"[SidebarProvider] Restoring pending plan confirmation to webview from persisted data."
+			await this._restorePendingPlanConfirmationState(
+				this._persistedPendingPlanData
 			);
-			const planCtx = this._persistedPendingPlanData;
-			const planDataForRestore = {
-				originalRequest: planCtx.originalUserRequest,
-				originalInstruction: planCtx.originalInstruction,
-				type: planCtx.type,
-				relevantFiles: planCtx.relevantFiles,
-				textualPlanExplanation: planCtx.textualPlanExplanation,
-			};
-
-			this.postMessageToWebview({
-				type: "restorePendingPlanConfirmation",
-				value: planDataForRestore,
-			});
-			this.postMessageToWebview({ type: "updateLoadingState", value: false }); // Not a loading state
-			this.isGeneratingUserRequest = false; // Ensure this is reset if we're in a persisted plan state
-			await this.workspaceState.update(
-				"minovativeMind.isGeneratingUserRequest",
-				false
-			);
-			isAnyOperationBeingRestored = true;
 		} else if (
 			this.currentAiStreamingState &&
 			!this.currentAiStreamingState.isComplete
 		) {
-			// #3: AI is actively streaming a response
-			console.log(
-				"[SidebarProvider] Restoring active AI streaming progress to webview."
-			);
-			this.postMessageToWebview({
-				type: "restoreStreamingProgress",
-				value: this.currentAiStreamingState,
-			});
-			this.postMessageToWebview({ type: "updateLoadingState", value: true }); // Is a loading state
-			isAnyOperationBeingRestored = true;
+			await this._restoreAiStreamingState(this.currentAiStreamingState);
 		} else if (this.pendingCommitReviewData) {
-			// #4: A commit is awaiting user review
-			console.log(
-				"[SidebarProvider] Restoring pending commit review to webview."
-			);
-			this.postMessageToWebview({
-				type: "restorePendingCommitReview",
-				value: this.pendingCommitReviewData,
-			});
-			this.postMessageToWebview({ type: "updateLoadingState", value: false }); // Not a loading state
-			this.isGeneratingUserRequest = false; // Ensure this is reset if we're in a pending commit state
-			await this.workspaceState.update(
-				"minovativeMind.isGeneratingUserRequest",
-				false
-			);
-			isAnyOperationBeingRestored = true;
+			await this._restorePendingCommitReviewState(this.pendingCommitReviewData);
 		} else if (this.isGeneratingUserRequest) {
-			// #5: Generic `isGeneratingUserRequest` is true, but no specific active operation found above.
+			// Generic `isGeneratingUserRequest` is true, but no specific active operation found above.
 			// This indicates a stale state that needs to be reset.
-			console.log(
-				"[SidebarProvider] Detected stale generic loading state. Resetting."
-			);
-			// `endUserOperation` handles clearing state, re-enabling inputs, and sending status.
-			await this.endUserOperation("success", "Inputs re-enabled.");
-			isAnyOperationBeingRestored = true; // Mark as handled (reset)
+			await this._resetStaleLoadingState();
 		} else {
-			// #6: No active or pending operations detected. Ensure UI is fully re-enabled.
-			console.log(
-				"[SidebarProvider] No active operations, re-enabling inputs."
-			);
-			this.postMessageToWebview({ type: "reenableInput" });
-			this.postMessageToWebview({ type: "updateLoadingState", value: false });
-			this.postMessageToWebview({ type: "statusUpdate", value: "" }); // Clear any stale status message
-			this.clearActiveOperationState(); // Ensure cancellation token and streaming state are null
+			// No active or pending operations detected. Ensure UI is fully re-enabled.
+			await this._resetQuiescentUIState();
 		}
 
 		// Send final message about revertible changes
@@ -432,6 +500,113 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			type: "planExecutionFinished",
 			hasRevertibleChanges: hasRevertibleChanges,
 		});
+	}
+
+	/**
+	 * Restores UI state for an actively running plan execution.
+	 */
+	private async _restorePlanExecutionState(): Promise<void> {
+		console.log(
+			"[SidebarProvider] Detected active plan execution. Restoring UI state."
+		);
+		this.postMessageToWebview({ type: "updateLoadingState", value: true });
+		this.postMessageToWebview({ type: "planExecutionStarted" });
+		this.postMessageToWebview({
+			type: "statusUpdate",
+			value: "A plan execution is currently in progress. Please wait.",
+		});
+	}
+
+	/**
+	 * Restores UI state for a pending plan confirmation.
+	 * @param persistedData The persisted plan data.
+	 */
+	private async _restorePendingPlanConfirmationState(
+		persistedData: sidebarTypes.PersistedPlanData
+	): Promise<void> {
+		console.log(
+			"[SidebarProvider] Restoring pending plan confirmation to webview from persisted data."
+		);
+		const planCtx = persistedData;
+		const planDataForRestore = {
+			originalRequest: planCtx.originalUserRequest,
+			originalInstruction: planCtx.originalInstruction,
+			type: planCtx.type,
+			relevantFiles: planCtx.relevantFiles,
+			textualPlanExplanation: planCtx.textualPlanExplanation,
+		};
+
+		this.postMessageToWebview({
+			type: "restorePendingPlanConfirmation",
+			value: planDataForRestore,
+		});
+		this.postMessageToWebview({ type: "updateLoadingState", value: false });
+		this.isGeneratingUserRequest = false;
+		await this.workspaceState.update(
+			"minovativeMind.isGeneratingUserRequest",
+			false
+		);
+	}
+
+	/**
+	 * Restores UI state for an active AI streaming operation.
+	 * @param streamingState The current AI streaming state.
+	 */
+	private async _restoreAiStreamingState(
+		streamingState: sidebarTypes.AiStreamingState
+	): Promise<void> {
+		console.log(
+			"[SidebarProvider] Restoring active AI streaming progress to webview."
+		);
+		this.postMessageToWebview({
+			type: "restoreStreamingProgress",
+			value: streamingState,
+		});
+		this.postMessageToWebview({ type: "updateLoadingState", value: true });
+	}
+
+	/**
+	 * Restores UI state for a pending commit review.
+	 * @param commitReviewData The pending commit review data.
+	 */
+	private async _restorePendingCommitReviewState(commitReviewData: {
+		commitMessage: string;
+		stagedFiles: string[];
+	}): Promise<void> {
+		console.log(
+			"[SidebarProvider] Restoring pending commit review to webview."
+		);
+		this.postMessageToWebview({
+			type: "restorePendingCommitReview",
+			value: commitReviewData,
+		});
+		this.postMessageToWebview({ type: "updateLoadingState", value: false });
+		this.isGeneratingUserRequest = false;
+		await this.workspaceState.update(
+			"minovativeMind.isGeneratingUserRequest",
+			false
+		);
+	}
+
+	/**
+	 * Resets stale loading state indicators if no specific active operation is found.
+	 */
+	private async _resetStaleLoadingState(): Promise<void> {
+		console.log(
+			"[SidebarProvider] Detected stale generic loading state. Resetting."
+		);
+		await this.endUserOperation("success", "Inputs re-enabled.");
+	}
+
+	/**
+	 * Resets the UI to a quiescent state when no operations are active or pending.
+	 */
+	private async _resetQuiescentUIState(): Promise<void> {
+		console.log("[SidebarProvider] No active operations, re-enabling inputs.");
+		this.postMessageToWebview({ type: "reenableInput" });
+		this.postMessageToWebview({ type: "updateLoadingState", value: false });
+		this.postMessageToWebview({ type: "statusUpdate", value: "" }); // Clear any stale status message
+		this.clearActiveOperationState(); // Ensure cancellation token and streaming state are null
 	}
 
 	// --- OPERATION & STATE HELPERS ---
@@ -468,11 +643,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			false
 		);
 
-		// State cleanup: This also handles activeOperationCancellationTokenSource disposal/reset and currentAiStreamingState = null
 		this.clearActiveOperationState();
 		this.pendingPlanGenerationContext = null;
 		this.lastPlanGenerationContext = null;
-		// Clear pendingCommitReviewData ONLY if not pausing for review
 		if (outcome !== "review") {
 			this.pendingCommitReviewData = null;
 		}
@@ -485,11 +658,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			);
 		}
 
-		// UI feedback after state cleanup
 		if (shouldReenableInputs) {
 			this.postMessageToWebview({ type: "reenableInput" });
 		}
-		// Always send updateLoadingState: false when an operation ends, unless it's a review state
 		if (outcome !== "review") {
 			this.postMessageToWebview({ type: "updateLoadingState", value: false });
 		}
@@ -506,7 +677,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 					statusMessage = "Operation completed successfully.";
 					break;
 				case "cancelled":
-					statusMessage = "";
+					statusMessage = "Operation cancelled."; // More explicit message
 					isError = true;
 					break;
 				case "failed":
@@ -542,44 +713,33 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public async triggerUniversalCancellation(): Promise<void> {
 		console.log("[SidebarProvider] Triggering universal cancellation...");
 
-		// 1. Cancel the active operation, then dispose and clear the token source
 		if (this.activeOperationCancellationTokenSource) {
-			this.activeOperationCancellationTokenSource.cancel(); // Signal cancellation
-			const wasAiGenerationInProgress =
-				!!this.currentAiStreamingState &&
-				!this.currentAiStreamingState.isComplete;
-			// The clearActiveOperationState() method handles disposing and nullifying the token source,
-			// as well as setting currentAiStreamingState to null.
+			this.activeOperationCancellationTokenSource.cancel();
 			this.clearActiveOperationState();
 		}
 
-		// 2. Terminate any active child processes
 		this.activeChildProcesses.forEach((cp) => {
 			console.log(
 				`[SidebarProvider] Killing child process with PID: ${cp.pid}`
 			);
 			cp.kill();
 		});
-		this.activeChildProcesses = []; // Clear the list of child processes
+		this.activeChildProcesses = [];
 
-		// 3. Reset all other relevant state variables to a quiescent state
-		await this.setPlanExecutionActive(false); // Update plan execution status
+		await this.setPlanExecutionActive(false);
 
 		this.pendingPlanGenerationContext = null;
-		await this.updatePersistedPendingPlanData(null); // Clear persisted data
+		await this.updatePersistedPendingPlanData(null);
 		this.lastPlanGenerationContext = null;
-		this.pendingCommitReviewData = null; // Ensure this is cleared upon universal cancellation
-		// this.currentAiStreamingState = null; // Removed: Handled by clearActiveOperationState()
+		this.pendingCommitReviewData = null;
 
-		this.isGeneratingUserRequest = false; // Reset generation flag
+		this.isGeneratingUserRequest = false;
 		await this.workspaceState.update(
 			"minovativeMind.isGeneratingUserRequest",
 			false
-		); // Persist the reset flag
-		this.isEditingMessageActive = false; // Reset editing flag
+		);
+		this.isEditingMessageActive = false;
 
-		// 4. Call endUserOperation to finalize UI state and send status updates.
-		// This ensures "reenableInput" and "statusUpdate" are sent after all core state cleanup.
 		const wasAiGenerationInProgress =
 			!!this.currentAiStreamingState &&
 			!this.currentAiStreamingState.isComplete;
@@ -589,7 +749,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			!wasAiGenerationInProgress
 		);
 
-		// 5. Send a specific confirmation message to the webview, after all other messages
 		this.postMessageToWebview({
 			type: "operationCancelledConfirmation",
 		});
@@ -653,9 +812,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				);
 			} catch (error: any) {
 				revertSuccessful = false;
-				revertErrorMessage = `Failed to revert most recent workflow changes: ${
-					error.message || String(error)
-				}`;
+				revertErrorMessage = formatUserFacingErrorMessage(
+					error,
+					"Failed to revert most recent workflow changes.",
+					"Revert Error: ",
+					this.workspaceRootUri
+				);
 				finalStatusMessage = revertErrorMessage;
 				isErrorStatus = true;
 				showErrorNotification(

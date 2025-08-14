@@ -3,9 +3,9 @@ import {
 	HistoryEntry,
 	ChatMessage,
 	UpdateRelevantFilesDisplayMessage,
-	HistoryEntryPart, // Added import for HistoryEntryPart
-	ImageInlineData, // Added import for ImageInlineData
-} from "../common/sidebarTypes"; // Assuming ChatMessage is defined here for save/load
+	HistoryEntryPart,
+	ImageInlineData,
+} from "../common/sidebarTypes";
 
 const CHAT_HISTORY_STORAGE_KEY = "minovativeMindChatHistory";
 const MAX_HISTORY_ITEMS = 100;

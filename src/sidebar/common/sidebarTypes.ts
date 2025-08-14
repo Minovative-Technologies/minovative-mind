@@ -108,6 +108,12 @@ export interface PrefillChatInput {
 	payload: { text: string };
 }
 
+// Extension to Webview for signaling that a file URI has been loaded (e.g., for webview initial setup)
+export interface FileUriLoadedMessage {
+	type: "fileUriLoaded";
+	uri: string;
+}
+
 // Placeholder interfaces for other ExtensionToWebviewMessages inferred from usage
 // These are not exhaustive but represent common message types.
 interface StatusUpdateMessage {
@@ -279,6 +285,54 @@ export interface ReceiveWorkspaceFilesMessage {
 	value: string[]; // Array of relative file paths
 }
 
+/**
+ * Message sent from the extension to the webview to indicate the webview is ready
+ * and can now receive state updates or initial data.
+ */
+export interface WebviewReadyMessage {
+	type: "webviewReady";
+}
+
+/**
+ * Message sent from the extension to the webview to update the list of API keys.
+ */
+export interface UpdateKeyListMessage {
+	type: "updateKeyList";
+	value: ApiKeyInfo[]; // Expected payload structure
+}
+
+/**
+ * Message sent from the extension to the webview to restore the chat history.
+ */
+export interface RestoreHistoryMessage {
+	type: "restoreHistory";
+	value: HistoryEntry[]; // Expected payload structure
+}
+
+/**
+ * Message sent from the extension to the webview to confirm a commit operation.
+ */
+export interface ConfirmCommitMessage {
+	type: "confirmCommit";
+}
+
+/**
+ * Message sent from the extension to the webview to cancel a commit operation.
+ */
+export interface CancelCommitMessage {
+	type: "cancelCommit";
+}
+
+/**
+ * Message sent from the extension to the webview to update the display of relevant files.
+ * (Ensure the properties match the actual data being sent).
+ */
+export interface UpdateRelevantFilesDisplayMessage {
+	type: "updateRelevantFilesDisplay";
+	messageIndex: number; // Example property, adjust as needed based on actual usage
+	isExpanded: boolean; // Example property, adjust as needed
+}
+
 export type ExtensionToWebviewMessages =
 	| StatusUpdateMessage
 	| AiResponseStartMessage
@@ -312,7 +366,14 @@ export type ExtensionToWebviewMessages =
 	| CodeFileStreamChunkMessage
 	| CodeFileStreamEndMessage
 	| ResetCodeStreamingAreaMessage
-	| ReceiveWorkspaceFilesMessage;
+	| ReceiveWorkspaceFilesMessage
+	| FileUriLoadedMessage
+	| WebviewReadyMessage
+	| UpdateKeyListMessage
+	| RestoreHistoryMessage
+	| ConfirmCommitMessage
+	| CancelCommitMessage
+	| UpdateRelevantFilesDisplayMessage;
 
 export interface PlanGenerationContext {
 	type: "chat" | "editor";
