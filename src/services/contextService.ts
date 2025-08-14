@@ -37,14 +37,17 @@ import {
 	detectProjectType,
 	formatProjectProfileForPrompt,
 } from "./projectTypeDetector"; // Import project type detection and formatting
-import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
+import {
+	DEFAULT_FLASH_LITE_MODEL,
+	DEFAULT_SIZE,
+} from "../sidebar/common/sidebarConstants";
 
 // Constants for symbol processing
 export const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 5000;
 
 // Performance monitoring constants
 const PERFORMANCE_THRESHOLDS = {
-	SCAN_TIME_WARNING: 15000, // 5 seconds
+	SCAN_TIME_WARNING: 15000, // 15 seconds
 	DEPENDENCY_BUILD_TIME_WARNING: 10000, // 10 seconds
 	CONTEXT_BUILD_TIME_WARNING: 15000, // 15 seconds
 	MAX_FILES_FOR_DETAILED_PROCESSING: 2000,
@@ -168,7 +171,7 @@ export class ContextService {
 			const allScannedFiles = await scanWorkspace({
 				useCache: options?.useScanCache ?? true,
 				maxConcurrentReads: options?.maxConcurrency ?? 15,
-				maxFileSize: options?.maxFileSize ?? 1024 * 1024 * 1, // 1MB
+				maxFileSize: options?.maxFileSize ?? DEFAULT_SIZE,
 				cacheTimeout: 5 * 60 * 1000, // 5 minutes
 			});
 
@@ -224,7 +227,7 @@ export class ContextService {
 					useCache: options?.useDependencyCache ?? true,
 					maxConcurrency: options?.maxConcurrency ?? 15,
 					skipLargeFiles: options?.skipLargeFiles ?? true,
-					maxFileSizeForParsing: options?.maxFileSize ?? 1024 * 1024 * 1, // 1MB
+					maxFileSizeForParsing: options?.maxFileSize ?? DEFAULT_SIZE,
 					retryFailedFiles: true,
 					maxRetries: 3,
 				}

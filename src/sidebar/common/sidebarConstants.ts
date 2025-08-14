@@ -24,6 +24,7 @@ export const DEFAULT_MODEL =
 	AVAILABLE_GEMINI_MODELS[AVAILABLE_GEMINI_MODELS.length - 1];
 
 export const TEMPERATURE = 2;
+export const DEFAULT_SIZE = 1024 * 1024 * 1;
 
 // Minovative commands for the chat input
 export const MINOVATIVE_COMMANDS = ["/plan", "/commit"];

@@ -2,6 +2,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { FileStructureAnalysis } from "../types/codeGenerationTypes";
+import { DEFAULT_SIZE } from "../sidebar/common/sidebarConstants";
 
 /**
  * Get language ID from file extension
@@ -210,7 +211,7 @@ export async function formatSelectedFilesIntoSnippets(
 	}
 
 	const formattedSnippets: string[] = [];
-	const maxFileSizeForSnippet = 1024 * 1024 * 1; // 1MB
+	const maxFileSizeForSnippet = DEFAULT_SIZE;
 
 	for (const fileUri of fileUris) {
 		if (token.isCancellationRequested) {

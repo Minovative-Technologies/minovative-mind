@@ -347,9 +347,6 @@ When addressing **coding tasks**, maintain an **organized, modular approach**. P
 							await sidebarProvider.chatService.handleRegularChat(
 								[{ text: userChatPrompt }] // Changed from string to HistoryEntryPart array
 							);
-							vscode.window.showInformationMessage(
-								"Code sent to chat. Check Minovative Mind sidebar for response."
-							);
 						} catch (error: any) {
 							const errorMessage = error.message || String(error);
 							if (errorMessage.includes("Operation cancelled by user.")) {

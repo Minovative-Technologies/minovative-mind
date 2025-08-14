@@ -1615,7 +1615,7 @@ export class PlanService {
 		}
 
 		const formattedSnippets: string[] = [];
-		const maxFileSizeForSnippet = 1024 * 1024 * 1; // 1MB limit per file to prevent prompt overflow
+		const maxFileSizeForSnippet = sidebarConstants.DEFAULT_SIZE;
 
 		for (const relativePath of relevantFiles) {
 			if (token.isCancellationRequested) {

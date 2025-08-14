@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import BPromise from "bluebird"; // using bluebird map for concurrency control
 import * as path from "path";
 import { loadGitIgnoreMatcher } from "../utils/ignoreUtils";
+import { DEFAULT_SIZE } from "../sidebar/common/sidebarConstants";
 
 // Interface for scan options (can be expanded later for settings)
 interface ScanOptions {
@@ -149,7 +150,7 @@ export async function scanWorkspace(
 
 	// Define concurrency. Tune to 15 (was 10) to align with common usage in ContextService.
 	const concurrency = options?.maxConcurrentReads ?? 15;
-	const maxFileSize = options?.maxFileSize ?? 1024 * 1024 * 1; // 1MB default
+	const maxFileSize = options?.maxFileSize ?? DEFAULT_SIZE;
 
 	// Make RELEVANT_FILE_EXTENSIONS configurable via VS Code settings
 	const config = vscode.workspace.getConfiguration(

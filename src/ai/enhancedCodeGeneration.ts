@@ -24,6 +24,7 @@ import {
 	createEnhancedModificationPrompt,
 } from "./prompts/enhancedCodeGenerationPrompts";
 import { CodeValidationService } from "../services/codeValidationService";
+import { DEFAULT_SIZE } from "../sidebar/common/sidebarConstants";
 
 // Re-export these types to make them accessible to other modules that import from this file.
 export type {
@@ -379,7 +380,7 @@ export class EnhancedCodeGenerator {
 		}
 
 		const formattedSnippets: string[] = [];
-		const maxFileSizeForSnippet = 1024 * 1024 * 1; // 1MB limit per file
+		const maxFileSizeForSnippet = DEFAULT_SIZE;
 
 		for (const relativePath of relevantFilePaths) {
 			if (token.isCancellationRequested) {

@@ -4,6 +4,7 @@ import {
 	MODEL_SELECTION_STORAGE_KEY,
 	AVAILABLE_GEMINI_MODELS,
 	DEFAULT_MODEL,
+	DEFAULT_SIZE,
 } from "../common/sidebarConstants";
 import { resetClient } from "../../ai/gemini"; // Adjusted path
 
@@ -56,7 +57,7 @@ const DEFAULT_OPTIMIZATION_SETTINGS = {
 	maxConcurrency: 15,
 	enablePerformanceMonitoring: true,
 	skipLargeFiles: true,
-	maxFileSize: 1024 * 1024 * 1, // 1MB
+	maxFileSize: DEFAULT_SIZE,
 	scanCacheTimeout: 5 * 60 * 1000, // 5 minutes
 	dependencyCacheTimeout: 10 * 60 * 1000, // 10 minutes
 	aiSelectionCacheTimeout: 5 * 60 * 1000, // 5 minutes

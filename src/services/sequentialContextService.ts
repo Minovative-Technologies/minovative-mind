@@ -18,7 +18,10 @@ import {
 } from "../context/smartContextSelector";
 import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes";
 import { SettingsManager } from "../sidebar/managers/settingsManager";
-import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
+import {
+	DEFAULT_FLASH_LITE_MODEL,
+	DEFAULT_SIZE,
+} from "../sidebar/common/sidebarConstants";
 
 export interface SequentialContextOptions {
 	enableSequentialProcessing?: boolean;
@@ -106,7 +109,7 @@ export class SequentialContextService {
 		const allFiles = await scanWorkspace({
 			useCache: true,
 			maxConcurrency: 10,
-			maxFileSize: 1024 * 1024 * 1, // 1MB
+			maxFileSize: DEFAULT_SIZE,
 		});
 
 		if (allFiles.length === 0) {
@@ -611,7 +614,7 @@ export class SequentialContextService {
 		const allFiles = await scanWorkspace({
 			useCache: true,
 			maxConcurrency: 10,
-			maxFileSize: 1024 * 1024 * 1, // 1MB
+			maxFileSize: DEFAULT_SIZE,
 		});
 
 		// Build dependency graph
