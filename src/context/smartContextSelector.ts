@@ -163,7 +163,6 @@ export async function selectRelevantFilesAI(
 		allScannedFiles,
 		projectRoot,
 		activeEditorContext,
-		diagnostics,
 		fileDependencies,
 		activeEditorSymbols,
 		preSelectedHeuristicFiles,
@@ -252,7 +251,7 @@ export async function selectRelevantFilesAI(
 				contextPrompt += `File Location: ${relativeSymPath}:${lineNumberDisplay}\n`;
 			}
 
-			const MAX_RELATED_SYMBOL_FILES_PROMPT = 5; // Limit related files for prompt conciseness
+			const MAX_RELATED_SYMBOL_FILES_PROMPT = 10; // Limit related files for prompt conciseness
 
 			// References (general references, fetched if activeSymbolDetailedInfo doesn't explicitly contain them)
 			try {
@@ -423,10 +422,6 @@ export async function selectRelevantFilesAI(
 				}
 			}
 		}
-	}
-
-	if (diagnostics && diagnostics.trim().length > 0) {
-		contextPrompt += `\nRelevant Diagnostics - Fix all Diagnostics:\n${diagnostics}\n`;
 	}
 
 	if (chatHistory.length > 0) {
