@@ -123,7 +123,7 @@ export class CommitService {
 
 Only provide the commit message in simple sentences, paragraphs, or lists.
 
-Do not use Markdown formatting or special symbols like backticks (\`) or escape characters. Replace them with plain text instead.
+Do not use Markdown formatting or special symbols like backticks (\`) or escape characters at ALL, never. Replace them with plain text instead.
 
 Prioritize file-by-file summaries, use the overall diff for additional context, and follow git commit message best practices.
 
