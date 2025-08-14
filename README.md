@@ -128,6 +128,7 @@ My vision is to empower every developer with a powerful, free, and open-source A
 
 ## Learn more about the project
 
+- [**`USER_GUIDE.md`**](./USER_GUIDE.md)
 - [**`CONTRIBUTING.md`**](./CONTRIBUTING.md)
 - [**`CAPABILITIES.md`**](./CAPABILITIES.md)
 - [**`ARCHITECTURE.md`**](./ARCHITECTURE.md)
