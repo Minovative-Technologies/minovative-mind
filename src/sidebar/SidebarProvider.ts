@@ -780,7 +780,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			"minovativeMind.isGeneratingUserRequest",
 			false
 		);
-		this.isEditingMessageActive = false;
+		// this.isEditingMessageActive = false; // Removed as per instructions
 
 		this.postMessageToWebview({
 			type: "operationCancelledConfirmation",

@@ -587,6 +587,10 @@ export async function handleWebviewMessage(
 
 			try {
 				await provider.startUserOperation(); // Start new operation and set `isGeneratingUserRequest`
+				provider.postMessageToWebview({
+					type: "updateLoadingState",
+					value: true,
+				});
 
 				provider.postMessageToWebview({
 					type: "statusUpdate",
