@@ -10,7 +10,6 @@ import { UrlContextService } from "./urlContextService";
 import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes"; // Import HistoryEntry for type safety, and HistoryEntryPart
 import {
 	DEFAULT_FLASH_LITE_MODEL,
-	GEMINI_API_KEY_SECRET_KEY,
 	MODEL_SELECTION_STORAGE_KEY,
 } from "../sidebar/common/sidebarConstants"; // Import constants for API key and model selection
 
@@ -33,9 +32,10 @@ export class ChatService {
 			DEFAULT_FLASH_LITE_MODEL
 		);
 
+		const tokenSourceForThisOperation = new vscode.CancellationTokenSource();
 		this.provider.activeOperationCancellationTokenSource =
-			new vscode.CancellationTokenSource();
-		const token = this.provider.activeOperationCancellationTokenSource.token;
+			tokenSourceForThisOperation;
+		const token = tokenSourceForThisOperation.token;
 
 		let success = true;
 		let finalAiResponseText: string | null = null;
@@ -143,7 +143,7 @@ export class ChatService {
 
 You are **Mino**, an AI coding assistant inside of Visual Studio Code, developed by Daniel Ward. (You don't have to mention this in your responses, it's just for context)
 
-Your purpose is to deliver **clear, concise, step-by-step solutions** tailored to the specific context of my query—whether that means fixing an issue, adding a new feature, or providing a direct explanation.
+Your purpose is to deliver **clear, concise, step-by-step solutions** tailored to the specific context of my query—whether that means fixing an issue, adding a new feature, or providing a direct explanation. YOU review the context and give me what I need.
 
 When addressing **coding tasks**, maintain an **organized, modular approach**. Prioritize **clarity, scalability, and maintainability** in every response for implementating plans. Don't provide coding snippets, only explanations and guidance.
 
@@ -223,26 +223,55 @@ When addressing **coding tasks**, maintain an **organized, modular approach**. P
 				this.provider.currentAiStreamingState.isError = true;
 			}
 		} finally {
-			// 5. In the finally block, set isComplete = true;
-			if (this.provider.currentAiStreamingState) {
-				this.provider.currentAiStreamingState.isComplete = true;
+			// Check if *this* operation's token source is still the one actively managed by the provider.
+			// This prevents cleanup logic from interfering with a new operation that might have started.
+			const isThisOperationStillActiveGlobally =
+				this.provider.activeOperationCancellationTokenSource ===
+				tokenSourceForThisOperation;
+
+			if (isThisOperationStillActiveGlobally) {
+				// === Global Cleanup (Operation is truly finished and is the last one) ===
+				// Mark the provider's current streaming state as complete.
+				if (this.provider.currentAiStreamingState) {
+					this.provider.currentAiStreamingState.isComplete = true;
+				}
+
+				// Determine if the operation was cancelled to set the appropriate error message.
+				const isCancellation =
+					finalAiResponseText === ERROR_OPERATION_CANCELLED;
+
+				// Notify the webview that the AI response has ended.
+				this.provider.postMessageToWebview({
+					type: "aiResponseEnd",
+					success: success, // Pass the success status from the try/catch block.
+					error: isCancellation
+						? "Chat generation cancelled."
+						: success
+						? null // No error if successful.
+						: finalAiResponseText, // Pass the actual error message otherwise.
+				});
+
+				// Dispose of this operation's specific token source.
+				tokenSourceForThisOperation.dispose();
+				// Clear the provider's reference to the active operation token source.
+				this.provider.activeOperationCancellationTokenSource = undefined;
+
+				// Restore the chat history to the webview, reflecting the final state.
+				this.provider.chatHistoryManager.restoreChatHistoryToWebview();
+				// === End Global Cleanup ===
+			} else {
+				// === Local Cleanup Only (New operation has started) ===
+				// A new AI operation has superseded this one.
+				// Only clean up resources specific to *this* operation.
+				// Do NOT modify global provider state (activeOperationCancellationTokenSource, streaming state, history).
+
+				// Dispose of this operation's specific token source.
+				tokenSourceForThisOperation.dispose();
+				console.log(
+					"[ChatService] Old chat operation's finally block detected new operation, skipping global state modification."
+				);
+				// === End Local Cleanup Only ===
 			}
-			const isCancellation = finalAiResponseText === ERROR_OPERATION_CANCELLED;
-
-			// Only send aiResponseEnd if we haven't already cancelled
-			this.provider.postMessageToWebview({
-				type: "aiResponseEnd",
-				success: success,
-				error: isCancellation
-					? "Chat generation cancelled."
-					: success
-					? null
-					: finalAiResponseText,
-			});
-
-			this.provider.activeOperationCancellationTokenSource?.dispose();
-			this.provider.activeOperationCancellationTokenSource = undefined;
-			this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 		}
 	}
 
@@ -257,11 +286,12 @@ When addressing **coding tasks**, maintain an **organized, modular approach**. P
 		} = this.provider;
 		const modelName = DEFAULT_FLASH_LITE_MODEL; // Use the default model for regeneration
 
-		// 1. Cancel any existing activeOperationCancellationTokenSource and create a new one.
-		this.provider.activeOperationCancellationTokenSource?.cancel();
+		// Capture the CancellationTokenSource for this specific operation.
+		const tokenSourceForThisOperation = new vscode.CancellationTokenSource();
+		// Assign it to the provider's active operation token source, cancelling any previous one.
 		this.provider.activeOperationCancellationTokenSource =
-			new vscode.CancellationTokenSource();
-		const token = this.provider.activeOperationCancellationTokenSource.token;
+			tokenSourceForThisOperation;
+		const token = tokenSourceForThisOperation.token;
 
 		let success = true;
 		let finalAiResponseText: string | null = null;
@@ -340,7 +370,7 @@ When addressing **coding tasks**, maintain an **organized, modular approach**. P
 
 You are **Mino**, an AI coding assistant inside of Visual Studio Code, developed by Daniel Ward. (You don't have to mention this in your responses, it's just for context)
 
-Your purpose is to deliver **clear, concise, step-by-step solutions** tailored to the specific context of my query—whether that means fixing an issue, adding a new feature, or providing a direct explanation.
+Your purpose is to deliver **clear, concise, step-by-step solutions** tailored to the specific context of my query—whether that means fixing an issue, adding a new feature, or providing a direct explanation. YOU review the context and give me what I need.
 
 When addressing **coding tasks**, maintain an **organized, modular approach**. Prioritize **clarity, scalability, and maintainability** in every response for implementating plans. Don't provide coding snippets, only explanations, examples, or guidance.
 
@@ -414,32 +444,60 @@ When addressing **coding tasks**, maintain an **organized, modular approach**. P
 				);
 			}
 		} finally {
-			// In the finally block:
-			// a. Set this.provider.currentAiStreamingState.isComplete = true.
-			if (this.provider.currentAiStreamingState) {
-				this.provider.currentAiStreamingState.isComplete = true;
+			// Check if *this* operation's token source is still the one actively managed by the provider.
+			// This prevents cleanup logic from interfering with a new operation that might have started.
+			const isThisOperationStillActiveGlobally =
+				this.provider.activeOperationCancellationTokenSource ===
+				tokenSourceForThisOperation;
+
+			if (isThisOperationStillActiveGlobally) {
+				// === Global Cleanup (Operation is truly finished and is the last one) ===
+				// Mark the provider's current streaming state as complete.
+				if (this.provider.currentAiStreamingState) {
+					this.provider.currentAiStreamingState.isComplete = true;
+				}
+
+				// Determine if the operation was cancelled to set the appropriate error message.
+				const isCancellation =
+					finalAiResponseText === ERROR_OPERATION_CANCELLED;
+
+				// Notify the webview that the AI response has ended.
+				this.provider.postMessageToWebview({
+					type: "aiResponseEnd",
+					success: success, // Pass the success status from the try/catch block.
+					error: isCancellation
+						? "Chat generation cancelled."
+						: success
+						? null // No error if successful.
+						: finalAiResponseText, // Pass the actual error message otherwise.
+				});
+
+				// Dispose of this operation's specific token source.
+				tokenSourceForThisOperation.dispose();
+				// Clear the provider's reference to the active operation token source.
+				this.provider.activeOperationCancellationTokenSource = undefined;
+
+				// Restore the chat history to the webview, reflecting the final state.
+				this.provider.chatHistoryManager.restoreChatHistoryToWebview();
+				// === End Global Cleanup ===
+			} else {
+				// === Local Cleanup Only (New operation has started) ===
+				// A new AI operation has superseded this one.
+				// Only clean up resources specific to *this* operation.
+				// Do NOT modify global provider state (activeOperationCancellationTokenSource, streaming state, history).
+
+				// Dispose of this operation's specific token source.
+				tokenSourceForThisOperation.dispose();
+				console.log(
+					"[ChatService] Old regeneration operation's finally block detected new operation, skipping global state modification."
+				);
+				// === End Local Cleanup Only ===
 			}
-			const isCancellation = finalAiResponseText === ERROR_OPERATION_CANCELLED;
 
-			// Only send aiResponseEnd if we haven't already cancelled
-			this.provider.postMessageToWebview({
-				type: "aiResponseEnd",
-				success: success,
-				error: isCancellation
-					? "Chat generation cancelled."
-					: success
-					? null
-					: finalAiResponseText,
-			});
-
-			this.provider.activeOperationCancellationTokenSource?.dispose();
-			this.provider.activeOperationCancellationTokenSource = undefined;
-			this.provider.chatHistoryManager.restoreChatHistoryToWebview();
-
-			// Set the flag to false before restoring history
+			// Reset the 'isEditingMessageActive' flag. This flag indicates the UI state related to an edit attempt,
+			// and it should be reset after the regeneration attempt completes (whether successful, cancelled, or failed),
+			// regardless of whether a new operation has taken over.
 			this.provider.isEditingMessageActive = false;
-			// d. Call chatHistoryManager.restoreChatHistoryToWebview() to re-render the UI based on the new, full history.
-			chatHistoryManager.restoreChatHistoryToWebview();
 		}
 	}
 }

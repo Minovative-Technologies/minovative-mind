@@ -756,6 +756,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		if (this.activeOperationCancellationTokenSource) {
 			this.activeOperationCancellationTokenSource.cancel();
 			this.clearActiveOperationState();
+			this.postMessageToWebview({ type: "reenableInput" });
+			this.postMessageToWebview({ type: "updateLoadingState", value: false });
 		}
 
 		this.activeChildProcesses.forEach((cp) => {
@@ -779,15 +781,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			false
 		);
 		this.isEditingMessageActive = false;
-
-		const wasAiGenerationInProgress =
-			!!this.currentAiStreamingState &&
-			!this.currentAiStreamingState.isComplete;
-		await this.endUserOperation(
-			"cancelled",
-			undefined,
-			!wasAiGenerationInProgress
-		);
 
 		this.postMessageToWebview({
 			type: "operationCancelledConfirmation",

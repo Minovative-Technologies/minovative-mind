@@ -4,10 +4,10 @@ import { PlanGenerationContext } from "../sidebar/common/sidebarTypes";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 
 // Scoring weights constants
-const HIGH_RELEVANCE = 10;
-const MEDIUM_RELEVANCE = 5;
-const LOW_RELEVANCE = 1;
-const ACTIVE_FILE_SCORE_BOOST = 1000; // Ensures active file is highly prioritized
+const HIGH_RELEVANCE = 50;
+const MEDIUM_RELEVANCE = 25;
+const LOW_RELEVANCE = 5;
+const ACTIVE_FILE_SCORE_BOOST = 100;
 
 export interface HeuristicSelectionOptions {
 	maxHeuristicFilesTotal: number;
