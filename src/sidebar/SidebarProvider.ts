@@ -756,8 +756,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		if (this.activeOperationCancellationTokenSource) {
 			this.activeOperationCancellationTokenSource.cancel();
 			this.clearActiveOperationState();
-			this.postMessageToWebview({ type: "reenableInput" });
-			this.postMessageToWebview({ type: "updateLoadingState", value: false });
 		}
 
 		this.activeChildProcesses.forEach((cp) => {
@@ -782,6 +780,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 		// this.isEditingMessageActive = false; // Removed as per instructions
 
+		// Ensure these messages are always sent to re-enable UI regardless of active token source
+		this.postMessageToWebview({ type: "reenableInput" });
+		this.postMessageToWebview({ type: "updateLoadingState", value: false });
 		this.postMessageToWebview({
 			type: "operationCancelledConfirmation",
 		});
