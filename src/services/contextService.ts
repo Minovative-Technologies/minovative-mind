@@ -11,7 +11,7 @@ import {
 	HistoryEntryPart,
 	HistoryEntry,
 } from "../sidebar/common/sidebarTypes";
-import { scanWorkspace } from "../context/workspaceScanner";
+import { scanWorkspace, clearScanCache } from "../context/workspaceScanner";
 import {
 	buildDependencyGraph,
 	buildReverseDependencyGraph,
@@ -101,6 +101,7 @@ export class ContextService {
 	private aiRequestService: AIRequestService;
 	private postMessageToWebview: (message: any) => void;
 	private sequentialContextService?: SequentialContextService;
+	private disposables: vscode.Disposable[] = [];
 
 	constructor(
 		settingsManager: SettingsManager,
@@ -114,6 +115,7 @@ export class ContextService {
 		this.changeLogger = changeLogger;
 		this.aiRequestService = aiRequestService;
 		this.postMessageToWebview = postMessageToWebview;
+		this._registerWorkspaceWatchers();
 	}
 
 	/**
@@ -134,6 +136,59 @@ export class ContextService {
 			);
 		}
 		return this.sequentialContextService;
+	}
+
+	private async _registerWorkspaceWatchers(): Promise<void> {
+		const registerDisposable = (disposable: vscode.Disposable) => {
+			this.disposables.push(disposable);
+		};
+
+		const clearCacheForFileUri = (uri: vscode.Uri) => {
+			const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+			if (workspaceFolder) {
+				const workspacePath = workspaceFolder.uri.fsPath;
+				console.log(
+					`[ContextService] Clearing scan cache for workspace: ${workspacePath} due to file change.`
+				);
+				clearScanCache(workspacePath); // Ensure clearScanCache is imported
+			} else {
+				console.warn(
+					`[ContextService] File change detected outside of any known workspace folder for URI: ${uri.toString()}`
+				);
+			}
+		};
+
+		// Subscribe to file creation events
+		registerDisposable(
+			vscode.workspace.onDidCreateFiles((event) => {
+				console.debug(`[ContextService] onDidCreateFiles event detected.`);
+				event.files.forEach((fileUri: vscode.Uri) =>
+					clearCacheForFileUri(fileUri)
+				);
+			})
+		);
+
+		// Subscribe to file deletion events
+		registerDisposable(
+			vscode.workspace.onDidDeleteFiles((event) => {
+				console.debug(`[ContextService] onDidDeleteFiles event detected.`);
+				event.files.forEach((fileUri: vscode.Uri) =>
+					clearCacheForFileUri(fileUri)
+				);
+			})
+		);
+
+		// Subscribe to file rename events
+		registerDisposable(
+			vscode.workspace.onDidRenameFiles((event) => {
+				console.debug(`[ContextService] onDidRenameFiles event detected.`);
+				event.files.forEach((fileRename) => {
+					clearCacheForFileUri(fileRename.newUri);
+				});
+			})
+		);
+
+		console.log("[ContextService] Workspace file system watchers registered.");
 	}
 
 	public async buildProjectContext(
@@ -893,5 +948,18 @@ export class ContextService {
 				}
 			);
 		}
+	}
+
+	public dispose(): void {
+		console.log("[ContextService] Disposing workspace file system watchers...");
+		this.disposables.forEach((disposable) => {
+			try {
+				disposable.dispose();
+			} catch (error) {
+				console.error("[ContextService] Error disposing watcher:", error);
+			}
+		});
+		this.disposables = [];
+		console.log("[ContextService] Workspace file system watchers disposed.");
 	}
 }

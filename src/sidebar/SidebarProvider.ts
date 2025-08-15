@@ -306,6 +306,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			"receiveWorkspaceFiles", // Result of a file scan request
 			"restorePendingPlanConfirmation", // Restores UI for pending plan review
 			"updateModelList", // Model selection changes (infrequent)
+			"updateLoadingState",
+			"apiKeyStatus",
+			"updateOptimizationSettings",
+			"structuredPlanParseFailed",
+			"planExecutionFinished",
+			"revertCompleted",
+			"restoreStreamingProgress",
+			"restorePendingCommitReview",
+			"resetCodeStreamingArea",
 		]);
 
 		// Messages that are typically frequent and should be throttled to prevent UI overwhelming
@@ -321,6 +330,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			"codeFileStreamChunk", // Individual chunks of streamed code content (very frequent)
 			"codeFileStreamEnd", // Signals the end of code file streaming
 			"gitProcessUpdate", // Updates from git command execution
+			"updateStreamingRelevantFiles",
 		]);
 
 		if (immediateTypes.has(message.type)) {
