@@ -137,6 +137,14 @@ export function initializeDomElements(): RequiredDomElements | null {
 	// Instead, they are dynamically created within createPlanConfirmationUI()
 	// if they are null. Therefore, they are not part of the initial fatal validation here.
 
+	const editingIndicator = document.getElementById(
+		"editing-indicator"
+	) as HTMLElement | null;
+
+	const editMessageHelpText = document.getElementById(
+		"edit-message-help-text"
+	) as HTMLElement | null;
+
 	const requiredElements = {
 		chatContainer,
 		chatInput,
@@ -181,6 +189,10 @@ export function initializeDomElements(): RequiredDomElements | null {
 		attachImageButton,
 		imagePreviewsContainer,
 		clearImagesButton,
+
+		// Add the new elements here:
+		editingIndicator,
+		editMessageHelpText,
 	};
 
 	const missingElements: string[] = [];

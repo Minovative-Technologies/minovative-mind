@@ -16,6 +16,11 @@ import {
 	displayImagePreview,
 	clearImagePreviews,
 } from "../utils/imageUtils";
+import {
+	appendMessage,
+	sendEditedMessageToExtension,
+} from "../ui/chatMessageRenderer";
+import { startTypingAnimation } from "../ui/typingAnimation";
 
 /**
  * Initializes all event listeners related to the chat input field and command suggestions,
@@ -49,6 +54,40 @@ export function initializeInputEventListeners(
 		return;
 	}
 	// commandSuggestionsContainer and chatInputControlsWrapper are accessed via elements object now.
+
+	/**
+	 * Clears the editing state, hiding the cancel button and resetting the input field.
+	 * @param els The necessary DOM elements.
+	 * @param shouldRefocus Optional boolean to control if the chat input should regain focus. Defaults to true.
+	 */
+	const clearEditingState = (
+		els: RequiredDomElements,
+		shouldRefocus: boolean = true
+	) => {
+		console.log("[inputEventHandlers] Clearing editing state.");
+		appState.isEditingMessage = false;
+		appState.editingMessageIndex = null;
+		els.chatInput.value = "";
+		if (els.cancelEditButton) {
+			// Added null check
+			els.cancelEditButton.style.display = "none"; // Hide cancel button
+		}
+		els.chatInputControlsWrapper.classList.remove("editing-mode-active"); // Remove editing mode visual
+		if (els.editMessageHelpText) {
+			// Added null check
+			els.editMessageHelpText.style.display = "none"; // Hide help text
+		}
+		if (shouldRefocus) {
+			els.chatInput.focus(); // Return focus to input
+		}
+	};
+
+	// Add event listener to cancelEditButton
+	if (elements.cancelEditButton) {
+		elements.cancelEditButton.addEventListener("click", () => {
+			clearEditingState(elements);
+		});
+	}
 
 	// Event listener for input changes in the chat input field (for command suggestions)
 	chatInput.addEventListener("input", () => {
@@ -141,9 +180,86 @@ export function initializeInputEventListeners(
 		// If suggestions are not visible, handle Enter key for sending messages
 		if (!isCommandOrFileSuggestionsCurrentlyVisible) {
 			if (e.key === "Enter" && !e.shiftKey) {
-				console.log("Chat input Enter key pressed (no suggestions visible).");
 				e.preventDefault(); // Prevent new line in textarea
-				sendMessage(elements, setLoadingState);
+
+				if (appState.isEditingMessage) {
+					console.log("Chat input Enter key pressed (editing message).");
+					const newContent = chatInput.value.trim();
+					// 1. Before the 'clearEditingState(elements);' call, add the following line to capture the current index:
+					const originalEditingIndex = appState.editingMessageIndex;
+
+					// 2. Update the validation condition
+					if (
+						newContent &&
+						originalEditingIndex !== null &&
+						originalEditingIndex >= 0
+					) {
+						clearEditingState(elements); // Resets input, hides cancel button etc.
+
+						// Visually update the message element in the DOM (handled by subsequent message processing)
+						// Find the message element being edited
+						// 3. Update the 'editedMessageElement' query selector
+						const editedMessageElement = elements.chatContainer.querySelector(
+							`.message[data-message-index="${originalEditingIndex}"]`
+						) as HTMLElement | null;
+
+						if (editedMessageElement) {
+							// Remove subsequent messages
+							let nextSibling = editedMessageElement.nextElementSibling;
+							while (nextSibling) {
+								const toRemove = nextSibling;
+								nextSibling = toRemove.nextElementSibling; // Get next before removing
+								toRemove.remove();
+							}
+							elements.chatContainer.scrollTop =
+								elements.chatContainer.scrollHeight; // Scroll to bottom after clearing
+						} else {
+							// 4. Update the 'console.warn' message
+							console.warn(
+								`Edited message element for index ${originalEditingIndex} not found. Subsequent messages might not be cleared.`
+							);
+						}
+
+						// Append a loading indicator
+						appendMessage(
+							elements,
+							"Model",
+							"",
+							"ai-message loading-message",
+							false
+						);
+
+						// Call typing animation
+						startTypingAnimation(elements);
+
+						// Set global loading state to true
+						setLoadingState(true, elements);
+
+						// Call the refactored sendEditedMessageToExtension
+						// 5. Update the call to 'sendEditedMessageToExtension'
+						sendEditedMessageToExtension(
+							elements,
+							originalEditingIndex,
+							newContent
+						);
+					} else {
+						console.warn(
+							"Attempted to send edited message without valid content or index. Reverting edit."
+						);
+						updateStatus(
+							elements,
+							"Please enter content for the edited message.",
+							true
+						);
+						clearEditingState(elements); // Clean up editing state on validation failure
+					}
+				} else {
+					// If appState.isEditingMessage is false, proceed with the existing new message sending logic
+					console.log(
+						"Chat input Enter key pressed (no suggestions visible, new message)."
+					);
+					sendMessage(elements, setLoadingState);
+				}
 			}
 			return; // No further suggestion handling needed if not visible
 		}
@@ -211,6 +327,11 @@ export function initializeInputEventListeners(
 		setTimeout(() => {
 			if (!chatInput) {
 				return;
+			}
+
+			if (appState.isEditingMessage) {
+				clearEditingState(elements, false);
+				console.log("Message edit cancelled due to blur.");
 			}
 
 			// Capture the state of currentSuggestionType at the beginning of this blur event processing.

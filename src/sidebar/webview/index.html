@@ -127,6 +127,10 @@
 
     <!-- Original Image Previews Area and its contents moved as per instructions -->
     <div id="input-container">
+      <div id="editing-indicator"
+        style="display: none; color: var(--vscode-editor-foreground); font-size: 0.85em; padding: 4px 0;"></div>
+      <div id="edit-message-help-text"
+        style="display: none; color: var(--vscode-editor-foreground); font-size: 0.85em; padding: 4px 0;"></div>
       <textarea id="chat-input" rows="3"
         placeholder="Chat with Mino, use '/' (commands), or find files '@'..."></textarea>
 
@@ -190,7 +194,7 @@
         data</strong>? This action cannot be undone.</p>
     <div class="confirmation-buttons-wrapper">
       <button id="confirm-clear-chat-button" title="Yes, Clear All">Yes, Clear All</button>
-      <button id="cancel-clear-chat-button" title="No, Keep Them">No, Keep Them</button>
+      <button id="cancel-clear-chat-button" title="No, Keep Them"></button>
     </div>
   </div>
 

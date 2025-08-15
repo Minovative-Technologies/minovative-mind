@@ -34,9 +34,12 @@ export interface RequiredDomElements {
 	cancelCommitButton: HTMLButtonElement;
 	emptyChatPlaceholder: HTMLDivElement;
 
+	editingIndicator: HTMLElement | null;
+	cancelEditButton: HTMLButtonElement | null;
+	editMessageHelpText: HTMLElement | null; // Added this property
+
 	chatInputControlsWrapper: HTMLDivElement;
 	commandSuggestionsContainer: HTMLDivElement;
-	// groundingToggle: HTMLInputElement;
 
 	// Token usage display elements
 	tokenUsageContainer: HTMLDivElement;
@@ -110,13 +113,15 @@ export interface WebviewAppState {
 	isAwaitingUserReview: boolean;
 	isCommitActionInProgress: boolean;
 	isCancellationInProgress: boolean;
-	isPlanExecutionInProgress: boolean; // Track plan execution state
+	isPlanExecutionInProgress: boolean;
 	hasRevertibleChanges: boolean;
 	totalKeys: number;
-	isTokenUsageVisible: boolean; // Track token usage visibility
+	isTokenUsageVisible: boolean;
 	nextMessageIndex: number;
 	selectedImages: ImageUploadState[];
 	allWorkspaceFiles: string[];
 	isRequestingWorkspaceFiles: boolean;
 	currentSuggestionType: SuggestionType;
+	editingMessageIndex: number | null;
+	isEditingMessage: boolean;
 }

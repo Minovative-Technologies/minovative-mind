@@ -22,11 +22,42 @@ let globalSetLoadingState:
 	| ((loading: boolean, elements: RequiredDomElements) => void)
 	| null = null;
 
+// Flag to ensure CSS is only injected once
+let _chatRendererStylesInjected: boolean = false;
+
 // Function to set the global setLoadingState reference
 export function setGlobalSetLoadingState(
 	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
 	globalSetLoadingState = setLoadingState;
+	// Instruction 6: Inject conceptual CSS rules upon initialization
+	injectChatRendererStyles();
+}
+
+/**
+ * Injects default CSS rules for editing indicator and cancel button.
+ * This ensures they are hidden by default when the webview is initialized.
+ * Called once upon the first setting of globalSetLoadingState.
+ */
+export function injectChatRendererStyles(): void {
+	if (_chatRendererStylesInjected) {
+		return;
+	}
+
+	const style = document.createElement("style");
+	style.textContent = `
+		.editing-indicator {
+			display: none;
+		}
+		.cancel-edit-button {
+			display: none;
+		}
+	`;
+	document.head.appendChild(style);
+	_chatRendererStylesInjected = true;
+	console.log(
+		"[ChatMessageRenderer] Injected default CSS for editing state elements."
+	);
 }
 
 /**
@@ -354,7 +385,7 @@ export function appendMessage(
 			deleteButton.title = "Delete Message";
 			setIconForButton(deleteButton, faTrashCan);
 
-			// --- Edit Button Creation (Instruction 2) ---
+			// --- Edit Button Creation ---
 			if (className.includes("user-message")) {
 				// Only for user messages
 				editButton = document.createElement("button");
@@ -429,7 +460,7 @@ export function appendMessage(
 			messageActions.classList.add("message-actions");
 			messageActions.appendChild(copyButton);
 			messageActions.appendChild(deleteButton);
-			// --- Append Edit Button (Instruction 3) ---
+			// --- Append Edit Button ---
 			if (editButton) {
 				messageActions.appendChild(editButton);
 			}
@@ -440,16 +471,14 @@ export function appendMessage(
 
 			messageElement.appendChild(messageActions);
 
-			// --- Edit Mode Activation (Instruction 4) and Key Event Handling (Instruction 5) ---
+			// Instruction 1 & 2: Update Edit Button Listener
 			if (editButton) {
 				editButton.addEventListener("click", () => {
-					// Retrieve the message index directly from the DOM element's dataset
 					const messageIndexStr = messageElement.dataset.messageIndex;
 					const messageIndex = messageIndexStr
 						? parseInt(messageIndexStr, 10)
-						: -1; // Parse to number
+						: -1;
 
-					// Add robust validation for the retrieved index
 					if (isNaN(messageIndex) || messageIndex < 0) {
 						console.error(
 							"[ChatMessageRenderer] Invalid message index for editing:",
@@ -460,200 +489,41 @@ export function appendMessage(
 							"Error: Cannot edit message. Please try again or refresh.",
 							true
 						);
-						return; // Prevent further execution if index is invalid
+						return;
 					}
 
-					// Get the currentTextElement and store its textContent as originalText
 					const currentTextElement = messageElement.querySelector(
 						".message-text-content"
 					) as HTMLSpanElement;
 					const originalText = currentTextElement?.textContent || "";
 
-					// Create a new textarea element
-					const textarea = document.createElement("textarea");
-					textarea.classList.add("message-text-content", "editing-textarea");
-					textarea.value = originalText.trim(); // Set textarea.value to originalText.trim()
-					textarea.rows = Math.max(3, originalText.split("\n").length); // Set textarea.rows
+					// Copy the message text to elements.chatInput.value
+					elements.chatInput.value = originalText.trim();
 
-					// Replace currentTextElement with textarea
-					currentTextElement?.replaceWith(textarea);
+					// Set appState.editingMessageIndex and appState.isEditingMessage
+					appState.editingMessageIndex = messageIndex;
+					appState.isEditingMessage = true;
 
-					// Hide messageActions during editing
-					if (messageActions) {
-						messageActions.style.opacity = "0";
-						messageActions.style.pointerEvents = "none";
+					// Make elements.editingIndicator and elements.cancelCommitButton visible
+					if (elements.editingIndicator) {
+						elements.editingIndicator.style.display = "inline-block"; // Or 'block', based on expected layout
+					}
+					if (elements.cancelCommitButton) {
+						elements.cancelCommitButton.style.display = "inline-flex"; // Or 'block', based on expected layout
 					}
 
-					// Focus the textarea
-					textarea.focus();
+					// Focus the elements.chatInput
+					elements.chatInput.focus();
 
-					// Inner event handlers to manage scope and allow removal
-					const handleKeydown = (e: KeyboardEvent) => {
-						// BEGIN Instruction 5
-						if (
-							!textarea.parentNode ||
-							!elements.chatContainer.contains(textarea)
-						) {
-							console.warn(
-								"[ChatMessageRenderer] Edit textarea no longer in DOM or not part of chat container during keydown. Aborting operation."
-							);
-							textarea.removeEventListener("keydown", handleKeydown);
-							textarea.removeEventListener("blur", handleBlur);
-							return;
-						}
-						// END Instruction 5
-						if (e.key === "Enter" && !e.shiftKey) {
-							// On Enter (without Shift)
-							e.preventDefault();
-							const newContent = textarea.value.trim();
-							if (newContent !== originalText.trim()) {
-								// If newContent !== originalText.trim()
-								// 1. Visually update the message: Create new span, replace textarea with span
-								const newTextSpan = document.createElement("span");
-								newTextSpan.classList.add("message-text-content");
-								newTextSpan.innerHTML = md.render(newContent);
-								// BEGIN Instruction 6
-								if (elements.chatContainer.contains(textarea)) {
-									// END Instruction 6
-									textarea.replaceWith(newTextSpan);
-								} else {
-									// BEGIN Instruction 6
-									console.warn(
-										"[ChatMessageRenderer] Textarea not found in DOM during Enter key finalization after initial check. Aborting replaceWith."
-									);
-									// END Instruction 6
-								}
+					// Call disableAllMessageActionButtons
+					disableAllMessageActionButtons(elements);
 
-								// 2. Add the temporary CSS class `user-message-edited-pending-ai` to the parent `messageElement`
-								messageElement.classList.add("user-message-edited-pending-ai");
+					// Ensure elements.sendButton.disabled is false
+					elements.sendButton.disabled = false;
 
-								// 6. Ensure messageActions for the edited message are visible and interactive.
-								if (messageActions) {
-									messageActions.style.opacity = "1";
-									messageActions.style.pointerEvents = "auto";
-								}
-
-								// 3. Get a reference to `messageElement` and traverse its `nextElementSibling` siblings,
-								//    calling `remove()` on them from `elements.chatContainer` to clear previous AI responses and subsequent user messages.
-								let nextSibling = messageElement.nextElementSibling;
-								while (nextSibling) {
-									const toRemove = nextSibling;
-									nextSibling = toRemove.nextElementSibling; // Get next before removing
-									toRemove.remove();
-								}
-								elements.chatContainer.scrollTop =
-									elements.chatContainer.scrollHeight; // Scroll to bottom after clearing
-
-								// 4. Call `appendMessage(elements, "Model", "", "ai-message loading-message", false);`
-								appendMessage(
-									elements,
-									"Model",
-									"",
-									"ai-message loading-message",
-									false
-								);
-
-								// 5. Call `startTypingAnimation(elements);`
-								startTypingAnimation(elements);
-
-								// 7. After these UI updates, call the now-modified `sendEditedMessageToExtension`.
-								sendEditedMessageToExtension(
-									elements,
-									messageIndex,
-									newContent
-								);
-							} else {
-								// If content hasn't changed, just revert
-								// BEGIN Instruction 7
-								revertEdit(elements, textarea, originalText, messageActions);
-								// END Instruction 7
-							}
-							// Remove event listeners after handling Enter/revert
-							textarea.removeEventListener("keydown", handleKeydown);
-							textarea.removeEventListener("blur", handleBlur);
-						} else if (e.key === "Escape") {
-							// On Escape
-							e.preventDefault();
-							// BEGIN Instruction 7
-							revertEdit(elements, textarea, originalText, messageActions); // Call revertEdit()
-							// END Instruction 7
-							// Remove event listeners
-							textarea.removeEventListener("keydown", handleKeydown);
-							textarea.removeEventListener("blur", handleBlur);
-						}
-					};
-
-					const handleBlur = () => {
-						// BEGIN Instruction 8
-						if (
-							!textarea.parentNode ||
-							!elements.chatContainer.contains(textarea)
-						) {
-							console.warn(
-								"[ChatMessageRenderer] Edit textarea no longer in DOM or not part of chat container during blur. Aborting operation."
-							);
-							textarea.removeEventListener("keydown", handleKeydown);
-							textarea.removeEventListener("blur", handleBlur);
-							return;
-						}
-						// END Instruction 8
-						// On blur
-						const newContent = textarea.value.trim();
-						if (newContent !== originalText.trim()) {
-							// Apply the same UI updates as in handleKeydown 'Enter' block if content changes
-							const newTextSpan = document.createElement("span");
-							newTextSpan.classList.add("message-text-content");
-							newTextSpan.innerHTML = md.render(newContent);
-							// BEGIN Instruction 9
-							if (elements.chatContainer.contains(textarea)) {
-								// END Instruction 9
-								textarea.replaceWith(newTextSpan);
-							} else {
-								// BEGIN Instruction 9
-								console.warn(
-									"[ChatMessageRenderer] Textarea not found in DOM during Blur event finalization after initial check. Aborting replaceWith."
-								);
-								// END Instruction 9
-							}
-
-							messageElement.classList.add("user-message-edited-pending-ai");
-
-							if (messageActions) {
-								messageActions.style.opacity = "1";
-								messageActions.style.pointerEvents = "auto";
-							}
-
-							let nextSibling = messageElement.nextElementSibling;
-							while (nextSibling) {
-								const toRemove = nextSibling;
-								nextSibling = toRemove.nextElementSibling;
-								toRemove.remove();
-							}
-							elements.chatContainer.scrollTop =
-								elements.chatContainer.scrollHeight;
-
-							appendMessage(
-								elements,
-								"Model",
-								"",
-								"ai-message loading-message",
-								false
-							);
-							startTypingAnimation(elements);
-
-							sendEditedMessageToExtension(elements, messageIndex, newContent);
-						} else {
-							// BEGIN Instruction 10
-							revertEdit(elements, textarea, originalText, messageActions); // Call revertEdit()
-							// END Instruction 10
-						}
-						// Remove event listeners
-						textarea.removeEventListener("keydown", handleKeydown);
-						textarea.removeEventListener("blur", handleBlur);
-					};
-
-					textarea.addEventListener("keydown", handleKeydown);
-					textarea.addEventListener("blur", handleBlur);
+					console.log(
+						`[ChatMessageRenderer] Editing message at index: ${messageIndex}`
+					);
 				});
 			}
 
@@ -919,15 +789,30 @@ export function reenableAllMessageActionButtons(
 	console.log("[ChatMessageRenderer] Re-enabled all message action buttons.");
 }
 
-function sendEditedMessageToExtension(
-	elements: RequiredDomElements,
+// Instruction 3: Create clearEditingState function
+export function clearEditingState(elements: RequiredDomElements): void {
+	elements.chatInput.value = "";
+	if (elements.editingIndicator) {
+		elements.editingIndicator.style.display = "none";
+	}
+	if (elements.cancelCommitButton) {
+		elements.cancelCommitButton.style.display = "none";
+	}
+	appState.editingMessageIndex = -1; // Assuming -1 means no message is being edited
+	appState.isEditingMessage = false;
+	reenableAllMessageActionButtons(elements);
+	elements.sendButton.disabled = false; // Ensure send button is enabled after clearing edit state
+	console.log("[ChatMessageRenderer] Cleared editing state.");
+}
+
+// Instruction 4: Refactor sendEditedMessageToExtension
+export function sendEditedMessageToExtension(
+	elements: RequiredDomElements, // elements is still needed for globalSetLoadingState call, if it was to remain
 	messageIndex: number,
 	newContent: string
 ): void {
-	// Set loading state to true to disable buttons, similar to sendMessage function
-	if (globalSetLoadingState) {
-		globalSetLoadingState(true, elements);
-	}
+	// Instruction 4: Removed UI update logic (globalSetLoadingState) from this function.
+	// It should now exclusively send the payload.
 
 	postMessageToExtension({
 		type: "editChatMessage",
@@ -939,39 +824,5 @@ function sendEditedMessageToExtension(
 	);
 }
 
-// BEGIN Instruction 2
-function revertEdit(
-	elements: RequiredDomElements,
-	textarea: HTMLTextAreaElement,
-	originalText: string,
-	messageActions: HTMLDivElement | null
-) {
-	// END Instruction 2
-	// BEGIN Instruction 3
-	if (!textarea.parentNode || !elements.chatContainer.contains(textarea)) {
-		console.warn(
-			"[ChatMessageRenderer] Textarea not found in DOM or not part of chat container during revert operation. Aborting replaceWith."
-		);
-		return;
-	}
-	// END Instruction 3
-	const originalTextSpan = document.createElement("span");
-	originalTextSpan.classList.add("message-text-content");
-	originalTextSpan.innerHTML = md.render(originalText);
-	// BEGIN Instruction 4
-	if (elements.chatContainer.contains(textarea)) {
-		// END Instruction 4
-		textarea.replaceWith(originalTextSpan);
-	} else {
-		// BEGIN Instruction 4
-		console.warn(
-			"[ChatMessageRenderer] Textarea parent not found during revert operation after initial check. Aborting replaceWith."
-		);
-		// END Instruction 4
-	}
-
-	if (messageActions) {
-		messageActions.style.opacity = "1";
-		messageActions.style.pointerEvents = "auto";
-	}
-}
+// Instruction 5: Remove the revertEdit function entirely.
+// The revertEdit function was here. It has been removed as per instructions.
