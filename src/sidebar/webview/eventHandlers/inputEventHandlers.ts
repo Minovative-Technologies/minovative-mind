@@ -237,11 +237,7 @@ export function initializeInputEventListeners(
 
 						// Call the refactored sendEditedMessageToExtension
 						// 5. Update the call to 'sendEditedMessageToExtension'
-						sendEditedMessageToExtension(
-							elements,
-							originalEditingIndex,
-							newContent
-						);
+						sendEditedMessageToExtension(originalEditingIndex, newContent);
 					} else {
 						console.warn(
 							"Attempted to send edited message without valid content or index. Reverting edit."

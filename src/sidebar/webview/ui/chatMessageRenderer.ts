@@ -504,12 +504,12 @@ export function appendMessage(
 					appState.editingMessageIndex = messageIndex;
 					appState.isEditingMessage = true;
 
-					// Make elements.editingIndicator and elements.cancelCommitButton visible
+					// Make elements.editingIndicator and elements.cancelEditButton visible
 					if (elements.editingIndicator) {
 						elements.editingIndicator.style.display = "inline-block"; // Or 'block', based on expected layout
 					}
-					if (elements.cancelCommitButton) {
-						elements.cancelCommitButton.style.display = "inline-flex"; // Or 'block', based on expected layout
+					if (elements.cancelEditButton) {
+						elements.cancelEditButton.style.display = "inline-flex"; // Or 'block', based on expected layout
 					}
 
 					// Focus the elements.chatInput
@@ -795,8 +795,8 @@ export function clearEditingState(elements: RequiredDomElements): void {
 	if (elements.editingIndicator) {
 		elements.editingIndicator.style.display = "none";
 	}
-	if (elements.cancelCommitButton) {
-		elements.cancelCommitButton.style.display = "none";
+	if (elements.cancelEditButton) {
+		elements.cancelEditButton.style.display = "none";
 	}
 	appState.editingMessageIndex = -1; // Assuming -1 means no message is being edited
 	appState.isEditingMessage = false;
@@ -807,7 +807,6 @@ export function clearEditingState(elements: RequiredDomElements): void {
 
 // Instruction 4: Refactor sendEditedMessageToExtension
 export function sendEditedMessageToExtension(
-	elements: RequiredDomElements, // elements is still needed for globalSetLoadingState call, if it was to remain
 	messageIndex: number,
 	newContent: string
 ): void {
