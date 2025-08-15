@@ -47,6 +47,7 @@ git clone https://github.com/Minovative-Technologies/minovative-mind.git
 cd minovative-mind
 git remote remove origin
 ```
+> Don't use `git remote remove origin` if you want to contribute back into the original GitHub repo, otherwise, keep it and do what you want!
 
 ### **Step 2: Install Dependencies**
 
