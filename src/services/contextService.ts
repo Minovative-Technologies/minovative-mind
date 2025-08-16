@@ -665,23 +665,6 @@ export class ContextService {
 
 			// Populate heuristicSelectedFiles by awaiting a call to getHeuristicRelevantFiles
 			try {
-				// Retrieve optimization settings
-				const optimizationSettings =
-					this.settingsManager.getOptimizationSettings();
-				// Create a heuristicOptions object populated with these settings
-				const heuristicOptions: HeuristicSelectionOptions =
-					optimizationSettings;
-
-				heuristicSelectedFiles = await getHeuristicRelevantFiles(
-					allScannedFiles,
-					rootFolder.uri,
-					editorContext,
-					fileDependencies,
-					reverseFileDependencies, // Pass reverseFileDependencies
-					activeSymbolDetailedInfo, // Pass activeSymbolDetailedInfo
-					cancellationToken,
-					heuristicOptions // Pass heuristicOptions as the last argument
-				);
 				if (heuristicSelectedFiles.length > 0) {
 					this.postMessageToWebview({
 						type: "statusUpdate",
@@ -816,7 +799,7 @@ export class ContextService {
 						modelName: DEFAULT_FLASH_LITE_MODEL, // Use the default model for selection
 						cancellationToken,
 						fileDependencies,
-						preSelectedHeuristicFiles: heuristicSelectedFiles, // Pass heuristicSelectedFiles
+						preSelectedHeuristicFiles: [], // Pass heuristicSelectedFiles
 						fileSummaries: fileSummariesForAI, // Pass the generated file summaries
 						selectionOptions: {
 							useCache: options?.useAISelectionCache ?? true,
@@ -835,16 +818,34 @@ export class ContextService {
 							value: `${selectedFiles.length} relevant file(s) for context`, // Updated message
 						});
 					} else {
-						// Fallback logic: if AI returns no *additional* files, or its selection was empty/invalid,
-						// fall back to the heuristically selected files.
-						filesForContextBuilding = heuristicSelectedFiles;
-						this.postMessageToWebview({
-							type: "statusUpdate",
-							value:
-								filesForContextBuilding.length > 0
-									? `AI identified no additional files. Using ${filesForContextBuilding.length} heuristically relevant file(s).` // Updated message
-									: `AI identified no specific files.`, // Updated message
-						});
+						// AI returned no relevant files or an empty selection.
+						let fallbackFiles: vscode.Uri[] = [];
+						if (editorContext?.documentUri) {
+							// Priority 1: Active file
+							fallbackFiles = [editorContext.documentUri];
+							this.postMessageToWebview({
+								type: "statusUpdate",
+								value: `AI selection yielded no relevant files. Falling back to the active file.`,
+							});
+						} else if (allScannedFiles.length > 0) {
+							// Priority 2: Small subset of scanned files (e.g., first 10)
+							fallbackFiles = allScannedFiles.slice(
+								0,
+								Math.min(allScannedFiles.length, 10)
+							);
+							this.postMessageToWebview({
+								type: "statusUpdate",
+								value: `AI selection yielded no relevant files and no active file. Falling back to a subset of scanned files (${fallbackFiles.length}).`,
+							});
+						} else {
+							// No files available at all
+							fallbackFiles = [];
+							this.postMessageToWebview({
+								type: "statusUpdate",
+								value: `AI selection yielded no relevant files and no files were scanned.`,
+							});
+						}
+						filesForContextBuilding = fallbackFiles; // Assign fallback files
 					}
 				} catch (error: any) {
 					console.error(
@@ -852,30 +853,37 @@ export class ContextService {
 					);
 					this.postMessageToWebview({
 						type: "statusUpdate",
-						value: "Smart context selection failed. Using limited context.",
+						value: `Smart context selection failed due to an error. Falling back to limited context.`,
 						isError: true,
 					});
-					// On AI error, first fallback to heuristic files
-					filesForContextBuilding = heuristicSelectedFiles;
-					if (
-						filesForContextBuilding.length === 0 &&
-						editorContext?.documentUri
-					) {
-						// If no heuristics either, fall back to just the active file
-						filesForContextBuilding = [editorContext.documentUri];
-					}
-					if (filesForContextBuilding.length === 0) {
-						// As a last resort, if nothing else, take a small subset of all scanned files
-						filesForContextBuilding = allScannedFiles.slice(
+
+					let fallbackFiles: vscode.Uri[] = [];
+					if (editorContext?.documentUri) {
+						// Priority 1: Active file
+						fallbackFiles = [editorContext.documentUri];
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: `Falling back to the active file.`,
+						});
+					} else if (allScannedFiles.length > 0) {
+						// Priority 2: Small subset of scanned files (e.g., first 10)
+						fallbackFiles = allScannedFiles.slice(
 							0,
 							Math.min(allScannedFiles.length, 10)
 						);
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: `Falling back to a subset of scanned files (${fallbackFiles.length}).`,
+						});
+					} else {
+						// No files available at all
+						fallbackFiles = [];
+						this.postMessageToWebview({
+							type: "statusUpdate",
+							value: `No files available for fallback.`,
+						});
 					}
-					this.postMessageToWebview({
-						type: "statusUpdate",
-						value: `Smart context selection failed. Falling back to ${filesForContextBuilding.length} file(s).`,
-						isError: true,
-					});
+					filesForContextBuilding = fallbackFiles; // Assign fallback files
 				}
 			} else if (currentQueryForSelection?.startsWith("/commit")) {
 				return {

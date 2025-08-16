@@ -309,7 +309,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				// Construct Prompt: Create userChatPrompt using a template string
 				const userChatPrompt =
 					`${finalUserMessageContent}\n\n` +
-					`From this file \`${fileName}\`, I've provided ${codeContextDescription}. Lets chat about my code.\n\n` +
+					`In this project: From this file \`${fileName}\`, I've provided ${codeContextDescription}. Lets chat about my code.\n\n` +
 					`(Language: ${codeContextLanguageId}):\n\n\`\`\`${codeContextLanguageId}\n${codeContentForAI}\n\`\`\``;
 
 				// Show Progress: Wrap the core logic in vscode.window.withProgress
