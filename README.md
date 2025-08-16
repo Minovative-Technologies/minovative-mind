@@ -149,7 +149,7 @@ My vision is to empower every developer with a powerful, free, and open-source A
 - [**`SECURITY.md`**](./SECURITY.md)
 - [**`GOOGLE_AI_POLICIES.md`**](./GOOGLE_AI_POLICIES.md)
 
-*“This project makes API calls directly from your VS Code environment using your own Gemini API key. No data is stored, processed, or transmitted by third parties beyond Google’s API.”*
+_“This project makes API calls directly from your VS Code environment using your own Gemini API key. No data is stored, processed, or transmitted by third parties beyond Google’s API.”_
 
 ---
 
