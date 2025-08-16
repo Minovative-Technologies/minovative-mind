@@ -1,9 +1,9 @@
 import { sendMessage } from "../messageSender";
 import { postMessageToExtension } from "../utils/vscodeApi";
 import {
-	showSuggestions, // Renamed from showCommandSuggestions
-	hideSuggestions, // Renamed from hideCommandSuggestions
-	selectSuggestion, // Renamed from selectCommand
+	showSuggestions,
+	hideSuggestions,
+	selectSuggestion,
 	highlightCommand,
 	isInputtingCompleteCommand,
 } from "../ui/commandSuggestions";
@@ -67,7 +67,9 @@ export function initializeInputEventListeners(
 		console.log("[inputEventHandlers] Clearing editing state.");
 		appState.isEditingMessage = false;
 		appState.editingMessageIndex = null;
-		els.chatInput.value = "";
+		if (shouldRefocus) {
+			els.chatInput.value = "";
+		}
 		if (els.cancelEditButton) {
 			// Added null check
 			els.cancelEditButton.style.display = "none"; // Hide cancel button
@@ -320,6 +322,11 @@ export function initializeInputEventListeners(
 	// before the blur event hides the suggestions. This prevents the suggestions from
 	// disappearing before a click registers on them.
 	chatInput.addEventListener("blur", () => {
+		if (appState.isEditingMessage) {
+			clearEditingState(elements, false);
+			console.log("Editing cancelled due to blur");
+		}
+
 		setTimeout(() => {
 			if (!chatInput) {
 				return;
