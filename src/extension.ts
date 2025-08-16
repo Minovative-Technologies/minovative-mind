@@ -284,19 +284,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 
 			// 4. Implement Contextual Code Selection:
-
-			// --- NEW GUARD: Enforce user selection for 'chat' and 'custom prompt' ---
-			if (
-				originalSelection.isEmpty &&
-				(instruction === "chat" || instruction === "custom prompt")
-			) {
-				vscode.window.showInformationMessage(
-					"Please select the code you want to discuss or apply the custom prompt to."
-				);
-				return;
-			}
-			// --- END NEW GUARD ---
-
 			if (!originalSelection.isEmpty) {
 				// User made an explicit selection: Use it as-is.
 				selectedText = editor.document.getText(originalSelection);
@@ -307,7 +294,11 @@ export async function activate(context: vscode.ExtensionContext) {
 					"[Minovative Mind] No explicit user selection. Attempting automatic selection cascade."
 				);
 
-				if (instruction === "/fix") {
+				if (instruction === "chat" || instruction === "custom prompt") {
+					console.log(
+						"[Minovative Mind] No selection detected for chat/custom prompt. Will use file path reference."
+					);
+				} else if (instruction === "/fix") {
 					const errorDiagnostics = allDiagnostics.filter(
 						(d) => d.severity === vscode.DiagnosticSeverity.Error
 					);
@@ -408,18 +399,6 @@ export async function activate(context: vscode.ExtensionContext) {
 							);
 						}
 					}
-					// Apply visual update for auto-selected ranges
-					if (!effectiveRange.isEqual(originalSelection)) {
-						const newSelection = new vscode.Selection(
-							effectiveRange.start,
-							effectiveRange.end
-						);
-						editor.selection = newSelection;
-						editor.revealRange(
-							effectiveRange,
-							vscode.TextEditorRevealType.InCenterIfOutsideViewport
-						);
-					}
 				} else if (instruction === "/merge") {
 					if (!hasMergeConflicts(fullText)) {
 						vscode.window.showInformationMessage(
@@ -437,6 +416,18 @@ export async function activate(context: vscode.ExtensionContext) {
 						"Minovative Mind: Selected full file for merge operation due to conflicts."
 					);
 				}
+			}
+			// Apply visual update for auto-selected ranges
+			if (!effectiveRange.isEqual(originalSelection)) {
+				const newSelection = new vscode.Selection(
+					effectiveRange.start,
+					effectiveRange.end
+				);
+				editor.selection = newSelection;
+				editor.revealRange(
+					effectiveRange,
+					vscode.TextEditorRevealType.InCenterIfOutsideViewport
+				);
 			}
 
 			// 5. Implement Context Gathering and Formatting:
@@ -479,15 +470,23 @@ export async function activate(context: vscode.ExtensionContext) {
 			} else if (instruction === "/merge") {
 				composedMessage = `/plan Please resolve the merge conflicts in ${displayFileName}. Provide the implementation solution before code. Here's the full file content with conflicts:\n\n\`\`\`${languageId}\n${fullText}\n\`\`\``;
 			} else if (instruction === "chat") {
-				composedMessage =
-					`${userProvidedMessage}\n\n` +
-					`In this project: From this file \`${displayFileName}\`, focus on the conversation. I've provided ${contextDescription}. Let's chat instead of code.\n\n` +
-					`(Language: ${languageId}):\n\n\`\`\`${languageId}\n${contextForMessage}\n\`\`\``;
+				if (originalSelection.isEmpty) {
+					composedMessage = `${userProvidedMessage}\n\nIn this project: Focus on the conversation within the context of file \`${displayFileName}\`.`;
+				} else {
+					composedMessage =
+						`${userProvidedMessage}\n\n` +
+						`In this project: From this file \`${displayFileName}\`, focus on the conversation. I've provided ${contextDescription}.\n\n` +
+						`(Language: ${languageId}):\n\n\`\`\`${languageId}\n${contextForMessage}\n\`\`\``;
+				}
 			} else if (instruction === "custom prompt") {
-				composedMessage =
-					`/plan ${userProvidedMessage}\n\n` +
-					`In this project: From this file \`${displayFileName}\`, provide the implementation solution before code. I've provided ${contextDescription}:\n\n` +
-					`(Language: ${languageId}):\n\n\`\`\`${languageId}\n${contextForMessage}\n\`\`\``;
+				if (originalSelection.isEmpty) {
+					composedMessage = `/plan ${userProvidedMessage}\n\nIn this project: Provide the implementation solution within the context of file \`${displayFileName}\`.`;
+				} else {
+					composedMessage =
+						`/plan ${userProvidedMessage}\n\n` +
+						`In this project: From this file \`${displayFileName}\`. I've provided ${contextDescription}:\n\n` +
+						`(Language: ${languageId}):\n\n\`\`\`${languageId}\n${contextForMessage}\n\`\`\``;
+				}
 			} else {
 				vscode.window.showErrorMessage("Unknown instruction received.");
 				return;
