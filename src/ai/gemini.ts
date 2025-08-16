@@ -6,6 +6,7 @@ import {
 	GenerationConfig,
 	Tool,
 } from "@google/generative-ai";
+import { MINO_SYSTEM_INSTRUCTION } from "./prompts/systemInstructions";
 
 export const ERROR_QUOTA_EXCEEDED = "ERROR_GEMINI_QUOTA_EXCEEDED";
 // Define a specific error message constant for cancellation
@@ -71,6 +72,7 @@ export function initializeGenerativeAI(
 			model = generativeAI.getGenerativeModel({
 				model: modelName,
 				tools: tools,
+				systemInstruction: MINO_SYSTEM_INSTRUCTION,
 			});
 			currentApiKey = apiKey;
 			currentModelName = modelName;
