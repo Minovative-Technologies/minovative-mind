@@ -1,10 +1,18 @@
-# Minovative Mind (Now Public, Easy to Use, and Free!)
+# Now available free on VS Code Marketplace
 
-## An open-source AI agent that automates software development, powerful enough that it built itself by vibe coding
+**IMPORTANT**: _Search up "Minovative Mind" in the VS Code Marketplace or Extensions Store in the VS Code application_
+
+---
+
+---
+
+## Minovative Mind (Now Public, Easy to Use, and Free!)
+
+### An open-source AI agent that automates software development, powerful enough that it built itself by vibe coding
 
 A showcase of implementing a feature: e.g., planning, file creation, and code generation
 
-- [Minovative Mind YouTube Showcase](https://youtu.be/f08_WgmSbUc)
+- [(Outdated but still good) Minovative Mind YouTube Showcase](https://youtu.be/f08_WgmSbUc)
 
 ---
 
@@ -130,6 +138,7 @@ My vision is to empower every developer with a powerful, free, and open-source A
 
 ## Learn more about the project
 
+- [**`MARKETPLACE_GETTING_STARTED.md`**](./MARKETPLACE_GETTING_STARTED.md)
 - [**`USER_GUIDE.md`**](./USER_GUIDE.md)
 - [**`CONTRIBUTING.md`**](./CONTRIBUTING.md)
 - [**`CAPABILITIES.md`**](./CAPABILITIES.md)
