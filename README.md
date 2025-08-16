@@ -140,6 +140,8 @@ My vision is to empower every developer with a powerful, free, and open-source A
 - [**`SECURITY.md`**](./SECURITY.md)
 - [**`GOOGLE_AI_POLICIES.md`**](./GOOGLE_AI_POLICIES.md)
 
+*“This project makes API calls directly from your VS Code environment using your own Gemini API key. No data is stored, processed, or transmitted by third parties beyond Google’s API.”*
+
 ---
 
 > Remember, Minovative Mind is designed to assist, not replace, the brilliance of human developers! Happy Coding!
