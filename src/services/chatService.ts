@@ -139,7 +139,7 @@ export class ChatService {
 			// Revise construction of input for aiRequestService.generateWithRetry
 			const initialSystemPrompt: HistoryEntryPart[] = [
 				{
-					text: `In this project: \n\nProject Context:\n${
+					text: `Let's chat instead of code. In this project: \n\nProject Context:\n${
 						projectContext.contextString
 					}${urlContextString ? `\n\n${urlContextString}` : ""}`,
 				},
@@ -358,7 +358,7 @@ export class ChatService {
 			// Construct the full user turn contents, including system prompt and user input
 			const initialSystemPrompt: HistoryEntryPart[] = [
 				{
-					text: `In this project: \n\nProject Context:\n${projectContext.contextString}`,
+					text: `Let's chat instead of code. In this project: \n\nProject Context:\n${projectContext.contextString}`,
 				},
 			];
 			const fullUserTurnContents: HistoryEntryPart[] = [

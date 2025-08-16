@@ -477,16 +477,16 @@ export async function activate(context: vscode.ExtensionContext) {
 					diagnosticsString || "No errors found."
 				}\n\n---`;
 			} else if (instruction === "/merge") {
-				composedMessage = `/plan Please resolve the merge conflicts in ${displayFileName}. Here's the full file content with conflicts:\n\n\`\`\`${languageId}\n${fullText}\n\`\`\``;
+				composedMessage = `/plan Please resolve the merge conflicts in ${displayFileName}. Provide the implementation solution before code. Here's the full file content with conflicts:\n\n\`\`\`${languageId}\n${fullText}\n\`\`\``;
 			} else if (instruction === "chat") {
 				composedMessage =
 					`${userProvidedMessage}\n\n` +
-					`In this project: From this file \`${displayFileName}\`, I've provided ${contextDescription}. Let's chat about my code.\n\n` +
+					`In this project: From this file \`${displayFileName}\`, focus on the conversation. I've provided ${contextDescription}. Let's chat instead of code.\n\n` +
 					`(Language: ${languageId}):\n\n\`\`\`${languageId}\n${contextForMessage}\n\`\`\``;
 			} else if (instruction === "custom prompt") {
 				composedMessage =
 					`/plan ${userProvidedMessage}\n\n` +
-					`In this project: From this file \`${displayFileName}\`, I've provided ${contextDescription}:\n\n` +
+					`In this project: From this file \`${displayFileName}\`, provide the implementation solution before code. I've provided ${contextDescription}:\n\n` +
 					`(Language: ${languageId}):\n\n\`\`\`${languageId}\n${contextForMessage}\n\`\`\``;
 			} else {
 				vscode.window.showErrorMessage("Unknown instruction received.");
