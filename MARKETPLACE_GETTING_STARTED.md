@@ -1,6 +1,6 @@
 # Minovative Mind: Your AI Coding Assistant — Getting Started
 
-Welcome to **Minovative Mind**, your powerful AI coding assistant for VS Code. This guide will help you seamlessly integrate it into your workflow so you can accelerate development, automate tasks, and gain intelligent assistance—right from the moment you install it via the VS Code Marketplace.
+This guide will help you seamlessly integrate it into your workflow so you can accelerate development, automate tasks, and gain intelligent assistance—right from the moment you install it via the VS Code Marketplace.
 
 👉 **Next Step:** Set up your API key to unlock the full potential of our AI features.
 
@@ -34,11 +34,7 @@ Now that your API key is set, you’re ready to start working with Minovative Mi
 
 ### Key Commands to Try
 
-- **`/plan [your task]`** → Break down a complex task into a structured execution plan.
-- **`/fix [your bug]`** → Paste a code snippet and description, then let the AI suggest fixes.
-- **Code Explanation** → Right-click any code snippet in your editor and select **“Generate Explanation.”**
-
----
+- open the sidebar to see how to use the AI Agent
 
 ## ✨ Tips for Best Results
 
