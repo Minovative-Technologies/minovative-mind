@@ -4,10 +4,10 @@ import { PlanGenerationContext } from "../sidebar/common/sidebarTypes";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 
 // Scoring weights constants
-const HIGH_RELEVANCE = 50;
-const MEDIUM_RELEVANCE = 25;
-const LOW_RELEVANCE = 5;
-const ACTIVE_FILE_SCORE_BOOST = 100;
+const HIGH_RELEVANCE = 100;
+const MEDIUM_RELEVANCE = 80;
+const LOW_RELEVANCE = 50;
+const ACTIVE_FILE_SCORE_BOOST = 200;
 
 export interface HeuristicSelectionOptions {
 	maxHeuristicFilesTotal: number;
@@ -42,8 +42,8 @@ export async function getHeuristicRelevantFiles(
 ): Promise<vscode.Uri[]> {
 	// Initialize effective options with provided options or default weights
 	const effectiveOptions: HeuristicSelectionOptions = {
-		maxHeuristicFilesTotal: options?.maxHeuristicFilesTotal ?? 7,
-		maxSameDirectoryFiles: options?.maxSameDirectoryFiles ?? 3, // Default value
+		maxHeuristicFilesTotal: options?.maxHeuristicFilesTotal ?? 15,
+		maxSameDirectoryFiles: options?.maxSameDirectoryFiles ?? 10, // Default value
 		maxDirectDependencies: options?.maxDirectDependencies ?? 5, // Default value
 		maxReverseDependencies: options?.maxReverseDependencies ?? 5, // Default value
 		maxCallHierarchyFiles: options?.maxCallHierarchyFiles ?? 5, // Default value
