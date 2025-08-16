@@ -89,7 +89,7 @@ export function finalizeStreamingMessage(elements: RequiredDomElements): void {
 		appState.currentAccumulatedText = "";
 		appState.typingBuffer = "";
 		appState.typingTimer = null; // Ensure the timer is cleared
-
+		clearEditingState(elements);
 		elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight;
 	} else {
 		console.log(
@@ -800,8 +800,6 @@ export function clearEditingState(elements: RequiredDomElements): void {
 	}
 	appState.editingMessageIndex = -1; // Assuming -1 means no message is being edited
 	appState.isEditingMessage = false;
-	reenableAllMessageActionButtons(elements);
-	elements.sendButton.disabled = false; // Ensure send button is enabled after clearing edit state
 	console.log("[ChatMessageRenderer] Cleared editing state.");
 }
 

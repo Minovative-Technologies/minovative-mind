@@ -778,17 +778,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			"minovativeMind.isGeneratingUserRequest",
 			false
 		);
-		this.isEditingMessageActive = false;
+		// this.isEditingMessageActive = false; // Removed as per instructions
 
-		const wasAiGenerationInProgress =
-			!!this.currentAiStreamingState &&
-			!this.currentAiStreamingState.isComplete;
-		await this.endUserOperation(
-			"cancelled",
-			undefined,
-			!wasAiGenerationInProgress
-		);
-
+		// Ensure these messages are always sent to re-enable UI regardless of active token source
+		this.postMessageToWebview({ type: "reenableInput" });
+		this.postMessageToWebview({ type: "updateLoadingState", value: false });
 		this.postMessageToWebview({
 			type: "operationCancelledConfirmation",
 		});

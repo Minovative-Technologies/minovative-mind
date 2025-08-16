@@ -191,6 +191,116 @@ export class ContextService {
 		console.log("[ContextService] Workspace file system watchers registered.");
 	}
 
+	private _deduplicateUris(uris: vscode.Uri[]): vscode.Uri[] {
+		const uniquePaths = new Set<string>();
+		const uniqueUris: vscode.Uri[] = [];
+		for (const uri of uris) {
+			if (!uniquePaths.has(uri.fsPath)) {
+				uniquePaths.add(uri.fsPath);
+				uniqueUris.push(uri);
+			}
+		}
+		return uniqueUris;
+	}
+
+	private async _extractAndValidateUserProvidedFilePaths(
+		userRequest: string,
+		workspaceRootUri: vscode.Uri,
+		allScannedFiles: vscode.Uri[],
+		cancellationToken: vscode.CancellationToken | undefined
+	): Promise<vscode.Uri[]> {
+		const foundUris: vscode.Uri[] = [];
+		// This regex aims to capture strings that look like file paths.
+		// It's a balance: broad enough to catch common formats but relies heavily on subsequent validation.
+		// It tries to catch:
+		// 1. Paths with slashes and an optional extension (e.g., 'folder/file', 'folder/file.ts')
+		// 2. Simple filenames with an extension (e.g., 'package.json', 'README.md')
+
+		// The optional `(?:[/\][a-zA-Z0-9_.-]+)*` handles multiple directory levels.
+		const filePathRegex =
+			/(?:(?:[a-zA-Z]:|~|\.{1,2})?[\/\\])?(?:[a-zA-Z0-9_.-]+(?:[\/\\][a-zA-Z0-9_.-]+)*)?(?:[a-zA-Z0-9_.-]+(?:\.[a-zA-Z0-9]{1,6})?)?/g;
+
+		const matches = userRequest.match(filePathRegex);
+
+		if (!matches) {
+			return [];
+		}
+
+		const workspaceRootPath = workspaceRootUri.fsPath;
+		// Convert scanned files to a Set for efficient O(1) lookups
+		const allScannedFilePaths = new Set(
+			allScannedFiles.map((uri) => uri.fsPath)
+		);
+
+		await BPromise.map(
+			matches,
+			async (match: string) => {
+				if (cancellationToken?.isCancellationRequested) {
+					return;
+				}
+
+				// Clean the matched path: remove leading/trailing quotes, backticks,
+				// or other markdown formatting that might be part of the match.
+				// Also remove trailing dots which might be from punctuation.
+				let cleanedMatch = match.replace(/^[`"'\\]+|[`"']+$|\.$/, "").trim();
+
+				if (!cleanedMatch) {
+					return; // Skip empty strings after cleaning
+				}
+
+				let potentialUri: vscode.Uri | undefined;
+				try {
+					// Try resolving as a relative path from workspace root
+					let resolvedUri = vscode.Uri.joinPath(workspaceRootUri, cleanedMatch);
+
+					// Check if the resolved path actually starts with the workspace root path.
+					// This prevents cases where joinPath resolves to an external path if cleanedMatch is absolute.
+					if (resolvedUri.fsPath.startsWith(workspaceRootPath)) {
+						potentialUri = resolvedUri;
+					} else {
+						// If it's an absolute path mentioned directly (less common but possible, e.g., /Users/user/project/file.ts)
+						// Or if the initial joinPath resulted in a path outside the workspace (e.g., if cleanedMatch was '../file.ts')
+						try {
+							const absUri = vscode.Uri.file(cleanedMatch);
+							if (absUri.fsPath.startsWith(workspaceRootPath)) {
+								potentialUri = absUri;
+							}
+						} catch (e) {
+							// Not a valid absolute path URI string
+						}
+					}
+
+					if (potentialUri) {
+						// Prioritize checking against the already scanned files for speed
+						if (allScannedFilePaths.has(potentialUri.fsPath)) {
+							foundUris.push(potentialUri);
+						} else {
+							// If not in scanned list, perform a direct file system stat check as a fallback.
+							// This catches files not in the initial scan (e.g., very recent changes, or filtered by scan options).
+							try {
+								const stat = await vscode.workspace.fs.stat(potentialUri);
+								if (stat.type === vscode.FileType.File) {
+									// Ensure it's a file, not a directory
+									foundUris.push(potentialUri);
+								}
+							} catch (statError: any) {
+								// File does not exist or cannot be accessed, or it's a directory
+								// console.debug(`[ContextService] User-provided path "${cleanedMatch}" does not exist or is not a file: ${statError.message}`);
+							}
+						}
+					}
+				} catch (e: any) {
+					console.debug(
+						`[ContextService] Failed to process user-provided path "${cleanedMatch}": ${e.message}`
+					);
+				}
+			},
+			{ concurrency: 10 } // Limit concurrent file system checks to avoid overwhelming FS
+		);
+
+		return foundUris; // Deduplication will happen in the main method
+	}
+
 	public async buildProjectContext(
 		cancellationToken: vscode.CancellationToken | undefined,
 		userRequest?: string,
@@ -781,6 +891,29 @@ export class ContextService {
 					relevantFiles: [],
 				};
 			}
+
+			let finalFilesForContextBuilding: vscode.Uri[] = Array.from(
+				filesForContextBuilding
+			);
+
+			if (userRequest && rootFolder) {
+				const userProvidedUris =
+					await this._extractAndValidateUserProvidedFilePaths(
+						userRequest,
+						rootFolder.uri,
+						allScannedFiles,
+						cancellationToken
+					);
+
+				if (userProvidedUris.length > 0) {
+					// Combine existing files with user-provided files
+					const combinedUris =
+						finalFilesForContextBuilding.concat(userProvidedUris);
+					// Deduplicate the combined list
+					finalFilesForContextBuilding = this._deduplicateUris(combinedUris);
+				}
+			}
+			filesForContextBuilding = finalFilesForContextBuilding; // Update the original array
 
 			// Convert filesForContextBuilding (vscode.Uri[]) to relative string paths
 			const relativeFilesForContextBuilding: string[] =
