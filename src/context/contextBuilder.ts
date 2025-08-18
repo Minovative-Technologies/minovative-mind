@@ -7,8 +7,8 @@ import { intelligentlySummarizeFileContent } from "./fileContentProcessor";
 import { DEFAULT_SIZE } from "../sidebar/common/sidebarConstants";
 
 // Constants for context building
-const MAX_REFERENCED_TYPE_CONTENT_CHARS = 8000;
-const MAX_REFERENCED_TYPES_TO_INCLUDE = 20;
+const MAX_REFERENCED_TYPE_CONTENT_CHARS = 10000;
+const MAX_REFERENCED_TYPES_TO_INCLUDE = 30;
 
 // Configuration for context building - Adjusted for large context windows
 interface ContextConfig {
@@ -23,7 +23,7 @@ interface ContextConfig {
 export const DEFAULT_CONTEXT_CONFIG: ContextConfig = {
 	maxFileLength: DEFAULT_SIZE, // Approx 1MB in characters
 	maxTotalLength: DEFAULT_SIZE, // Approx 1MB in characters
-	maxSymbolEntriesPerFile: 20, // Default to 10 symbols per file
+	maxSymbolEntriesPerFile: 40, // # symbols per file
 	maxTotalSymbolChars: 100000, // Default to 100KB for the entire symbols section
 	maxActiveSymbolDetailChars: 100000, // Default to 100KB
 };

@@ -1,6 +1,6 @@
 // src/sidebar/common/sidebarTypes.ts
 import * as vscode from "vscode";
-import { Content } from "@google/generative-ai"; // Assuming History might be needed if HistoryEntry evolves
+import { Content } from "@google/generative-ai";
 import { ActiveSymbolDetailedInfo } from "../../services/contextService";
 
 export interface ImageInlineData {

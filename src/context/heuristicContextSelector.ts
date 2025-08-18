@@ -43,10 +43,10 @@ export async function getHeuristicRelevantFiles(
 	// Initialize effective options with provided options or default weights
 	const effectiveOptions: HeuristicSelectionOptions = {
 		maxHeuristicFilesTotal: options?.maxHeuristicFilesTotal ?? 30,
-		maxSameDirectoryFiles: options?.maxSameDirectoryFiles ?? 15, // Default value
-		maxDirectDependencies: options?.maxDirectDependencies ?? 10, // Default value
-		maxReverseDependencies: options?.maxReverseDependencies ?? 10, // Default value
-		maxCallHierarchyFiles: options?.maxCallHierarchyFiles ?? 10, // Default value
+		maxSameDirectoryFiles: options?.maxSameDirectoryFiles ?? 15,
+		maxDirectDependencies: options?.maxDirectDependencies ?? 10,
+		maxReverseDependencies: options?.maxReverseDependencies ?? 10,
+		maxCallHierarchyFiles: options?.maxCallHierarchyFiles ?? 10,
 		sameDirectoryWeight: options?.sameDirectoryWeight ?? LOW_RELEVANCE,
 		directDependencyWeight: options?.directDependencyWeight ?? MEDIUM_RELEVANCE,
 		reverseDependencyWeight:
@@ -59,8 +59,8 @@ export async function getHeuristicRelevantFiles(
 			options?.referencedTypeDefinitionWeight ?? MEDIUM_RELEVANCE,
 		generalSymbolRelatedBoost:
 			options?.generalSymbolRelatedBoost ?? MEDIUM_RELEVANCE,
-		dependencyWeight: options?.dependencyWeight ?? MEDIUM_RELEVANCE, // Default value
-		directoryWeight: options?.directoryWeight ?? LOW_RELEVANCE, // Default value
+		dependencyWeight: options?.dependencyWeight ?? MEDIUM_RELEVANCE,
+		directoryWeight: options?.directoryWeight ?? LOW_RELEVANCE,
 		neighborDirectoryWeight: options?.neighborDirectoryWeight ?? LOW_RELEVANCE, // New default value
 		sharedAncestorWeight: options?.sharedAncestorWeight ?? LOW_RELEVANCE, // New default value
 	};

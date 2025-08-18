@@ -64,7 +64,7 @@ const DEFAULT_OPTIMIZATION_SETTINGS = {
 	maxFilesForSymbolProcessing: 500,
 	maxFilesForDetailedProcessing: 1000,
 	enableSmartContext: true,
-	maxPromptLength: 50000,
+	maxPromptLength: 100000,
 	enableStreaming: false,
 	fallbackToHeuristics: true,
 	maxHeuristicFilesTotal: 50,

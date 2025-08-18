@@ -78,7 +78,7 @@ export class SequentialFileProcessor {
 		const startTime = Date.now();
 		const {
 			maxFilesPerBatch = 20,
-			summaryLength = 3000,
+			summaryLength = 10000,
 			enableDetailedAnalysis = true,
 			includeDependencies = true,
 			complexityThreshold = "high",
@@ -249,7 +249,7 @@ export class SequentialFileProcessor {
 					`file-analysis-${relativePath}`,
 					{
 						temperature: TEMPERATURE,
-						maxOutputTokens: 5000,
+						maxOutputTokens: 65000, // Allow large responses for detailed analysis
 					}
 				);
 

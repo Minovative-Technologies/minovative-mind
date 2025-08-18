@@ -9,7 +9,7 @@ import { TEMPERATURE } from "../sidebar/common/sidebarConstants";
 import * as SymbolService from "../services/symbolService";
 import { ActiveSymbolDetailedInfo } from "../services/contextService";
 
-const MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION = 5000;
+const MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION = 10000;
 export { MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION };
 
 // Cache interface for AI selection results
@@ -180,7 +180,7 @@ export async function selectRelevantFilesAI(
 
 	// Check cache first
 	const useCache = selectionOptions?.useCache ?? true;
-	const cacheTimeout = selectionOptions?.cacheTimeout ?? 20 * 60 * 1000; // 20 minutes default
+	const cacheTimeout = selectionOptions?.cacheTimeout ?? 10 * 60 * 1000; // 10 minutes default
 
 	if (useCache) {
 		const cacheKey = generateAISelectionCacheKey(
@@ -251,7 +251,7 @@ export async function selectRelevantFilesAI(
 				contextPrompt += `File Location: ${relativeSymPath}:${lineNumberDisplay}\n`;
 			}
 
-			const MAX_RELATED_SYMBOL_FILES_PROMPT = 10; // Limit related files for prompt conciseness
+			const MAX_RELATED_SYMBOL_FILES_PROMPT = 20; // Limit related files for prompt conciseness
 
 			// References (general references, fetched if activeSymbolDetailedInfo doesn't explicitly contain them)
 			try {
