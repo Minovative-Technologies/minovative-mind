@@ -1,7 +1,7 @@
 {
 	"name": "minovative-mind-vscode",
 	"displayName": "Minovative Mind",
-	"description": "This extension leverages Google Gemini to provide intelligent, context-aware assistance directly within your development environment. From understanding complex code to automating multi-step refactoring, Minovative Mind is designed to accelerate your flow.",
+	"description": "Turn your ideas into software—just describe it in natural language, and this extension builds it for you.",
 	"keywords": [
 		"AI",
 		"VSCode",

@@ -333,7 +333,10 @@ export class ChatService {
 			// 4. Call contextService.buildProjectContext using token and userMessageText (text-only for context).
 			const projectContext = await contextService.buildProjectContext(
 				token,
-				userMessageTextForContext
+				userMessageTextForContext,
+				undefined, // editorContext
+				undefined, // initialDiagnosticsString
+				{ useAISelectionCache: false } // options
 			);
 
 			if (projectContext.contextString.startsWith("[Error")) {

@@ -828,14 +828,13 @@ export class ContextService {
 								value: `AI selection yielded no relevant files. Falling back to the active file.`,
 							});
 						} else if (allScannedFiles.length > 0) {
-							// Priority 2: Small subset of scanned files (e.g., first 10)
 							fallbackFiles = allScannedFiles.slice(
 								0,
-								Math.min(allScannedFiles.length, 10)
+								Math.min(allScannedFiles.length, 0)
 							);
 							this.postMessageToWebview({
 								type: "statusUpdate",
-								value: `AI selection yielded no relevant files and no active file. Falling back to a subset of scanned files (${fallbackFiles.length}).`,
+								value: `AI selection yielded no relevant files.`,
 							});
 						} else {
 							// No files available at all
