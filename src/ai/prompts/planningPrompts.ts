@@ -362,7 +362,7 @@ export function createPlanningPrompt(
         *   **Context & Completeness**: ${mainInstructions} Consult "Broader Project Context" (especially symbol info for '/fix' targeting and impact analysis) and "Recent Chat History". Address the *entirety* of the request.
         *   **Recent Changes**: Build upon "Recent Project Changes". Avoid redundant steps. Combine all logical changes for a single file into one \`modify_file\`'s \`modification_prompt\`.
         *   **Steps**: Decompose into logical, sequential, 1-indexed steps. Define \`action\` (create_directory, create_file, modify_file, run_command).
-        *   **Properties**: Provide \`path\` (relative, safe, non-empty), \`description\` (required, detailed, explains *why* and *how*). Use \`content\`/\`generate_prompt\` for \`create_file\`, \`modification_prompt\` for \`modify_file\`, \`command\` for \`run_command\` (infer package manager).
+        *   **Properties**: Provide \`path\` (relative, safe, non-empty), \`description\` (required, detailed, explains *why* and *how*). For \`create_file\` steps, you MUST provide **either** \`content\` (direct string content) **or** \`generate_prompt\` (a prompt for the AI to generate content), but NEVER both., \`modification_prompt\` for \`modify_file\`, \`command\` for \`run_command\` (infer package manager).
         *   **Single Modify Per File**: At most one \`modify_file\` step per file path. Consolidate all changes for a file into its \`modification_prompt\`.
         *   **JSON Escaping**: Escape \`\\n\`, \`\\r\`, \`\\\`, \`\"\` within JSON string values.
         *   **Output**: Strictly adhere to the JSON structure below and examples.

@@ -102,6 +102,9 @@ export class ContextService {
 	private postMessageToWebview: (message: any) => void;
 	private sequentialContextService?: SequentialContextService;
 	private disposables: vscode.Disposable[] = [];
+	private fileDependencies?: Map<string, string[]>;
+	private reverseFileDependencies?: Map<string, string[]>;
+	private areDependenciesComputed: boolean = false;
 
 	constructor(
 		settingsManager: SettingsManager,
@@ -121,8 +124,9 @@ export class ContextService {
 	/**
 	 * Initialize sequential context service if not already initialized
 	 */
-	private initializeSequentialContextService(): SequentialContextService {
+	private async initializeSequentialContextService(): Promise<SequentialContextService> {
 		if (!this.sequentialContextService) {
+			await this._computeWorkspaceDependencies();
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders || workspaceFolders.length === 0) {
 				throw new Error("No workspace folder open");
@@ -132,7 +136,9 @@ export class ContextService {
 				this.aiRequestService,
 				workspaceRoot,
 				this.postMessageToWebview,
-				this.settingsManager
+				this.settingsManager,
+				this.fileDependencies ?? new Map<string, string[]>(),
+				this.reverseFileDependencies ?? new Map<string, string[]>()
 			);
 		}
 		return this.sequentialContextService;
@@ -151,6 +157,7 @@ export class ContextService {
 					`[ContextService] Clearing scan cache for workspace: ${workspacePath} due to file change.`
 				);
 				clearScanCache(workspacePath); // Ensure clearScanCache is imported
+				this.areDependenciesComputed = false; // Invalidate computed dependencies
 			} else {
 				console.warn(
 					`[ContextService] File change detected outside of any known workspace folder for URI: ${uri.toString()}`
@@ -189,6 +196,60 @@ export class ContextService {
 		);
 
 		console.log("[ContextService] Workspace file system watchers registered.");
+	}
+
+	private async _computeWorkspaceDependencies(): Promise<void> {
+		if (this.areDependenciesComputed) {
+			return;
+		}
+
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			console.warn(
+				"[ContextService] Cannot compute workspace dependencies: No workspace folder open."
+			);
+			return;
+		}
+		const workspaceRoot = workspaceFolders[0].uri;
+
+		try {
+			console.log("[ContextService] Computing workspace dependencies...");
+			// scanWorkspace and buildDependencyGraph are already imported
+			const allScannedFiles = await scanWorkspace({
+				/* default options */
+			});
+
+			if (allScannedFiles.length === 0) {
+				console.warn(
+					"[ContextService] No files found to compute dependencies."
+				);
+				this.areDependenciesComputed = true;
+				return;
+			}
+
+			const fileDependencies = await buildDependencyGraph(
+				allScannedFiles,
+				workspaceRoot,
+				{
+					/* default options */
+				}
+			);
+			this.fileDependencies = fileDependencies;
+
+			this.reverseFileDependencies = buildReverseDependencyGraph(
+				fileDependencies,
+				workspaceRoot
+			);
+
+			console.log(
+				`[ContextService] Workspace dependencies computed (${fileDependencies.size} files processed).`
+			);
+			this.areDependenciesComputed = true;
+		} catch (error: any) {
+			console.error(
+				`[ContextService] Error computing workspace dependencies: ${error.message}`
+			);
+		}
 	}
 
 	private _deduplicateUris(uris: vscode.Uri[]): vscode.Uri[] {
@@ -1043,7 +1104,7 @@ export class ContextService {
 		}
 	): Promise<BuildProjectContextResult> {
 		try {
-			const sequentialService = this.initializeSequentialContextService();
+			const sequentialService = await this.initializeSequentialContextService();
 
 			const result = await sequentialService.buildSequentialContext(
 				userRequest,

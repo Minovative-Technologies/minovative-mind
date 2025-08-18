@@ -33,7 +33,6 @@ import { md } from "../utils/markdownRenderer";
 import { postMessageToExtension } from "../utils/vscodeApi";
 import { RequiredDomElements } from "../types/webviewTypes";
 import { resetUIStateAfterCancellation } from "../ui/statusManager";
-import { showSuggestions, hideSuggestions } from "../ui/commandSuggestions"; // Existing import, ensures show/hideSuggestions are available
 
 // Add global variables for code streaming
 const activeCodeStreams = new Map<

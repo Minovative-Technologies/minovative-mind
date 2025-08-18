@@ -808,9 +808,6 @@ export function sendEditedMessageToExtension(
 	messageIndex: number,
 	newContent: string
 ): void {
-	// Instruction 4: Removed UI update logic (globalSetLoadingState) from this function.
-	// It should now exclusively send the payload.
-
 	postMessageToExtension({
 		type: "editChatMessage",
 		messageIndex: messageIndex,
@@ -820,6 +817,3 @@ export function sendEditedMessageToExtension(
 		`[ChatMessageRenderer] Sent editChatMessage for index ${messageIndex}`
 	);
 }
-
-// Instruction 5: Remove the revertEdit function entirely.
-// The revertEdit function was here. It has been removed as per instructions.

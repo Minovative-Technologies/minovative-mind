@@ -58,21 +58,29 @@ export class SequentialContextService {
 	private workspaceRoot: vscode.Uri;
 	private postMessageToWebview: (message: any) => void;
 	private settingsManager: SettingsManager;
+	private fileDependencies: Map<string, string[]>;
+	private reverseFileDependencies: Map<string, string[]>;
 
 	constructor(
 		aiRequestService: AIRequestService,
 		workspaceRoot: vscode.Uri,
 		postMessageToWebview: (message: any) => void,
-		settingsManager: SettingsManager
+		settingsManager: SettingsManager,
+		fileDependencies: Map<string, string[]>,
+		reverseFileDependencies: Map<string, string[]>
 	) {
 		this.aiRequestService = aiRequestService;
 		this.workspaceRoot = workspaceRoot;
 		this.postMessageToWebview = postMessageToWebview;
 		this.settingsManager = settingsManager;
+		this.fileDependencies = fileDependencies;
+		this.reverseFileDependencies = reverseFileDependencies;
 		this.sequentialProcessor = new SequentialFileProcessor(
 			aiRequestService,
 			workspaceRoot,
-			postMessageToWebview
+			postMessageToWebview,
+			this.fileDependencies,
+			this.reverseFileDependencies
 		);
 	}
 
@@ -305,7 +313,8 @@ export class SequentialContextService {
 
 		context += `Purpose Distribution:\n`;
 		for (const [purpose, files] of byPurpose) {
-			context += `- ${purpose}: ${files.length} files\n`;
+			context += `- ${purpose}: ${files.length} files\
+`;
 		}
 		context += `\n`;
 
@@ -371,8 +380,8 @@ export class SequentialContextService {
 			allFiles,
 			this.workspaceRoot,
 			undefined, // No active editor context for filtering
-			undefined, // No file dependencies for filtering
-			undefined, // No reverse dependencies for filtering
+			this.fileDependencies, // Pass file dependencies
+			this.reverseFileDependencies, // Pass reverse file dependencies
 			undefined, // No active symbol info for filtering
 			undefined, // No cancellation token
 			heuristicOptions // Pass heuristicOptions as the last argument
@@ -450,7 +459,7 @@ export class SequentialContextService {
 					},
 					modelName,
 					cancellationToken: undefined,
-					fileDependencies: new Map(), // No dependency graph for filtering
+					fileDependencies: this.fileDependencies, // Pass file dependencies for AI filtering
 					preSelectedHeuristicFiles: heuristicFiles,
 					fileSummaries,
 					selectionOptions: {
