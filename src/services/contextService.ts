@@ -876,7 +876,7 @@ export class ContextService {
 						filesForContextBuilding = selectedFiles;
 						this.postMessageToWebview({
 							type: "statusUpdate",
-							value: `${selectedFiles.length} relevant file(s) for context`, // Updated message
+							value: `Found relevant file(s) for context`, // Updated message
 						});
 					} else {
 						// AI returned no relevant files or an empty selection.

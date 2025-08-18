@@ -358,8 +358,10 @@ export function createPlanningPrompt(
         *   Maintain code style.
         *   Ensure modifications are substantial, functional changes.
         *   Generate production-ready, robust, maintainability, secure, clean, efficient code adhering to best practices.
+        *   **Mandatory Steps**: The generated JSON plan MUST include a non-empty \\\`steps\\\` array. Every actionable request requires at least one concrete step.
     *   **Guidelines**:
         *   **Context & Completeness**: ${mainInstructions} Consult "Broader Project Context" (especially symbol info for '/fix' targeting and impact analysis) and "Recent Chat History". Address the *entirety* of the request.
+        *   **Concrete Actions**: Ensure each step is a concrete, actionable execution step. The \\\`description\\\` for each step must clearly detail *what* needs to be done and *how*, leaving no ambiguity for execution.
         *   **Recent Changes**: Build upon "Recent Project Changes". Avoid redundant steps. Combine all logical changes for a single file into one \`modify_file\`'s \`modification_prompt\`.
         *   **Steps**: Decompose into logical, sequential, 1-indexed steps. Define \`action\` (create_directory, create_file, modify_file, run_command).
         *   **Properties**: Provide \`path\` (relative, safe, non-empty), \`description\` (required, detailed, explains *why* and *how*). For \`create_file\` steps, you MUST provide **either** \`content\` (direct string content) **or** \`generate_prompt\` (a prompt for the AI to generate content), but NEVER both., \`modification_prompt\` for \`modify_file\`, \`command\` for \`run_command\` (infer package manager).

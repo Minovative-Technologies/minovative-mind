@@ -336,9 +336,6 @@ export async function activate(context: vscode.ExtensionContext) {
 							);
 							selectedText = editor.document.getText(allErrorsRange);
 							effectiveRange = allErrorsRange;
-							vscode.window.showInformationMessage(
-								"Minovative Mind: Automatically selected all error ranges for /fix."
-							);
 						} else {
 							console.warn(
 								"[Minovative Mind] Could not determine valid range for all errors. Falling back to intelligent /fix logic."
@@ -382,9 +379,6 @@ export async function activate(context: vscode.ExtensionContext) {
 						if (relevantSymbol) {
 							selectedText = editor.document.getText(relevantSymbol.range);
 							effectiveRange = relevantSymbol.range;
-							vscode.window.showInformationMessage(
-								"Minovative Mind: Automatically selected relevant code block for /fix."
-							);
 						} else {
 							console.log(
 								`[Minovative Mind] Intelligent selection for '/fix' failed. Falling back to full file selection.`
@@ -393,9 +387,6 @@ export async function activate(context: vscode.ExtensionContext) {
 							effectiveRange = new vscode.Range(
 								editor.document.positionAt(0),
 								editor.document.positionAt(fullText.length)
-							);
-							vscode.window.showInformationMessage(
-								"Minovative Mind: Falling back to full file selection for /fix as no specific code unit was found."
 							);
 						}
 					}
@@ -471,7 +462,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				composedMessage = `/plan Please resolve the merge conflicts in ${displayFileName}. Provide the implementation solution before code. Here's the full file content with conflicts:\n\n\`\`\`${languageId}\n${fullText}\n\`\`\``;
 			} else if (instruction === "chat") {
 				if (originalSelection.isEmpty) {
-					composedMessage = `${userProvidedMessage}\n\nIn this project: Focus on the conversation within the context of file \`${displayFileName}\`.`;
+					composedMessage = `${userProvidedMessage}\n\nIn this project: Focus on the conversation within the context of file \`${displayFileName}\`. Do not code yet.`;
 				} else {
 					composedMessage =
 						`${userProvidedMessage}\n\n` +
