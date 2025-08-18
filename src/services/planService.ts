@@ -658,20 +658,19 @@ export class PlanService {
 	public async generateStructuredPlanAndExecute(
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {
-		await this.provider.setPlanExecutionActive(true);
-
-		// Notify webview that structured plan generation is starting - this will hide the stop button
-		this.provider.postMessageToWebview({
-			type: "updateLoadingState",
-			value: true,
-		});
-
 		let structuredPlanJsonString = "";
 		const token = this.provider.activeOperationCancellationTokenSource?.token;
-
 		let executablePlan: ExecutionPlan | null = null; // Declare executablePlan here
 
 		try {
+			await this.provider.setPlanExecutionActive(true);
+
+			// Notify webview that structured plan generation is starting - this will hide the stop button
+			this.provider.postMessageToWebview({
+				type: "updateLoadingState",
+				value: true,
+			});
+
 			await this.provider.updatePersistedPendingPlanData(null); // Clear persisted data as it's no longer pending confirmation
 
 			if (token?.isCancellationRequested) {
@@ -800,6 +799,8 @@ export class PlanService {
 				});
 				await this.provider.endUserOperation("failed"); // Signal failure and re-enable input
 			}
+		} finally {
+			await this.provider.setPlanExecutionActive(false);
 		}
 	}
 
