@@ -120,6 +120,7 @@ interface StatusUpdateMessage {
 	type: "statusUpdate";
 	value: string;
 	isError?: boolean;
+	subPlanId?: string;
 }
 
 interface AiResponseStartMessage {
@@ -194,6 +195,7 @@ export interface AppendRealtimeModelMessage {
 	diffContent?: string;
 	relevantFiles?: string[];
 	isPlanStepUpdate?: boolean;
+	subPlanId?: string;
 }
 
 interface RestorePendingPlanConfirmationMessage {

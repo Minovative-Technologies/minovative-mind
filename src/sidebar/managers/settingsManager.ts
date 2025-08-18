@@ -71,7 +71,7 @@ const DEFAULT_OPTIMIZATION_SETTINGS = {
 	maxSameDirectoryFiles: 20,
 	maxDirectDependencies: 20,
 	maxReverseDependencies: 10,
-	maxCallHierarchyFiles: 15,
+	maxCallHierarchyFiles: 30,
 	sameDirectoryWeight: 5,
 	directDependencyWeight: 15,
 	reverseDependencyWeight: 10,
@@ -83,8 +83,8 @@ const DEFAULT_OPTIMIZATION_SETTINGS = {
 	sharedAncestorWeight: 10,
 	referencedTypeDefinitionWeight: 25,
 	generalSymbolRelatedBoost: 15,
-	dependencyWeight: 5, // Equivalent to MEDIUM_RELEVANCE in heuristicContextSelector
-	directoryWeight: 1, // Equivalent to LOW_RELEVANCE in heuristicContextSelector
+	dependencyWeight: 5,
+	directoryWeight: 1,
 };
 
 export class SettingsManager {

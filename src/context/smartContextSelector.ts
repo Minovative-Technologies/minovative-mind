@@ -386,7 +386,7 @@ export async function selectRelevantFilesAI(
 
 					if (references) {
 						const relatedFilePaths: Set<string> = new Set();
-						const MAX_RELATED_FILES = 15; // Limit the number of related files to include
+						const MAX_RELATED_FILES = 20;
 
 						for (const ref of references) {
 							if (ref.uri.fsPath !== activeFileUri.fsPath) {

@@ -54,9 +54,9 @@ export async function buildDependencyGraph(
 	}
 
 	const dependencyGraph = new Map<string, string[]>();
-	const concurrencyLimit = options?.maxConcurrency ?? 15; // Increased from 10
+	const concurrencyLimit = options?.maxConcurrency ?? 15;
 	const skipLargeFiles = options?.skipLargeFiles ?? true;
-	const maxFileSizeForParsing = options?.maxFileSizeForParsing ?? 500 * 1024; // 500KB default
+	const maxFileSizeForParsing = options?.maxFileSizeForParsing ?? 1024 * 1024; // 1MB default
 	const retryFailedFiles = options?.retryFailedFiles ?? true;
 	const maxRetries = options?.maxRetries ?? 2;
 

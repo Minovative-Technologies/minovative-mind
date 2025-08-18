@@ -127,8 +127,8 @@ export async function scanWorkspace(
 
 	// Check cache first
 	const useCache = options?.useCache ?? true;
-	// Tune cacheTimeout to 15 minutes (was 5 minutes)
-	const cacheTimeout = options?.cacheTimeout ?? 15 * 60 * 1000; // 15 minutes default
+
+	const cacheTimeout = options?.cacheTimeout ?? 10 * 60 * 1000; // 10 minutes default
 
 	if (useCache) {
 		const cached = scanCache.get(workspacePath);

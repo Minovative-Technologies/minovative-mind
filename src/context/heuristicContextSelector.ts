@@ -42,11 +42,11 @@ export async function getHeuristicRelevantFiles(
 ): Promise<vscode.Uri[]> {
 	// Initialize effective options with provided options or default weights
 	const effectiveOptions: HeuristicSelectionOptions = {
-		maxHeuristicFilesTotal: options?.maxHeuristicFilesTotal ?? 15,
-		maxSameDirectoryFiles: options?.maxSameDirectoryFiles ?? 10, // Default value
-		maxDirectDependencies: options?.maxDirectDependencies ?? 5, // Default value
-		maxReverseDependencies: options?.maxReverseDependencies ?? 5, // Default value
-		maxCallHierarchyFiles: options?.maxCallHierarchyFiles ?? 5, // Default value
+		maxHeuristicFilesTotal: options?.maxHeuristicFilesTotal ?? 30,
+		maxSameDirectoryFiles: options?.maxSameDirectoryFiles ?? 15, // Default value
+		maxDirectDependencies: options?.maxDirectDependencies ?? 10, // Default value
+		maxReverseDependencies: options?.maxReverseDependencies ?? 10, // Default value
+		maxCallHierarchyFiles: options?.maxCallHierarchyFiles ?? 10, // Default value
 		sameDirectoryWeight: options?.sameDirectoryWeight ?? LOW_RELEVANCE,
 		directDependencyWeight: options?.directDependencyWeight ?? MEDIUM_RELEVANCE,
 		reverseDependencyWeight:

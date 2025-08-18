@@ -43,7 +43,7 @@ import {
 } from "../sidebar/common/sidebarConstants";
 
 // Constants for symbol processing
-export const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 5000;
+export const MAX_REFERENCED_TYPE_CONTENT_CHARS_CONSTANT = 10000;
 
 // Performance monitoring constants
 const PERFORMANCE_THRESHOLDS = {

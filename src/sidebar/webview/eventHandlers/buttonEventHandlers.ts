@@ -329,8 +329,8 @@ export function initializeButtonEventListeners(
 							codeCopyButton.innerHTML = originalInnerHTML;
 							codeCopyButton.title = originalTitle;
 							codeCopyButton.classList.remove("copied");
-							codeCopyButton.disabled = false; // Add: Re-enable button on success
-						}, 1500);
+							codeCopyButton.disabled = false;
+						}, 1000);
 					} else {
 						console.warn(
 							"Could not find code element within pre.hljs for copy button."
