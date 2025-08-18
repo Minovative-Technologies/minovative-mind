@@ -101,15 +101,16 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 
 ### 4.1 Symbol & Dependency Graphing
 
-- **Detailed Symbol Tree**: Builds a comprehensive symbol tree, including implementations and references, powered by `SymbolService` and `DependencyGraphBuilder` (as detailed in `ARCHITECTURE.md`).
+- **Detailed Symbol Tree**: Builds a comprehensive symbol tree, including implementations and references, powered by `SymbolService` and `DependencyGraphBuilder` now provides persistent, cached workspace-wide dependency graphs that are integrated into services like `SequentialContextService` and `SequentialFileProcessor`, enabling deep, context-aware analysis.
 - **Type Resolution**: Performs type resolution and summarization of code references, providing the AI with a deeper semantic understanding of the codebase.
 
 ### 4.2 File Relevance Engine
 
 - **Hybrid File Selection**: Employs a combination of heuristic (rule-based) and AI-driven (smart) selection strategies to identify the most relevant files for context, using components like `HeuristicContextSelector` and `SmartContextSelector`.
-- **Prioritized Context**: Prioritizes files that are recently modified, linked by symbols, or are directly related to the user's active context.
-- **Intelligent File Summarization**: Summarizes file content using `FileContentProcessor` to fit within token limits while preserving critical information for the AI (`intelligentlySummarizeFileContent`).
+- **Prioritized Context**: Prioritizes files that are recently modified, linked by symbols, or are directly related to the user's active context. It now includes **refined relevance scoring for prior file context, considering file dependency graphs** and user intent, ensuring the most pertinent information is presented to the AI.
+- **Intelligent File Summarization**: Summarizes file content using `FileContentProcessor` to fit within token limits while preserving critical information for the AI (`intelligentlySummarizeFileContent`). This includes **detailed file complexity estimation** using multiple metrics and **enhanced main purpose detection** for files based on their path and extension.
 - **Configurable Heuristic File Selection**: Utilizes `HeuristicContextSelector` with configurable rules (e.g., directory proximity, dependency analysis, symbol relevance) to intelligently select the most pertinent files for AI context, enhancing relevance beyond simple smart selection.
+- **Dependency Extraction**: `SequentialFileProcessor` performs **expanded and refined dependency extraction** directly from code, enriching file summaries and contributing to accurate relevance scoring.
 
 ### 4.3 Project Change Logging
 
@@ -135,7 +136,7 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 ### 5.1 Search & Context Optimization
 
 - **Efficient Workspace Scanner**: Utilizes `WorkspaceScanner` with intelligent filtering to quickly identify and process relevant project files.
-- **Cached Dependency Graphing**: Caches and batches dependency graph analysis to improve performance for symbol and reference lookups.
+- **Cached Dependency Graphing**: Caches and batches dependency graph analysis to improve performance for symbol and reference lookups. Furthermore, `SequentialFileProcessor` introduces **internal file caching** to prevent redundant processing and significantly improve overall performance of file analysis.
 - **Smart Truncation & Progressive Loading**: Employs intelligent truncation and progressive loading of content to optimize token usage and response times.
 - **Optimized AI Request Handling**: Employs parallel processing and batching for concurrent AI calls, enhancing scalability and managing workload efficiently.
 
