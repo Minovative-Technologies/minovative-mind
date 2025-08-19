@@ -840,9 +840,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 				await this.revertService.revertChanges(mostRecentChangeSet.changes);
 
 				revertSuccessful = true;
-				finalStatusMessage =
-					"Most recent workflow changes reverted successfully!";
-				showInfoNotification(finalStatusMessage);
 				console.log(
 					"[SidebarProvider] Most recent workflow changes reverted successfully."
 				);

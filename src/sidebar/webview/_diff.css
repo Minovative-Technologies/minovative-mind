@@ -14,7 +14,11 @@
 	font-size: 0.97em;
 	border: 1.5px solid var(--vscode-editorGroup-border);
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
-	overflow: auto;
+	overflow: hidden; /* Essential for the collapse transition */
+}
+
+.diff-container.no-diff-content {
+	padding-bottom: 5px;
 }
 
 .diff-container .diff-header {
@@ -26,6 +30,47 @@
 	border-bottom: 1px dashed var(--vscode-editorGroup-border);
 	background: var(--vscode-editorWidget-background);
 	border-radius: 6px 6px 0 0;
+	display: flex; /* Enable flexbox */
+	justify-content: space-between; /* Pushes toggle button to the right */
+	align-items: center; /* Vertically center items */
+}
+
+.diff-header-text {
+	font-style: normal; /* Override inherited italic if desired */
+}
+
+.diff-toggle-button {
+	background: none;
+	border: none;
+	color: var(--vscode-button-foreground); /* Use a suitable foreground color */
+	cursor: pointer;
+	padding: 5px;
+	border-radius: var(--border-radius);
+	transition: background-color 0.15s ease-in-out;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.diff-toggle-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+.diff-toggle-button:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+}
+
+.diff-content-wrapper {
+	max-height: 1000px; /* A large enough value to ensure content is visible when expanded */
+	overflow: hidden; /* Hide content that exceeds max-height */
+	transition: max-height 0.3s ease-out; /* Smooth transition for expanding/collapsing */
+	padding-bottom: 10px; /* Add padding for the actual diff content */
+}
+
+.diff-container.collapsed .diff-content-wrapper {
+	max-height: 0;
+	padding-bottom: 0; /* Remove padding when collapsed */
 }
 
 .diff-code {
