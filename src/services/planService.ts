@@ -660,7 +660,8 @@ export class PlanService {
 	): Promise<void> {
 		let structuredPlanJsonString = "";
 		const token = this.provider.activeOperationCancellationTokenSource?.token;
-		let executablePlan: ExecutionPlan | null = null; // Declare executablePlan here
+		let executablePlan: ExecutionPlan | null = null;
+		let lastError: Error | null = null;
 
 		try {
 			await this.provider.setPlanExecutionActive(true);
@@ -708,61 +709,119 @@ export class PlanService {
 				urlContextString
 			);
 
-			console.log(`Attempting to generate and parse structured plan.`);
-
-			// Single AI generation call
-			structuredPlanJsonString =
-				await this.provider.aiRequestService.generateWithRetry(
-					[{ text: promptForAI }],
-					sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
-					undefined,
-					"structured plan generation",
-					jsonGenerationConfig,
-					undefined,
-					token
+			for (let attempt = 1; attempt <= this.MAX_PLAN_PARSE_RETRIES; attempt++) {
+				console.log(
+					`Attempt ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} to generate structured plan...`
 				);
+				this.provider.postMessageToWebview({
+					type: "statusUpdate",
+					value: `Attempt ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} to generate structured plan...`,
+					isError: false,
+				});
 
-			if (token?.isCancellationRequested) {
-				throw new Error(ERROR_OPERATION_CANCELLED);
-			}
-			if (!structuredPlanJsonString) {
-				throw new Error("AI failed to generate any response for the plan.");
-			}
-			if (structuredPlanJsonString.toLowerCase().startsWith("error:")) {
-				throw new Error(
-					formatUserFacingErrorMessage(
-						new Error(structuredPlanJsonString),
-						"The AI failed to generate a valid structured plan. This might be a model issue.",
-						"AI response error: ",
+				try {
+					structuredPlanJsonString =
+						await this.provider.aiRequestService.generateWithRetry(
+							[{ text: promptForAI }],
+							sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
+							undefined,
+							"structured plan generation",
+							jsonGenerationConfig,
+							undefined,
+							token
+						);
+
+					if (token?.isCancellationRequested) {
+						throw new Error(ERROR_OPERATION_CANCELLED);
+					}
+					if (!structuredPlanJsonString) {
+						throw new Error("AI failed to generate any response for the plan.");
+					}
+
+					// Markdown stripping
+					structuredPlanJsonString = structuredPlanJsonString
+						.replace(/^\s*/im, "")
+						.replace(/\s*$/im, "")
+						.trim();
+
+					if (structuredPlanJsonString.toLowerCase().startsWith("error:")) {
+						throw new Error(
+							formatUserFacingErrorMessage(
+								new Error(structuredPlanJsonString),
+								"The AI generated an error response for the structured plan. This might be a model issue.",
+								"AI response error: ",
+								planContext.workspaceRootUri
+							)
+						);
+					}
+
+					const { plan, error } = await this.parseAndValidatePlanWithFix(
+						structuredPlanJsonString,
 						planContext.workspaceRootUri
+					);
+
+					if (error) {
+						lastError = new Error(
+							`Failed to parse or validate generated plan: ${error}`
+						);
+						console.error(
+							`[PlanService] Parse/Validation error on attempt ${attempt}:`,
+							lastError.message
+						);
+						if (attempt < this.MAX_PLAN_PARSE_RETRIES) {
+							continue;
+						} else {
+							throw lastError;
+						}
+					}
+
+					if (!plan || plan.steps.length === 0) {
+						lastError = new Error(
+							"AI generated plan content but it was empty or invalid after parsing."
+						);
+						console.error(
+							`[PlanService] Empty/Invalid plan on attempt ${attempt}:`,
+							lastError.message
+						);
+						if (attempt < this.MAX_PLAN_PARSE_RETRIES) {
+							continue;
+						} else {
+							throw lastError;
+						}
+					}
+
+					executablePlan = plan;
+					break; // Successfully generated and parsed, exit loop
+				} catch (error: any) {
+					if (error.message === ERROR_OPERATION_CANCELLED) {
+						throw error; // Re-throw cancellation immediately
+					}
+
+					lastError = error;
+					console.error(
+						`[PlanService] AI generation or processing failed on attempt ${attempt}:`,
+						lastError?.message
+					);
+
+					if (attempt < this.MAX_PLAN_PARSE_RETRIES) {
+						await new Promise((resolve) =>
+							setTimeout(resolve, 30000 + attempt * 5000)
+						); // Exponential backoff for retries
+						continue;
+					} else {
+						throw lastError; // Re-throw the last error after max retries
+					}
+				}
+			}
+
+			if (!executablePlan) {
+				throw (
+					lastError ||
+					new Error(
+						"Failed to generate and parse a valid structured plan after multiple retries."
 					)
 				);
 			}
-
-			// Markdown stripping
-			structuredPlanJsonString = structuredPlanJsonString
-				.replace(/^\s*/im, "")
-				.replace(/\s*$/im, "")
-				.trim();
-
-			// Perform single parsing and validation
-			const { plan, error } = await this.parseAndValidatePlanWithFix(
-				structuredPlanJsonString,
-				planContext.workspaceRootUri
-			);
-
-			// Add error handling for single attempt
-			if (error) {
-				throw new Error(`Failed to parse or validate generated plan: ${error}`);
-			}
-
-			if (!plan || plan.steps.length === 0) {
-				throw new Error(
-					"AI generated plan content but it was empty or invalid after parsing."
-				);
-			}
-
-			executablePlan = plan; // Assign the successfully parsed and validated plan
 
 			// If we reached here, executablePlan is valid. Proceed with execution.
 			this.provider.pendingPlanGenerationContext = null;
