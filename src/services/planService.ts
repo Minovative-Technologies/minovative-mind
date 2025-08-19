@@ -1516,7 +1516,8 @@ export class PlanService {
 		isError: boolean = false,
 		diffContent?: string
 	): void {
-		this.provider.postMessageToWebview({
+		// Construct the message object to be sent to both history and webview
+		const appendMessage: sidebarTypes.AppendRealtimeModelMessage = {
 			type: "appendRealtimeModelMessage",
 			value: {
 				text: message,
@@ -1524,7 +1525,12 @@ export class PlanService {
 			},
 			isPlanStepUpdate: true,
 			diffContent: diffContent,
-		});
+		};
+
+		// Use the internal helper to post to webview AND add to chat history
+		this._postChatUpdateForPlanExecution(appendMessage);
+
+		// Keep console logs for internal debugging, separate from UI/history updates
 		if (isError) {
 			console.error(`Minovative Mind: ${message}`);
 		} else {

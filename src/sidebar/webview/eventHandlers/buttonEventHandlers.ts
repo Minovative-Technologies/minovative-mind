@@ -409,6 +409,19 @@ export function initializeButtonEventListeners(
 						textToCopy = textToCopy.replace(/\n\s*\n/g, "\n\n"); // Clean up blank lines
 					}
 
+					// *** Append diff content if available ***
+					const diffContainer = messageElement.querySelector(".diff-container");
+					if (diffContainer) {
+						const diffCodePre = diffContainer.querySelector("pre.diff-code");
+						if (diffCodePre) {
+							const diffTextContent = diffCodePre.textContent || "";
+							if (diffTextContent.trim() !== "") {
+								// Append the diff content, separated by a clear header
+								textToCopy += `\n\n\`\`\`diff\n${diffTextContent.trim()}\n\`\`\``;
+							}
+						}
+					}
+
 					try {
 						await navigator.clipboard.writeText(textToCopy);
 						console.log("Text copied to clipboard.");

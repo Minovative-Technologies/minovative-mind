@@ -16,6 +16,7 @@ import {
 } from "./statusManager";
 import { RequiredDomElements } from "../types/webviewTypes";
 import { ImageInlineData } from "../../common/sidebarTypes";
+import { faChevronDown, faChevronUp } from "@fortawesome/free-solid-svg-icons";
 
 // Global reference to setLoadingState function
 let globalSetLoadingState:
@@ -178,15 +179,41 @@ export function appendMessage(
 	if (diffContent !== undefined) {
 		const diffContainer = document.createElement("div");
 		diffContainer.classList.add("diff-container");
+		diffContainer.classList.add("collapsed"); // Default to collapsed
 
 		const diffHeaderElement = document.createElement("div");
 		diffHeaderElement.classList.add("diff-header");
-		diffContainer.prepend(diffHeaderElement);
+
+		const headerTextSpan = document.createElement("span");
+		headerTextSpan.classList.add("diff-header-text");
+		headerTextSpan.textContent = "Code Diff:";
+		diffHeaderElement.appendChild(headerTextSpan);
+
+		const toggleButton = document.createElement("button");
+		toggleButton.classList.add("diff-toggle-button");
+		toggleButton.title = "Toggle Diff Visibility";
+		setIconForButton(toggleButton, faChevronDown); // Default icon for collapsed state
+
+		toggleButton.addEventListener("click", () => {
+			const isCollapsed = diffContainer.classList.toggle("collapsed");
+			if (isCollapsed) {
+				setIconForButton(toggleButton, faChevronDown);
+			} else {
+				setIconForButton(toggleButton, faChevronUp);
+			}
+			// Ensure the chat scrolls to make the expanded diff visible
+			elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight;
+		});
+
+		diffHeaderElement.appendChild(toggleButton);
+		diffContainer.appendChild(diffHeaderElement);
+
+		const diffContentWrapper = document.createElement("div"); // New wrapper for collapsible content
+		diffContentWrapper.classList.add("diff-content-wrapper");
 
 		const trimmedDiffContent = diffContent.trim();
 
 		if (trimmedDiffContent !== "") {
-			diffHeaderElement.textContent = "Code Diff:";
 			const preCode = document.createElement("pre");
 			preCode.classList.add("diff-code");
 
@@ -194,7 +221,7 @@ export function appendMessage(
 			codeElement.classList.add("language-diff");
 			codeElement.classList.add("hljs");
 
-			// Split diff into lines and render each with gutter
+			// Logic to render diff lines with gutter and code highlighting
 			const diffLines = trimmedDiffContent.split("\n");
 			let oldLine = 1;
 			let newLine = 1;
@@ -203,7 +230,6 @@ export function appendMessage(
 				if (hunk.length === 0) {
 					return;
 				}
-				// Wrap hunk lines in a container
 				const hunkContainer = document.createElement("div");
 				hunkContainer.classList.add("diff-hunk-container");
 				hunk.forEach((lineWrapper: HTMLDivElement) =>
@@ -257,7 +283,6 @@ export function appendMessage(
 				codeSpan.textContent = line.replace(/^[+\- ]/, "");
 				lineWrapper.appendChild(codeSpan);
 
-				// Group consecutive change lines into hunks
 				if (isChange) {
 					currentHunk.push(lineWrapper);
 					inHunk = true;
@@ -269,7 +294,6 @@ export function appendMessage(
 					}
 					codeElement.appendChild(lineWrapper);
 				}
-				// If last line, flush any remaining hunk
 				if (i === diffLines.length - 1 && currentHunk.length > 0) {
 					flushHunk(currentHunk);
 					currentHunk = [];
@@ -277,12 +301,21 @@ export function appendMessage(
 			});
 
 			preCode.appendChild(codeElement);
-			diffContainer.appendChild(preCode);
+			diffContentWrapper.appendChild(preCode); // Append to wrapper
 		} else {
-			diffHeaderElement.textContent =
-				"No Code Changes Detected (or no diff provided)";
+			// Handle case with no actual diff content
+			const noDiffText = document.createElement("span");
+			noDiffText.textContent = "No Code Changes Detected (or no diff provided)";
+			noDiffText.style.fontStyle = "italic";
+			noDiffText.style.color = "var(--vscode-descriptionForeground)";
+			noDiffText.style.padding = "10px 20px";
+			diffContentWrapper.appendChild(noDiffText);
 			diffContainer.classList.add("no-diff-content");
+			// Hide toggle button if no diff content
+			toggleButton.style.display = "none";
+			diffContainer.classList.remove("collapsed"); // Ensure it's not visually collapsed
 		}
+		diffContainer.appendChild(diffContentWrapper); // Append wrapper to container
 		messageElement.appendChild(diffContainer);
 	}
 
@@ -518,7 +551,6 @@ export function appendMessage(
 					// Call disableAllMessageActionButtons
 					disableAllMessageActionButtons(elements);
 
-					// Ensure elements.sendButton.disabled is false
 					elements.sendButton.disabled = false;
 
 					console.log(
