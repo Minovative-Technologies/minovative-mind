@@ -17,10 +17,6 @@ import {
 	buildReverseDependencyGraph,
 } from "../context/dependencyGraphBuilder";
 import {
-	getHeuristicRelevantFiles,
-	HeuristicSelectionOptions,
-} from "../context/heuristicContextSelector"; // Import heuristic selector
-import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
 	MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION, // Import for summary length
