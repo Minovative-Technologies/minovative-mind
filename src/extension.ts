@@ -267,22 +267,6 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 			}
 
-			// Confirmation dialog for custom prompts
-			if (instruction === "custom prompt") {
-				const confirmation = await vscode.window.showInformationMessage(
-					`You entered: "${userProvidedMessage}". Do you want to proceed with this custom command?`,
-					{ modal: true },
-					"Yes",
-					"No"
-				);
-				if (confirmation !== "Yes") {
-					vscode.window.showInformationMessage(
-						"Custom command execution cancelled."
-					);
-					return; // Stop execution if not confirmed
-				}
-			}
-
 			// 4. Implement Contextual Code Selection:
 			if (!originalSelection.isEmpty) {
 				// User made an explicit selection: Use it as-is.

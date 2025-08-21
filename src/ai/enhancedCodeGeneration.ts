@@ -257,7 +257,12 @@ export class EnhancedCodeGenerator {
 				token
 			);
 
-			return this.codeValidationService.checkPureCodeFormat(rawContent, false);
+			const cleanedRawContent = cleanCodeOutput(rawContent);
+
+			return this.codeValidationService.checkPureCodeFormat(
+				cleanedRawContent,
+				false
+			);
 		} catch (error: any) {
 			return {
 				isValid: false,
