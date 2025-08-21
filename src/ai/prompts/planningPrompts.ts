@@ -113,6 +113,20 @@ export function createInitialPlanningExplanationPrompt(
 		mainInstructions = `Based on my request from the chat ("${userRequest}") and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill it.`;
 	}
 
+	const newDependencyInstructionsForExplanation = `
+**Dependency Management Directive:**
+*   Never directly edit \`package.json\`, \`requirements.txt\`, or similar manifest files to add new dependencies.
+*   When a new dependency is required, generate a \`RunCommand\` step to install it using the appropriate package manager.
+*   For Node.js projects (indicated by \`package.json\`), use \`npm install <package-name>\` for runtime dependencies and \`npm install <package-name> --save-dev\` for development dependencies.
+*   For Python projects (indicated by \`requirements.txt\` or \`.py\` files), use \`pip install <package-name>\`.
+*   Utilize project context (e.g., \`package.json\`, \`.py\` files) to infer the correct package manager and command.
+*   If manifest files are created or significantly modified by other means, include \`RunCommand\` steps such as \`npm install\` or \`pip install -r requirements.txt\`.
+`;
+	if (mainInstructions !== "") {
+		mainInstructions += "\n";
+	}
+	mainInstructions += newDependencyInstructionsForExplanation;
+
 	const chatHistoryForPrompt =
 		chatHistory && chatHistory.length > 0
 			? `
@@ -328,6 +342,20 @@ export function createPlanningPrompt(
         --- End Request ---`;
 		mainInstructions = `Based on my request from the chat (\"${userRequest}\") and any relevant chat history, generate a plan to fulfill it. Carefully examine the 'File Structure' and 'Existing Relative File Paths' within the 'Broader Project Context' section. Based on these details, infer the project's likely framework (e.g., Next.js, React, Node.js) and its typical file organization conventions (e.g., Next.js routes under \`pages/\` or \`app/\` directly at the workspace root, versus a project using a \`src/\` directory for all source files). When generating \`path\` values for \`create_directory\`, \`create_file\`, or \`modify_file\` steps in the JSON plan, ensure they strictly adhere to the inferred framework's standard practices and are always relative to the workspace root. Avoid assuming a \`src/\` directory for routes if the existing structure suggests otherwise (e.g., \`pages/\` or \`app/\` at root).`;
 	}
+
+	const newDependencyRulesForJsonPlan = `
+**Dependency Management Rules for JSON Plan Generation:**
+*   **Never directly edit \`package.json\`, \`requirements.txt\`, or similar manifest files to add new dependencies.**
+*   When a new dependency is required, generate a \`RunCommand\` step to install it using the appropriate package manager.
+*   For Node.js projects (indicated by \`package.json\`), use \`npm install <package-name>\` for runtime dependencies and \`npm install <package-name> --save-dev\` for development dependencies.
+*   For Python projects (indicated by \`requirements.txt\` or \`.py\` files), use \`pip install <package-name>\`.
+*   Utilize project context (e.g., \`package.json\`, \`.py\` files) to infer the correct package manager and command.
+*   If manifest files are created or significantly modified by other means (e.g., by another tool), include \`RunCommand\` steps such as \`npm install\` or \`pip install -r requirements.txt\`.
+`;
+	if (mainInstructions !== "") {
+		mainInstructions += "\n";
+	}
+	mainInstructions += newDependencyRulesForJsonPlan;
 
 	const textualPlanPromptSection = `
     --- Detailed Textual Plan Explanation (Base your entire JSON plan on this) ---
