@@ -1,3 +1,4 @@
+// src/sidebar/webview/eventHandlers/messageBusHandler.ts
 import {
 	appendMessage,
 	finalizeStreamingMessage,
@@ -12,9 +13,6 @@ import {
 	AiStreamingState,
 	PersistedPlanData,
 	PlanExecutionFinishedMessage,
-	CodeFileStreamStartMessage,
-	CodeFileStreamChunkMessage,
-	CodeFileStreamEndMessage,
 	ChatMessage, // Import ChatMessage for type casting
 } from "../../common/sidebarTypes";
 import {
@@ -33,30 +31,17 @@ import { md } from "../utils/markdownRenderer";
 import { postMessageToExtension } from "../utils/vscodeApi";
 import { RequiredDomElements } from "../types/webviewTypes";
 import { resetUIStateAfterCancellation } from "../ui/statusManager";
-
-// Add global variables for code streaming
-const activeCodeStreams = new Map<
-	string,
-	{ container: HTMLDivElement; codeElement: HTMLElement }
->();
-let codeStreamingArea: HTMLElement | null = null;
-
-// Helper function for code streaming state reset
-const resetCodeStreams = () => {
-	activeCodeStreams.clear();
-	if (codeStreamingArea) {
-		codeStreamingArea.innerHTML = "";
-		codeStreamingArea.style.display = "none";
-	}
-};
+import {
+	handleCodeFileStreamStart,
+	handleCodeFileStreamChunk,
+	handleCodeFileStreamEnd,
+	resetCodeStreams,
+} from "./codeStreamHandler";
 
 export function initializeMessageBusHandler(
 	elements: RequiredDomElements,
 	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
 ): void {
-	// Initialize codeStreamingArea at the beginning
-	codeStreamingArea = document.getElementById("code-streaming-area");
-
 	window.addEventListener("message", (event: MessageEvent) => {
 		const message = event.data;
 		console.log(
@@ -113,134 +98,15 @@ export function initializeMessageBusHandler(
 				break;
 
 			case "codeFileStreamStart": {
-				const { streamId, filePath, languageId } =
-					message.value as CodeFileStreamStartMessage["value"];
-				console.log(
-					`[Webview] Code stream start: ${filePath} (Stream ID: ${streamId})`
-				);
-
-				if (!codeStreamingArea) {
-					console.error("[Webview] Code streaming area not found.");
-					return;
-				}
-
-				// Create container for this file's stream
-				const container = document.createElement("div");
-				container.classList.add("code-file-stream-container");
-				container.dataset.streamId = streamId;
-
-				// Pre and Code elements for content
-				const pre = document.createElement("pre");
-				const codeElement = document.createElement("code");
-				codeElement.classList.add(`language-${languageId}`);
-				codeElement.classList.add("hljs"); // For highlight.js
-				pre.appendChild(codeElement);
-				container.appendChild(pre);
-
-				// Footer for file path and loading dots
-				const footer = document.createElement("div");
-				footer.classList.add("code-file-stream-footer");
-				footer.innerHTML = `
-                    <span class="file-path">${filePath}</span>
-                    <span class="status-indicator">
-                        <span class="loading-dots">Generating<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
-                    </span>
-                `;
-				container.appendChild(footer);
-
-				codeStreamingArea.appendChild(container);
-				activeCodeStreams.set(streamId, { container, codeElement });
-
-				codeStreamingArea.style.display = "flex"; // Show the overall streaming area
-				codeStreamingArea.scrollTop = codeStreamingArea.scrollHeight; // Scroll to bottom
+				handleCodeFileStreamStart(elements, message as any);
 				break;
 			}
-
 			case "codeFileStreamChunk": {
-				const { streamId, chunk } =
-					message.value as CodeFileStreamChunkMessage["value"];
-				// console.log(`[Webview] Code stream chunk for ${streamId}: ${chunk.length} chars`);
-
-				const streamInfo = activeCodeStreams.get(streamId);
-				if (streamInfo) {
-					streamInfo.codeElement.textContent += chunk;
-					// Re-highlight the element with each chunk
-					// hljs might be global or needs to be imported. Assuming global for now.
-					if ((window as any).hljs) {
-						(window as any).hljs.highlightElement(streamInfo.codeElement);
-					}
-					if (codeStreamingArea) {
-						codeStreamingArea.scrollTop = codeStreamingArea.scrollHeight; // Scroll to bottom
-					}
-				} else {
-					console.warn(
-						`[Webview] Received chunk for unknown stream ID: ${streamId}`
-					);
-				}
+				handleCodeFileStreamChunk(elements, message as any);
 				break;
 			}
-
 			case "codeFileStreamEnd": {
-				const { streamId, success, error } =
-					message.value as CodeFileStreamEndMessage["value"];
-				console.log(
-					`[Webview] Code stream end for ${streamId}. Success: ${success}, Error: ${error}`
-				);
-
-				const streamInfo = activeCodeStreams.get(streamId);
-				if (streamInfo) {
-					const footer = streamInfo.container.querySelector(
-						".code-file-stream-footer"
-					);
-					const statusIndicator = footer?.querySelector(
-						".status-indicator"
-					) as HTMLElement | null;
-					const loadingDots = footer?.querySelector(
-						".loading-dots"
-					) as HTMLElement | null;
-
-					// Remove loading dots
-					if (loadingDots) {
-						loadingDots.remove();
-					}
-
-					// Add success/error icon
-					if (statusIndicator) {
-						const icon = document.createElement("span");
-						icon.classList.add("status-icon");
-						if (success) {
-							icon.textContent = "✔"; // Green check
-							icon.style.color = "var(--vscode-editorGutter-addedBackground)";
-							icon.title = "Generation complete";
-						} else {
-							icon.textContent = "❌"; // Red cross
-							icon.style.color = "var(--vscode-errorForeground)";
-							icon.title = `Generation failed: ${error || "Unknown error"}`;
-							if (error) {
-								const errorDetails = document.createElement("span");
-								errorDetails.classList.add("error-details");
-								errorDetails.textContent = ` ${error}`;
-								statusIndicator.appendChild(errorDetails);
-							}
-						}
-						statusIndicator.prepend(icon);
-					}
-
-					// Ensure final highlighting is applied
-					if ((window as any).hljs) {
-						(window as any).hljs.highlightElement(streamInfo.codeElement);
-					}
-
-					activeCodeStreams.delete(streamId);
-
-					if (codeStreamingArea) {
-						codeStreamingArea.scrollTop = codeStreamingArea.scrollHeight; // Scroll to bottom
-					}
-				} else {
-					console.warn(
-						`[Webview] Received end message for unknown stream ID: ${streamId}`
-					);
-				}
+				handleCodeFileStreamEnd(elements, message as any);
 				break;
 			}
 
@@ -456,7 +322,7 @@ export function initializeMessageBusHandler(
 				break;
 			}
 			case "aiResponseEnd": {
-				finalizeStreamingMessage(elements); // New: Add at the beginning
+				finalizeStreamingMessage(elements);
 				console.log("Received aiResponseEnd. Stream finished.");
 
 				const isCancellation =
@@ -1230,7 +1096,7 @@ export function initializeMessageBusHandler(
 				console.log(
 					"[Webview] Received operationCancelledConfirmation. Resetting UI state."
 				);
-				finalizeStreamingMessage(elements); // New: Add before resetUIStateAfterCancellation
+				finalizeStreamingMessage(elements);
 				resetUIStateAfterCancellation(elements, setLoadingState);
 				resetCodeStreams();
 				break;
