@@ -79,7 +79,7 @@
 	background: transparent;
 	border: none;
 	box-shadow: none;
-	overflow-x: auto;
+	height: fit-content;
 }
 
 .diff-line {

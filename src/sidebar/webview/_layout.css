@@ -124,6 +124,7 @@
 	transition: border-color 0.2s, opacity 0.2s;
 	position: relative;
 	border: 2px solid var(--vscode-editorWidget-border, #444);
+	height: fit-content;
 }
 .diff-hunk-container:hover {
 	border-color: var(--vscode-focusBorder, #007acc);
