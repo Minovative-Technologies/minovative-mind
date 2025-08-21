@@ -63,7 +63,8 @@
 
 .diff-content-wrapper {
 	max-height: 1000px; /* A large enough value to ensure content is visible when expanded */
-	overflow: hidden; /* Hide content that exceeds max-height */
+	overflow-y: scroll;
+	overflow-x: hidden;
 	transition: max-height 0.3s ease-out; /* Smooth transition for expanding/collapsing */
 	padding-bottom: 10px; /* Add padding for the actual diff content */
 }
