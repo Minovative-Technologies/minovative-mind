@@ -31,6 +31,9 @@ export function repairJsonEscapeSequences(jsonString: string): string {
 			} else if (char === '"') {
 				// Escape literal double quote: '"' -> '\"'
 				modifiedContent += '\\"';
+			} else if (char === "`") {
+				// New condition to escape backticks
+				modifiedContent += "\\`";
 			} else {
 				// Append other characters as they are.
 				modifiedContent += char;
