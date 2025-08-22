@@ -17,6 +17,7 @@ import {
 	analyzeFileStructure,
 	getLanguageId,
 	isRewriteIntentDetected,
+	isAIOutputLikelyErrorMessage,
 } from "../utils/codeAnalysisUtils";
 import { formatSuccessfulChangesForPrompt } from "../workflow/changeHistoryFormatter";
 import {
@@ -259,6 +260,43 @@ export class EnhancedCodeGenerator {
 
 			const cleanedRawContent = cleanCodeOutput(rawContent);
 
+			if (
+				cleanedRawContent.trim().length < 5 ||
+				isAIOutputLikelyErrorMessage(cleanedRawContent) ||
+				cleanedRawContent.trim() === "/"
+			) {
+				const errorMessage = `AI generated invalid or unexpectedly short content for file '${filePath}'. Raw response was: '${cleanedRawContent.substring(
+					0,
+					100
+				)}...'`;
+				console.error(`[EnhancedCodeGenerator] ${errorMessage}`);
+				this.postMessageToWebview({
+					type: "statusUpdate",
+					value: `AI generated invalid content for '${path.basename(
+						filePath
+					)}'. Please review the prompt or try again.`,
+					isError: true,
+				});
+				return {
+					isValid: false,
+					finalContent: cleanedRawContent, // Return raw content for debugging
+					issues: [
+						{
+							type: "other",
+							message: `AI generated invalid or unexpectedly short content. Expected full code.`,
+							line: 1,
+							severity: "error",
+							code: "AI_EMPTY_OR_MALFORMED_OUTPUT",
+							source: "EnhancedCodeGenerator",
+						},
+					],
+					suggestions: [
+						"Refine your prompt. The AI might be confused by the request or existing file context.",
+						"Ensure the AI is instructed to provide the full file content, not just a snippet or placeholder.",
+					],
+				};
+			}
+
 			return this.codeValidationService.checkPureCodeFormat(
 				cleanedRawContent,
 				false
@@ -322,6 +360,46 @@ export class EnhancedCodeGenerator {
 		);
 
 		const modifiedContent = cleanCodeOutput(rawContent);
+
+		if (
+			modifiedContent.trim().length < 5 ||
+			isAIOutputLikelyErrorMessage(modifiedContent) ||
+			modifiedContent.trim() === "/"
+		) {
+			const errorMessage = `AI generated invalid or unexpectedly short content for file '${filePath}'. Raw response was: '${modifiedContent.substring(
+				0,
+				100
+			)}...'`;
+			console.error(`[EnhancedCodeGenerator] ${errorMessage}`);
+			this.postMessageToWebview({
+				type: "statusUpdate",
+				value: `AI generated invalid content for '${path.basename(
+					filePath
+				)}'. Please review the prompt or try again.`,
+				isError: true,
+			});
+			return {
+				content: modifiedContent, // Ensure modifiedContent is returned for debugging
+				validation: {
+					isValid: false,
+					finalContent: modifiedContent, // Return modifiedContent for debugging
+					issues: [
+						{
+							type: "other",
+							message: `AI generated invalid or unexpectedly short content. Expected full file content.`,
+							line: 1,
+							severity: "error",
+							code: "AI_EMPTY_OR_MALFORMED_OUTPUT",
+							source: "EnhancedCodeGenerator",
+						},
+					],
+					suggestions: [
+						"Refine your prompt. The AI might be confused by the request or existing file context, especially when modifying a core validation file.",
+						"Ensure the AI is instructed to provide the full modified file content, not just a snippet or placeholder.",
+					],
+				},
+			};
+		}
 
 		const validation = await this._validateAndRefineModification(
 			filePath,

@@ -25,6 +25,7 @@ import {
 import { GitConflictResolutionService } from "../services/gitConflictResolutionService";
 
 import { CodeValidationService } from "../services/codeValidationService";
+import { DiagnosticService } from "../utils/diagnosticUtils";
 import { ContextRefresherService } from "../services/contextRefresherService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
@@ -174,7 +175,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		);
 
 		this.codeValidationService = new CodeValidationService(
-			this.workspaceRootUri || vscode.Uri.file("/")
+			new DiagnosticService()
 		);
 		this.contextRefresherService = new ContextRefresherService(
 			this.contextService,
