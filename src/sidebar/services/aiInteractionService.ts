@@ -86,7 +86,8 @@ export async function _performModification(
 			modificationPrompt,
 			generationContext,
 			modelName,
-			token
+			token,
+			generationConfig
 		);
 		modifiedContent = genResult.content;
 

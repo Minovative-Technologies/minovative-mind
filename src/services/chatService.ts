@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import {
 	ERROR_OPERATION_CANCELLED,
-	GOOGLE_SEARCH_TOOL,
 	initializeGenerativeAI,
 } from "../ai/gemini"; // Ensure initializeGenerativeAI is imported
 import { GenerationConfig, Tool } from "@google/generative-ai"; // Ensure Tool is imported
@@ -65,18 +64,8 @@ export class ChatService {
 			return; // Exit early if model name is missing
 		}
 
-		// Define toolConfig: GOOGLE_SEARCH_TOOL if groundingEnabled is true, otherwise undefined.
-		let toolConfig: Tool[] | undefined = undefined;
-		if (groundingEnabled) {
-			toolConfig = GOOGLE_SEARCH_TOOL as Tool[];
-		}
-
 		// Call initializeGenerativeAI with apiKey, modelName, and toolConfig.
-		const initializationSuccess = initializeGenerativeAI(
-			apiKey,
-			modelName,
-			toolConfig
-		);
+		const initializationSuccess = initializeGenerativeAI(apiKey, modelName);
 
 		// Add error handling to verify the success of initializeGenerativeAI.
 		if (!initializationSuccess) {

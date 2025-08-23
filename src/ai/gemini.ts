@@ -14,8 +14,6 @@ export const ERROR_OPERATION_CANCELLED = "Operation cancelled by user.";
 // Add a new error constant for service unavailability
 export const ERROR_SERVICE_UNAVAILABLE = "ERROR_GEMINI_SERVICE_UNAVAILABLE";
 
-export const GOOGLE_SEARCH_TOOL = [{ googleSearch: {} }];
-
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
 let currentApiKey: string | null = null;
