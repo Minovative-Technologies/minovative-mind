@@ -154,6 +154,11 @@ interface ReenableInputMessage {
 	type: "reenableInput";
 }
 
+export interface UpdateCancellationStateMessage {
+	type: "updateCancellationState";
+	value: boolean;
+}
+
 interface ApiKeyStatusMessage {
 	type: "apiKeyStatus";
 	value: string;
@@ -348,6 +353,7 @@ export type ExtensionToWebviewMessages =
 	  }
 	| UpdateLoadingStateMessage
 	| ReenableInputMessage
+	| UpdateCancellationStateMessage // Added UpdateCancellationStateMessage
 	| ApiKeyStatusMessage
 	| UpdateModelListMessage
 	| UpdateOptimizationSettingsMessage

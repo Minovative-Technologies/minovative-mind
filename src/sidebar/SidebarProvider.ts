@@ -59,6 +59,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		stagedFiles: string[];
 	} | null = null;
 	public isGeneratingUserRequest: boolean = false;
+	public isCancellingOperation: boolean = false;
 	public isEditingMessageActive: boolean = false;
 	private _persistedPendingPlanData: sidebarTypes.PersistedPlanData | null =
 		null;
@@ -316,6 +317,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			"restoreStreamingProgress",
 			"restorePendingCommitReview",
 			"resetCodeStreamingArea",
+			"updateCancellationState", // Add this line
 		]);
 
 		// Messages that are typically frequent and should be throttled to prevent UI overwhelming
@@ -669,6 +671,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.currentAiStreamingState = null;
 	}
 
+	public async endCancellationOperation(): Promise<void> {
+		this.isCancellingOperation = false;
+		this.postMessageToWebview({
+			type: "updateCancellationState",
+			value: false,
+		});
+		this.clearActiveOperationState();
+	}
+
 	public async endUserOperation(
 		outcome: sidebarTypes.ExecutionOutcome | "review",
 		customStatusMessage?: string,
@@ -684,7 +695,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			false
 		);
 
-		this.clearActiveOperationState();
+		if (outcome === "cancelled") {
+			this.endCancellationOperation();
+		} else {
+			this.clearActiveOperationState();
+		}
+
 		this.pendingPlanGenerationContext = null;
 		this.lastPlanGenerationContext = null;
 		if (outcome !== "review") {
@@ -754,6 +770,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public async triggerUniversalCancellation(): Promise<void> {
 		console.log("[SidebarProvider] Triggering universal cancellation...");
 
+		this.isGeneratingUserRequest = false;
+		this.isCancellingOperation = true;
 		if (this.activeOperationCancellationTokenSource) {
 			this.activeOperationCancellationTokenSource.cancel();
 			// The clearActiveOperationState() call is intentionally removed here
@@ -776,7 +794,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.lastPlanGenerationContext = null;
 		this.pendingCommitReviewData = null;
 
-		this.isGeneratingUserRequest = false;
 		await this.workspaceState.update(
 			"minovativeMind.isGeneratingUserRequest",
 			false
@@ -784,8 +801,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		// this.isEditingMessageActive = false; // Removed as per instructions
 
 		// Ensure these messages are always sent to re-enable UI regardless of active token source
-		this.postMessageToWebview({ type: "reenableInput" });
 		this.postMessageToWebview({ type: "updateLoadingState", value: false });
+		this.postMessageToWebview({ type: "reenableInput" });
+		this.postMessageToWebview({ type: "updateCancellationState", value: true });
 		this.postMessageToWebview({
 			type: "operationCancelledConfirmation",
 		});

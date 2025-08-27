@@ -111,6 +111,7 @@ export interface WebviewAppState {
 	isApiKeySet: boolean;
 	isLoading: boolean;
 	isAwaitingUserReview: boolean;
+	isCancelling: boolean;
 	isCommitActionInProgress: boolean;
 	isCancellationInProgress: boolean;
 	isPlanExecutionInProgress: boolean;

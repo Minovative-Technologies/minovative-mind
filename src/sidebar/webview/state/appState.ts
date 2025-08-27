@@ -29,8 +29,13 @@ export const appState: WebviewAppState = {
 	pendingPlanData: null,
 	pendingCommitReviewData: null,
 	isApiKeySet: false,
+	/**
+	 * Indicates if an AI generation operation is actively in progress.
+	 * This should strictly reflect active *generation* and *not* be set to `true` during cancellation; it should be `false` when cancellation begins.
+	 */
 	isLoading: false,
 	isAwaitingUserReview: false,
+	isCancelling: false,
 	isCommitActionInProgress: false,
 	isCancellationInProgress: false,
 	isPlanExecutionInProgress: false,

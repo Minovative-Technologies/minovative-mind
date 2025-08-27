@@ -10,7 +10,7 @@ import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes";
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants"; // Import constants for API key and model selection
 
 const AI_CHAT_PROMPT =
-	"Lets discuss and do not code yet. You should only focus on high level thinking in this project, using the project context given to you. Only respone helpfully. Make sure to mention what files are being changed or created if any.";
+	"Lets discuss and do not code yet. You should only focus on high level thinking in this project, using the project context given to you. Only respone helpfully with production-ready explainations, no placeholders, no TODOs for the user. Make sure to mention what files are being changed or created if any.";
 
 export class ChatService {
 	private urlContextService: UrlContextService;
@@ -217,6 +217,11 @@ export class ChatService {
 				// Determine if the operation was cancelled to set the appropriate error message.
 				const isCancellation =
 					finalAiResponseText === ERROR_OPERATION_CANCELLED;
+
+				// If cancellation occurred and this was the active operation, notify SidebarProvider
+				if (isCancellation) {
+					this.provider.endCancellationOperation();
+				}
 
 				// Notify the webview that the AI response has ended.
 				this.provider.postMessageToWebview({
@@ -433,6 +438,11 @@ export class ChatService {
 				// Determine if the operation was cancelled to set the appropriate error message.
 				const isCancellation =
 					finalAiResponseText === ERROR_OPERATION_CANCELLED;
+
+				// If cancellation occurred and this was the active operation, notify SidebarProvider
+				if (isCancellation) {
+					this.provider.endCancellationOperation();
+				}
 
 				// Notify the webview that the AI response has ended.
 				this.provider.postMessageToWebview({
