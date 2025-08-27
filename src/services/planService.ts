@@ -75,7 +75,7 @@ export class PlanService {
 	// --- CHAT-INITIATED PLAN ---
 	public async handleInitialPlanRequest(userRequest: string): Promise<void> {
 		const { apiKeyManager, changeLogger } = this.provider;
-		const modelName = this.provider.settingsManager.getSelectedModelName();
+		const modelName = sidebarConstants.DEFAULT_FLASH_LITE_MODEL; // Use default model for initial plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
 		if (!apiKey) {
@@ -316,7 +316,7 @@ export class PlanService {
 		isMergeOperation: boolean = false
 	): Promise<sidebarTypes.PlanGenerationResult> {
 		const { apiKeyManager, changeLogger } = this.provider;
-		const modelName = this.provider.settingsManager.getSelectedModelName();
+		const modelName = sidebarConstants.DEFAULT_FLASH_LITE_MODEL; // Use default model for editor-initiated plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
 		const rootFolder = vscode.workspace.workspaceFolders?.[0];
