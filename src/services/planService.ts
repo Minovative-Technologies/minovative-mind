@@ -75,7 +75,10 @@ export class PlanService {
 	// --- CHAT-INITIATED PLAN ---
 	public async handleInitialPlanRequest(userRequest: string): Promise<void> {
 		const { apiKeyManager, changeLogger } = this.provider;
-		const modelName = sidebarConstants.DEFAULT_FLASH_LITE_MODEL; // Use default model for initial plan generation
+		const modelName = this.provider.settingsManager.getSetting<string>(
+			sidebarConstants.MODEL_SELECTION_STORAGE_KEY,
+			sidebarConstants.DEFAULT_FLASH_LITE_MODEL
+		); // Use selected model for initial plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
 		if (!apiKey) {
@@ -316,7 +319,10 @@ export class PlanService {
 		isMergeOperation: boolean = false
 	): Promise<sidebarTypes.PlanGenerationResult> {
 		const { apiKeyManager, changeLogger } = this.provider;
-		const modelName = sidebarConstants.DEFAULT_FLASH_LITE_MODEL; // Use default model for editor-initiated plan generation
+		const modelName = this.provider.settingsManager.getSetting<string>(
+			sidebarConstants.MODEL_SELECTION_STORAGE_KEY,
+			sidebarConstants.DEFAULT_FLASH_LITE_MODEL
+		); // Use selected model for editor-initiated plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
 		const rootFolder = vscode.workspace.workspaceFolders?.[0];
@@ -699,11 +705,11 @@ export class PlanService {
 
 			for (let attempt = 1; attempt <= this.MAX_PLAN_PARSE_RETRIES; attempt++) {
 				console.log(
-					`Attempt ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} to generate structured plan (function call)...`
+					`Generating structured plan - ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} `
 				);
 				this.provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: `Attempt ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} to generate structured plan (function call)...`,
+					value: `Generating structured plan - ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} `,
 					isError: false,
 				});
 
@@ -711,7 +717,7 @@ export class PlanService {
 					const functionCall: FunctionCall | null =
 						await this.provider.aiRequestService.generateFunctionCall(
 							planContext.initialApiKey,
-							sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
+							planContext.modelName,
 							[{ role: "user", parts: [{ text: promptForAIForFunctionCall }] }],
 							[{ functionDeclarations: [generateExecutionPlanTool] }],
 							FunctionCallingMode.ANY,

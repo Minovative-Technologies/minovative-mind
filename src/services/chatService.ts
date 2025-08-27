@@ -7,10 +7,10 @@ import {
 import { GenerationConfig, Tool } from "@google/generative-ai"; // Ensure Tool is imported
 import { UrlContextService } from "./urlContextService";
 import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes"; // Import HistoryEntry for type safety, and HistoryEntryPart
-import {
-	DEFAULT_FLASH_LITE_MODEL,
-	MODEL_SELECTION_STORAGE_KEY,
-} from "../sidebar/common/sidebarConstants"; // Import constants for API key and model selection
+import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants"; // Import constants for API key and model selection
+
+const AI_CHAT_PROMPT =
+	"Lets discuss and do not code yet. You should only focus on high level thinking in this project, using the project context given to you. Only respone helpfully.";
 
 export class ChatService {
 	private urlContextService: UrlContextService;
@@ -26,10 +26,7 @@ export class ChatService {
 		const { settingsManager } = this.provider;
 		// Retrieve the active apiKey and the current modelName from settings
 		const apiKey = this.provider.apiKeyManager.getActiveApiKey();
-		const modelName = settingsManager.getSetting<string>(
-			MODEL_SELECTION_STORAGE_KEY,
-			DEFAULT_FLASH_LITE_MODEL
-		);
+		const modelName = DEFAULT_FLASH_LITE_MODEL; // Set modelName to DEFAULT_FLASH_LITE_MODEL directly
 
 		const tokenSourceForThisOperation = new vscode.CancellationTokenSource();
 		this.provider.activeOperationCancellationTokenSource =
@@ -128,7 +125,7 @@ export class ChatService {
 			// Revise construction of input for aiRequestService.generateWithRetry
 			const initialSystemPrompt: HistoryEntryPart[] = [
 				{
-					text: `Lets discuss and do not code yet. In this project: \n\nProject Context:\n${
+					text: `${AI_CHAT_PROMPT} \n\nProject Context:\n${
 						projectContext.contextString
 					}${urlContextString ? `\n\n${urlContextString}` : ""}`,
 				},
@@ -350,7 +347,7 @@ export class ChatService {
 			// Construct the full user turn contents, including system prompt and user input
 			const initialSystemPrompt: HistoryEntryPart[] = [
 				{
-					text: `Lets discuss and do not code yet. In this project: \n\nProject Context:\n${projectContext.contextString}`,
+					text: `${AI_CHAT_PROMPT} \n\nProject Context:\n${projectContext.contextString}`,
 				},
 			];
 			const fullUserTurnContents: HistoryEntryPart[] = [
