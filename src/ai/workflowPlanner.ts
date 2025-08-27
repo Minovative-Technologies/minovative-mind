@@ -21,7 +21,7 @@ export enum PlanStepAction {
 export interface PlanStep {
 	step: number;
 	action: PlanStepAction;
-	description: string;
+	description?: string; // Made optional
 	path?: string; // Optional: Relevant for file/directory actions (relative path from workspace root)
 	command?: string; // Optional: Relevant for run_command action (command line string)
 	generate_prompt?: string;
@@ -129,97 +129,115 @@ export interface ParsedPlanResult {
 }
 
 /**
- * Parses a JSON string into an ExecutionPlan and performs validation and sanitization.
+ * Parses a JSON string or object into an ExecutionPlan and performs validation and sanitization.
  *
- * @param jsonString The raw JSON string received from the AI.
+ * @param source The raw JSON string received from the AI, or a direct plan object.
  * @param workspaceRootUri The URI of the workspace root.
  * @returns An object containing the validated ExecutionPlan or an error message.
  */
 export async function parseAndValidatePlan(
-	jsonString: string,
+	source: string | object, // Updated parameter type
 	workspaceRootUri: vscode.Uri
 ): Promise<ParsedPlanResult> {
-	console.log("Attempting to parse and validate plan JSON:", jsonString);
+	console.log("Attempting to parse and validate plan source:", source);
+
+	let potentialPlan: any; // Declared here to be accessible to both branches
 
 	try {
-		// --- 1. Clean Markdown Fences and Extract JSON Object ---
-		let cleanedString = jsonString
-			.replace(/```(json|typescript)?/g, "")
-			.replace(/```/g, "");
-		cleanedString = cleanedString.trim();
+		if (typeof source === "object" && source !== null) {
+			potentialPlan = source; // Use object directly
+			console.log("Using direct object as potential plan.");
+		} else if (typeof source === "string") {
+			const jsonString = source; // Renamed for clarity within this branch
+			console.log("Parsing plan from string JSON:", jsonString);
 
-		const firstBraceIndex = cleanedString.indexOf("{");
-		const lastBraceIndex = cleanedString.lastIndexOf("}");
+			// --- 1. Clean Markdown Fences and Extract JSON Object ---
+			let cleanedString = jsonString
+				.replace(/```(json|typescript)?/g, "")
+				.replace(/```/g, "");
+			cleanedString = cleanedString.trim();
 
-		if (
-			firstBraceIndex === -1 ||
-			lastBraceIndex === -1 ||
-			lastBraceIndex < firstBraceIndex
-		) {
+			const firstBraceIndex = cleanedString.indexOf("{");
+			const lastBraceIndex = cleanedString.lastIndexOf("}");
+
+			if (
+				firstBraceIndex === -1 ||
+				lastBraceIndex === -1 ||
+				lastBraceIndex < firstBraceIndex
+			) {
+				const errorMsg =
+					"Error parsing plan JSON: Could not find a valid JSON object within the response.";
+				console.error(errorMsg, jsonString);
+				return { plan: null, error: errorMsg };
+			}
+
+			let extractedJsonString = cleanedString.substring(
+				firstBraceIndex,
+				lastBraceIndex + 1
+			);
+
+			// --- 2. Enhanced JSON String Sanitization ---
+			console.log(
+				"Original extracted JSON string for parsing:",
+				extractedJsonString
+			);
+
+			// This regex is more robust for matching string literals. It correctly handles escaped quotes
+			// and avoids matching content outside of valid JSON strings.
+			const stringLiteralRegex = /"((?:\\.|[^"\\])*)"/g;
+
+			// A map of control characters to their escaped representations.
+			const charToEscape: { [key: string]: string } = {
+				"\b": "\\b",
+				"\f": "\\f",
+				"\n": "\\n",
+				"\r": "\\r",
+				"\t": "\\t",
+			};
+
+			const sanitizedJsonString = extractedJsonString.replace(
+				stringLiteralRegex,
+				(match, contentInsideQuotes: string) => {
+					let processedContent = "";
+					for (let i = 0; i < contentInsideQuotes.length; i++) {
+						const char = contentInsideQuotes[i];
+						const charCode = char.charCodeAt(0);
+
+						// If it's a known control character with a short escape, use it.
+						if (charToEscape[char]) {
+							processedContent += charToEscape[char];
+						}
+						// Check for other control characters (U+0000 to U+001F) that must be escaped.
+						else if (charCode >= 0 && charCode <= 0x1f) {
+							// Format to \uXXXX unicode escape sequence.
+							processedContent += `\\u${charCode
+								.toString(16)
+								.padStart(4, "0")}`;
+						}
+						// If it's not a control character, append it as is.
+						else {
+							processedContent += char;
+						}
+					}
+					// Return the processed content re-wrapped in quotes.
+					return `"${processedContent}"`;
+				}
+			);
+
+			console.log(
+				"Sanitized extracted JSON string for parsing:",
+				sanitizedJsonString
+			);
+			// --- End of Sanitization ---
+
+			potentialPlan = JSON.parse(sanitizedJsonString);
+		} else {
+			// Handle invalid source type (null, undefined, number, boolean, etc.)
 			const errorMsg =
-				"Error parsing plan JSON: Could not find a valid JSON object within the response.";
-			console.error(errorMsg, jsonString);
+				"Invalid source provided for plan parsing. Must be a string or a non-null object.";
+			console.error(errorMsg, source);
 			return { plan: null, error: errorMsg };
 		}
-
-		let extractedJsonString = cleanedString.substring(
-			firstBraceIndex,
-			lastBraceIndex + 1
-		);
-
-		// --- 2. Enhanced JSON String Sanitization ---
-		console.log(
-			"Original extracted JSON string for parsing:",
-			extractedJsonString
-		);
-
-		// This regex is more robust for matching string literals. It correctly handles escaped quotes
-		// and avoids matching content outside of valid JSON strings.
-		const stringLiteralRegex = /"((?:\\.|[^"\\])*)"/g;
-
-		// A map of control characters to their escaped representations.
-		const charToEscape: { [key: string]: string } = {
-			"\b": "\\b",
-			"\f": "\\f",
-			"\n": "\\n",
-			"\r": "\\r",
-			"\t": "\\t",
-		};
-
-		const sanitizedJsonString = extractedJsonString.replace(
-			stringLiteralRegex,
-			(match, contentInsideQuotes: string) => {
-				let processedContent = "";
-				for (let i = 0; i < contentInsideQuotes.length; i++) {
-					const char = contentInsideQuotes[i];
-					const charCode = char.charCodeAt(0);
-
-					// If it's a known control character with a short escape, use it.
-					if (charToEscape[char]) {
-						processedContent += charToEscape[char];
-					}
-					// Check for other control characters (U+0000 to U+001F) that must be escaped.
-					else if (charCode >= 0 && charCode <= 0x1f) {
-						// Format to \uXXXX unicode escape sequence.
-						processedContent += `\\u${charCode.toString(16).padStart(4, "0")}`;
-					}
-					// If it's not a control character, append it as is.
-					else {
-						processedContent += char;
-					}
-				}
-				// Return the processed content re-wrapped in quotes.
-				return `"${processedContent}"`;
-			}
-		);
-
-		console.log(
-			"Sanitized extracted JSON string for parsing:",
-			sanitizedJsonString
-		);
-		// --- End of Sanitization ---
-
-		const potentialPlan = JSON.parse(sanitizedJsonString);
 
 		// --- 3. Validate Plan Structure and Content ---
 		if (
@@ -229,12 +247,12 @@ export async function parseAndValidatePlan(
 			!Array.isArray(potentialPlan.steps)
 		) {
 			const errorMsg =
-				"Plan validation failed: The JSON must have a 'planDescription' (string) and 'steps' (array).";
+				"Plan validation failed: The source must represent an object with 'planDescription' (string) and 'steps' (array).";
 			console.error(errorMsg, potentialPlan);
 			return { plan: null, error: errorMsg };
 		}
 
-		// ADDED CHECK: Ensure the steps array is not empty
+		// Ensure the steps array is not empty
 		if (potentialPlan.steps.length === 0) {
 			const errorMsg =
 				"Plan validation failed: The generated plan contains an empty steps array. It must contain at least one step.";
@@ -257,7 +275,8 @@ export async function parseAndValidatePlan(
 				step.step !== i + 1 ||
 				!step.action ||
 				!Object.values(PlanStepAction).includes(step.action) ||
-				typeof step.description !== "string"
+				(typeof step.description !== "string" &&
+					typeof step.description !== "undefined")
 			) {
 				const errorMsg = `Plan validation failed: Step ${
 					i + 1
@@ -279,6 +298,7 @@ export async function parseAndValidatePlan(
 					const errorMsg = `Plan validation failed: Step ${step.step} (${step.action}) requires a non-empty 'path'.`;
 					return { plan: null, error: errorMsg };
 				}
+				// Ensure paths are relative, do not contain '..', and do not start with '/' (which path.isAbsolute typically handles on Unix-like systems)
 				if (path.isAbsolute(step.path) || step.path.includes("..")) {
 					const errorMsg = `Plan validation failed: Path for step ${step.step} must be relative and cannot contain '..'.`;
 					return { plan: null, error: errorMsg };
@@ -310,21 +330,24 @@ export async function parseAndValidatePlan(
 					}
 					break;
 				case PlanStepAction.CreateFile:
+					// Enforce mutual exclusivity of 'content' and 'generate_prompt'
 					if (!isCreateFileStep(step)) {
 						actionSpecificError =
-							"Invalid 'create_file' step. Must have 'path' and either 'content' or 'generate_prompt'.";
+							"Invalid 'create_file' step. Must have 'path' and either 'content' or 'generate_prompt' (mutually exclusive).";
 					}
 					break;
 				case PlanStepAction.ModifyFile:
+					// Enforce 'modification_prompt' is a non-empty string
 					if (!isModifyFileStep(step)) {
 						actionSpecificError =
-							"Invalid 'modify_file' step. Must have 'path' and 'modification_prompt'.";
+							"Invalid 'modify_file' step. Must have 'path' and a non-empty 'modification_prompt'.";
 					}
 					break;
 				case PlanStepAction.RunCommand:
+					// Enforce 'command' is a non-empty string
 					if (!isRunCommandStep(step)) {
 						actionSpecificError =
-							"Invalid 'run_command' step. Must have a 'command'.";
+							"Invalid 'run_command' step. Must have a non-empty 'command'.";
 					}
 					break;
 			}
@@ -363,9 +386,9 @@ export async function parseAndValidatePlan(
 		);
 		return { plan: potentialPlan as ExecutionPlan };
 	} catch (error: any) {
-		const errorMsg = `Error parsing plan JSON: ${
+		const errorMsg = `Error parsing plan source: ${
 			error.message || "An unknown error occurred"
-		}. Please ensure the AI provides valid JSON.`;
+		}. Please ensure the source provides valid JSON or a plan object.`;
 		console.error(errorMsg, error);
 		return { plan: null, error: errorMsg };
 	}

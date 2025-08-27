@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { GenerationConfig } from "@google/generative-ai";
+import { FunctionCall, FunctionCallingMode } from "@google/generative-ai";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import * as sidebarTypes from "../sidebar/common/sidebarTypes";
 import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes";
@@ -18,10 +18,11 @@ import { UrlContextService } from "./urlContextService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 import {
 	createInitialPlanningExplanationPrompt,
-	createPlanningPrompt,
+	createPlanningPromptForFunctionCall, // Modified: Changed to createPlanningPromptForFunctionCall
 } from "../ai/prompts/planningPrompts";
 import { repairJsonEscapeSequences } from "../utils/jsonUtils";
-import { PlanExecutorService } from "./planExecutorService"; // Added import
+import { PlanExecutorService } from "./planExecutorService";
+import { generateExecutionPlanTool } from "../ai/prompts/planFunctions"; // Added: Import generateExecutionPlanTool
 
 export class PlanService {
 	// Audited retry constants and made configurable via VS Code settings
@@ -587,55 +588,47 @@ export class PlanService {
 				workspaceRootUri
 			);
 
-			// 2. Check if parsing failed and if the error is specifically about escaped characters.
+			// 2. If initial parsing failed, attempt repair and re-validation.
 			if (!parsedResult.plan && parsedResult.error) {
-				const errorMessageLower = parsedResult.error.toLowerCase();
-				if (errorMessageLower.includes("bad escaped character")) {
+				console.log(
+					"[PlanService] Initial JSON parsing failed. Attempting programmatic repair."
+				);
+
+				const repairedJsonString = repairJsonEscapeSequences(jsonString);
+
+				// Only re-parse if the repair function actually changed the string.
+				if (repairedJsonString !== jsonString) {
 					console.log(
-						"[PlanService] Detected 'Bad escaped character' error. Attempting programmatic repair."
+						"[PlanService] JSON string modified by repair function. Re-parsing after programmatic repair."
+					);
+					const reParsedResult = await parseAndValidatePlan(
+						repairedJsonString,
+						workspaceRootUri
 					);
 
-					// Attempt programmatic repair.
-					const repairedJsonString = repairJsonEscapeSequences(jsonString);
-
-					// Only re-parse if the repair function actually changed the string.
-					if (repairedJsonString !== jsonString) {
-						console.log(
-							"[PlanService] Re-parsing JSON after programmatic repair."
-						);
-						// 3. Attempt to parse the repaired JSON.
-						const reParsedResult = await parseAndValidatePlan(
-							repairedJsonString,
-							workspaceRootUri
-						);
-
-						if (reParsedResult.plan) {
-							// 4. Repair was successful. Return the repaired plan.
-							console.log("[PlanService] Programmatic JSON repair successful.");
-							return reParsedResult;
-						} else {
-							// Repair failed. Report a combined error.
-							console.warn(
-								"[PlanService] Programmatic JSON repair failed. Original error:",
-								parsedResult.error,
-								"Repair error:",
-								reParsedResult.error
-							);
-							return {
-								plan: null,
-								error: `JSON parsing failed: Original error "${parsedResult.error}". Programmatic repair failed with error: "${reParsedResult.error}".`,
-							};
-						}
+					if (reParsedResult.plan) {
+						// Repair was successful. Return the repaired plan.
+						console.log("[PlanService] Programmatic JSON repair successful.");
+						return reParsedResult;
 					} else {
-						// Repair function didn't change the string, implies no fix was applied or needed for this specific error type.
-						console.log(
-							"[PlanService] Repair function did not alter JSON. Proceeding with original error."
+						// Repair failed. Report a combined error for better diagnostics.
+						console.warn(
+							"[PlanService] Programmatic JSON repair failed. Original error:",
+							parsedResult.error,
+							"Repair attempt error:",
+							reParsedResult.error
 						);
-						// Fallback to the original error.
-						return parsedResult;
+						return {
+							plan: null,
+							error: `JSON parsing failed: Original error: "${parsedResult.error}". Repair attempt also failed with: "${reParsedResult.error}".`,
+						};
 					}
 				} else {
-					// Error is not related to escaped characters, return original result.
+					// Repair function didn't change the string, so no repair was applied or possible for this specific issue.
+					console.log(
+						"[PlanService] Repair function did not alter JSON. Proceeding with original parsing error."
+					);
+					// Fallback to the original error.
 					return parsedResult;
 				}
 			} else {
@@ -658,7 +651,6 @@ export class PlanService {
 	public async generateStructuredPlanAndExecute(
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {
-		let structuredPlanJsonString = "";
 		const token = this.provider.activeOperationCancellationTokenSource?.token;
 		let executablePlan: ExecutionPlan | null = null;
 		let lastError: Error | null = null;
@@ -678,10 +670,7 @@ export class PlanService {
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 
-			const jsonGenerationConfig: GenerationConfig = {
-				responseMimeType: "application/json",
-				temperature: sidebarConstants.TEMPERATURE,
-			};
+			// Removed: jsonGenerationConfig is no longer needed for function calling.
 
 			const recentChanges = this.provider.changeLogger.getChangeLog();
 			const formattedRecentChanges =
@@ -695,14 +684,13 @@ export class PlanService {
 			const urlContextString =
 				this.urlContextService.formatUrlContexts(urlContexts);
 
-			// Generate a single, standard prompt for the AI.
-			const promptForAI = createPlanningPrompt(
+			// Generate a single, standard prompt for the AI for function calling.
+			const promptForAIForFunctionCall = createPlanningPromptForFunctionCall(
 				planContext.type === "chat"
 					? planContext.originalUserRequest
 					: undefined,
 				planContext.projectContext,
 				planContext.type === "editor" ? planContext.editorContext : undefined,
-				undefined, // Removed arguments related to retry attempts or previous errors
 				planContext.chatHistory,
 				planContext.textualPlanExplanation,
 				formattedRecentChanges,
@@ -711,52 +699,38 @@ export class PlanService {
 
 			for (let attempt = 1; attempt <= this.MAX_PLAN_PARSE_RETRIES; attempt++) {
 				console.log(
-					`Attempt ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} to generate structured plan...`
+					`Attempt ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} to generate structured plan (function call)...`
 				);
 				this.provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: `Attempt ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} to generate structured plan...`,
+					value: `Attempt ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} to generate structured plan (function call)...`,
 					isError: false,
 				});
 
 				try {
-					structuredPlanJsonString =
-						await this.provider.aiRequestService.generateWithRetry(
-							[{ text: promptForAI }],
+					const functionCall: FunctionCall | null =
+						await this.provider.aiRequestService.generateFunctionCall(
+							planContext.initialApiKey,
 							sidebarConstants.DEFAULT_FLASH_LITE_MODEL,
-							undefined,
-							"structured plan generation",
-							jsonGenerationConfig,
-							undefined,
+							[{ role: "user", parts: [{ text: promptForAIForFunctionCall }] }],
+							[{ functionDeclarations: [generateExecutionPlanTool] }],
+							FunctionCallingMode.ANY,
 							token
 						);
 
 					if (token?.isCancellationRequested) {
 						throw new Error(ERROR_OPERATION_CANCELLED);
 					}
-					if (!structuredPlanJsonString) {
-						throw new Error("AI failed to generate any response for the plan.");
-					}
-
-					// Markdown stripping
-					structuredPlanJsonString = structuredPlanJsonString
-						.replace(/^\s*/im, "")
-						.replace(/\s*$/im, "")
-						.trim();
-
-					if (structuredPlanJsonString.toLowerCase().startsWith("error:")) {
+					if (!functionCall) {
 						throw new Error(
-							formatUserFacingErrorMessage(
-								new Error(structuredPlanJsonString),
-								"The AI generated an error response for the structured plan. This might be a model issue.",
-								"AI response error: ",
-								planContext.workspaceRootUri
-							)
+							"AI failed to generate a valid function call for the plan."
 						);
 					}
 
+					// Pass functionCall.args (which is an object) to parseAndValidatePlanWithFix
+					// It must be stringified because parseAndValidatePlanWithFix expects a JSON string.
 					const { plan, error } = await this.parseAndValidatePlanWithFix(
-						structuredPlanJsonString,
+						JSON.stringify(functionCall.args),
 						planContext.workspaceRootUri
 					);
 
@@ -802,10 +776,10 @@ export class PlanService {
 						`[PlanService] AI generation or processing failed on attempt ${attempt}:`,
 						lastError?.message
 					);
-
+					// Removed: x;
 					if (attempt < this.MAX_PLAN_PARSE_RETRIES) {
 						await new Promise((resolve) =>
-							setTimeout(resolve, 30000 + attempt * 5000)
+							setTimeout(resolve, 15000 + attempt * 2000)
 						); // Exponential backoff for retries
 						continue;
 					} else {

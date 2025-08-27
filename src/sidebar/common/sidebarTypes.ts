@@ -380,15 +380,7 @@ export type ExtensionToWebviewMessages =
 export interface PlanGenerationContext {
 	type: "chat" | "editor";
 	originalUserRequest?: string;
-	editorContext?: {
-		instruction: string;
-		selectedText: string;
-		fullText: string;
-		languageId: string;
-		filePath: string;
-		documentUri: vscode.Uri;
-		selection: vscode.Range;
-	};
+	editorContext?: EditorContext; // Changed to use the exported EditorContext interface
 	projectContext: string;
 	diagnosticsString?: string;
 	initialApiKey: string;
@@ -426,6 +418,7 @@ export interface EditorContext {
 	filePath: string;
 	documentUri: import("vscode").Uri;
 	selection: import("vscode").Range;
+	diagnosticsString?: string;
 }
 
 export interface AiStreamingState {

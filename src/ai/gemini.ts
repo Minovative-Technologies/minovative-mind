@@ -5,6 +5,8 @@ import {
 	Content,
 	GenerationConfig,
 	Tool,
+	FunctionCall,
+	FunctionCallingMode, // Added FunctionCallingMode import
 } from "@google/generative-ai";
 import { MINO_SYSTEM_INSTRUCTION } from "./prompts/systemInstructions";
 
@@ -229,6 +231,130 @@ export async function* generateContentStream(
 		}
 	} catch (error: any) {
 		console.error(`Gemini (${modelName}): Raw error during stream:`, error);
+
+		if (error instanceof Error && error.message === ERROR_OPERATION_CANCELLED) {
+			throw error;
+		}
+
+		let errorMessage = `An error occurred with the Gemini API (${modelName}).`;
+		const lowerErrorMessage = (error.message || "").toLowerCase();
+		const status = error.httpGoogleError?.code || error.status;
+
+		if (lowerErrorMessage.includes("quota") || status === 429) {
+			throw new Error(ERROR_QUOTA_EXCEEDED);
+		} else if (
+			lowerErrorMessage.includes("api key not valid") ||
+			status === 400 ||
+			status === 403
+		) {
+			errorMessage = `Invalid API Key for Gemini model ${modelName}. Please verify your key.`;
+			resetClient();
+		} else if (
+			lowerErrorMessage.includes("model not found") ||
+			status === 404
+		) {
+			errorMessage = `The model '${modelName}' is not valid or accessible.`;
+			resetClient();
+		} else if (
+			status === 503 ||
+			lowerErrorMessage.includes("service unavailable")
+		) {
+			throw new Error(ERROR_SERVICE_UNAVAILABLE);
+		} else {
+			errorMessage = `Gemini (${modelName}) error: ${error.message}`;
+		}
+
+		throw new Error(errorMessage);
+	}
+}
+
+/**
+ * Generates content and attempts to extract a function call.
+ *
+ * @param apiKey The Google Gemini API key.
+ * @param modelName The specific Gemini model name to use.
+ * @param contents The content array for the Gemini model.
+ * @param tools Array of tools to configure the model with for function calling.
+ * @param functionCallingMode Optional: Specifies the function calling mode (e.g., "AUTO", "NONE", "ANY").
+ * @returns The extracted FunctionCall object or null if not present.
+ */
+export async function generateFunctionCall(
+	apiKey: string,
+	modelName: string,
+	contents: Content[],
+	tools: Tool[],
+	functionCallingMode?: FunctionCallingMode // Modified function signature
+): Promise<FunctionCall | null> {
+	console.log(`Gemini (${modelName}): Attempting to generate function call.`);
+
+	if (!initializeGenerativeAI(apiKey, modelName, tools)) {
+		throw new Error(
+			`Gemini AI client not initialized for function call generation. Please check API key, selected model (${modelName}), and tools.`
+		);
+	}
+	if (!model) {
+		throw new Error(
+			`Gemini model (${modelName}) is not available after initialization attempt for function call.`
+		);
+	}
+
+	try {
+		const requestOptions: {
+			contents: Content[];
+			tools: Tool[];
+			toolConfig?: {
+				functionCallingConfig: {
+					mode: FunctionCallingMode;
+				};
+			};
+		} = {
+			contents: contents,
+			tools: tools,
+		};
+
+		// Add toolConfig with functionCallingConfig.mode if functionCallingMode is provided
+		if (functionCallingMode) {
+			requestOptions.toolConfig = {
+				functionCallingConfig: {
+					mode: functionCallingMode,
+				},
+			};
+		}
+
+		const result = await model.generateContent(requestOptions); // Modified call
+		const response = result.response;
+
+		if (response.promptFeedback?.blockReason) {
+			const { blockReason, safetyRatings } = response.promptFeedback;
+			console.error(
+				`Gemini (${modelName}) function call request blocked. Reason: ${blockReason}. Ratings: ${JSON.stringify(
+					safetyRatings
+				)}`
+			);
+			throw new Error(`Request blocked by Gemini (reason: ${blockReason}).`);
+		}
+
+		const functionCall =
+			response.candidates?.[0]?.content?.parts?.[0]?.functionCall;
+
+		if (functionCall) {
+			console.log(
+				`Gemini (${modelName}): Successfully received function call:`,
+				functionCall
+			);
+			return functionCall;
+		} else {
+			console.warn(
+				`Gemini (${modelName}): No function call found in the response. Full response:`,
+				response
+			);
+			return null;
+		}
+	} catch (error: any) {
+		console.error(
+			`Gemini (${modelName}): Raw error during function call:`,
+			error
+		);
 
 		if (error instanceof Error && error.message === ERROR_OPERATION_CANCELLED) {
 			throw error;

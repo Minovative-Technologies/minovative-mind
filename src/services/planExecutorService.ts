@@ -373,7 +373,7 @@ export class PlanExecutorService {
 					break;
 				case PlanStepAction.ModifyFile:
 					if (isModifyFileStep(step)) {
-						detailedStepDescription = `Modifying file: \`${step.path}\` (AI will apply changes)`;
+						detailedStepDescription = `Modifying file: \`${step.path}\` (content modified by AI)`;
 					} else {
 						detailedStepDescription = `Modifying file`;
 					}
