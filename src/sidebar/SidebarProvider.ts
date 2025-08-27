@@ -907,15 +907,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 		switch (outcome) {
 			case "success":
-				message = `Plan for ("${description}") completed successfully!`;
+				message = `Plan completed successfully!`;
 				isError = false;
 				break;
 			case "cancelled":
-				message = `Plan for ("${description}") was cancelled.`;
+				message = `Plan was cancelled.`;
 				isError = true;
 				break;
 			case "failed":
-				message = `Plan for ("${description}") failed. Check sidebar for details.`;
+				message = `Plan failed. Check sidebar for details.`;
 				isError = true;
 				break;
 		}

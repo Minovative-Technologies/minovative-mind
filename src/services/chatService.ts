@@ -10,7 +10,7 @@ import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes";
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants"; // Import constants for API key and model selection
 
 const AI_CHAT_PROMPT =
-	"Lets discuss and do not code yet. You should only focus on high level thinking in this project, using the project context given to you. Only respone helpfully.";
+	"Lets discuss and do not code yet. You should only focus on high level thinking in this project, using the project context given to you. Only respone helpfully. Make sure to mention what files are being changed or created if any.";
 
 export class ChatService {
 	private urlContextService: UrlContextService;
