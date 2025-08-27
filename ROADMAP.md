@@ -18,17 +18,17 @@ In AI-assisted code generation, a common approach for modification is to have th
 4. **Performance Overhead:** Generating and processing entire file contents, especially for large files, can be computationally intensive for both the AI model and the local system.
 5. **User Interruption:** Frequent, large-scale changes can disrupt a developer's workflow, leading to merge conflicts, unnecessary reformatting, or the need for manual cleanup.
 
-#### The Solution: Surgical Edits via Diff Generation
+#### The Solution: Surgical Edits via AI Function Calling
 
-A "surgical insertion" or "surgical edit" involves applying highly precise, granular changes to the codebase. Instead of replacing the entire file, the AI would be instructed to generate only the necessary additions, deletions, or modifications at specific locations. This can be achieved by having the AI output a structured format like a unified diff or a series of JSON-encoded edit commands.
+A "surgical insertion" or "surgical edit" involves applying highly precise, granular changes to the codebase. Instead of replacing the entire file, the AI would be instructed to call specific, pre-defined functions (tools) designed for code modification. These functions would enable the AI to perform granular additions, deletions, or modifications at specific locations within the file. This approach leverages the AI's ability to understand context and intent, translating it into reliable and structured code operations.
 
-**Benefits of AI-Generated Surgical Edits:**
+**Benefits of AI Function Calling for Surgical Edits:**
 
-1. **Enhanced Safety and Stability:** By focusing only on the specific lines or blocks relevant to the task, the risk of introducing unintended bugs or regressions in unaffected parts of the file is drastically reduced.
-2. **Preservation of Existing Code:** Comments, formatting, and other non-functional aspects of the code are better preserved, ensuring the developer's original intent and style are respected.
-3. **Streamlined Code Review:** Reviewers can easily see the exact changes proposed by the AI, making the review process faster, more focused, and less error-prone.
-4. **Improved Performance:** Transmitting and processing smaller diffs or edit commands is more efficient than handling entire file contents, leading to faster response times.
-5. **Reduced Merge Conflicts:** With more targeted changes, the likelihood of encountering merge conflicts when integrating AI-generated code into concurrent development workflows is minimized.
+1. **Enhanced Safety and Stability:** By leveraging pre-defined functions, changes are executed through a controlled interface, drastically reducing the risk of introducing unintended bugs or regressions in unaffected parts of the file.
+2. **Guaranteed Structured Modifications:** Function calls enforce a structured approach to code changes, ensuring consistency and adherence to predefined operational logic, unlike free-form text generation.
+3. **Preservation of Existing Code:** Direct function calls to modify specific lines or blocks ensure that comments, formatting, and other non-functional aspects of the code are better preserved, respecting the developer's original intent and style.
+4. **Improved Performance:** Function calls, being explicit and targeted, can lead to more efficient processing and execution of changes compared to parsing and applying large diffs.
+5. **Reduced Merge Conflicts:** With highly targeted and structured changes, the likelihood of encountering merge conflicts when integrating AI-generated code into concurrent development workflows is minimized.
 
 ---
 

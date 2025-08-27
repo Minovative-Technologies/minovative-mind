@@ -160,14 +160,14 @@ export function createInitialPlanningExplanationPrompt(
     You are the expert software engineer for me. Your task is to ONLY explain your detailed, step-by-step plan in Markdown to fulfill my request, ONLY focused on solving the problem or implementing the feature.
 
     **Instructions for Plan Explanation:**
-    *   **Goal**: Provide a clear, comprehensive, and human-readable plan. Use Markdown (e.g., lists, bold text).
+    *   **Goal**: ONLY Provide a clear, comprehensive, highlevel thinking, and human-readable plan. Use Markdown (e.g., lists, bold text).
     *   **Context & Analysis**: ${mainInstructions} Refer to the "Broader Project Context" which includes detailed symbol information. ${
 		editorContext && diagnosticsString
 			? "**For '/fix' requests, specifically detail how your plan addresses all 'Relevant Diagnostics'.**"
 			: ""
 	}
     *   **Completeness & Clarity**: Cover all necessary steps. Describe each step briefly (e.g., "Create 'utils.ts'", "Modify 'main.ts' to import utility", "Install 'axios' via npm").
-    *   **Output Format**: **DO NOT output any JSON.** Your entire response must be human-readable text.
+    *   **Output Format**: **DO NOT output any JSON or Code.** Your entire response must be human-readable text.
     *   **Production Readiness**: Generate production-ready code. Prioritize robustness, maintainability, security, cleanliness, efficiency, and industry best practices.
 
     
