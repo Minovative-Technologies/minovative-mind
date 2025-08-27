@@ -20,6 +20,7 @@ import {
 	selectRelevantFilesAI,
 	SelectRelevantFilesAIOptions,
 	MAX_FILE_SUMMARY_LENGTH_FOR_AI_SELECTION, // Import for summary length
+	clearAISelectionCache, // Import clearAISelectionCache for cache invalidation
 } from "../context/smartContextSelector";
 import {
 	buildContextString,
@@ -154,6 +155,13 @@ export class ContextService {
 				);
 				clearScanCache(workspacePath); // Ensure clearScanCache is imported
 				this.areDependenciesComputed = false; // Invalidate computed dependencies
+				// --- New addition: Clear AI selection cache ---
+				console.log(
+					`[ContextService] Clearing AI selection cache for workspace: ${workspacePath} due to file change.`
+				);
+				// Ensure clearAISelectionCache is available in this scope via import
+				clearAISelectionCache(workspacePath);
+				// --- End of new addition ---
 			} else {
 				console.warn(
 					`[ContextService] File change detected outside of any known workspace folder for URI: ${uri.toString()}`

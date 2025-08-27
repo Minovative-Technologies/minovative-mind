@@ -1,7 +1,14 @@
 import * as vscode from "vscode";
-import { Content, GenerationConfig } from "@google/generative-ai";
+import {
+	Content,
+	GenerationConfig,
+	FunctionCall,
+	Tool,
+	FunctionCallingMode, // Added FunctionCallingMode import
+} from "@google/generative-ai";
 import { ApiKeyManager } from "../sidebar/managers/apiKeyManager";
 import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes";
+import * as gemini from "../ai/gemini";
 import {
 	ERROR_OPERATION_CANCELLED,
 	ERROR_QUOTA_EXCEEDED,
@@ -448,5 +455,55 @@ export class AIRequestService {
 			enableTimeout: true,
 			cancellationToken: token, // Pass the cancellation token to ParallelProcessor
 		});
+	}
+
+	/**
+	 * Generates a function call response from the AI based on provided content and tools.
+	 * It includes cancellation token support to abort long-running requests.
+	 * @param apiKey The API key to use for the request.
+	 * @param modelName The name of the AI model to use (e.g., 'gemini-pro').
+	 * @param contents An array of `Content` objects representing the conversation history or prompt.
+	 * @param tools An array of `Tool` objects defining the functions the model can call.
+	 * @param functionCallingMode An optional `FunctionCallingMode` to specify how function calls are handled (e.g., "AUTO", "NONE", "ANY").
+	 * @param token An optional `CancellationToken` to signal if the operation should be cancelled.
+	 * @returns A Promise that resolves to a `FunctionCall` object, or rejects if the operation is cancelled or an error occurs.
+	 */
+	public async generateFunctionCall(
+		apiKey: string,
+		modelName: string,
+		contents: Content[],
+		tools: Tool[],
+		functionCallingMode?: FunctionCallingMode, // Added parameter
+		token?: vscode.CancellationToken
+	): Promise<FunctionCall> {
+		if (token?.isCancellationRequested) {
+			console.log(
+				"[AIRequestService] Function call generation cancelled at start."
+			);
+			throw new Error(gemini.ERROR_OPERATION_CANCELLED);
+		}
+
+		const functionCall = await gemini.generateFunctionCall(
+			apiKey,
+			modelName,
+			contents,
+			tools,
+			functionCallingMode // Pass the new parameter here
+		);
+
+		if (functionCall === null) {
+			throw new Error(
+				`AI response did not contain a valid function call for model ${modelName}`
+			);
+		}
+
+		if (token?.isCancellationRequested) {
+			console.log(
+				"[AIRequestService] Function call generation cancelled after response."
+			);
+			throw new Error(gemini.ERROR_OPERATION_CANCELLED);
+		}
+
+		return functionCall;
 	}
 }

@@ -1,4 +1,4 @@
-# Now available free on VS Marketplace
+# _The Holy Grail_ of AI Coding Agents is now available free on VS Code Marketplace
 
 **IMPORTANT**: _Search up "Minovative Mind" in the VS Marketplace or Extensions Store in the VS Code application_
 

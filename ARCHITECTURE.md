@@ -1,4 +1,4 @@
-# Minovative Mind (AI Agent): An Integrated AI-Driven Development & Automation Platform for VS Code
+# The Holy Grail of AI agents: Minovative Mind, an Integrated AI-Driven Development & Automation Platform for VS Code
 
 A deeper analysis of the file structure, class responsibilities, and how different components interact, here is a more comprehensive breakdown of the systems that work together in this project. This results in approximately **6** core, distinct systems:
 
@@ -10,7 +10,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 ---
 
-## The [Creator](https://github.com/Quarantiine) himself vibe coded these systems below mostly using the project itself to build the monolithic application called Minovative Mind
+## The [Creator](https://github.com/Quarantiine) himself intelligently vibe coded these systems below mostly using the AI agent itself to build the monolithic application you see below
 
 ### Core Extension (Foundation)
 
@@ -41,13 +41,13 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 1. **AI Model Integration (Gemini Client)**:
 
-   - **Responsibility**: Provides the low-level, direct interface for communicating with the Google Gemini API. This includes handling API initialization, managing streaming responses from the model, performing basic error mapping for common API issues, and accurately counting tokens for both input prompts and generated responses. It supports various Gemini models (e.g., `gemini-2.5-pro`, `flash`, `flash-lite`). Users can input their own API key to utilize these services.
+   - **Responsibility**: Provides the low-level, direct interface for communicating with the Google Gemini API. This includes handling API initialization, managing streaming responses from the model, performing basic error mapping for common API issues, and accurately counting tokens for both input prompts and generated responses. It supports various Gemini models (e.g., `gemini-2.5-pro`, `flash`, `flash-lite`). Users can input their own API key to utilize these services. The client now supports configuring the `FunctionCallingMode` for API requests, enhancing control over AI interaction behavior. Model selection for this client is managed by higher-level services like `ChatService` and `PlanService`.
    - **Key Files**: `src/ai/gemini.ts`.
    - **Uses AI**: Yes (direct API calls).
 
 2. **AI Request Orchestration & Robustness**:
 
-   - **Responsibility**: Manages the overall process of making AI requests with a focus on reliability and efficiency. It implements robust **retry logic** for transient network errors, API rate limits, or service unavailability, and handles **cancellation requests** allowing users to terminate ongoing AI operations. It also orchestrates and optimizes concurrent AI calls through **parallel processing and batching** via integration with `src/utils/parallelProcessor.ts`, and reports token usage to `src/services/tokenTrackingService.ts`. This system acts as a critical abstraction layer over the direct API client, enhancing scalability and fault tolerance.
+   - **Responsibility**: Manages the overall process of making AI requests with a focus on reliability and efficiency. It implements robust **retry logic** for transient network errors, API rate limits, or service unavailability, and handles **cancellation requests** allowing users to terminate ongoing AI operations. It also orchestrates and optimizes concurrent AI calls through **parallel processing and batching** via integration with `src/utils/parallelProcessor.ts`, and reports token usage to `src/services/tokenTrackingService.ts`. This system acts as a critical abstraction layer over the direct API client, enhancing scalability and fault tolerance. Specifically, `aiRequestService.generateFunctionCall` now accepts and forwards the `functionCallingMode` parameter, which is leveraged to enforce `FunctionCallingMode.ANY` for plan generation workflows. This requires careful adjustment of argument passing, including the cancellation token, to ensure correct handling of this mode. It dynamically accepts model names from calling services for flexible AI model selection.
    - **Key Files**: `src/services/aiRequestService.ts` (`AIRequestService` class, `generateWithRetry`, `generateMultipleInParallel`, `generateInBatches`, `processFilesInParallel`).
    - **Uses AI**: Yes (orchestrates all direct AI calls).
 
@@ -131,20 +131,24 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
    - **Responsibility**: Manages the full lifecycle of AI-generated action plans, from initial conceptualization to automated execution and post-execution handling. This includes:
      - **Initial Plan Generation**: Uses lightweight AI models (Gemini Flash Lite) via `src/services/aiRequestService.ts` to generate high-level textual plan explanations based on user requests and project context (`createInitialPlanningExplanationPrompt`).
-     - **Structured Planning**: Guides the AI (also via `aiRequestService.ts` and `createPlanningPrompt`) to convert textual explanations into detailed, multi-step executable JSON plans, strictly adhering to the schema defined in `src/ai/workflowPlanner.ts`.
-     - **Validation & Repair**: Employs `parseAndValidatePlanWithFix` (which wraps `parseAndValidatePlan` from `workflowPlanner.ts`) to rigorously validate generated plans against the schema, including programmatic repair for common JSON escape sequence errors that AI models might introduce.
+     - **Structured Planning**: Utilizes `createPlanningPromptForFunctionCall` to guide the AI, via `aiRequestService.ts`, to convert textual explanations into detailed, multi-step executable JSON plans. For this, `FunctionCallingMode.ANY` is specifically applied to force the AI to generate a `generateExecutionPlan` tool call, ensuring a deterministic JSON output that strictly adheres to the schema defined in `src/ai/workflowPlanner.ts`. This strategic use of 'ANY' mode is crucial for the reliability of automated planning.
+     - **Validation & Repair**: Employs `parseAndValidatePlanWithFix` (which wraps `parseAndValidatePlan` from `workflowPlanner.ts`) to rigorously validate generated plans against the schema, including programmatic repair for common JSON escape sequence errors that AI models might introduce. With `FunctionCallingMode.ANY` now enforcing a tool call for planning, the focus of validation shifts more heavily towards the content and structure of the `functionCall.args` (the JSON plan) itself, ensuring it's syntactically correct and semantically valid, rather than primarily checking if a function call was made. `parseAndValidatePlanWithFix` and its underlying repair mechanisms remain critical for handling any malformed JSON arguments.
      - **Step Execution Logic**: Interprets and executes each concrete step of the structured plan (e.g., `_handleCreateDirectoryStep`, `_handleCreateFileStep`, `_handleModifyFileStep`, `_handleRunCommandStep`), managing step-level retries for transient errors and providing user intervention options (retry, skip, cancel).
      - **File System & Code Integration**: Directly utilizes `enhancedCodeGenerator` (from `src/ai/enhancedCodeGeneration.ts`) for AI-driven file creation and modification, `gitConflictResolutionService.ts` for automated conflict resolution in specific scenarios, `commandExecution.ts` for securely running shell commands (with user confirmation), and `ProjectChangeLogger.ts` for meticulously recording all file modifications.
      - **User Interaction**: Manages user prompts for command execution confirmation, provides real-time progress updates (`_logStepProgress`), handles comprehensive error reporting (`_reportStepError`), and notifies the user upon plan completion or cancellation. It also tracks and persists the overall execution outcome and changes for review and potential reversion.
    - **Key Files**: `src/services/planService.ts` (`PlanService` class, `handleInitialPlanRequest`, `initiatePlanFromEditorAction`, `generateStructuredPlanAndExecute`, `_executePlan`, `_executePlanSteps`, `parseAndValidatePlanWithFix`), `src/ai/workflowPlanner.ts`, `src/services/aiRequestService.ts`, `src/ai/enhancedCodeGeneration.ts`, `src/services/gitConflictResolutionService.ts`, `src/utils/commandExecution.ts`, `src/workflow/ProjectChangeLogger.ts`.
    - **Uses AI**: Yes (for initial textual plan, structured plan generation, and code generation/modification within plan steps).
+   - A key distinction exists in AI model usage: general chat interactions typically use a lightweight model for responsiveness, while structured plan generation prioritizes accuracy and capability, often leveraging a model optimized for function calling.
+     - **Chat Model Usage**: `ChatService` (specifically the `handleRegularChat` method) consistently utilizes the `DEFAULT_FLASH_LITE_MODEL` for general conversational interactions, ensuring speed and cost-effectiveness.
+     - **Plan Model Usage**: For initial plan generation, `PlanService` retrieves the `modelName` from user settings (via `sidebarConstants.MODEL_SELECTION_STORAGE_KEY`). This applies to both chat-initiated (`handleInitialPlanRequest`) and editor-initiated (`initiatePlanFromEditorAction`) plans. If no user setting is found, it defaults to `DEFAULT_FLASH_LITE_MODEL` for initial textual plan explanations.
+     - **Model Usage in Execution**: When `generateStructuredPlanAndExecute` is called, the `modelName` from the `planContext` (which was determined during the initial plan generation phase) is used for all subsequent AI calls within that plan's execution, including structured plan generation and any AI-driven code modifications.
 
 3. **Project Change Logging**:
 
    - **Responsibility**: Provides a comprehensive, auditable log of all file system modifications (creations, modifications, deletions) performed by AI-driven workflows. It meticulously tracks individual changes (`FileChangeEntry`) during an active plan execution and then archives them into `RevertibleChangeSet` objects upon successful plan completion, ensuring a traceable and reversible development process.
    - **Key Files**: `src/workflow/ProjectChangeLogger.ts`
    - **Key Structures**: `FileChangeEntry` (records `filePath`, `changeType`, `summary`, `diffContent`, `timestamp`, `originalContent`, `newContent` for individual file changes), `RevertibleChangeSet` (groups related `FileChangeEntry` objects for a single completed plan execution, along with a unique `id` and `summary`).
-   - **Key Methods**: `logChange` (adds individual changes to the current in-memory log buffer), `getChangeLog` (retrieves the current set of changes), `clear` (resets the current log buffer), `saveChangesAsLastCompletedPlan` (transfers current changes to an archived `RevertibleChangeSet` and clears the buffer), `getCompletedPlanChangeSets` (retrieves all archived change sets), `popLastCompletedPlanChanges` (removes the most recent archived set from the stack), `clearAllCompletedPlanChanges`.
+   - **Key Methods**: `logChange` (adds individual changes to the current in-memory log buffer), `getChangeLog` (retrieves the current set of changes), `clear` (resets the current log buffer), `saveChangesAsLastCompletedPlan` (transfers current changes to an archived `RevertibleChangeSet` and clears the buffer), `getCompletedPlanChangeSets` (retrieves all archived change sets), `popLastCompletedPlanChanges` (removes the most recent archived set from the stack), `clearAllCompletedPlanChanges`).
    - **Uses AI**: No (records actions taken by the system, not directly by AI).
 
 4. **Reversion Service**:

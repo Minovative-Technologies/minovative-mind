@@ -26,6 +26,7 @@ import {
 } from "./prompts/enhancedCodeGenerationPrompts";
 import { CodeValidationService } from "../services/codeValidationService";
 import { DEFAULT_SIZE } from "../sidebar/common/sidebarConstants";
+import { GenerationConfig } from "@google/generative-ai";
 
 // Re-export these types to make them accessible to other modules that import from this file.
 export type {
@@ -56,7 +57,8 @@ export class EnhancedCodeGenerator {
 		generatePrompt: string,
 		context: EnhancedGenerationContext,
 		modelName: string,
-		token?: vscode.CancellationToken
+		token?: vscode.CancellationToken,
+		generationConfig?: GenerationConfig // New parameter
 	): Promise<{ content: string; validation: CodeValidationResult }> {
 		const languageId = getLanguageId(path.extname(filePath));
 		const streamId = crypto.randomUUID();
@@ -80,7 +82,9 @@ export class EnhancedCodeGenerator {
 				generationContext,
 				modelName,
 				streamId,
-				token
+				token,
+				undefined, // Explicitly pass undefined for onCodeChunkCallback
+				generationConfig
 			);
 			if (!initialResult.isValid) {
 				return {
@@ -237,7 +241,8 @@ export class EnhancedCodeGenerator {
 		modelName: string,
 		streamId: string,
 		token?: vscode.CancellationToken,
-		onCodeChunkCallback?: (chunk: string) => Promise<void> | void
+		onCodeChunkCallback?: (chunk: string) => Promise<void> | void,
+		generationConfig?: GenerationConfig // New parameter
 	): Promise<CodeValidationResult> {
 		const enhancedPrompt = createEnhancedGenerationPrompt(
 			filePath,
@@ -250,7 +255,7 @@ export class EnhancedCodeGenerator {
 				modelName,
 				undefined,
 				"enhanced file generation",
-				undefined,
+				generationConfig, // Pass generationConfig here
 				{
 					onChunk: async (chunk) =>
 						this._streamChunk(streamId, filePath, chunk, onCodeChunkCallback),
@@ -265,18 +270,6 @@ export class EnhancedCodeGenerator {
 				isAIOutputLikelyErrorMessage(cleanedRawContent) ||
 				cleanedRawContent.trim() === "/"
 			) {
-				const errorMessage = `AI generated invalid or unexpectedly short content for file '${filePath}'. Raw response was: '${cleanedRawContent.substring(
-					0,
-					100
-				)}...'`;
-				console.error(`[EnhancedCodeGenerator] ${errorMessage}`);
-				this.postMessageToWebview({
-					type: "statusUpdate",
-					value: `AI generated invalid content for '${path.basename(
-						filePath
-					)}'. Please review the prompt or try again.`,
-					isError: true,
-				});
 				return {
 					isValid: false,
 					finalContent: cleanedRawContent, // Return raw content for debugging
@@ -366,18 +359,6 @@ export class EnhancedCodeGenerator {
 			isAIOutputLikelyErrorMessage(modifiedContent) ||
 			modifiedContent.trim() === "/"
 		) {
-			const errorMessage = `AI generated invalid or unexpectedly short content for file '${filePath}'. Raw response was: '${modifiedContent.substring(
-				0,
-				100
-			)}...'`;
-			console.error(`[EnhancedCodeGenerator] ${errorMessage}`);
-			this.postMessageToWebview({
-				type: "statusUpdate",
-				value: `AI generated invalid content for '${path.basename(
-					filePath
-				)}'. Please review the prompt or try again.`,
-				isError: true,
-			});
 			return {
 				content: modifiedContent, // Ensure modifiedContent is returned for debugging
 				validation: {

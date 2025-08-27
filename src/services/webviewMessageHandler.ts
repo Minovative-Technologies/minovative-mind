@@ -179,7 +179,6 @@ export async function handleWebviewMessage(
 		case "chatMessage": {
 			await provider.startUserOperation(); // Start the operation and set generating state
 			const userMessageText = validatedData.value;
-			const groundingEnabled = validatedData.groundingEnabled ?? false;
 			const incomingImageParts = validatedData.imageParts; // Array of ImageInlineData | undefined
 
 			// Handle /commit command first (existing logic)
@@ -237,10 +236,7 @@ export async function handleWebviewMessage(
 
 			provider.chatHistoryManager.addHistoryEntry("user", userHistoryParts);
 
-			await provider.chatService.handleRegularChat(
-				userHistoryParts,
-				groundingEnabled
-			);
+			await provider.chatService.handleRegularChat(userHistoryParts);
 			break;
 		}
 
