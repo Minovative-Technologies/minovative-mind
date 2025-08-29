@@ -38,55 +38,6 @@ export async function handleWebviewMessage(
 
 	const validatedData = parseResult.data; // Use validated data from now on
 
-	// Prevent new operations if one is ongoing
-	// `allowedDuringBackground` includes messages that can run concurrently,
-	// are follow-up actions, or are designed to interrupt/redirect existing operations.
-	const allowedDuringBackground = [
-		"webviewReady",
-		"requestDeleteConfirmation",
-		"saveChatRequest",
-		"loadChatRequest",
-		"selectModel",
-		"requestAuthState",
-		"deleteSpecificMessage",
-		"confirmCommit", // Follow-up to commit generation
-		"cancelCommit", // Follow-up to commit generation
-		"openExternalLink",
-		"confirmPlanExecution", // Allowed as a follow-up action to a pending plan
-		"retryStructuredPlanGeneration", // Allowed as a follow-up action to a failed/declined plan
-		"openFile", // Allowed as a direct user interaction
-		"toggleRelevantFilesDisplay", // Allowed as a UI interaction
-		"openSettingsPanel",
-		"universalCancel", // Universal cancellation message, must be allowed during background operations
-		"editChatMessage", // Allowed to interrupt/redirect existing operations
-		"getTokenStatistics", // Allow token statistics requests during background operations
-		"getCurrentTokenEstimates", // Allow current token estimates during background operations
-		"openSidebar", // Allow opening sidebar during background operations
-		"generatePlanPromptFromAIMessage", // Allow this new message type during background operations
-		"revertRequest",
-		"requestClearChatConfirmation", // Allowed for user confirmation flow
-		"confirmClearChatAndRevert", // Allowed as a direct user interaction during clear chat flow
-		"cancelClearChat", // Allowed as a direct user interaction during clear chat flow
-		"requestWorkspaceFiles", // Allow workspace file requests during background operations
-		"operationCancelledConfirmation", // Allowed to update UI state after cancellation
-	];
-
-	if (
-		provider.isOperationInProgress() &&
-		!allowedDuringBackground.includes(validatedData.type)
-	) {
-		console.warn(
-			`Message type "${validatedData.type}" blocked because an operation is in progress.`
-		);
-		provider.postMessageToWebview({
-			type: "statusUpdate",
-			value:
-				"An operation is already in progress. Please wait for it to complete or cancel it before starting a new one.",
-			isError: true,
-		});
-		return;
-	}
-
 	switch (validatedData.type) {
 		case "universalCancel":
 			console.log("[MessageHandler] Received universal cancellation request.");
