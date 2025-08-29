@@ -19,6 +19,70 @@ export class ChatService {
 		this.urlContextService = new UrlContextService();
 	}
 
+	private _postAiResponseEndAndCleanup(
+		tokenSourceForThisOperation: vscode.CancellationTokenSource,
+		success: boolean,
+		finalAiResponseText: string | null
+	): void {
+		const isThisOperationStillActiveGlobally =
+			this.provider.activeOperationCancellationTokenSource ===
+			tokenSourceForThisOperation;
+
+		if (isThisOperationStillActiveGlobally) {
+			if (this.provider.currentAiStreamingState) {
+				this.provider.currentAiStreamingState.isComplete = true;
+			}
+
+			const isCancellation = finalAiResponseText === ERROR_OPERATION_CANCELLED;
+
+			if (isCancellation) {
+				this.provider.endCancellationOperation();
+			}
+
+			this.provider.postMessageToWebview({
+				type: "aiResponseEnd",
+				success: success,
+				error: isCancellation
+					? "Chat generation cancelled."
+					: success
+					? null
+					: finalAiResponseText,
+			});
+
+			tokenSourceForThisOperation.dispose();
+			this.provider.activeOperationCancellationTokenSource = undefined;
+
+			this.provider.chatHistoryManager.restoreChatHistoryToWebview();
+		} else {
+			tokenSourceForThisOperation.dispose();
+			console.log(
+				"[ChatService] Old chat operation's finally block detected new operation, skipping global state modification."
+			);
+		}
+	}
+
+	private _extractUserMessageText(
+		userContentParts: HistoryEntryPart[]
+	): string {
+		return userContentParts
+			.filter((part): part is { text: string } => "text" in part)
+			.map((part) => part.text)
+			.join("\n");
+	}
+
+	private _buildInitialSystemPrompt(
+		projectContextString: string,
+		urlContextString?: string
+	): HistoryEntryPart[] {
+		return [
+			{
+				text: `${AI_CHAT_PROMPT} \n\nProject Context:\n${projectContextString}${
+					urlContextString ? `\n\n${urlContextString}` : ""
+				}`,
+			},
+		];
+	}
+
 	public async handleRegularChat(
 		userContentParts: HistoryEntryPart[], // Modified signature
 		groundingEnabled: boolean = false
@@ -37,28 +101,21 @@ export class ChatService {
 		let finalAiResponseText: string | null = null;
 
 		// Add checks for apiKey and modelName before initialization
-		if (!apiKey) {
-			vscode.window.showErrorMessage(
-				"Gemini API key is not set. Please set it in VS Code settings to use chat features."
-			);
-			this.provider.postMessageToWebview({
-				type: "aiResponseEnd",
-				success: false,
-				error: "Gemini API key is not set.",
-			});
-			return; // Exit early if API key is missing
-		}
+		if (!apiKey || !modelName) {
+			const errorMessage = !apiKey
+				? "Gemini API key is not set. Please set it in VS Code settings to use chat features."
+				: "Gemini model is not selected. Please select one in VS Code settings to use chat features.";
+			const errorDetail = !apiKey
+				? "Gemini API key is not set."
+				: "Gemini model is not selected.";
 
-		if (!modelName) {
-			vscode.window.showErrorMessage(
-				"Gemini model is not selected. Please select one in VS Code settings to use chat features."
-			);
+			vscode.window.showErrorMessage(errorMessage);
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
 				success: false,
-				error: "Gemini model is not selected.",
+				error: errorDetail,
 			});
-			return; // Exit early if model name is missing
+			return;
 		}
 
 		// Call initializeGenerativeAI with apiKey, modelName, and toolConfig.
@@ -80,10 +137,8 @@ export class ChatService {
 		}
 
 		// Extract text content for services that only handle text (UrlContextService, ContextService)
-		const userMessageTextForContext = userContentParts
-			.filter((part): part is { text: string } => "text" in part)
-			.map((part) => part.text)
-			.join("\n");
+		const userMessageTextForContext =
+			this._extractUserMessageText(userContentParts);
 
 		try {
 			// Automatically process URLs in the user message for context
@@ -123,13 +178,11 @@ export class ChatService {
 			});
 
 			// Revise construction of input for aiRequestService.generateWithRetry
-			const initialSystemPrompt: HistoryEntryPart[] = [
-				{
-					text: `${AI_CHAT_PROMPT} \n\nProject Context:\n${
-						projectContext.contextString
-					}${urlContextString ? `\n\n${urlContextString}` : ""}`,
-				},
-			];
+			const initialSystemPrompt: HistoryEntryPart[] =
+				this._buildInitialSystemPrompt(
+					projectContext.contextString,
+					urlContextString
+				);
 			const fullUserTurnContents: HistoryEntryPart[] = [
 				...initialSystemPrompt,
 				...userContentParts, // Append the direct user input (text + images)
@@ -201,60 +254,11 @@ export class ChatService {
 				this.provider.currentAiStreamingState.isError = true;
 			}
 		} finally {
-			// Check if *this* operation's token source is still the one actively managed by the provider.
-			// This prevents cleanup logic from interfering with a new operation that might have started.
-			const isThisOperationStillActiveGlobally =
-				this.provider.activeOperationCancellationTokenSource ===
-				tokenSourceForThisOperation;
-
-			if (isThisOperationStillActiveGlobally) {
-				// === Global Cleanup (Operation is truly finished and is the last one) ===
-				// Mark the provider's current streaming state as complete.
-				if (this.provider.currentAiStreamingState) {
-					this.provider.currentAiStreamingState.isComplete = true;
-				}
-
-				// Determine if the operation was cancelled to set the appropriate error message.
-				const isCancellation =
-					finalAiResponseText === ERROR_OPERATION_CANCELLED;
-
-				// If cancellation occurred and this was the active operation, notify SidebarProvider
-				if (isCancellation) {
-					this.provider.endCancellationOperation();
-				}
-
-				// Notify the webview that the AI response has ended.
-				this.provider.postMessageToWebview({
-					type: "aiResponseEnd",
-					success: success, // Pass the success status from the try/catch block.
-					error: isCancellation
-						? "Chat generation cancelled."
-						: success
-						? null // No error if successful.
-						: finalAiResponseText, // Pass the actual error message otherwise.
-				});
-
-				// Dispose of this operation's specific token source.
-				tokenSourceForThisOperation.dispose();
-				// Clear the provider's reference to the active operation token source.
-				this.provider.activeOperationCancellationTokenSource = undefined;
-
-				// Restore the chat history to the webview, reflecting the final state.
-				this.provider.chatHistoryManager.restoreChatHistoryToWebview();
-				// === End Global Cleanup ===
-			} else {
-				// === Local Cleanup Only (New operation has started) ===
-				// A new AI operation has superseded this one.
-				// Only clean up resources specific to *this* operation.
-				// Do NOT modify global provider state (activeOperationCancellationTokenSource, streaming state, history).
-
-				// Dispose of this operation's specific token source.
-				tokenSourceForThisOperation.dispose();
-				console.log(
-					"[ChatService] Old chat operation's finally block detected new operation, skipping global state modification."
-				);
-				// === End Local Cleanup Only ===
-			}
+			this._postAiResponseEndAndCleanup(
+				tokenSourceForThisOperation,
+				success,
+				finalAiResponseText
+			);
 		}
 	}
 
@@ -316,10 +320,9 @@ export class ChatService {
 
 			const userContentPartsForRegen = editedUserMessageEntry.parts; // Get HistoryEntryPart[]
 			// Extract text content for services that only handle text
-			const userMessageTextForContext = userContentPartsForRegen
-				.filter((part): part is { text: string } => "text" in part)
-				.map((part) => part.text)
-				.join("\n");
+			const userMessageTextForContext = this._extractUserMessageText(
+				userContentPartsForRegen
+			);
 
 			// 4. Call contextService.buildProjectContext using token and userMessageText (text-only for context).
 			const projectContext = await contextService.buildProjectContext(
@@ -350,11 +353,8 @@ export class ChatService {
 			});
 
 			// Construct the full user turn contents, including system prompt and user input
-			const initialSystemPrompt: HistoryEntryPart[] = [
-				{
-					text: `${AI_CHAT_PROMPT} \n\nProject Context:\n${projectContext.contextString}`,
-				},
-			];
+			const initialSystemPrompt: HistoryEntryPart[] =
+				this._buildInitialSystemPrompt(projectContext.contextString, undefined);
 			const fullUserTurnContents: HistoryEntryPart[] = [
 				...initialSystemPrompt,
 				...userContentPartsForRegen, // Append the direct user input (text + images)
@@ -422,60 +422,11 @@ export class ChatService {
 				);
 			}
 		} finally {
-			// Check if *this* operation's token source is still the one actively managed by the provider.
-			// This prevents cleanup logic from interfering with a new operation that might have started.
-			const isThisOperationStillActiveGlobally =
-				this.provider.activeOperationCancellationTokenSource ===
-				tokenSourceForThisOperation;
-
-			if (isThisOperationStillActiveGlobally) {
-				// === Global Cleanup (Operation is truly finished and is the last one) ===
-				// Mark the provider's current streaming state as complete.
-				if (this.provider.currentAiStreamingState) {
-					this.provider.currentAiStreamingState.isComplete = true;
-				}
-
-				// Determine if the operation was cancelled to set the appropriate error message.
-				const isCancellation =
-					finalAiResponseText === ERROR_OPERATION_CANCELLED;
-
-				// If cancellation occurred and this was the active operation, notify SidebarProvider
-				if (isCancellation) {
-					this.provider.endCancellationOperation();
-				}
-
-				// Notify the webview that the AI response has ended.
-				this.provider.postMessageToWebview({
-					type: "aiResponseEnd",
-					success: success, // Pass the success status from the try/catch block.
-					error: isCancellation
-						? "Chat generation cancelled."
-						: success
-						? null // No error if successful.
-						: finalAiResponseText, // Pass the actual error message otherwise.
-				});
-
-				// Dispose of this operation's specific token source.
-				tokenSourceForThisOperation.dispose();
-				// Clear the provider's reference to the active operation token source.
-				this.provider.activeOperationCancellationTokenSource = undefined;
-
-				// Restore the chat history to the webview, reflecting the final state.
-				this.provider.chatHistoryManager.restoreChatHistoryToWebview();
-				// === End Global Cleanup ===
-			} else {
-				// === Local Cleanup Only (New operation has started) ===
-				// A new AI operation has superseded this one.
-				// Only clean up resources specific to *this* operation.
-				// Do NOT modify global provider state (activeOperationCancellationTokenSource, streaming state, history).
-
-				// Dispose of this operation's specific token source.
-				tokenSourceForThisOperation.dispose();
-				console.log(
-					"[ChatService] Old regeneration operation's finally block detected new operation, skipping global state modification."
-				);
-				// === End Local Cleanup Only ===
-			}
+			this._postAiResponseEndAndCleanup(
+				tokenSourceForThisOperation,
+				success,
+				finalAiResponseText
+			);
 
 			// Reset the 'isEditingMessageActive' flag. This flag indicates the UI state related to an edit attempt,
 			// and it should be reset after the regeneration attempt completes (whether successful, cancelled, or failed),
