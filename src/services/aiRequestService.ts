@@ -4,7 +4,7 @@ import {
 	GenerationConfig,
 	FunctionCall,
 	Tool,
-	FunctionCallingMode, // Added FunctionCallingMode import
+	FunctionCallingMode,
 } from "@google/generative-ai";
 import { ApiKeyManager } from "../sidebar/managers/apiKeyManager";
 import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes";
@@ -12,7 +12,6 @@ import * as gemini from "../ai/gemini";
 import {
 	ERROR_OPERATION_CANCELLED,
 	ERROR_QUOTA_EXCEEDED,
-	ERROR_SERVICE_UNAVAILABLE,
 	generateContentStream,
 	countGeminiTokens,
 } from "../ai/gemini";
@@ -75,7 +74,7 @@ export class AIRequestService {
 	 * It handles API key rotation on quota errors, retries, and cancellation.
 	 */
 	public async generateWithRetry(
-		userContentParts: HistoryEntryPart[], // Changed parameter from prompt: string
+		userContentParts: HistoryEntryPart[],
 		modelName: string,
 		history: readonly HistoryEntry[] | undefined,
 		requestType: string = "request",
@@ -257,7 +256,7 @@ export class AIRequestService {
 						finalOutputTokens, // Use the accurately counted output tokens
 						requestType,
 						modelName,
-						totalInputTextForContext.length > 1000 // Use the full input context for tracking
+						totalInputTextForContext.length > 1000
 							? totalInputTextForContext.substring(0, 1000) + "..."
 							: totalInputTextForContext
 					);
@@ -306,28 +305,6 @@ export class AIRequestService {
 					}
 					consecutiveTransientErrorCount++;
 					continue;
-				} else if (errorMessage === ERROR_SERVICE_UNAVAILABLE) {
-					const currentDelay = Math.min(
-						maxDelayMs,
-						baseDelayMs * 2 ** consecutiveTransientErrorCount
-					);
-					console.warn(
-						`[AIRequestService] Service unavailable for model ${modelName}. Retrying after ${(
-							currentDelay / 60000
-						).toFixed(0)} minutes.`
-					);
-					this.postMessageToWebview({
-						type: "statusUpdate",
-						value: `AI service temporarily unavailable. Waiting ${(
-							currentDelay / 60000
-						).toFixed(0)} minutes before retrying...`,
-					});
-					await new Promise((resolve) => setTimeout(resolve, currentDelay));
-					if (token?.isCancellationRequested) {
-						throw new Error(ERROR_OPERATION_CANCELLED);
-					}
-					consecutiveTransientErrorCount++;
-					continue;
 				} else {
 					// For any other non-retryable error, set result and exit the loop / return immediately
 					consecutiveTransientErrorCount = 0; // Reset counter for non-transient errors
@@ -345,7 +322,7 @@ export class AIRequestService {
 	public async generateMultipleInParallel(
 		requests: Array<{
 			id: string;
-			userContentParts: HistoryEntryPart[]; // Changed from prompt: string
+			userContentParts: HistoryEntryPart[];
 			modelName: string;
 			history?: readonly HistoryEntry[];
 			generationConfig?: GenerationConfig;
@@ -356,19 +333,19 @@ export class AIRequestService {
 			timeout?: number;
 			retries?: number;
 		} = {},
-		token?: vscode.CancellationToken // Added optional cancellation token
+		token?: vscode.CancellationToken
 	): Promise<Map<string, ParallelTaskResult<string>>> {
 		const tasks: ParallelTask<string>[] = requests.map((request) => ({
 			id: request.id,
 			task: () =>
 				this.generateWithRetry(
-					request.userContentParts, // Changed to new parameter
+					request.userContentParts,
 					request.modelName,
 					request.history,
 					`parallel-${request.id}`,
 					request.generationConfig,
 					undefined,
-					token, // Pass the cancellation token to generateWithRetry
+					token,
 					false
 				),
 			priority: request.priority ?? 0,
@@ -382,7 +359,7 @@ export class AIRequestService {
 			defaultRetries: config.retries ?? 1,
 			enableRetries: true,
 			enableTimeout: true,
-			cancellationToken: token, // Pass the cancellation token to ParallelProcessor
+			cancellationToken: token,
 		});
 	}
 
@@ -397,7 +374,7 @@ export class AIRequestService {
 			timeout?: number;
 			retries?: number;
 		} = {},
-		token?: vscode.CancellationToken // Added optional cancellation token
+		token?: vscode.CancellationToken
 	): Promise<Map<string, ParallelTaskResult<T>>> {
 		return ParallelProcessor.processFilesInParallel(files, processor, {
 			maxConcurrency: config.maxConcurrency ?? 4,
@@ -405,7 +382,7 @@ export class AIRequestService {
 			defaultRetries: config.retries ?? 2,
 			enableRetries: true,
 			enableTimeout: true,
-			cancellationToken: token, // Pass the cancellation token to ParallelProcessor
+			cancellationToken: token,
 		});
 	}
 
@@ -415,7 +392,7 @@ export class AIRequestService {
 	public async generateInBatches(
 		requests: Array<{
 			id: string;
-			userContentParts: HistoryEntryPart[]; // Changed from prompt: string
+			userContentParts: HistoryEntryPart[];
 			modelName: string;
 			history?: readonly HistoryEntry[];
 			generationConfig?: GenerationConfig;
@@ -427,19 +404,19 @@ export class AIRequestService {
 			timeout?: number;
 			retries?: number;
 		} = {},
-		token?: vscode.CancellationToken // Added optional cancellation token
+		token?: vscode.CancellationToken
 	): Promise<Map<string, ParallelTaskResult<string>>> {
 		const tasks: ParallelTask<string>[] = requests.map((request) => ({
 			id: request.id,
 			task: () =>
 				this.generateWithRetry(
-					request.userContentParts, // Changed to new parameter
+					request.userContentParts,
 					request.modelName,
 					request.history,
 					`batch-${request.id}`,
 					request.generationConfig,
 					undefined,
-					token, // Pass the cancellation token to generateWithRetry
+					token,
 					false
 				),
 			priority: request.priority ?? 0,
@@ -453,7 +430,7 @@ export class AIRequestService {
 			defaultRetries: config.retries ?? 1,
 			enableRetries: true,
 			enableTimeout: true,
-			cancellationToken: token, // Pass the cancellation token to ParallelProcessor
+			cancellationToken: token,
 		});
 	}
 
@@ -473,7 +450,7 @@ export class AIRequestService {
 		modelName: string,
 		contents: Content[],
 		tools: Tool[],
-		functionCallingMode?: FunctionCallingMode, // Added parameter
+		functionCallingMode?: FunctionCallingMode,
 		token?: vscode.CancellationToken
 	): Promise<FunctionCall> {
 		if (token?.isCancellationRequested) {
@@ -488,7 +465,7 @@ export class AIRequestService {
 			modelName,
 			contents,
 			tools,
-			functionCallingMode // Pass the new parameter here
+			functionCallingMode
 		);
 
 		if (functionCall === null) {
