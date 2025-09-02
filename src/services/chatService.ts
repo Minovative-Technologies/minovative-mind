@@ -340,7 +340,7 @@ export class ChatService {
 				userMessageTextForContext,
 				undefined, // editorContext
 				undefined, // initialDiagnosticsString
-				{ useAISelectionCache: false } // options
+				{ useAISelectionCache: false, forceAISelectionRecalculation: true } // options
 			);
 
 			if (projectContext.contextString.startsWith("[Error")) {

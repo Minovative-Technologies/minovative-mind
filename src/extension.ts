@@ -441,26 +441,26 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (instruction === "/fix") {
 				composedMessage = `/plan Please fix the following code errors in ${displayFileName}:\n\n${
 					diagnosticsString || "No errors found."
-				}\n\n---`;
+				}\n\n---\n\nHighlevel thinking first. No coding yet.`;
 			} else if (instruction === "/merge") {
-				composedMessage = `/plan Please resolve the merge conflicts in ${displayFileName}. Provide the implementation solution before code. Here's the full file content with conflicts:\n\n\`\`\`${languageId}\n${fullText}\n\`\`\``;
+				composedMessage = `/plan Please resolve the merge conflicts in ${displayFileName}. Provide the implementation solution before code. Here's the full file content with conflicts:\n\n\`\`\`${languageId}\n${fullText}\n\`\`\`\n\nHighlevel thinking first. No coding yet.`;
 			} else if (instruction === "chat") {
 				if (originalSelection.isEmpty) {
-					composedMessage = `Message: ${userProvidedMessage} \n\nIn this project, focus on the conversation within the context of file \`${displayFileName}\`. Do not code yet.`;
+					composedMessage = `Message: ${userProvidedMessage} \n\nIn this project, focus on the conversation within the context of file \`${displayFileName}\`. Do not code.`;
 				} else {
 					composedMessage =
-						`${userProvidedMessage}\n\n` +
+						`Message: ${userProvidedMessage}\n\n` +
 						`In this project: From this file \`${displayFileName}\`, focus on the conversation. I've provided ${contextDescription}.\n\n` +
-						`(Language: ${languageId}):\n\n\`\`\`${languageId}\n${contextForMessage}\n\`\`\``;
+						`(Language: ${languageId}):\n\n\`\`\`${languageId}\n${contextForMessage}\n\`\`\`. Do not code.`;
 				}
 			} else if (instruction === "custom prompt") {
 				if (originalSelection.isEmpty) {
-					composedMessage = `/plan ${userProvidedMessage}\n\nIn this project: Provide the implementation solution within the context of file \`${displayFileName}\`.`;
+					composedMessage = `/plan ${userProvidedMessage}\n\nIn this project: Provide the implementation solution within the context of file \`${displayFileName}\`. Highlevel thinking first. No coding yet.`;
 				} else {
 					composedMessage =
 						`/plan ${userProvidedMessage}\n\n` +
 						`In this project: From this file \`${displayFileName}\`. I've provided ${contextDescription}:\n\n` +
-						`(Language: ${languageId}):\n\n\`\`\`${languageId}\n${contextForMessage}\n\`\`\``;
+						`(Language: ${languageId}):\n\n\`\`\`${languageId}\n${contextForMessage}\n\`\`\`\n\nHighlevel thinking first. No coding yet.`;
 				}
 			} else {
 				vscode.window.showErrorMessage("Unknown instruction received.");

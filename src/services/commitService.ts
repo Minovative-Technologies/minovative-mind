@@ -121,9 +121,7 @@ export class CommitService {
 
 			Do not use Markdown formatting (except for markdown format lists, use list for organization), special symbols like backticks (\`), quotes ("), or escape characters at ALL. Replace them with plain text instead.
 			
-			You are an expert using Git. Your task is to generate a short, but highly accurate commit message based on the provided staged changes. Make your commit messages in past tense only.
-
-Only provide the commit message in simple sentences or lists.
+			You are an expert using Git. Your task is to generate a short, but highly accurate commit message based on the provided staged changes. Make your commit messages in past tense only and use markdown to provide the commit message in simple sentences or lists.
 
 Prioritize file-by-file summaries, use the overall diff for additional context, and follow git commit message best practices.
 

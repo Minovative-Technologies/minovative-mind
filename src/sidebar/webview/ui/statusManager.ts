@@ -144,9 +144,6 @@ export function resetUIStateAfterCancellation(
 			"ai-message"
 		) // Ensure it's an actual AI message element
 	) {
-		console.log(
-			"[Webview] Removing lingering AI message with 'Generating...' text."
-		);
 		const lingeringMessageElement =
 			appState.currentAiMessageContentElement.parentElement;
 		// Remove the entire AI message container from the DOM.

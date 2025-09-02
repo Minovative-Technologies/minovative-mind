@@ -704,7 +704,7 @@ export class PlanService {
 				);
 				this.provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: `Generating structured plan - ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} `,
+					value: `Generating structured plan...`,
 					isError: false,
 				});
 

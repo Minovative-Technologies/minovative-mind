@@ -60,6 +60,7 @@ interface ContextBuildOptions {
 	enablePerformanceMonitoring?: boolean;
 	skipLargeFiles?: boolean;
 	maxFileSize?: number;
+	forceAISelectionRecalculation?: boolean; // New optional property
 }
 
 export interface ActiveSymbolDetailedInfo {
@@ -817,6 +818,15 @@ export class ContextService {
 					value: "Identifying relevant files",
 					showLoadingDots: true,
 				});
+
+				// Conditional check: if forceAISelectionRecalculation is true, clear the AI selection cache
+				if (options?.forceAISelectionRecalculation === true) {
+					console.log(
+						`[ContextService] Forcing AI selection recalculation: clearing cache for workspace: ${rootFolder.uri.fsPath}`
+					);
+					clearAISelectionCache(rootFolder.uri.fsPath);
+				}
+
 				try {
 					const selectionOptions: SelectRelevantFilesAIOptions = {
 						userRequest: currentQueryForSelection,
@@ -867,7 +877,7 @@ export class ContextService {
 						preSelectedHeuristicFiles: [], // Pass heuristicSelectedFiles
 						fileSummaries: fileSummariesForAI, // Pass the generated file summaries
 						selectionOptions: {
-							useCache: options?.useAISelectionCache ?? true,
+							useCache: options?.useAISelectionCache ?? true, // Correctly propagates the useAISelectionCache option
 							cacheTimeout: 5 * 60 * 1000, // 5 minutes
 							maxPromptLength: 50000,
 							enableStreaming: false,
