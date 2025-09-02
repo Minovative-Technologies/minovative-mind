@@ -80,6 +80,7 @@
 #chat-container {
 	flex-grow: 1;
 	overflow-y: scroll;
+	overflow-x: hidden;
 	padding: var(--element-spacing);
 	margin: var(--element-spacing) 0;
 	border-radius: var(--border-radius);
@@ -106,7 +107,6 @@
 	padding: 10px 0px 0px 0px; /* Reduced top padding */
 	flex-shrink: 0;
 	transition: color 0.2s ease-in-out;
-	overflow-x: scroll;
 }
 
 #chat-input-controls-wrapper {
