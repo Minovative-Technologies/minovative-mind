@@ -243,6 +243,9 @@ export function createEnhancedModificationPrompt(
 
 	// Universal critical requirements (always strictly enforced, regardless of rewrite intent)
 	requirementsList.push(
+		"**FINAL OUTPUT FORMAT: IMPORTANT**: When modifying a file, you MUST generate and return the *complete, full content of the entire file* after applying the modifications. The output MUST be a **single, properly formatted markdown code block** (e.g., \n```typescript\n...full_file_content...\n```\n). Do NOT provide only a partial code snippet, diff, specific function/class, or any conversational text outside the code block. The output must be the *whole, updated file* contained within this single code block."
+	);
+	requirementsList.push(
 		"**Accuracy First**: Ensure all imports, types, and dependencies are *absolutely* correct and precisely specified. Verify module paths, type definitions, and API usage."
 	);
 	requirementsList.push(

@@ -9,184 +9,116 @@ export function createInitialPlanningExplanationPrompt(
 	chatHistory?: sidebarTypes.HistoryEntry[],
 	urlContextString?: string
 ): string {
-	let specificContextPrompt = "";
-	let mainInstructions = "";
-	let instructionType: string = ""; // Initialize to avoid 'undefined' if no editorContext
-
-	if (editorContext) {
-		if (editorContext.instruction.toLowerCase() === "/fix") {
-			instructionType = `I triggered the '/fix' command on the selected code, which means you need to fix the code so there are no more bugs to fix. Only focus on fixing the diagnostics provided.`;
-			specificContextPrompt = `
-        --- Specific Request Context from Editor ---
-        File Path: ${editorContext.filePath}
-        Language: ${editorContext.languageId}
-
-        --- Instruction Type ---
-        ${instructionType}
-        --- End Instruction Type ---
-
-        --- Selected Code in Editor ---
-        \`\`\`${editorContext.languageId}
-        ${editorContext.selectedText}
-        \`\`\`
-        --- End Selected Code ---
-
-        ${
-					diagnosticsString
-						? `\n--- Relevant Diagnostics in Selection ---\n${diagnosticsString}\n--- End Relevant Diagnostics ---\n`
-						: ""
-				}
-
-        --- Full Content of Affected File (${editorContext.filePath}) ---
-        \`\`\`${editorContext.languageId}
-        ${editorContext.fullText}
-        \`\`\`
-        --- End Full Content ---`;
-
-			mainInstructions = `Based on my request from the editor ('/fix' command) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For '/fix', the plan should ONLY clearly address the 'Relevant Diagnostics' listed. **Crucially, for '/fix' requests, you MUST actively consult the "Active Symbol Detailed Information" section in the "Broader Project Context" to:**
-            *   **Understand the broader impact of a change.**
-            *   **Identify all affected areas by considering definitions, implementations, and call hierarchy.**
-            *   **Ensure robust and less disruptive fixes by checking referenced types for compatibility and correct usage.**
-            *   **Anticipate unintended side effects.**`;
-		} else if (editorContext.instruction.toLowerCase() === "/merge") {
-			instructionType = `I triggered the '/merge' command to resolve Git merge conflicts in the selected file. Only focus on resolving the conflicts.`;
-			specificContextPrompt = `
-        --- Specific Request Context from Editor ---
-        File Path: ${editorContext.filePath}
-        Language: ${editorContext.languageId}
-
-        --- Instruction Type ---
-        ${instructionType}
-        --- End Instruction Type ---
-
-        --- Selected Code in Editor ---
-        \`\`\`${editorContext.languageId}
-        ${editorContext.fullText}
-        \`\`\`
-        --- End Selected Code ---
-
-        --- Full Content of Affected File (${editorContext.filePath}) ---
-        \`\`\`${editorContext.languageId}
-        ${editorContext.fullText}
-        \`\`\`
-        --- End Full Content ---`;
-
-			mainInstructions = `Based on my request to resolve Git merge conflicts in the provided file, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to resolve all conflicts and produce a clean, merged file. Your plan must identify and resolve all '<<<<<<<', '=======', and '>>>>>>>' markers. Make sure the AI produces a single 'modify_file' step to resolve all conflicts.`;
-		} else {
-			instructionType = `I provided the custom instruction for you to complete. Only focus on completing the instructions: "${editorContext.instruction}".`;
-			specificContextPrompt = `
-        --- Specific Request Context from Editor ---
-        File Path: ${editorContext.filePath}
-        Language: ${editorContext.languageId}
-
-        --- Instruction Type ---
-        ${instructionType}
-        --- End Instruction Type ---
-
-        --- Selected Code in Editor ---
-        \`\`\`${editorContext.languageId}
-        ${editorContext.selectedText}
-        \`\`\`
-        --- End Selected Code ---
-
-        ${
-					diagnosticsString
-						? `\n--- Relevant Diagnostics in Selection ---\n${diagnosticsString}\n--- End Relevant Diagnostics ---\n`
-						: ""
-				}
-
-        --- Full Content of Affected File (${editorContext.filePath}) ---
-        \`\`\`${editorContext.languageId}
-        ${editorContext.fullText}
-        \`\`\`
-        --- End Full Content ---`;
-
-			mainInstructions = `Based on my request from the editor (custom instruction) and the provided file/selection context, and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill the request. For custom instructions, interpret the request in the context of the selected code, chat history, and any diagnostics.`;
-		}
-	} else if (userRequest) {
-		specificContextPrompt = `
-        --- My Request from Chat ---
-        ${userRequest}
-        --- End Request ---`;
-
-		mainInstructions = `Based on my request from the chat ("${userRequest}") and any relevant chat history, ONLY explain your step-by-step plan with as much detail as possible, to fulfill it.`;
-	}
+	let specificContextContent = "";
+	let planExplanationInstructions = "";
 
 	const createFileJsonRules = `
-**JSON Plan Generation Rules for \`create_file\` steps:**
-*   You **must** provide a \`path\` field.
-*   You **must** provide **exactly one** of the following:
-    *   The \`content\` field: Use this to provide the literal, pre-defined content for the file. If \`content\` is provided, \`generate_prompt\` **must be omitted**.
-    *   The \`generate_prompt\` field: Use this to provide a detailed prompt for the AI to generate the file's content. If \`generate_prompt\` is provided, \`content\` **must be omitted**.
-*   **Crucially, you must not provide both \`content\` and \`generate_prompt\`, nor must you provide neither.** Failure to adhere to this will result in plan validation errors.
+JSON Plan Rules for \`create_file\` steps:
+- Must include \`path\`.
+- Provide *exactly one* of \`content\` (literal file content) or \`generate_prompt\` (prompt for content generation). Never both, never neither.
 `;
 
 	const newDependencyInstructionsForExplanation = `
-**Dependency Management Directive:**
-*   Never directly edit \`package.json\`, \`requirements.txt\`, or similar manifest files to add new dependencies.
-*   When a new dependency is required, generate a \`RunCommand\` step to install it using the appropriate package manager.
-*   For Node.js projects (indicated by \`package.json\`), use \`npm install <package-name>\` for runtime dependencies and \`npm install <package-name> --save-dev\` for development dependencies.
-*   For Python projects (indicated by \`requirements.txt\` or \`.py\` files), use \`pip install <package-name>\`.
-*   Utilize project context (e.g., \`package.json\`, \`.py\` files) to infer the correct package manager and command.
-*   If manifest files are created or significantly modified by other means, include \`RunCommand\` steps such as \`npm install\` or \`pip install -r requirements.txt\`.
+Dependency Management:
+- Do not edit manifest files (e.g., package.json, requirements.txt) directly for new dependencies.
+- Use \`RunCommand\` for installation: \`npm install <pkg>\` (runtime), \`npm install <pkg> --save-dev\` (dev) for Node.js; \`pip install <pkg>\` for Python.
+- Infer package manager from project context.
+- Include \`RunCommand\` for \`npm install\` or \`pip install -r requirements.txt\` if manifest files are created/modified by other means.
 `;
-	if (mainInstructions !== "") {
-		mainInstructions += "\n";
+
+	if (editorContext) {
+		const filePath = editorContext.filePath;
+		const languageId = editorContext.languageId;
+		const selectedText = editorContext.selectedText;
+		const fullText = editorContext.fullText;
+		const diagnostics = diagnosticsString
+			? `\nRelevant Diagnostics in Selection:\n${diagnosticsString}`
+			: "";
+
+		if (editorContext.instruction.toLowerCase() === "/fix") {
+			specificContextContent = `File Path: ${filePath}
+Language: ${languageId}
+Instruction Type: I triggered '/fix' on the selected code to fix bugs based on provided diagnostics.
+Selected Code:
+\`\`\`${languageId}
+${selectedText}
+\`\`\`
+Full Content of Affected File:
+\`\`\`${languageId}
+${fullText}
+\`\`\`${diagnostics}`;
+			planExplanationInstructions = `Based on the '/fix' command and file context, explain a detailed plan. The plan must address 'Relevant Diagnostics'. Consult "Broader Project Context" (symbol info) for broader impact, affected areas, compatibility, and side effects.`;
+		} else if (editorContext.instruction.toLowerCase() === "/merge") {
+			specificContextContent = `File Path: ${filePath}
+Language: ${languageId}
+Instruction Type: I triggered '/merge' to resolve Git merge conflicts in this file.
+Full Content of Affected File (with conflicts):
+\`\`\`${languageId}
+${fullText}
+\`\`\``;
+			planExplanationInstructions = `Based on the '/merge' command, explain a plan to resolve all Git merge conflicts ('<<<<<<<', '=======', '>>>>>>>') and produce a clean merged file. The plan must include a single 'modify_file' step for conflict resolution.`;
+		} else {
+			// Custom instruction
+			specificContextContent = `File Path: ${filePath}
+Language: ${languageId}
+Instruction Type: My custom instruction: "${editorContext.instruction}".
+Selected Code:
+\`\`\`${languageId}
+${selectedText}
+\`\`\`
+Full Content of Affected File:
+\`\`\`${languageId}
+${fullText}
+\`\`\`${diagnostics}`;
+			planExplanationInstructions = `Based on my custom instruction ("${editorContext.instruction}") and file context, explain a detailed plan. Interpret the request in the context of selected code, chat history, and diagnostics.`;
+		}
+	} else if (userRequest) {
+		specificContextContent = `My Request from Chat: ${userRequest}`;
+		planExplanationInstructions = `Based on my request ("${userRequest}") and chat history, explain a detailed plan to fulfill it.`;
 	}
-	mainInstructions += createFileJsonRules; // Add the new rules here
-	mainInstructions += newDependencyInstructionsForExplanation;
 
 	const chatHistoryForPrompt =
 		chatHistory && chatHistory.length > 0
-			? `
-    --- Recent Chat History (for additional context on my train of thought and previous conversations with a AI model) ---
-    ${chatHistory
-			.map(
-				(entry) =>
-					`Role: ${entry.role}\nContent:\n${entry.parts
-						.filter(
-							(p): p is HistoryEntryPart & { text: string } => "text" in p
-						) // Apply type guard
-						.map((p) => p.text)
-						.join("\n")}`
-			)
-			.join("\n---\n")}
-    --- End Recent Chat History ---`
+			? `Chat History (for context):\n${chatHistory
+					.map(
+						(entry) =>
+							`Role: ${entry.role}\nContent:\n${entry.parts
+								.filter(
+									(p): p is HistoryEntryPart & { text: string } => "text" in p
+								)
+								.map((p) => p.text)
+								.join("\n")}`
+					)
+					.join("\n---\n")}`
 			: "";
 
-	return `
-    
+	return `You are an expert software engineer. Your task is to explain a detailed, high-level, step-by-step plan to fulfill the request, focusing solely on problem-solving or feature implementation. No code or JSON output, only human-readable text.
 
-    You are the expert software engineer for me. Your task is to ONLY explain your detailed, step-by-step plan in Markdown to fulfill my request, ONLY focused on solving the problem or implementing the feature.
-
-    **Instructions for Plan Explanation:**
-    *   **Goal**: ONLY Provide a clear, comprehensive, highlevel thinking, and human-readable plan. Use Markdown (e.g., lists, bold text).
-    *   **Context & Analysis**: ${mainInstructions} Refer to the "Broader Project Context" which includes detailed symbol information. ${
+Instructions for Plan Explanation:
+*   Goal: Provide a clear, comprehensive, high-level, and human-readable plan using Markdown.
+*   Context & Analysis: ${planExplanationInstructions.trim()}
+${createFileJsonRules.trim()}
+${newDependencyInstructionsForExplanation.trim()}
+Refer to the "Broader Project Context" which includes detailed symbol information. ${
 		editorContext && diagnosticsString
-			? "**For '/fix' requests, specifically detail how your plan addresses all 'Relevant Diagnostics'.**"
+			? "For '/fix' requests, specifically detail how your plan addresses all 'Relevant Diagnostics'."
 			: ""
 	}
-    *   **Completeness & Clarity**: Cover all necessary steps. Describe each step briefly (e.g., "Create 'utils.ts'", "Modify 'main.ts' to import utility", "Install 'axios' via npm").
-    *   **Output Format**: **DO NOT output any JSON or Code.** Your entire response must be human-readable text.
-    *   **Production Readiness**: Generate production-ready code. Prioritize robustness, maintainability, security, cleanliness, efficiency, and industry best practices.
+*   Completeness & Clarity: Cover all necessary steps. Describe each step briefly (e.g., "Create 'utils.ts'", "Modify 'main.ts' to import utility", "Install 'axios' via npm").
+*   Production Readiness: Generate production-ready code. Prioritize robustness, maintainability, security, cleanliness, efficiency, and industry best practices.
 
-    
+${
+	specificContextContent
+		? `Specific Context:\n${specificContextContent.trim()}\n`
+		: ""
+}
+${chatHistoryForPrompt ? `\n${chatHistoryForPrompt}\n` : ""}
+${urlContextString ? `URL Context: ${urlContextString}\n` : ""}
 
-    *** Specific Context ***
-    ${specificContextPrompt}
-    *** End, Specific Context ***
+Broader Project Context (Reference Only):
+${projectContext}
 
-    *** Chat History ***
-    ${chatHistoryForPrompt}
-    *** End, Chat History ***
-
-    ${urlContextString ? `URL Context: ${urlContextString}` : ""}
-
-    *** Broader Project Context (Reference Only) ***
-    ${projectContext}
-    *** End Broader Project ***
-
-    --- Plan Explanation (Text with Markdown) ---
+--- Plan Explanation (Text with Markdown) ---
 `;
 }
 
@@ -208,124 +140,109 @@ export function createPlanningPromptForFunctionCall(
 ): string {
 	const chatHistoryForPrompt =
 		chatHistory && chatHistory.length > 0
-			? `
-    --- Recent Chat History ---
-    ${chatHistory
-			.map(
-				(entry) =>
-					`Role: ${entry.role}\nContent:\n${entry.parts
-						.filter(
-							(p): p is HistoryEntryPart & { text: string } => "text" in p
-						)
-						.map((p) => p.text)
-						.join("\n")}`
-			)
-			.join("\n---\n")}
-    --- End Recent Chat History ---`
-			: "--- No Recent Chat History ---";
+			? `Chat History:\n${chatHistory
+					.map(
+						(entry) =>
+							`Role: ${entry.role}\nContent:\n${entry.parts
+								.filter(
+									(p): p is HistoryEntryPart & { text: string } => "text" in p
+								)
+								.map((p) => p.text)
+								.join("\n")}`
+					)
+					.join("\n---\n")}`
+			: "";
 
 	const recentChangesForPrompt =
 		recentChanges && recentChanges.length > 0
-			? `
-    --- Recent Project Changes (During Current Workflow Execution) ---
-    ${recentChanges}
-    --- End Recent Project Changes ---`
-			: "--- No Recent Project Changes ---";
+			? `Recent Project Changes:\n${recentChanges}`
+			: "";
 
 	let mainUserRequestDescription =
 		userRequest ||
 		"No specific user request provided, rely on textual plan explanation.";
 
 	if (editorContext) {
+		const filePath = editorContext.filePath;
+		const languageId = editorContext.languageId;
+		const selectedText = editorContext.selectedText;
+		const fullText = editorContext.fullText;
+		const diagnostics = editorContext.diagnosticsString
+			? `\nRelevant Diagnostics: ${editorContext.diagnosticsString}`
+			: "";
+
 		if (editorContext.instruction.toLowerCase() === "/fix") {
-			mainUserRequestDescription = `My request is to fix the code. I triggered the '/fix' command on the selected code.
-File Path: ${editorContext.filePath}
-Language: ${editorContext.languageId}
+			mainUserRequestDescription = `Request: Fix code (triggered '/fix').
+File: ${filePath}
+Language: ${languageId}
 Selected Code:
-\`\`\`${editorContext.languageId}
-${editorContext.selectedText}
+\`\`\`${languageId}
+${selectedText}
 \`\`\`
-Full Content of Affected File:
-\`\`\`${editorContext.languageId}
-${editorContext.fullText}
-\`\`\`
-${
-	editorContext.diagnosticsString
-		? `Relevant Diagnostics: ${editorContext.diagnosticsString}`
-		: ""
-}`;
+Full Content:
+\`\`\`${languageId}
+${fullText}
+\`\`\`${diagnostics}`;
 		} else if (editorContext.instruction.toLowerCase() === "/merge") {
-			mainUserRequestDescription = `My request is to resolve Git merge conflicts. I triggered the '/merge' command.
-File Path: ${editorContext.filePath}
-Language: ${editorContext.languageId}
-Full Content of Affected File (with conflicts):
-\`\`\`${editorContext.languageId}
-${editorContext.fullText}
+			mainUserRequestDescription = `Request: Resolve Git merge conflicts (triggered '/merge').
+File: ${filePath}
+Language: ${languageId}
+Full Content (with conflicts):
+\`\`\`${languageId}
+${fullText}
 \`\`\``;
 		} else {
 			// Custom instruction
-			mainUserRequestDescription = `My custom instruction is: "${
-				editorContext.instruction
-			}".
-File Path: ${editorContext.filePath}
-Language: ${editorContext.languageId}
+			mainUserRequestDescription = `Request: Custom instruction ("${editorContext.instruction}").
+File: ${filePath}
+Language: ${languageId}
 Selected Code:
-\`\`\`${editorContext.languageId}
-${editorContext.selectedText}
+\`\`\`${languageId}
+${selectedText}
 \`\`\`
-Full Content of Affected File:
-\`\`\`${editorContext.languageId}
-${editorContext.fullText}
-\`\`\`
-${
-	editorContext.diagnosticsString
-		? `Relevant Diagnostics: ${editorContext.diagnosticsString}`
-		: ""
-}`;
+Full Content:
+\`\`\`${languageId}
+${fullText}
+\`\`\`${diagnostics}`;
 		}
 	}
 
-	return `
-You are an expert software engineer AI. Your current task is to generate a structured execution plan by calling the \`generateExecutionPlan\` function.
+	return `You are an expert software engineer AI. Generate a structured execution plan by calling the \`generateExecutionPlan\` function.
 
-**Instructions for Function Call:**
-*   You **MUST** call the \`generateExecutionPlan\` tool.
-*   The \`plan\` argument of the function call **MUST** contain the entire detailed textual plan explanation provided below.
-*   Populate the \`user_request\` argument with the original user's request or editor instruction.
-*   Populate the \`project_context\` argument with the entire provided broader project context.
-*   Populate the \`chat_history\` argument with the entire provided recent chat history.
-*   Populate the \`recent_changes\` argument with the entire provided recent project changes.
-*   Populate the \`url_context_string\` argument with any provided URL context.
+Instructions for Function Call:
+- You MUST call the \`generateExecutionPlan\` tool.
+- \`plan\`: Use the entire detailed textual plan explanation below.
+- \`user_request\`: Original user's request or editor instruction.
+- \`project_context\`: Entire broader project context.
+- \`chat_history\`: Entire recent chat history.
+- \`recent_changes\`: Entire recent project changes.
+- \`url_context_string\`: Any provided URL context.
 
-**Crucial Rules for generateExecutionPlan Tool Usage:**
-For \`create_file\` steps: You **must** provide *either* \`content\` *or* \`generate_prompt\`, but **never both**, and **never neither**. This ensures the AI either provides the content directly or specifies how to generate it, preventing ambiguity.
-For \`modify_file\` steps: You **must** always provide a non-empty \`modification_prompt\` that precisely details the changes required. Omitting this or providing an empty prompt is not allowed.
-Ensure all \`path\` fields for file or directory operations are always relative to the workspace root. Paths must **not** contain \`..\` and must **not** begin with \`/\`.
+Crucial Rules for \`generateExecutionPlan\` Tool:
+- \`create_file\`: Provide *either* \`content\` *or* \`generate_prompt\`; never both or neither.
+- \`modify_file\`: Always provide a non-empty \`modification_prompt\`.
+- All \`path\` fields must be relative to workspace root, no \`..\` or leading \`/\`.
+- Each step (create/modify) should be a single step.
+- A single \`modification_prompt\` should cohesively describe multiple changes for one file, one step if they're part of one logical task.
+- Avoid over-fragmentation.
+- For \`create_file\`, prefer \`content\` for known file content; use \`generate_prompt\` only if dynamic generation is truly needed.
+- All generated code/instructions must be production-ready (complete, functional, no placeholders/TODOs). The best code you can give.
 
-**Goal:** Ensure all relevant information is passed accurately and comprehensively to the \`generateExecutionPlan\` function.
+Goal: Ensure all relevant information is passed accurately and comprehensively to the \`generateExecutionPlan\` function. 
 
---- User Request/Instruction ---
-${mainUserRequestDescription}
---- End User Request/Instruction ---
+Absolutely Critical: The entire plan MUST NOT contain multiple 'modify_file' steps that target the exact same 'path'. All modifications for a single file must be consolidated into a single 'modify_file' step for that specific file. For a 'modify_file' step, its 'modification_prompt' must cohesively describe *all* changes intended for that single file. This is to ensure only one 'modify_file' step is generated per file throughout the plan.
 
---- Detailed Textual Plan Explanation ---
+User Request/Instruction:
+${mainUserRequestDescription.trim()}
+
+Detailed Textual Plan Explanation:
 ${textualPlanExplanation}
---- End Detailed Textual Plan Explanation ---
 
---- Broader Project Context ---
+Broader Project Context:
 ${projectContext}
---- End Broader Project Context ---
 
-${chatHistoryForPrompt}
-
-${recentChangesForPrompt}
-
-${
-	urlContextString
-		? `--- URL Context ---\n${urlContextString}\n--- End URL Context ---`
-		: ""
-}
-
-Call \`generateExecutionPlan\` now:
+${chatHistoryForPrompt ? `\n${chatHistoryForPrompt}` : ""}
+${recentChangesForPrompt ? `\n${recentChangesForPrompt}` : ""}
+${urlContextString ? `\nURL Context:\n${urlContextString}` : ""}
 `;
 }

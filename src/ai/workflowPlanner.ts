@@ -261,7 +261,6 @@ export async function parseAndValidatePlan(
 		}
 
 		const ig = await loadGitIgnoreMatcher(workspaceRootUri);
-		const modifyFileConsolidationMap = new Map<string, ModifyFileStep>();
 		const intermediateSteps: PlanStep[] = [];
 
 		for (let i = 0; i < potentialPlan.steps.length; i++) {
@@ -358,22 +357,11 @@ export async function parseAndValidatePlan(
 				return { plan: null, error: errorMsg };
 			}
 
-			// --- 4. Consolidate ModifyFile Steps ---
-			if (isModifyFileStep(step)) {
-				const existingStep = modifyFileConsolidationMap.get(step.path);
-				if (existingStep) {
-					existingStep.modification_prompt += `\n\n---\n\n${step.modification_prompt}`;
-				} else {
-					const newConsolidatedStep: ModifyFileStep = { ...step };
-					modifyFileConsolidationMap.set(step.path, newConsolidatedStep);
-					intermediateSteps.push(newConsolidatedStep);
-				}
-			} else {
-				intermediateSteps.push(step);
-			}
+			// --- 4. Add all valid steps without consolidation ---
+			intermediateSteps.push(step);
 		}
 
-		// Re-number and finalize the steps after consolidation
+		// Re-number and finalize the steps
 		const finalSteps = intermediateSteps.map((step, index) => ({
 			...step,
 			step: index + 1,
@@ -381,9 +369,7 @@ export async function parseAndValidatePlan(
 
 		potentialPlan.steps = finalSteps;
 
-		console.log(
-			`Plan validation successful. ${finalSteps.length} steps after consolidation.`
-		);
+		console.log(`Plan validation successful. ${finalSteps.length} steps.`);
 		return { plan: potentialPlan as ExecutionPlan };
 	} catch (error: any) {
 		const errorMsg = `Error parsing plan source: ${
