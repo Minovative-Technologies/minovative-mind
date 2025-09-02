@@ -457,7 +457,9 @@ export class PlanExecutorService {
 			errorMsg.includes("rate limit exceeded") ||
 			errorMsg.includes("network issue") ||
 			errorMsg.includes("AI service unavailable") ||
-			errorMsg.includes("timeout")
+			errorMsg.includes("timeout") ||
+			errorMsg.includes("parsing failed") || // Added for streaming parsing errors
+			errorMsg.includes("overloaded") // Added for Gemini overload errors
 		) {
 			isRetryableTransientError = true;
 		}

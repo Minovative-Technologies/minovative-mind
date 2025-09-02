@@ -1,6 +1,10 @@
 import * as vscode from "vscode";
 import { sanitizeErrorMessagePaths } from "./pathUtils";
-import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
+import {
+	ERROR_OPERATION_CANCELLED,
+	ERROR_STREAM_PARSING_FAILED,
+	ERROR_SERVICE_UNAVAILABLE,
+} from "../ai/gemini";
 
 /**
  * Formats a raw error into a user-friendly, readable message.
@@ -59,7 +63,13 @@ export function formatUserFacingErrorMessage(
 			"No VS Code workspace folder is currently open. Please open a project folder to proceed with this operation.";
 	}
 	// Add new AI-specific error mappings here, after 'No workspace folder open' and before 'HTTP 401'
-	else if (
+	else if (message.includes(ERROR_STREAM_PARSING_FAILED)) {
+		message =
+			"AI response parsing failed: The AI returned an unexpected or malformed response (parsing failed). Please try again.";
+	} else if (message.includes(ERROR_SERVICE_UNAVAILABLE)) {
+		message =
+			"AI service temporarily overloaded: The AI service is currently experiencing high load (overloaded). Please try again in a few moments.";
+	} else if (
 		message.includes("SAFETY") ||
 		message.includes("safety policy") ||
 		message.includes("blocked due to safety") ||
