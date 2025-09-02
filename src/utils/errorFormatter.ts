@@ -54,7 +54,46 @@ export function formatUserFacingErrorMessage(
 	) {
 		message =
 			"Network issue or timeout: Could not connect to the AI service. Please check your internet connection or try again in a few moments.";
+	} else if (message.includes("No workspace folder open")) {
+		message =
+			"No VS Code workspace folder is currently open. Please open a project folder to proceed with this operation.";
+	}
+	// Add new AI-specific error mappings here, after 'No workspace folder open' and before 'HTTP 401'
+	else if (
+		message.includes("SAFETY") ||
+		message.includes("safety policy") ||
+		message.includes("blocked due to safety") ||
+		message.includes("content moderation")
+	) {
+		message =
+			"Content generation stopped: The AI response was blocked due to a safety policy. Please try rephrasing your request or adjusting the input.";
 	} else if (
+		message.includes("resource exhausted") ||
+		message.includes("prompt too long") ||
+		message.includes("token limit exceeded")
+	) {
+		message =
+			"Input too long: Your request or chat history exceeded the AI's maximum length. Please try a shorter message or clear the chat history.";
+	} else if (
+		message.includes("model not found") ||
+		message.includes("invalid model name") ||
+		message.includes("model does not exist")
+	) {
+		message =
+			"AI Model Error: The selected AI model is unavailable or invalid. Please check your settings or try a different model.";
+	} else if (
+		message.includes("invalid argument") ||
+		message.includes("bad request") ||
+		message.includes("Malformed request")
+	) {
+		message =
+			"Invalid Request: The AI service received a malformed request. This might be a temporary issue, please try again.";
+	} else if (message.includes("API Key Initialization Failed")) {
+		message =
+			"API Key Initialization Failed: Unable to set up the AI service. Please ensure your API key is correct and has the necessary permissions.";
+	}
+	// Existing HTTP 401 check and subsequent conditions
+	else if (
 		message.includes("HTTP 401") ||
 		message.includes("HTTP 403") ||
 		message.includes("Unauthorized") ||
@@ -74,9 +113,6 @@ export function formatUserFacingErrorMessage(
 		// Covers 500, 502, 503, 504 etc. for server-side issues
 		message =
 			"AI service unavailable: The AI service is temporarily unavailable due to a server error. Please try again in a few moments.";
-	} else if (message.includes("No workspace folder open")) {
-		message =
-			"No VS Code workspace folder is currently open. Please open a project folder to proceed with this operation.";
 	} else if (message.toLowerCase().startsWith("error: ")) {
 		// If the message already starts with "Error: ", it might be a more specific AI-generated error.
 		// We can keep it but still sanitize paths if available.

@@ -9,21 +9,113 @@ import {
 	FunctionCallingMode, // Added FunctionCallingMode import
 } from "@google/generative-ai";
 import { MINO_SYSTEM_INSTRUCTION } from "./prompts/systemInstructions";
+import { geminiLogger } from "../utils/logger";
 
 export const ERROR_QUOTA_EXCEEDED = "ERROR_GEMINI_QUOTA_EXCEEDED";
 // Define a specific error message constant for cancellation
 export const ERROR_OPERATION_CANCELLED = "Operation cancelled by user.";
 // Add a new error constant for service unavailability
 export const ERROR_SERVICE_UNAVAILABLE = "ERROR_GEMINI_SERVICE_UNAVAILABLE";
+// Add a new error constant for stream parsing failures
+export const ERROR_STREAM_PARSING_FAILED = "ERROR_GEMINI_STREAM_PARSING_FAILED";
 
 let generativeAI: GoogleGenerativeAI | null = null;
 let model: GenerativeModel | null = null;
 let currentApiKey: string | null = null;
 let currentModelName: string | null = null;
+let currentToolsHash: string | null = null; // New module-level variable for tools hash
+
+/**
+ * Creates a truncated log string for content parts, useful for logging API requests without exposing full content.
+ * @param contents The array of Content objects to truncate.
+ * @returns A truncated string representation of the contents.
+ */
+function _getTruncatedContentsLog(contents: Content[]): string {
+	return contents
+		.map((c) =>
+			c.parts
+				.map((p) =>
+					"text" in p
+						? (p as { text: string }).text.substring(0, 50) +
+						  ((p as { text: string }).text.length > 50 ? "..." : "")
+						: "[IMAGE]"
+				)
+				.join(" ")
+		)
+		.join(" | ");
+}
+
+/**
+ * Handles common Gemini API errors, centralizing logging and specific error re-throws.
+ *
+ * @param error The raw error object caught from a Gemini API call.
+ * @param modelName The name of the model being used.
+ * @param contextString A string describing the context of the error (e.g., "stream generation").
+ * @param shouldResetClient If true, resets the client for API key/model not found errors.
+ */
+function _handleGeminiError(
+	error: any,
+	modelName: string,
+	contextString: string,
+	shouldResetClient: boolean
+): never {
+	geminiLogger.error(
+		modelName,
+		`Raw error during ${contextString}:`,
+		error,
+		error instanceof Error ? error.stack : ""
+	);
+
+	if (error instanceof Error && error.message === ERROR_OPERATION_CANCELLED) {
+		throw error;
+	}
+
+	const lowerErrorMessage = (error.message || "").toLowerCase();
+	const status = error.httpGoogleError?.code || error.status;
+
+	if (lowerErrorMessage.includes("quota") || status === 429) {
+		throw new Error(ERROR_QUOTA_EXCEEDED);
+	} else if (lowerErrorMessage.includes("failed to parse stream")) {
+		geminiLogger.error(
+			modelName,
+			`Stream parsing failed. Error: ${error.message}`
+		);
+		throw new Error(ERROR_STREAM_PARSING_FAILED);
+	} else if (
+		lowerErrorMessage.includes("api key not valid") ||
+		status === 400 ||
+		status === 403
+	) {
+		const errorMessage = `Invalid API Key for Gemini model ${modelName}. Please verify your key.`;
+		geminiLogger.error(modelName, errorMessage);
+		if (shouldResetClient) {
+			resetClient();
+		}
+		throw new Error(errorMessage);
+	} else if (lowerErrorMessage.includes("model not found") || status === 404) {
+		const errorMessage = `The model '${modelName}' is not valid or accessible.`;
+		geminiLogger.error(modelName, errorMessage);
+		if (shouldResetClient) {
+			resetClient();
+		}
+		throw new Error(errorMessage);
+	} else if (
+		status === 503 ||
+		lowerErrorMessage.includes("service unavailable")
+	) {
+		throw new Error(ERROR_SERVICE_UNAVAILABLE);
+	} else {
+		throw new Error(
+			`Gemini (${modelName}) error during ${contextString}: ${
+				error.message || String(error)
+			}`
+		);
+	}
+}
 
 /**
  * Initializes the GoogleGenerativeAI client and the GenerativeModel if needed.
- * Re-initializes if the API key or model name changes.
+ * Re-initializes if the API key, model name, or tools configuration changes.
  *
  * @param apiKey The Google Gemini API key.
  * @param modelName The specific Gemini model name to use (e.g., "gemini-2.5-pro-latest").
@@ -35,37 +127,42 @@ export function initializeGenerativeAI(
 	modelName: string,
 	tools?: Tool[]
 ): boolean {
-	console.log(
-		`Gemini: Attempting to initialize GoogleGenerativeAI with model: ${modelName}...`
+	geminiLogger.log(
+		modelName,
+		`Attempting to initialize GoogleGenerativeAI with model: ${modelName}...`
 	);
 	try {
 		if (!apiKey) {
-			console.error("Gemini: API Key is missing.");
+			geminiLogger.error(modelName, "API Key is missing.");
 			if (model) {
 				resetClient();
 			}
 			return false;
 		}
 		if (!modelName) {
-			console.error("Gemini: Model Name is missing.");
+			geminiLogger.error(modelName, "Model Name is missing.");
 			if (model) {
 				resetClient();
 			}
 			return false;
 		}
 
+		const newToolsHash = tools ? JSON.stringify(tools) : null;
+
 		const needsInitialization =
 			!generativeAI ||
 			!model ||
 			apiKey !== currentApiKey ||
-			modelName !== currentModelName;
+			modelName !== currentModelName ||
+			newToolsHash !== currentToolsHash; // Include tools hash in initialization check
 
 		if (needsInitialization) {
-			console.log(
-				`Gemini: Re-initializing client. Key changed: ${
+			geminiLogger.log(
+				modelName,
+				`Re-initializing client. Key changed: ${
 					apiKey !== currentApiKey
-				}, Model changed: ${
-					modelName !== currentModelName
+				}, Model changed: ${modelName !== currentModelName}, Tools changed: ${
+					newToolsHash !== currentToolsHash
 				}. New model: ${modelName}`
 			);
 			generativeAI = new GoogleGenerativeAI(apiKey);
@@ -76,13 +173,25 @@ export function initializeGenerativeAI(
 			});
 			currentApiKey = apiKey;
 			currentModelName = modelName;
-			console.log("Gemini: GoogleGenerativeAI initialized successfully.");
+			currentToolsHash = newToolsHash; // Update tools hash after successful initialization
+			geminiLogger.log(
+				modelName,
+				"GoogleGenerativeAI initialized successfully."
+			);
 		} else {
-			console.log("Gemini: Client already initialized with correct settings.");
+			geminiLogger.log(
+				modelName,
+				"Client already initialized with correct settings."
+			);
 		}
 		return true;
 	} catch (error) {
-		console.error("Gemini: Error initializing GoogleGenerativeAI:", error);
+		geminiLogger.error(
+			modelName,
+			"Error initializing GoogleGenerativeAI:",
+			error,
+			error instanceof Error ? error.stack : ""
+		);
 		vscode.window.showErrorMessage(
 			`Failed to initialize Gemini AI (${modelName}): ${
 				error instanceof Error ? error.message : String(error)
@@ -113,8 +222,9 @@ export async function* generateContentStream(
 	isMergeOperation: boolean = false
 ): AsyncIterableIterator<string> {
 	if (token?.isCancellationRequested) {
-		console.log(
-			"Gemini: Cancellation requested before starting stream generation."
+		geminiLogger.log(
+			modelName,
+			"Cancellation requested before starting stream generation."
 		);
 		throw new Error(ERROR_OPERATION_CANCELLED);
 	}
@@ -141,28 +251,17 @@ export async function* generateContentStream(
 	let contentYielded = false;
 
 	try {
-		const truncatedContentsLog = contents
-			.map((c) =>
-				c.parts
-					.map((p) =>
-						"text" in p
-							? (p as { text: string }).text.substring(0, 50) +
-							  ((p as { text: string }).text.length > 50 ? "..." : "")
-							: "[IMAGE]"
-					)
-					.join(" ")
-			)
-			.join(" | ");
-		console.log(
-			`Gemini (${modelName}): Sending stream request. Contents: "${truncatedContentsLog}"`
+		const truncatedContentsLog = _getTruncatedContentsLog(contents);
+		geminiLogger.log(
+			modelName,
+			`Sending stream request. Contents: "${truncatedContentsLog}"`
 		);
-		console.log(
-			`Gemini (${modelName}): Using generationConfig: ${JSON.stringify(
-				requestConfig
-			)}`
+		geminiLogger.log(
+			modelName,
+			`Using generationConfig: ${JSON.stringify(requestConfig)}`
 		);
 		if (isMergeOperation) {
-			console.log(`Gemini (${modelName}): This is a merge operation.`);
+			geminiLogger.log(modelName, `This is a merge operation.`);
 		}
 
 		const result = await model.generateContentStream({
@@ -172,7 +271,7 @@ export async function* generateContentStream(
 
 		for await (const chunk of result.stream) {
 			if (token?.isCancellationRequested) {
-				console.log("Gemini: Cancellation requested during streaming.");
+				geminiLogger.log(modelName, "Cancellation requested during streaming.");
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 
@@ -181,14 +280,12 @@ export async function* generateContentStream(
 				contentYielded = true;
 				const truncatedChunk =
 					text.length > 50 ? `${text.substring(0, 50)}...` : text;
-				console.log(
-					`Gemini (${modelName}): Received chunk: "${truncatedChunk}"`
-				);
+				geminiLogger.log(modelName, `Received chunk: "${truncatedChunk}"`);
 				yield text;
 			}
 		}
 
-		console.log(`Gemini (${modelName}): Stream finished.`);
+		geminiLogger.log(modelName, `Stream finished.`);
 		const finalResponse = await result.response;
 
 		if (finalResponse.promptFeedback?.blockReason) {
@@ -197,10 +294,10 @@ export async function* generateContentStream(
 				safetyRatings
 			)}`;
 			if (!contentYielded) {
-				console.error(message);
+				geminiLogger.error(modelName, message);
 				throw new Error(`Request blocked by Gemini (reason: ${blockReason}).`);
 			} else {
-				console.warn(`${message} (partially yielded)`);
+				geminiLogger.warn(modelName, `${message} (partially yielded)`);
 			}
 		}
 
@@ -216,55 +313,22 @@ export async function* generateContentStream(
 					safetyRatings
 				)}`;
 				if (!contentYielded) {
-					console.error(message);
+					geminiLogger.error(modelName, message);
 					throw new Error(
 						`Gemini stream stopped prematurely (reason: ${finishReason}).`
 					);
 				} else {
-					console.warn(`${message} (partially yielded)`);
+					geminiLogger.warn(modelName, `${message} (partially yielded)`);
 				}
 			}
 		} else if (!contentYielded && !finalResponse.promptFeedback?.blockReason) {
-			console.warn(
-				`Gemini (${modelName}): Stream ended without yielding content or a block reason.`
+			geminiLogger.warn(
+				modelName,
+				`Stream ended without yielding content or a block reason.`
 			);
 		}
 	} catch (error: any) {
-		console.error(`Gemini (${modelName}): Raw error during stream:`, error);
-
-		if (error instanceof Error && error.message === ERROR_OPERATION_CANCELLED) {
-			throw error;
-		}
-
-		let errorMessage = `An error occurred with the Gemini API (${modelName}).`;
-		const lowerErrorMessage = (error.message || "").toLowerCase();
-		const status = error.httpGoogleError?.code || error.status;
-
-		if (lowerErrorMessage.includes("quota") || status === 429) {
-			throw new Error(ERROR_QUOTA_EXCEEDED);
-		} else if (
-			lowerErrorMessage.includes("api key not valid") ||
-			status === 400 ||
-			status === 403
-		) {
-			errorMessage = `Invalid API Key for Gemini model ${modelName}. Please verify your key.`;
-			resetClient();
-		} else if (
-			lowerErrorMessage.includes("model not found") ||
-			status === 404
-		) {
-			errorMessage = `The model '${modelName}' is not valid or accessible.`;
-			resetClient();
-		} else if (
-			status === 503 ||
-			lowerErrorMessage.includes("service unavailable")
-		) {
-			throw new Error(ERROR_SERVICE_UNAVAILABLE);
-		} else {
-			errorMessage = `Gemini (${modelName}) error: ${error.message}`;
-		}
-
-		throw new Error(errorMessage);
+		_handleGeminiError(error, modelName, "stream generation", true);
 	}
 }
 
@@ -285,7 +349,7 @@ export async function generateFunctionCall(
 	tools: Tool[],
 	functionCallingMode?: FunctionCallingMode // Modified function signature
 ): Promise<FunctionCall | null> {
-	console.log(`Gemini (${modelName}): Attempting to generate function call.`);
+	geminiLogger.log(modelName, `Attempting to generate function call.`);
 
 	if (!initializeGenerativeAI(apiKey, modelName, tools)) {
 		throw new Error(
@@ -326,8 +390,9 @@ export async function generateFunctionCall(
 
 		if (response.promptFeedback?.blockReason) {
 			const { blockReason, safetyRatings } = response.promptFeedback;
-			console.error(
-				`Gemini (${modelName}) function call request blocked. Reason: ${blockReason}. Ratings: ${JSON.stringify(
+			geminiLogger.error(
+				modelName,
+				`Function call request blocked. Reason: ${blockReason}. Ratings: ${JSON.stringify(
 					safetyRatings
 				)}`
 			);
@@ -338,57 +403,22 @@ export async function generateFunctionCall(
 			response.candidates?.[0]?.content?.parts?.[0]?.functionCall;
 
 		if (functionCall) {
-			console.log(
-				`Gemini (${modelName}): Successfully received function call:`,
+			geminiLogger.log(
+				modelName,
+				`Successfully received function call:`,
 				functionCall
 			);
 			return functionCall;
 		} else {
-			console.warn(
-				`Gemini (${modelName}): No function call found in the response. Full response:`,
+			geminiLogger.warn(
+				modelName,
+				`No function call found in the response. Full response:`,
 				response
 			);
 			return null;
 		}
 	} catch (error: any) {
-		console.error(
-			`Gemini (${modelName}): Raw error during function call:`,
-			error
-		);
-
-		if (error instanceof Error && error.message === ERROR_OPERATION_CANCELLED) {
-			throw error;
-		}
-
-		let errorMessage = `An error occurred with the Gemini API (${modelName}).`;
-		const lowerErrorMessage = (error.message || "").toLowerCase();
-		const status = error.httpGoogleError?.code || error.status;
-
-		if (lowerErrorMessage.includes("quota") || status === 429) {
-			throw new Error(ERROR_QUOTA_EXCEEDED);
-		} else if (
-			lowerErrorMessage.includes("api key not valid") ||
-			status === 400 ||
-			status === 403
-		) {
-			errorMessage = `Invalid API Key for Gemini model ${modelName}. Please verify your key.`;
-			resetClient();
-		} else if (
-			lowerErrorMessage.includes("model not found") ||
-			status === 404
-		) {
-			errorMessage = `The model '${modelName}' is not valid or accessible.`;
-			resetClient();
-		} else if (
-			status === 503 ||
-			lowerErrorMessage.includes("service unavailable")
-		) {
-			throw new Error(ERROR_SERVICE_UNAVAILABLE);
-		} else {
-			errorMessage = `Gemini (${modelName}) error: ${error.message}`;
-		}
-
-		throw new Error(errorMessage);
+		_handleGeminiError(error, modelName, "function call", true);
 	}
 }
 
@@ -400,7 +430,8 @@ export function resetClient() {
 	model = null;
 	currentApiKey = null;
 	currentModelName = null;
-	console.log("Gemini: AI client state has been reset.");
+	currentToolsHash = null; // Reset tools hash on client reset
+	geminiLogger.log(undefined, "AI client state has been reset.");
 }
 
 /**
@@ -432,30 +463,19 @@ export async function countGeminiTokens(
 	}
 
 	try {
-		console.log(
+		geminiLogger.log(
+			modelName,
 			`[Gemini Token Counter] Requesting token count for model '${modelName}'...`
 		);
 		const { totalTokens } = await model.countTokens({
 			contents: contents,
 		});
-		console.log(
+		geminiLogger.log(
+			modelName,
 			`[Gemini Token Counter] Successfully counted ${totalTokens} tokens for model '${modelName}'.`
 		);
 		return totalTokens;
 	} catch (error) {
-		console.error(
-			`[Gemini Token Counter] Failed to count tokens for model '${modelName}':`,
-			error
-		);
-		// Re-throw specific errors if they indicate cancellation or other critical issues
-		if (error instanceof Error && error.message === ERROR_OPERATION_CANCELLED) {
-			throw error;
-		}
-		// Wrap and re-throw other errors for consistent handling in calling services
-		throw new Error(
-			`Failed to count tokens via Gemini API for model '${modelName}': ${
-				error instanceof Error ? error.message : String(error)
-			}`
-		);
+		_handleGeminiError(error, modelName, "token counting", true);
 	}
 }

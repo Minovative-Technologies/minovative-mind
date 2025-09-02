@@ -31,10 +31,9 @@ export const resetCodeStreams = (): void => {
 
 export function handleCodeFileStreamStart(
 	elements: RequiredDomElements,
-	message: any // Use 'any' or a more specific type if available in sidebarTypes
+	message: CodeFileStreamStartMessage
 ): void {
-	const { streamId, filePath, languageId } =
-		message.value as CodeFileStreamStartMessage["value"];
+	const { streamId, filePath, languageId } = message.value;
 	console.log(
 		`[CodeStreamHandler] Code stream start: ${filePath} (Stream ID: ${streamId})`
 	);
@@ -80,20 +79,15 @@ export function handleCodeFileStreamStart(
 
 export function handleCodeFileStreamChunk(
 	elements: RequiredDomElements, // Kept for consistency, though not directly used here
-	message: any // Use 'any' or a more specific type if available in sidebarTypes
+	message: CodeFileStreamChunkMessage
 ): void {
-	const { streamId, chunk } =
-		message.value as CodeFileStreamChunkMessage["value"];
+	const { streamId, chunk } = message.value;
 	// console.log(`[CodeStreamHandler] Code stream chunk for ${streamId}: ${chunk.length} chars`);
 
 	const streamInfo = activeCodeStreams.get(streamId);
 	if (streamInfo) {
 		streamInfo.codeElement.textContent += chunk;
-		// Re-highlight the element with each chunk
-		if (typeof hljs !== "undefined" && hljs) {
-			// Safely check for hljs availability
-			hljs.highlightElement(streamInfo.codeElement);
-		}
+		// Re-highlighting is handled once at the end of the stream, not with each chunk
 		if (codeStreamingArea) {
 			codeStreamingArea.scrollTop = codeStreamingArea.scrollHeight; // Scroll to bottom
 		}
@@ -106,10 +100,9 @@ export function handleCodeFileStreamChunk(
 
 export function handleCodeFileStreamEnd(
 	elements: RequiredDomElements, // Kept for consistency
-	message: any // Use 'any' or a more specific type if available in sidebarTypes
+	message: CodeFileStreamEndMessage
 ): void {
-	const { streamId, success, error } =
-		message.value as CodeFileStreamEndMessage["value"];
+	const { streamId, success, error } = message.value;
 	console.log(
 		`[CodeStreamHandler] Code stream end for ${streamId}. Success: ${success}, Error: ${error}`
 	);

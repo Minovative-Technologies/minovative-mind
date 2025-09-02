@@ -98,6 +98,677 @@ export async function typeContentIntoEditor(
 	}
 }
 
+async function _handleTypeContentAction(
+	step: PlanStep,
+	token: vscode.CancellationToken,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	reportErrorAndReturnResult: (
+		error: any,
+		defaultMessage: string,
+		filePath: string | undefined,
+		actionType: PlanStepAction
+	) => PlanStepExecutionResult,
+	postChatUpdate: (message: {
+		type: string;
+		value: { text: string; isError?: boolean };
+		diffContent?: string;
+	}) => void,
+	workspaceRootUri: vscode.Uri
+): Promise<PlanStepExecutionResult> {
+	if (token.isCancellationRequested) {
+		throw new Error(ERROR_OPERATION_CANCELLED);
+	}
+	if (!step.file || !step.content) {
+		const errMsg = "Missing file path or content for TypeContent action.";
+		return reportErrorAndReturnResult(
+			new Error(errMsg),
+			errMsg,
+			step.file,
+			PlanStepAction.TypeContent
+		);
+	}
+	const docToTypeUri = vscode.Uri.file(step.file);
+	try {
+		const docToType = await vscode.workspace.openTextDocument(docToTypeUri);
+		const editorToType = await vscode.window.showTextDocument(docToType);
+		await typeContentIntoEditor(editorToType, step.content, token, progress);
+		return { success: true };
+	} catch (error: any) {
+		return reportErrorAndReturnResult(
+			error,
+			`Failed to type content into editor for ${path.basename(
+				docToTypeUri.fsPath
+			)}.`,
+			step.file,
+			PlanStepAction.TypeContent
+		);
+	}
+}
+
+async function _handleDeleteFileAction(
+	step: PlanStep,
+	token: vscode.CancellationToken,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	changeLogger: ProjectChangeLogger,
+	postChatUpdate: (message: {
+		type: string;
+		value: { text: string; isError?: boolean };
+		diffContent?: string;
+	}) => void,
+	workspaceRootUri: vscode.Uri,
+	reportErrorAndReturnResult: (
+		error: any,
+		defaultMessage: string,
+		filePath: string | undefined,
+		actionType: PlanStepAction
+	) => PlanStepExecutionResult
+): Promise<PlanStepExecutionResult> {
+	if (token.isCancellationRequested) {
+		throw new Error(ERROR_OPERATION_CANCELLED);
+	}
+	if (!step.file) {
+		const errMsg = "Missing file path for DeleteFile action.";
+		return reportErrorAndReturnResult(
+			new Error(errMsg),
+			errMsg,
+			step.file,
+			PlanStepAction.DeleteFile
+		);
+	}
+	const targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file);
+	const fileName = path.basename(targetFileUri.fsPath);
+
+	let fileContentBeforeDelete: string = "";
+
+	try {
+		progress.report({
+			message: `Reading content of ${fileName} before deletion...`,
+		});
+		const contentBuffer = await vscode.workspace.fs.readFile(targetFileUri);
+		fileContentBeforeDelete = contentBuffer.toString();
+	} catch (error: any) {
+		if (
+			error instanceof vscode.FileSystemError &&
+			(error.code === "FileNotFound" || error.code === "EntryNotFound")
+		) {
+			console.warn(
+				`[PlanExecutionService] File ${fileName} not found for reading before deletion. Assuming empty content for logging.`
+			);
+			fileContentBeforeDelete = "";
+		} else {
+			return reportErrorAndReturnResult(
+				error,
+				`Failed to read file ${fileName} before deletion.`,
+				step.file,
+				PlanStepAction.DeleteFile
+			);
+		}
+	}
+
+	try {
+		progress.report({ message: `Deleting file: ${fileName}...` });
+		await vscode.workspace.fs.delete(targetFileUri, { useTrash: true });
+		console.log(
+			`[PlanExecutionService] Successfully deleted file: ${fileName}`
+		);
+	} catch (error: any) {
+		if (
+			error instanceof vscode.FileSystemError &&
+			(error.code === "FileNotFound" || error.code === "EntryNotFound")
+		) {
+			console.warn(
+				`[PlanExecutionService] File ${fileName} already not found. No deletion needed.`
+			);
+		} else {
+			return reportErrorAndReturnResult(
+				error,
+				`Failed to delete file ${fileName}.`,
+				step.file,
+				PlanStepAction.DeleteFile
+			);
+		}
+	}
+
+	const { summary, removedLines, formattedDiff } =
+		await generateFileChangeSummary(fileContentBeforeDelete, "", step.file);
+
+	const deleteChangeEntry: FileChangeEntry = {
+		filePath: step.file,
+		changeType: "deleted",
+		originalContent: fileContentBeforeDelete,
+		newContent: "",
+		summary: summary,
+		removedLines: removedLines,
+		addedLines: [],
+		timestamp: Date.now(),
+		diffContent: formattedDiff,
+	};
+
+	changeLogger.logChange(deleteChangeEntry);
+
+	console.log(
+		`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file}:\n---\n${formattedDiff}\n---`
+	);
+
+	postChatUpdate({
+		type: "appendRealtimeModelMessage",
+		value: {
+			text: `Successfully deleted \`${fileName}\`.`,
+			isError: false,
+		},
+		diffContent: formattedDiff,
+	});
+
+	progress.report({
+		message: `Successfully deleted ${fileName}.`,
+	});
+	return { success: true, diffContent: formattedDiff };
+}
+
+async function _handleCreateFileAction(
+	step: PlanStep,
+	token: vscode.CancellationToken,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	changeLogger: ProjectChangeLogger,
+	postChatUpdate: (message: {
+		type: string;
+		value: { text: string; isError?: boolean };
+		diffContent?: string;
+	}) => void,
+	aiRequestService: AIRequestService,
+	enhancedCodeGenerator: EnhancedCodeGenerator,
+	postMessageToWebview: (message: ExtensionToWebviewMessages) => void,
+	workspaceRootUri: vscode.Uri,
+	modelName: string,
+	reportErrorAndReturnResult: (
+		error: any,
+		defaultMessage: string,
+		filePath: string | undefined,
+		actionType: PlanStepAction
+	) => PlanStepExecutionResult
+): Promise<PlanStepExecutionResult> {
+	if (token.isCancellationRequested) {
+		throw new Error(ERROR_OPERATION_CANCELLED);
+	}
+	if (!step.file) {
+		const errMsg = "Missing file path for CreateFile action.";
+		return reportErrorAndReturnResult(
+			new Error(errMsg),
+			errMsg,
+			step.file,
+			PlanStepAction.CreateFile
+		);
+	}
+	const targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file);
+
+	let contentToProcess: string | undefined = step.content;
+
+	if (step.generate_prompt && !step.content) {
+		progress.report({
+			message: `Generating content for new file: ${path.basename(
+				targetFileUri.fsPath
+			)}...`,
+		});
+
+		const streamId = crypto.randomUUID();
+
+		const editorContext: EditorContext = {
+			filePath: step.file,
+			documentUri: targetFileUri,
+			fullText: "",
+			selection: new vscode.Range(0, 0, 0, 0),
+			selectedText: "",
+			instruction: step.generate_prompt ?? "",
+			languageId: getLanguageId(path.extname(step.file)),
+		};
+
+		const generationContext: EnhancedGenerationContext = {
+			editorContext: editorContext,
+			successfulChangeHistory: formatSuccessfulChangesForPrompt(
+				changeLogger.getCompletedPlanChangeSets()
+			),
+			projectContext: "",
+			activeSymbolInfo: undefined,
+			relevantSnippets: "",
+		};
+
+		try {
+			const languageId = getLanguageId(path.extname(step.file));
+			postMessageToWebview({
+				type: "codeFileStreamStart",
+				value: { streamId, filePath: step.file, languageId },
+			});
+
+			const generatedContentResult =
+				await enhancedCodeGenerator.generateFileContent(
+					step.file,
+					step.generate_prompt,
+					generationContext,
+					modelName,
+					token
+				);
+
+			contentToProcess = cleanCodeOutput(generatedContentResult.content);
+
+			postMessageToWebview({
+				type: "codeFileStreamEnd",
+				value: { streamId, filePath: step.file, success: true },
+			});
+		} catch (aiError: any) {
+			postMessageToWebview({
+				type: "codeFileStreamEnd",
+				value: {
+					streamId,
+					filePath: step.file,
+					success: false,
+					error: aiError instanceof Error ? aiError.message : String(aiError),
+				},
+			});
+			return reportErrorAndReturnResult(
+				aiError,
+				`Failed to generate content for ${path.basename(
+					targetFileUri.fsPath
+				)}.`,
+				step.file,
+				PlanStepAction.CreateFile
+			);
+		}
+	} else if (!step.content) {
+		const errMsg =
+			"Missing content for CreateFile action. Either 'content' or 'generate_prompt' must be provided.";
+		return reportErrorAndReturnResult(
+			new Error(errMsg),
+			errMsg,
+			step.file,
+			PlanStepAction.CreateFile
+		);
+	} else {
+		contentToProcess = cleanCodeOutput(step.content);
+	}
+
+	if (contentToProcess === undefined) {
+		const errMsg =
+			"Content to process is undefined after AI generation or content check.";
+		return reportErrorAndReturnResult(
+			new Error(errMsg),
+			errMsg,
+			step.file,
+			PlanStepAction.CreateFile
+		);
+	}
+
+	try {
+		await vscode.workspace.fs.stat(targetFileUri); // Check if file exists
+
+		const existingContentBuffer = await vscode.workspace.fs.readFile(
+			targetFileUri
+		);
+		const existingContent = existingContentBuffer.toString();
+
+		if (existingContent === contentToProcess) {
+			progress.report({
+				message: `File ${path.basename(
+					targetFileUri.fsPath
+				)} already has the target content. Skipping update.`,
+			});
+			return { success: true };
+		} else {
+			progress.report({
+				message: `Updating content of ${path.basename(
+					targetFileUri.fsPath
+				)}...`,
+			});
+
+			let documentToUpdate: vscode.TextDocument;
+			try {
+				documentToUpdate = await vscode.workspace.openTextDocument(
+					targetFileUri
+				);
+			} catch (error: any) {
+				return reportErrorAndReturnResult(
+					error,
+					`Failed to open document ${targetFileUri.fsPath} for update.`,
+					step.file,
+					PlanStepAction.CreateFile
+				);
+			}
+
+			const editorToUpdate = await vscode.window.showTextDocument(
+				documentToUpdate
+			);
+
+			try {
+				await applyAITextEdits(
+					editorToUpdate,
+					existingContent,
+					contentToProcess,
+					token
+				);
+			} catch (editError: any) {
+				return reportErrorAndReturnResult(
+					editError,
+					`Failed to apply AI text edits to ${path.basename(
+						targetFileUri.fsPath
+					)}.`,
+					step.file,
+					PlanStepAction.CreateFile
+				);
+			}
+
+			const { summary, addedLines, removedLines, formattedDiff } =
+				await generateFileChangeSummary(
+					existingContent,
+					contentToProcess,
+					step.file
+				);
+
+			const updateChangeEntry: FileChangeEntry = {
+				changeType: "modified",
+				filePath: step.file,
+				summary: summary,
+				addedLines: addedLines,
+				removedLines: removedLines,
+				timestamp: Date.now(),
+				diffContent: formattedDiff,
+				originalContent: existingContent,
+				newContent: contentToProcess,
+			};
+			changeLogger.logChange(updateChangeEntry);
+
+			console.log(
+				`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file}:\n---\n${formattedDiff}\n---`
+			);
+			postChatUpdate({
+				type: "appendRealtimeModelMessage",
+				value: {
+					text: `Successfully updated file \`${path.basename(
+						targetFileUri.fsPath
+					)}\`.`,
+					isError: false,
+				},
+				diffContent: formattedDiff,
+			});
+
+			progress.report({
+				message: `Successfully updated file ${path.basename(
+					targetFileUri.fsPath
+				)}.`,
+			});
+			return { success: true, diffContent: formattedDiff };
+		}
+	} catch (error: any) {
+		if (
+			error instanceof vscode.FileSystemError &&
+			(error.code === "FileNotFound" || error.code === "EntryNotFound")
+		) {
+			progress.report({
+				message: `Creating new file: ${path.basename(targetFileUri.fsPath)}...`,
+			});
+			try {
+				await vscode.workspace.fs.writeFile(
+					targetFileUri,
+					Buffer.from(contentToProcess)
+				);
+			} catch (writeError: any) {
+				return reportErrorAndReturnResult(
+					writeError,
+					`Failed to write content to new file ${targetFileUri.fsPath}.`,
+					step.file,
+					PlanStepAction.CreateFile
+				);
+			}
+
+			const {
+				summary: createSummary,
+				addedLines: createAddedLines,
+				formattedDiff: createFormattedDiff,
+			} = await generateFileChangeSummary("", contentToProcess, step.file);
+
+			const createChangeEntry: FileChangeEntry = {
+				changeType: "created",
+				filePath: step.file,
+				summary: createSummary,
+				addedLines: createAddedLines,
+				removedLines: [],
+				timestamp: Date.now(),
+				diffContent: createFormattedDiff,
+				originalContent: "",
+				newContent: contentToProcess,
+			};
+
+			changeLogger.logChange(createChangeEntry);
+
+			console.log(
+				`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file}:\n---\n${createFormattedDiff}\n---`
+			);
+			postChatUpdate({
+				type: "appendRealtimeModelMessage",
+				value: {
+					text: `Successfully created file \`${path.basename(
+						targetFileUri.fsPath
+					)}\`.`,
+					isError: false,
+				},
+				diffContent: createFormattedDiff,
+			});
+
+			progress.report({
+				message: `Successfully created file ${path.basename(
+					targetFileUri.fsPath
+				)}.`,
+			});
+			return { success: true, diffContent: createFormattedDiff };
+		} else {
+			return reportErrorAndReturnResult(
+				error,
+				`Error accessing or creating file ${targetFileUri.fsPath}.`,
+				step.file,
+				PlanStepAction.CreateFile
+			);
+		}
+	}
+}
+
+async function _handleModifyFileAction(
+	step: PlanStep,
+	token: vscode.CancellationToken,
+	progress: vscode.Progress<{ message?: string; increment?: number }>,
+	changeLogger: ProjectChangeLogger,
+	postChatUpdate: (message: {
+		type: string;
+		value: { text: string; isError?: boolean };
+		diffContent?: string;
+	}) => void,
+	aiRequestService: AIRequestService,
+	enhancedCodeGenerator: EnhancedCodeGenerator,
+	postMessageToWebview: (message: ExtensionToWebviewMessages) => void,
+	workspaceRootUri: vscode.Uri,
+	modelName: string,
+	reportErrorAndReturnResult: (
+		error: any,
+		defaultMessage: string,
+		filePath: string | undefined,
+		actionType: PlanStepAction
+	) => PlanStepExecutionResult,
+	_handleCreateFileAction: (
+		step: PlanStep,
+		token: vscode.CancellationToken,
+		progress: vscode.Progress<{ message?: string; increment?: number }>,
+		changeLogger: ProjectChangeLogger,
+		postChatUpdate: (message: {
+			type: string;
+			value: { text: string; isError?: boolean };
+			diffContent?: string;
+		}) => void,
+		aiRequestService: AIRequestService,
+		enhancedCodeGenerator: EnhancedCodeGenerator,
+		postMessageToWebview: (message: ExtensionToWebviewMessages) => void,
+		workspaceRootUri: vscode.Uri,
+		modelName: string,
+		reportErrorAndReturnResult: (
+			error: any,
+			defaultMessage: string,
+			filePath: string | undefined,
+			actionType: PlanStepAction
+		) => PlanStepExecutionResult
+	) => Promise<PlanStepExecutionResult>
+): Promise<PlanStepExecutionResult> {
+	if (token.isCancellationRequested) {
+		throw new Error(ERROR_OPERATION_CANCELLED);
+	}
+	if (!step.file || !step.modificationPrompt) {
+		const errMsg =
+			"Missing file path or modification prompt for ModifyFile action.";
+		return reportErrorAndReturnResult(
+			new Error(errMsg),
+			errMsg,
+			step.file,
+			PlanStepAction.ModifyFile
+		);
+	}
+	const targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file);
+	let document: vscode.TextDocument;
+	let editor: vscode.TextEditor;
+	let originalContent: string;
+	let aiModifiedContent: string;
+	let cleanedAIContent: string;
+
+	try {
+		progress.report({
+			message: `Opening file: ${path.basename(targetFileUri.fsPath)}...`,
+		});
+		document = await vscode.workspace.openTextDocument(targetFileUri);
+		editor = await vscode.window.showTextDocument(document);
+		originalContent = editor.document.getText();
+	} catch (error: any) {
+		if (
+			error instanceof vscode.FileSystemError &&
+			(error.code === "FileNotFound" || error.code === "EntryNotFound")
+		) {
+			progress.report({
+				message: `File ${path.basename(
+					targetFileUri.fsPath
+				)} not found. Attempting to generate initial content and create it...`,
+			});
+
+			const createStep: PlanStep = {
+				action: PlanStepAction.CreateFile,
+				file: step.file,
+				generate_prompt: step.modificationPrompt, // Use modification prompt for content generation
+				description: `Creating missing file ${path.basename(
+					targetFileUri.fsPath
+				)} from modification prompt.`,
+			};
+
+			// Delegate to _handleCreateFileAction for creation
+			return await _handleCreateFileAction(
+				createStep,
+				token,
+				progress,
+				changeLogger,
+				postChatUpdate,
+				aiRequestService,
+				enhancedCodeGenerator,
+				postMessageToWebview,
+				workspaceRootUri,
+				modelName,
+				reportErrorAndReturnResult
+			);
+		} else {
+			return reportErrorAndReturnResult(
+				error,
+				`Failed to access or open document ${targetFileUri.fsPath}.`,
+				step.file,
+				PlanStepAction.ModifyFile
+			);
+		}
+	}
+
+	progress.report({
+		message: `Analyzing and modifying ${path.basename(
+			targetFileUri.fsPath
+		)} with AI...`,
+	});
+
+	try {
+		aiModifiedContent = await _performModification(
+			originalContent,
+			step.modificationPrompt,
+			editor.document.languageId,
+			editor.document.uri.fsPath,
+			modelName,
+			aiRequestService,
+			enhancedCodeGenerator,
+			token,
+			postMessageToWebview,
+			false
+		);
+		cleanedAIContent = aiModifiedContent;
+	} catch (aiError: any) {
+		return reportErrorAndReturnResult(
+			aiError,
+			`Failed to modify file ${path.basename(targetFileUri.fsPath)}.`,
+			step.file,
+			PlanStepAction.ModifyFile
+		);
+	}
+
+	try {
+		await applyAITextEdits(editor, originalContent, cleanedAIContent, token);
+	} catch (editError: any) {
+		return reportErrorAndReturnResult(
+			editError,
+			`Failed to apply AI text edits to ${path.basename(
+				targetFileUri.fsPath
+			)}.`,
+			step.file,
+			PlanStepAction.ModifyFile
+		);
+	}
+
+	const { summary, addedLines, removedLines, formattedDiff } =
+		await generateFileChangeSummary(
+			originalContent,
+			cleanedAIContent,
+			step.file
+		);
+
+	const newChangeEntry: FileChangeEntry = {
+		changeType: "modified",
+		filePath: step.file,
+		summary: summary,
+		addedLines: addedLines,
+		removedLines: removedLines,
+		timestamp: Date.now(),
+		diffContent: formattedDiff,
+		originalContent: originalContent,
+		newContent: cleanedAIContent,
+	};
+	changeLogger.logChange(newChangeEntry);
+
+	console.log(
+		`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file}:\n---\n${formattedDiff}\n---`
+	);
+
+	postChatUpdate({
+		type: "appendRealtimeModelMessage",
+		value: {
+			text: `Successfully applied modifications to \`${path.basename(
+				targetFileUri.fsPath
+			)}\`.`,
+			isError: false,
+		},
+		diffContent: formattedDiff,
+	});
+
+	progress.report({
+		message: `Successfully applied modifications to ${path.basename(
+			targetFileUri.fsPath
+		)}.`,
+	});
+	return { success: true, diffContent: formattedDiff };
+}
+
 export async function executePlanStep(
 	step: PlanStep,
 	token: vscode.CancellationToken,
@@ -136,952 +807,21 @@ export async function executePlanStep(
 		.getConfiguration("minovativeMind")
 		.get("modelName", DEFAULT_FLASH_MODEL);
 
-	let result: PlanStepExecutionResult = { success: false };
-
-	try {
-		switch (step.action) {
-			case PlanStepAction.ModifyFile: {
-				if (!step.file || !step.modificationPrompt) {
-					const errMsg =
-						"Missing file path or modification prompt for ModifyFile action.";
-					postChatUpdate({
-						type: "appendRealtimeModelMessage",
-						value: { text: errMsg, isError: true },
-					});
-					result = {
-						success: false,
-						errorType: "non-transient",
-						errorMessage: errMsg,
-					};
-					break;
-				}
-				const targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file!);
-				let document: vscode.TextDocument;
-				let editor: vscode.TextEditor;
-				let originalContent: string;
-				let aiModifiedContent: string;
-				let cleanedAIContent: string; // To capture the cleaned AI output explicitly
-
-				try {
-					if (token.isCancellationRequested) {
-						result = {
-							success: false,
-							errorType: "cancellation",
-							errorMessage: "Operation cancelled by user.",
-						};
-						break;
-					}
-					progress.report({
-						message: `Opening file: ${path.basename(targetFileUri.fsPath)}...`,
-					});
-					document = await vscode.workspace.openTextDocument(targetFileUri);
-					editor = await vscode.window.showTextDocument(document);
-					originalContent = editor.document.getText();
-				} catch (error: any) {
-					if (
-						error instanceof vscode.FileSystemError &&
-						(error.code === "FileNotFound" || error.code === "EntryNotFound")
-					) {
-						progress.report({
-							message: `File ${path.basename(
-								targetFileUri.fsPath
-							)} not found. Attempting to generate initial content and create it...`,
-						});
-
-						let aiGeneratedInitialContent: string;
-						try {
-							if (token.isCancellationRequested) {
-								result = {
-									success: false,
-									errorType: "cancellation",
-									errorMessage: "Operation cancelled by user.",
-								};
-								break;
-							}
-							aiGeneratedInitialContent = await _performModification(
-								"",
-								step.modificationPrompt,
-								path.extname(targetFileUri.fsPath).substring(1),
-								targetFileUri.fsPath,
-								modelName,
-								aiRequestService,
-								enhancedCodeGenerator,
-								token,
-								postMessageToWebview,
-								false
-							);
-						} catch (aiError: any) {
-							const errorMessage = formatUserFacingErrorMessage(
-								aiError,
-								`Failed to generate initial content for ${path.basename(
-									targetFileUri.fsPath
-								)}.`,
-								"[PlanExecutionService] ",
-								workspaceRootUri
-							);
-							postChatUpdate({
-								type: "appendRealtimeModelMessage",
-								value: { text: errorMessage, isError: true },
-							});
-							result = {
-								success: false,
-								errorType: aiError.message?.includes(ERROR_OPERATION_CANCELLED)
-									? "cancellation"
-									: aiError.message?.includes("quota exceeded") ||
-									  aiError.message?.includes("rate limit exceeded") ||
-									  aiError.message?.includes("network issue") ||
-									  aiError.message?.includes("AI service unavailable") ||
-									  aiError.message?.includes("timeout")
-									? "transient"
-									: "non-transient",
-								errorMessage: errorMessage,
-							};
-							break;
-						}
-
-						const createStep: PlanStep = {
-							action: PlanStepAction.CreateFile,
-							file: step.file,
-							content: aiGeneratedInitialContent,
-							description: `Creating missing file ${path.basename(
-								targetFileUri.fsPath
-							)} from modification prompt.`,
-						};
-
-						const createResult = await executePlanStep(
-							createStep,
-							token,
-							progress,
-							changeLogger,
-							postChatUpdate,
-							aiRequestService,
-							enhancedCodeGenerator,
-							postMessageToWebview
-						);
-						// Delegate result of creation directly
-						result = createResult;
-						break;
-					} else {
-						const errorMessage = formatUserFacingErrorMessage(
-							error,
-							`Failed to access or open document ${targetFileUri.fsPath}.`,
-							"[PlanExecutionService] ",
-							workspaceRootUri
-						);
-						postChatUpdate({
-							type: "appendRealtimeModelMessage",
-							value: { text: errorMessage, isError: true },
-						});
-						result = {
-							success: false,
-							errorType: error.message?.includes(ERROR_OPERATION_CANCELLED)
-								? "cancellation"
-								: "non-transient",
-							errorMessage: errorMessage,
-						};
-						break;
-					}
-				}
-				if (!result.success && result.errorType) {
-					// If a prior error in the try/catch block set the result, propagate it
-					break;
-				}
-
-				if (token.isCancellationRequested) {
-					result = {
-						success: false,
-						errorType: "cancellation",
-						errorMessage: "Operation cancelled by user.",
-					};
-					break;
-				}
-				progress.report({
-					message: `Analyzing and modifying ${path.basename(
-						targetFileUri.fsPath
-					)} with AI...`,
-				});
-
-				try {
-					aiModifiedContent = await _performModification(
-						originalContent,
-						step.modificationPrompt,
-						editor.document.languageId,
-						editor.document.uri.fsPath,
-						modelName,
-						aiRequestService,
-						enhancedCodeGenerator,
-						token,
-						postMessageToWebview,
-						false
-					);
-					cleanedAIContent = aiModifiedContent; // Capture the cleaned AI output
-				} catch (aiError: any) {
-					const errorMessage = formatUserFacingErrorMessage(
-						aiError,
-						`Failed to modify file ${path.basename(targetFileUri.fsPath)}.`,
-						"[PlanExecutionService] ",
-						workspaceRootUri
-					);
-					postChatUpdate({
-						type: "appendRealtimeModelMessage",
-						value: { text: errorMessage, isError: true },
-					});
-					result = {
-						success: false,
-						errorType: aiError.message?.includes(ERROR_OPERATION_CANCELLED)
-							? "cancellation"
-							: aiError.message?.includes("quota exceeded") ||
-							  aiError.message?.includes("rate limit exceeded") ||
-							  aiError.message?.includes("network issue") ||
-							  aiError.message?.includes("AI service unavailable") ||
-							  aiError.message?.includes("timeout")
-							? "transient"
-							: "non-transient",
-						errorMessage: errorMessage,
-					};
-					break;
-				}
-
-				if (token.isCancellationRequested) {
-					result = {
-						success: false,
-						errorType: "cancellation",
-						errorMessage: "Operation cancelled by user.",
-					};
-					break;
-				}
-
-				try {
-					await applyAITextEdits(
-						editor,
-						originalContent,
-						cleanedAIContent,
-						token
-					);
-				} catch (editError: any) {
-					const errorMessage = formatUserFacingErrorMessage(
-						editError,
-						`Failed to apply AI text edits to ${path.basename(
-							targetFileUri.fsPath
-						)}.`,
-						"[PlanExecutionService] ",
-						workspaceRootUri
-					);
-					postChatUpdate({
-						type: "appendRealtimeModelMessage",
-						value: { text: errorMessage, isError: true },
-					});
-					result = {
-						success: false,
-						errorType: editError.message?.includes(ERROR_OPERATION_CANCELLED)
-							? "cancellation"
-							: "non-transient",
-						errorMessage: errorMessage,
-					};
-					break;
-				}
-
-				const { summary, addedLines, removedLines, formattedDiff } =
-					await generateFileChangeSummary(
-						originalContent,
-						cleanedAIContent,
-						step.file!
-					);
-
-				const newChangeEntry: FileChangeEntry = {
-					changeType: "modified",
-					filePath: step.file!,
-					summary: summary,
-					addedLines: addedLines,
-					removedLines: removedLines,
-					timestamp: Date.now(),
-					diffContent: formattedDiff,
-					originalContent: originalContent,
-					newContent: cleanedAIContent, // Use the captured cleaned AI output
-				};
-				changeLogger.logChange(newChangeEntry);
-
-				console.log(
-					`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file!}:\n---\n${formattedDiff}\n---`
-				);
-
-				postChatUpdate({
-					type: "appendRealtimeModelMessage",
-					value: {
-						text: `Successfully applied modifications to \`${path.basename(
-							targetFileUri.fsPath
-						)}\`.`,
-						isError: false,
-					},
-					diffContent: formattedDiff,
-				});
-
-				progress.report({
-					message: `Successfully applied modifications to ${path.basename(
-						targetFileUri.fsPath
-					)}.`,
-				});
-				result = { success: true, diffContent: formattedDiff };
-				break;
-			}
-
-			case PlanStepAction.TypeContent: {
-				if (!step.file || !step.content) {
-					const errMsg = "Missing file path or content for TypeContent action.";
-					postChatUpdate({
-						type: "appendRealtimeModelMessage",
-						value: { text: errMsg, isError: true },
-					});
-					result = {
-						success: false,
-						errorType: "non-transient",
-						errorMessage: errMsg,
-					};
-					break;
-				}
-				const docToTypeUri = vscode.Uri.file(step.file);
-				try {
-					if (token.isCancellationRequested) {
-						result = {
-							success: false,
-							errorType: "cancellation",
-							errorMessage: "Operation cancelled by user.",
-						};
-						break;
-					}
-					const docToType = await vscode.workspace.openTextDocument(
-						docToTypeUri
-					);
-					const editorToType = await vscode.window.showTextDocument(docToType);
-					await typeContentIntoEditor(
-						editorToType,
-						step.content,
-						token,
-						progress
-					);
-					result = { success: true };
-				} catch (error: any) {
-					const errorMessage = formatUserFacingErrorMessage(
-						error,
-						`Failed to type content into editor for ${path.basename(
-							docToTypeUri.fsPath
-						)}.`,
-						"[PlanExecutionService] ",
-						workspaceRootUri
-					);
-					postChatUpdate({
-						type: "appendRealtimeModelMessage",
-						value: { text: errorMessage, isError: true },
-					});
-					result = {
-						success: false,
-						errorType: error.message?.includes(ERROR_OPERATION_CANCELLED)
-							? "cancellation"
-							: "non-transient",
-						errorMessage: errorMessage,
-					};
-					break;
-				}
-				break;
-			}
-
-			case PlanStepAction.CreateFile: {
-				let targetFileUri: vscode.Uri;
-				if (!step.file) {
-					const errMsg = "Missing file path for CreateFile action.";
-					postChatUpdate({
-						type: "appendRealtimeModelMessage",
-						value: { text: errMsg, isError: true },
-					});
-					result = {
-						success: false,
-						errorType: "non-transient",
-						errorMessage: errMsg,
-					};
-					break;
-				}
-				targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file!);
-
-				let contentToProcess: string | undefined = step.content;
-
-				if (token.isCancellationRequested) {
-					result = {
-						success: false,
-						errorType: "cancellation",
-						errorMessage: "Operation cancelled by user.",
-					};
-					break;
-				}
-
-				if (step.generate_prompt && !step.content) {
-					progress.report({
-						message: `Generating content for new file: ${path.basename(
-							targetFileUri.fsPath
-						)}...`,
-					});
-
-					const streamId = crypto.randomUUID();
-					const onCodeChunkCallback = (chunk: string) => {
-						postMessageToWebview({
-							type: "codeFileStreamChunk",
-							value: {
-								streamId,
-								filePath: step.file!,
-								chunk,
-							},
-						});
-					};
-
-					const editorContext: EditorContext = {
-						filePath: step.file!,
-						documentUri: targetFileUri,
-						fullText: "",
-						selection: new vscode.Range(0, 0, 0, 0),
-						selectedText: "",
-						instruction: step.generate_prompt ?? "",
-						languageId: getLanguageId(path.extname(step.file!)),
-					};
-
-					const generationContext: EnhancedGenerationContext = {
-						editorContext: editorContext,
-						successfulChangeHistory: formatSuccessfulChangesForPrompt(
-							changeLogger.getCompletedPlanChangeSets()
-						),
-						projectContext: "",
-						activeSymbolInfo: undefined,
-						relevantSnippets: "",
-					};
-
-					try {
-						const languageId = getLanguageId(path.extname(step.file!));
-						postMessageToWebview({
-							type: "codeFileStreamStart",
-							value: { streamId, filePath: step.file!, languageId },
-						});
-
-						const generatedContentResult =
-							await enhancedCodeGenerator.generateFileContent(
-								step.file!,
-								step.generate_prompt!,
-								generationContext,
-								modelName,
-								token
-							);
-
-						contentToProcess = cleanCodeOutput(generatedContentResult.content);
-
-						postMessageToWebview({
-							type: "codeFileStreamEnd",
-							value: { streamId, filePath: step.file!, success: true },
-						});
-					} catch (aiError: any) {
-						postMessageToWebview({
-							type: "codeFileStreamEnd",
-							value: {
-								streamId,
-								filePath: step.file!,
-								success: false,
-								error:
-									aiError instanceof Error ? aiError.message : String(aiError),
-							},
-						});
-						const errorMessage = formatUserFacingErrorMessage(
-							aiError,
-							`Failed to generate content for ${path.basename(
-								targetFileUri.fsPath
-							)}.`,
-							"[PlanExecutionService] ",
-							workspaceRootUri
-						);
-						postChatUpdate({
-							type: "appendRealtimeModelMessage",
-							value: { text: errorMessage, isError: true },
-						});
-						result = {
-							success: false,
-							errorType: aiError.message?.includes(ERROR_OPERATION_CANCELLED)
-								? "cancellation"
-								: aiError.message?.includes("quota exceeded") ||
-								  aiError.message?.includes("rate limit exceeded") ||
-								  aiError.message?.includes("network issue") ||
-								  aiError.message?.includes("AI service unavailable") ||
-								  aiError.message?.includes("timeout")
-								? "transient"
-								: "non-transient",
-							errorMessage: errorMessage,
-						};
-						break;
-					}
-				} else if (!step.content) {
-					const errMsg =
-						"Missing content for CreateFile action. Either 'content' or 'generate_prompt' must be provided.";
-					postChatUpdate({
-						type: "appendRealtimeModelMessage",
-						value: { text: errMsg, isError: true },
-					});
-					result = {
-						success: false,
-						errorType: "non-transient",
-						errorMessage: errMsg,
-					};
-					break;
-				} else {
-					contentToProcess = cleanCodeOutput(step.content);
-				}
-
-				if (!result.success && result.errorType) {
-					break; // Propagate error from AI generation
-				}
-
-				if (contentToProcess === undefined) {
-					const errMsg =
-						"Content to process is undefined after AI generation or content check.";
-					postChatUpdate({
-						type: "appendRealtimeModelMessage",
-						value: { text: errMsg, isError: true },
-					});
-					result = {
-						success: false,
-						errorType: "non-transient",
-						errorMessage: errMsg,
-					};
-					break;
-				}
-
-				try {
-					if (token.isCancellationRequested) {
-						result = {
-							success: false,
-							errorType: "cancellation",
-							errorMessage: "Operation cancelled by user.",
-						};
-						break;
-					}
-					await vscode.workspace.fs.stat(targetFileUri);
-
-					const existingContentBuffer = await vscode.workspace.fs.readFile(
-						targetFileUri
-					);
-					const existingContent = existingContentBuffer.toString();
-
-					if (existingContent === contentToProcess) {
-						progress.report({
-							message: `File ${path.basename(
-								targetFileUri.fsPath
-							)} already has the target content. Skipping update.`,
-						});
-						result = { success: true };
-					} else {
-						progress.report({
-							message: `Updating content of ${path.basename(
-								targetFileUri.fsPath
-							)}...`,
-						});
-
-						let documentToUpdate: vscode.TextDocument;
-						try {
-							documentToUpdate = await vscode.workspace.openTextDocument(
-								targetFileUri
-							);
-						} catch (error: any) {
-							const errorMessage = formatUserFacingErrorMessage(
-								error,
-								`Failed to open document ${targetFileUri.fsPath} for update.`,
-								"[PlanExecutionService] ",
-								workspaceRootUri
-							);
-							postChatUpdate({
-								type: "appendRealtimeModelMessage",
-								value: { text: errorMessage, isError: true },
-							});
-							result = {
-								success: false,
-								errorType: error.message?.includes(ERROR_OPERATION_CANCELLED)
-									? "cancellation"
-									: "non-transient",
-								errorMessage: errorMessage,
-							};
-							break;
-						}
-
-						const editorToUpdate = await vscode.window.showTextDocument(
-							documentToUpdate
-						);
-
-						try {
-							await applyAITextEdits(
-								editorToUpdate,
-								existingContent,
-								contentToProcess,
-								token
-							);
-						} catch (editError: any) {
-							const errorMessage = formatUserFacingErrorMessage(
-								editError,
-								`Failed to apply AI text edits to ${path.basename(
-									targetFileUri.fsPath
-								)}.`,
-								"[PlanExecutionService] ",
-								workspaceRootUri
-							);
-							postChatUpdate({
-								type: "appendRealtimeModelMessage",
-								value: { text: errorMessage, isError: true },
-							});
-							result = {
-								success: false,
-								errorType: editError.message?.includes(
-									ERROR_OPERATION_CANCELLED
-								)
-									? "cancellation"
-									: "non-transient",
-								errorMessage: errorMessage,
-							};
-							break;
-						}
-						if (!result.success && result.errorType) {
-							break;
-						}
-
-						const newContentAfterEdit = editorToUpdate.document.getText(); // Actual content after edits
-						const { summary, addedLines, removedLines, formattedDiff } =
-							await generateFileChangeSummary(
-								existingContent,
-								contentToProcess, // Diff against the *intended* new content (AI's output)
-								step.file!
-							);
-
-						const updateChangeEntry: FileChangeEntry = {
-							changeType: "modified",
-							filePath: step.file!,
-							summary: summary,
-							addedLines: addedLines,
-							removedLines: removedLines,
-							timestamp: Date.now(),
-							diffContent: formattedDiff,
-							originalContent: existingContent,
-							newContent: contentToProcess, // Use captured cleaned AI output
-						};
-						changeLogger.logChange(updateChangeEntry);
-
-						console.log(
-							`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file!}:\n---\n${formattedDiff}\n---`
-						);
-						postChatUpdate({
-							type: "appendRealtimeModelMessage",
-							value: {
-								text: `Successfully updated file \`${path.basename(
-									targetFileUri.fsPath
-								)}\`.`,
-								isError: false,
-							},
-							diffContent: formattedDiff,
-						});
-
-						progress.report({
-							message: `Successfully updated file ${path.basename(
-								targetFileUri.fsPath
-							)}.`,
-						});
-						result = { success: true, diffContent: formattedDiff };
-					}
-				} catch (error: any) {
-					if (
-						error instanceof vscode.FileSystemError &&
-						(error.code === "FileNotFound" || error.code === "EntryNotFound")
-					) {
-						progress.report({
-							message: `Creating new file: ${path.basename(
-								targetFileUri.fsPath
-							)}...`,
-						});
-						try {
-							if (token.isCancellationRequested) {
-								result = {
-									success: false,
-									errorType: "cancellation",
-									errorMessage: "Operation cancelled by user.",
-								};
-								break;
-							}
-							await vscode.workspace.fs.writeFile(
-								targetFileUri,
-								Buffer.from(contentToProcess)
-							);
-						} catch (writeError: any) {
-							const errorMessage = formatUserFacingErrorMessage(
-								writeError,
-								`Failed to write content to new file ${targetFileUri.fsPath}.`,
-								"[PlanExecutionService] ",
-								workspaceRootUri
-							);
-							postChatUpdate({
-								type: "appendRealtimeModelMessage",
-								value: { text: errorMessage, isError: true },
-							});
-							result = {
-								success: false,
-								errorType: writeError.message?.includes(
-									ERROR_OPERATION_CANCELLED
-								)
-									? "cancellation"
-									: "non-transient",
-								errorMessage: errorMessage,
-							};
-							break;
-						}
-						if (!result.success && result.errorType) {
-							break;
-						}
-
-						const {
-							summary: createSummary,
-							addedLines: createAddedLines,
-							formattedDiff: createFormattedDiff,
-						} = await generateFileChangeSummary(
-							"",
-							contentToProcess,
-							step.file!
-						); // Diff against the intended new content
-
-						const createChangeEntry: FileChangeEntry = {
-							changeType: "created",
-							filePath: step.file!,
-							summary: createSummary,
-							addedLines: createAddedLines,
-							removedLines: [],
-							timestamp: Date.now(),
-							diffContent: createFormattedDiff,
-							originalContent: "",
-							newContent: contentToProcess, // Use captured cleaned AI output
-						};
-
-						changeLogger.logChange(createChangeEntry);
-
-						console.log(
-							`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file!}:\n---\n${createFormattedDiff}\n---`
-						);
-						postChatUpdate({
-							type: "appendRealtimeModelMessage",
-							value: {
-								text: `Successfully created file \`${path.basename(
-									targetFileUri.fsPath
-								)}\`.`,
-								isError: false,
-							},
-							diffContent: createFormattedDiff,
-						});
-
-						progress.report({
-							message: `Successfully created file ${path.basename(
-								targetFileUri.fsPath
-							)}.`,
-						});
-						result = { success: true, diffContent: createFormattedDiff };
-					} else {
-						const errorMessage = formatUserFacingErrorMessage(
-							error,
-							`Error accessing or creating file ${targetFileUri.fsPath}.`,
-							"[PlanExecutionService] ",
-							workspaceRootUri
-						);
-						postChatUpdate({
-							type: "appendRealtimeModelMessage",
-							value: { text: errorMessage, isError: true },
-						});
-						result = {
-							success: false,
-							errorType: error.message?.includes(ERROR_OPERATION_CANCELLED)
-								? "cancellation"
-								: "non-transient",
-							errorMessage: errorMessage,
-						};
-					}
-				}
-				break;
-			}
-
-			case PlanStepAction.DeleteFile: {
-				if (!step.file) {
-					const errMsg = "Missing file path for DeleteFile action.";
-					postChatUpdate({
-						type: "appendRealtimeModelMessage",
-						value: { text: errMsg, isError: true },
-					});
-					result = {
-						success: false,
-						errorType: "non-transient",
-						errorMessage: errMsg,
-					};
-					break;
-				}
-				const targetFileUri = vscode.Uri.joinPath(workspaceRootUri, step.file);
-				const fileName = path.basename(targetFileUri.fsPath);
-
-				let fileContentBeforeDelete: string = "";
-
-				try {
-					if (token.isCancellationRequested) {
-						result = {
-							success: false,
-							errorType: "cancellation",
-							errorMessage: "Operation cancelled by user.",
-						};
-						break;
-					}
-					progress.report({
-						message: `Reading content of ${fileName} before deletion...`,
-					});
-					const contentBuffer = await vscode.workspace.fs.readFile(
-						targetFileUri
-					);
-					fileContentBeforeDelete = contentBuffer.toString();
-				} catch (error: any) {
-					if (
-						error instanceof vscode.FileSystemError &&
-						(error.code === "FileNotFound" || error.code === "EntryNotFound")
-					) {
-						console.warn(
-							`[PlanExecutionService] File ${fileName} not found for reading before deletion. Assuming empty content for logging.`
-						);
-						fileContentBeforeDelete = "";
-					} else {
-						const errorMessage = formatUserFacingErrorMessage(
-							error,
-							`Failed to read file ${fileName} before deletion.`,
-							"[PlanExecutionService] ",
-							workspaceRootUri
-						);
-						postChatUpdate({
-							type: "appendRealtimeModelMessage",
-							value: { text: errorMessage, isError: true },
-						});
-						result = {
-							success: false,
-							errorType: error.message?.includes(ERROR_OPERATION_CANCELLED)
-								? "cancellation"
-								: "non-transient",
-							errorMessage: errorMessage,
-						};
-						break;
-					}
-				}
-				if (!result.success && result.errorType) {
-					break;
-				}
-
-				try {
-					if (token.isCancellationRequested) {
-						result = {
-							success: false,
-							errorType: "cancellation",
-							errorMessage: "Operation cancelled by user.",
-						};
-						break;
-					}
-					progress.report({ message: `Deleting file: ${fileName}...` });
-					await vscode.workspace.fs.delete(targetFileUri, { useTrash: true });
-					console.log(
-						`[PlanExecutionService] Successfully deleted file: ${fileName}`
-					);
-				} catch (error: any) {
-					if (
-						error instanceof vscode.FileSystemError &&
-						(error.code === "FileNotFound" || error.code === "EntryNotFound")
-					) {
-						console.warn(
-							`[PlanExecutionService] File ${fileName} already not found. No deletion needed.`
-						);
-					} else {
-						const errorMessage = formatUserFacingErrorMessage(
-							error,
-							`Failed to delete file ${fileName}.`,
-							"[PlanExecutionService] ",
-							workspaceRootUri
-						);
-						postChatUpdate({
-							type: "appendRealtimeModelMessage",
-							value: { text: errorMessage, isError: true },
-						});
-						result = {
-							success: false,
-							errorType: error.message?.includes(ERROR_OPERATION_CANCELLED)
-								? "cancellation"
-								: "non-transient",
-							errorMessage: errorMessage,
-						};
-						break;
-					}
-				}
-				if (!result.success && result.errorType) {
-					break;
-				}
-
-				const { summary, removedLines, formattedDiff } =
-					await generateFileChangeSummary(
-						fileContentBeforeDelete,
-						"",
-						step.file!
-					);
-
-				const deleteChangeEntry: FileChangeEntry = {
-					filePath: step.file!,
-					changeType: "deleted",
-					originalContent: fileContentBeforeDelete,
-					newContent: "",
-					summary: summary,
-					removedLines: removedLines,
-					addedLines: [],
-					timestamp: Date.now(),
-					diffContent: formattedDiff,
-				};
-
-				changeLogger.logChange(deleteChangeEntry);
-
-				console.log(
-					`[MinovativeMind:PlanExecutionService] Posting message with diffContent for ${step.file!}:\n---\n${formattedDiff}\n---`
-				);
-
-				postChatUpdate({
-					type: "appendRealtimeModelMessage",
-					value: {
-						text: `Successfully deleted \`${fileName}\`.`,
-						isError: false,
-					},
-					diffContent: formattedDiff,
-				});
-
-				progress.report({
-					message: `Successfully deleted ${fileName}.`,
-				});
-				result = { success: true, diffContent: formattedDiff };
-				break;
-			}
-
-			default: {
-				const errMsg = `Plan step action '${step.action}' is not yet implemented.`;
-				postChatUpdate({
-					type: "appendRealtimeModelMessage",
-					value: { text: errMsg, isError: true },
-				});
-				result = {
-					success: false,
-					errorType: "non-transient",
-					errorMessage: errMsg,
-				};
-				break;
-			}
-		}
-	} catch (globalError: any) {
-		// This catch block will primarily catch errors not caught by more specific try/catch blocks within the switch,
-		// or re-thrown cancellation errors.
+	// Define reportErrorAndReturnResult local helper function
+	const reportErrorAndReturnResult = (
+		error: any,
+		defaultMessage: string,
+		filePath: string | undefined,
+		actionType: PlanStepAction
+	): PlanStepExecutionResult => {
+		let errorType: PlanStepExecutionResult["errorType"] = "non-transient";
 		const errorMessage = formatUserFacingErrorMessage(
-			globalError,
-			`An unexpected error occurred during plan step execution.`,
-			"[PlanExecutionService] ",
+			error,
+			defaultMessage,
+			`[PlanExecutionService:${actionType}] `,
 			workspaceRootUri
 		);
-		let errorType: PlanStepExecutionResult["errorType"] = "non-transient";
+
 		if (errorMessage.includes(ERROR_OPERATION_CANCELLED)) {
 			errorType = "cancellation";
 		} else if (
@@ -1093,16 +833,198 @@ export async function executePlanStep(
 		) {
 			errorType = "transient";
 		}
+
 		postChatUpdate({
 			type: "appendRealtimeModelMessage",
-			value: { text: errorMessage, isError: true },
+			value: {
+				text: filePath
+					? `Error processing file \`${path.basename(
+							filePath
+					  )}\`: ${errorMessage}`
+					: `Error: ${errorMessage}`,
+				isError: true,
+			},
 		});
-		result = {
+
+		return {
 			success: false,
 			errorType: errorType,
 			errorMessage: errorMessage,
 		};
-	}
+	};
 
-	return result;
+	try {
+		switch (step.action) {
+			case PlanStepAction.ModifyFile: {
+				return await _handleModifyFileAction(
+					step,
+					token,
+					progress,
+					changeLogger,
+					postChatUpdate,
+					aiRequestService,
+					enhancedCodeGenerator,
+					postMessageToWebview,
+					workspaceRootUri,
+					modelName,
+					reportErrorAndReturnResult,
+					_handleCreateFileAction // Pass the create file handler
+				);
+			}
+
+			case PlanStepAction.TypeContent: {
+				return await _handleTypeContentAction(
+					step,
+					token,
+					progress,
+					reportErrorAndReturnResult,
+					postChatUpdate,
+					workspaceRootUri
+				);
+			}
+
+			case PlanStepAction.CreateFile: {
+				return await _handleCreateFileAction(
+					step,
+					token,
+					progress,
+					changeLogger,
+					postChatUpdate,
+					aiRequestService,
+					enhancedCodeGenerator,
+					postMessageToWebview,
+					workspaceRootUri,
+					modelName,
+					reportErrorAndReturnResult
+				);
+			}
+
+			case PlanStepAction.DeleteFile: {
+				return await _handleDeleteFileAction(
+					step,
+					token,
+					progress,
+					changeLogger,
+					postChatUpdate,
+					workspaceRootUri,
+					reportErrorAndReturnResult
+				);
+			}
+
+			case PlanStepAction.ViewFile: {
+				if (!step.file) {
+					const errMsg = "Missing file path for ViewFile action.";
+					return reportErrorAndReturnResult(
+						new Error(errMsg),
+						errMsg,
+						step.file,
+						PlanStepAction.ViewFile
+					);
+				}
+				const fileUri = vscode.Uri.joinPath(workspaceRootUri, step.file);
+				try {
+					await vscode.window.showTextDocument(fileUri, { preview: true });
+					progress.report({
+						message: `Viewing file: ${path.basename(fileUri.fsPath)}`,
+					});
+					postChatUpdate({
+						type: "appendRealtimeModelMessage",
+						value: {
+							text: `Opened file \`${path.basename(fileUri.fsPath)}\`.`,
+							isError: false,
+						},
+					});
+					return { success: true };
+				} catch (error: any) {
+					return reportErrorAndReturnResult(
+						error,
+						`Failed to open file ${path.basename(fileUri.fsPath)} for viewing.`,
+						step.file,
+						PlanStepAction.ViewFile
+					);
+				}
+			}
+
+			case PlanStepAction.ExecuteCommand: {
+				if (!step.command) {
+					const errMsg = "Missing command for ExecuteCommand action.";
+					return reportErrorAndReturnResult(
+						new Error(errMsg),
+						errMsg,
+						undefined,
+						PlanStepAction.ExecuteCommand
+					);
+				}
+				try {
+					progress.report({
+						message: `Executing command: ${step.command} ${
+							step.args ? step.args.join(" ") : ""
+						}`,
+					});
+					// Note: vscode.commands.executeCommand is for VS Code commands, not shell commands.
+					// If shell commands are intended, a different execution mechanism would be needed.
+					// For now, assume VS Code commands.
+					await vscode.commands.executeCommand(
+						step.command,
+						...(step.args || [])
+					);
+					postChatUpdate({
+						type: "appendRealtimeModelMessage",
+						value: {
+							text: `Successfully executed command \`${step.command}\`.`,
+							isError: false,
+						},
+					});
+					return { success: true };
+				} catch (error: any) {
+					return reportErrorAndReturnResult(
+						error,
+						`Failed to execute command ${step.command}.`,
+						undefined,
+						PlanStepAction.ExecuteCommand
+					);
+				}
+			}
+
+			case PlanStepAction.ShowMessage: {
+				if (!step.message) {
+					const errMsg = "Missing message for ShowMessage action.";
+					return reportErrorAndReturnResult(
+						new Error(errMsg),
+						errMsg,
+						undefined,
+						PlanStepAction.ShowMessage
+					);
+				}
+				vscode.window.showInformationMessage(step.message);
+				postChatUpdate({
+					type: "appendRealtimeModelMessage",
+					value: { text: `Message: ${step.message}`, isError: false },
+				});
+				return { success: true };
+			}
+
+			default: {
+				const errMsg = `Plan step action '${step.action}' is not yet implemented.`;
+				return reportErrorAndReturnResult(
+					new Error(errMsg),
+					errMsg,
+					undefined,
+					step.action
+				);
+			}
+		}
+	} catch (globalError: any) {
+		if (globalError.message === ERROR_OPERATION_CANCELLED) {
+			throw globalError; // Re-throw cancellation error to be handled by the outer loop
+		}
+		// This catch block will primarily catch errors not caught by more specific try/catch blocks within the switch,
+		// or re-thrown cancellation errors if not caught earlier.
+		return reportErrorAndReturnResult(
+			globalError,
+			`An unexpected error occurred during plan step execution.`,
+			step.file,
+			step.action
+		);
+	}
 }

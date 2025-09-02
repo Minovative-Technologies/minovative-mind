@@ -164,9 +164,14 @@ interface ApiKeyStatusMessage {
 	value: string;
 }
 
+export interface ModelInfo {
+	name: string;
+	description: string;
+}
+
 interface UpdateModelListMessage {
 	type: "updateModelList";
-	value: { availableModels: string[]; selectedModel: string };
+	value: { availableModels: ModelInfo[]; selectedModel: string };
 }
 
 interface UpdateOptimizationSettingsMessage {

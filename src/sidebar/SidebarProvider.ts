@@ -256,7 +256,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		webviewView.webview.html = await getHtmlForWebview(
 			webviewView.webview,
 			this.extensionUri,
-			sidebarConstants.AVAILABLE_GEMINI_MODELS,
+			sidebarConstants.MODEL_DETAILS, // Changed from AVAILABLE_GEMINI_MODELS to MODEL_DETAILS
 			this.settingsManager.getSelectedModelName(),
 			logoUri
 		);

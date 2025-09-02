@@ -39,6 +39,8 @@ export class PlanService {
 		enhancedCodeGenerator: EnhancedCodeGenerator,
 		private postMessageToWebview: (message: ExtensionToWebviewMessages) => void
 	) {
+		// As per instructions, ensure UrlContextService is initialized consistently.
+		// And enhancedCodeGenerator parameter is assigned directly.
 		this.urlContextService = new UrlContextService();
 		this.enhancedCodeGenerator = enhancedCodeGenerator;
 
@@ -127,22 +129,8 @@ export class PlanService {
 				);
 			const { contextString, relevantFiles } = buildContextResult;
 
-			// Initialize currentAiStreamingState immediately before aiResponseStart
-			this.provider.currentAiStreamingState = {
-				content: "",
-				relevantFiles: relevantFiles,
-				isComplete: false,
-				isError: false,
-			};
-			// Add new aiResponseStart message here with relevantFiles
-			this.provider.postMessageToWebview({
-				type: "aiResponseStart",
-				value: { modelName, relevantFiles: relevantFiles },
-			});
-			this.provider.postMessageToWebview({
-				type: "updateStreamingRelevantFiles",
-				value: relevantFiles,
-			});
+			// Refactored: Call new helper method to initialize streaming state
+			this._initializeStreamingState(modelName, relevantFiles);
 
 			if (contextString.startsWith("[Error")) {
 				throw new Error(contextString);
@@ -392,22 +380,8 @@ export class PlanService {
 				);
 			const { contextString, relevantFiles } = buildContextResult;
 
-			// Initialize currentAiStreamingState if not already set (aiResponseStart was sent from extension.ts)
-			if (!this.provider.currentAiStreamingState) {
-				this.provider.currentAiStreamingState = {
-					content: "",
-					relevantFiles: relevantFiles,
-					isComplete: false,
-					isError: false,
-				};
-			} else {
-				// Update the relevantFiles in the existing streaming state
-				this.provider.currentAiStreamingState.relevantFiles = relevantFiles;
-			}
-			this.provider.postMessageToWebview({
-				type: "updateStreamingRelevantFiles",
-				value: relevantFiles,
-			});
+			// Refactored: Call new helper method to initialize streaming state
+			this._initializeStreamingState(modelName, relevantFiles);
 
 			if (contextString.startsWith("[Error")) {
 				throw new Error(contextString);
@@ -652,6 +626,27 @@ export class PlanService {
 				error: `An unexpected error occurred during JSON parsing/validation: ${e.message}`,
 			};
 		}
+	}
+
+	// New private method to encapsulate streaming state initialization
+	private _initializeStreamingState(
+		modelName: string,
+		relevantFiles: string[] | undefined
+	): void {
+		this.provider.currentAiStreamingState = {
+			content: "",
+			relevantFiles: relevantFiles ?? [], // Ensure relevantFiles is always string[]
+			isComplete: false,
+			isError: false,
+		};
+		this.provider.postMessageToWebview({
+			type: "aiResponseStart",
+			value: { modelName, relevantFiles: relevantFiles ?? [] }, // Ensure relevantFiles is always string[]
+		});
+		this.provider.postMessageToWebview({
+			type: "updateStreamingRelevantFiles",
+			value: relevantFiles ?? [], // Ensure relevantFiles is always string[]
+		});
 	}
 	// --- PLAN GENERATION & EXECUTION ---
 	public async generateStructuredPlanAndExecute(

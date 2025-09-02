@@ -5,8 +5,10 @@ import {
 	AVAILABLE_GEMINI_MODELS,
 	DEFAULT_MODEL,
 	DEFAULT_SIZE,
+	MODEL_DETAILS, // Added MODEL_DETAILS import
 } from "../common/sidebarConstants";
 import { resetClient } from "../../ai/gemini"; // Adjusted path
+import { ModelInfo } from "../common/sidebarTypes"; // Added ModelInfo import
 
 // Optimization settings keys
 const OPTIMIZATION_SETTINGS_KEYS = {
@@ -399,7 +401,7 @@ export class SettingsManager {
 		this.postMessageToWebview({
 			type: "updateModelList",
 			value: {
-				availableModels: AVAILABLE_GEMINI_MODELS,
+				availableModels: MODEL_DETAILS, // Changed to MODEL_DETAILS
 				selectedModel: this._selectedModelName,
 			},
 		});

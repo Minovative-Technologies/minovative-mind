@@ -14,6 +14,7 @@ import {
 	PersistedPlanData,
 	PlanExecutionFinishedMessage,
 	ChatMessage, // Import ChatMessage for type casting
+	ModelInfo, // Import ModelInfo for type casting
 } from "../../common/sidebarTypes";
 import {
 	stopTypingAnimation,
@@ -891,13 +892,16 @@ export function initializeMessageBusHandler(
 					Array.isArray(message.value.availableModels) &&
 					typeof message.value.selectedModel === "string"
 				) {
-					const { availableModels, selectedModel } = message.value;
+					const { availableModels, selectedModel } = message.value as {
+						availableModels: ModelInfo[];
+						selectedModel: string;
+					};
 					elements.modelSelect!.innerHTML = "";
-					availableModels.forEach((modelName: string) => {
+					availableModels.forEach((model: ModelInfo) => {
 						const option = document.createElement("option");
-						option.value = modelName;
-						option.textContent = modelName;
-						if (modelName === selectedModel) {
+						option.value = model.name;
+						option.textContent = `${model.name} - ${model.description}`;
+						if (model.name === selectedModel) {
 							option.selected = true;
 						}
 						elements.modelSelect!.appendChild(option);

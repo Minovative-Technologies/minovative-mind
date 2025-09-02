@@ -1,11 +1,12 @@
 // src/sidebar/ui/webviewHelper.ts
 import * as vscode from "vscode";
 import { getNonce } from "../../utils/nonce";
+import { ModelInfo } from "../common/sidebarTypes";
 
 export async function getHtmlForWebview(
 	webview: vscode.Webview,
 	extensionUri: vscode.Uri,
-	availableModels: readonly string[],
+	availableModels: ModelInfo[],
 	selectedModel: string,
 	logoUri: vscode.Uri
 ): Promise<string> {
@@ -19,10 +20,10 @@ export async function getHtmlForWebview(
 
 	const modelOptionsHtml = availableModels
 		.map(
-			(modelName) =>
-				`<option value="${modelName}" ${
-					modelName === selectedModel ? "selected" : ""
-				}>${modelName}</option>`
+			(model) =>
+				`<option value="${model.name}" ${
+					model.name === selectedModel ? "selected" : ""
+				}>${model.name} - ${model.description}</option>`
 		)
 		.join("");
 

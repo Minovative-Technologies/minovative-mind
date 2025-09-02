@@ -8,6 +8,7 @@ import { GenerationConfig, Tool } from "@google/generative-ai"; // Ensure Tool i
 import { UrlContextService } from "./urlContextService";
 import { HistoryEntry, HistoryEntryPart } from "../sidebar/common/sidebarTypes"; // Import HistoryEntry for type safety, and HistoryEntryPart
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants"; // Import constants for API key and model selection
+import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 
 const AI_CHAT_PROMPT =
 	"Lets discuss and do not code yet. You should only focus on high level thinking in this project, using the project context given to you. Only respone helpfully with production-ready explainations, no placeholders, no TODOs for the user. Make sure to mention what files are being changed or created if any.";
@@ -75,7 +76,14 @@ export class ChatService {
 				error: `Failed to initialize Gemini AI with model '${modelName}'.`,
 			});
 			throw new Error(
-				`Failed to initialize Gemini AI with model '${modelName}'.`
+				formatUserFacingErrorMessage(
+					new Error(
+						`Failed to initialize Gemini AI with model '${modelName}'.`
+					),
+					"Failed to initialize AI service.",
+					"AI Initialization Error: ",
+					this.provider.workspaceRootUri
+				)
 			);
 		}
 
@@ -194,7 +202,12 @@ export class ChatService {
 				);
 			}
 		} catch (error: any) {
-			finalAiResponseText = error.message;
+			finalAiResponseText = formatUserFacingErrorMessage(
+				error,
+				"Failed to generate AI response.",
+				"AI Response Generation Error: ",
+				this.provider.workspaceRootUri
+			);
 			success = false;
 			// 4. In the catch block (for errors), set isError = true;
 			if (this.provider.currentAiStreamingState) {
@@ -403,7 +416,12 @@ export class ChatService {
 				);
 			}
 		} catch (error: any) {
-			finalAiResponseText = error.message;
+			finalAiResponseText = formatUserFacingErrorMessage(
+				error,
+				"Failed to regenerate AI response.",
+				"AI Response Regeneration Error: ",
+				this.provider.workspaceRootUri
+			);
 			success = false;
 			// Set isError = true;
 			if (this.provider.currentAiStreamingState) {
@@ -417,7 +435,7 @@ export class ChatService {
 				// Add a system error message to history and display it
 				chatHistoryManager.addHistoryEntry(
 					"model", // Changed from 'system' to 'model' as per instructions
-					`Error regenerating AI response: ${finalAiResponseText}`,
+					[{ text: finalAiResponseText }],
 					"error-message"
 				);
 			}

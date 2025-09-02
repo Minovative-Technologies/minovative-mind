@@ -7,11 +7,22 @@ export const GEMINI_API_KEY_SECRET_KEY = "geminiApiKey";
 export const MODEL_SELECTION_STORAGE_KEY = "geminiSelectedModel";
 
 // DONT CHANGE THESE MODELS (NEVER)
-export const AVAILABLE_GEMINI_MODELS = [
-	"gemini-2.5-pro",
-	"gemini-2.5-flash",
-	"gemini-2.5-flash-lite",
+export const MODEL_DETAILS = [
+	{
+		name: "gemini-2.5-pro",
+		description: "Premium | Powerful 🧠🧠",
+	},
+	{
+		name: "gemini-2.5-flash",
+		description: "Free | Everyday Use 🧠⚡",
+	},
+	{
+		name: "gemini-2.5-flash-lite",
+		description: "Free | Simple ⚡",
+	},
 ];
+
+export const AVAILABLE_GEMINI_MODELS = MODEL_DETAILS.map((model) => model.name);
 
 export const DEFAULT_PRO_MODEL = "gemini-2.5-pro";
 export const DEFAULT_FLASH_MODEL = "gemini-2.5-flash";
