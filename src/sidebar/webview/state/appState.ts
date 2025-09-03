@@ -49,4 +49,5 @@ export const appState: WebviewAppState = {
 	currentSuggestionType: "none",
 	editingMessageIndex: null,
 	isEditingMessage: false,
+	currentActiveOperationId: null,
 };

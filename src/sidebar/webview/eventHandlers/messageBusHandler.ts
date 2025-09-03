@@ -15,6 +15,9 @@ import {
 	PlanExecutionFinishedMessage,
 	ChatMessage, // Import ChatMessage for type casting
 	ModelInfo, // Import ModelInfo for type casting
+	AiResponseStartMessage,
+	AiResponseChunkMessage,
+	AiResponseEndMessage,
 } from "../../common/sidebarTypes";
 import {
 	stopTypingAnimation,
@@ -26,7 +29,7 @@ import {
 	showPlanParseErrorUI,
 	showCommitReviewUI,
 	hideAllConfirmationAndReviewUIs,
-	showClearChatConfirmationUI, // Added import for showClearChatConfirmationUI
+	showClearChatConfirmationUI,
 } from "../ui/confirmationAndReviewUIs";
 import { md } from "../utils/markdownRenderer";
 import { postMessageToExtension } from "../utils/vscodeApi";
@@ -113,13 +116,19 @@ export function initializeMessageBusHandler(
 
 			case "restoreStreamingProgress": {
 				finalizeStreamingMessage(elements);
-				const { content, relevantFiles, isComplete, isError } =
-					message.value as AiStreamingState;
+				const streamingState = message.value as AiStreamingState;
+				const { content, relevantFiles, isComplete, isError, operationId } =
+					streamingState;
+
+				appState.currentActiveOperationId = operationId;
+
 				console.log(
 					"[Webview] Received restoreStreamingProgress. Content length:",
 					content.length,
 					"Is Complete:",
-					isComplete
+					isComplete,
+					"Operation ID:",
+					operationId
 				);
 
 				// Append the base AI message element. This sets up the DOM structure
@@ -293,12 +302,14 @@ export function initializeMessageBusHandler(
 			}
 
 			case "aiResponseStart": {
+				const startMessage = message as AiResponseStartMessage; // Cast message
 				setLoadingState(true, elements);
 				finalizeStreamingMessage(elements); // Modified: Replace resetStreamingAnimationState()
 				console.log(
 					"Received aiResponseStart. Starting stream via appendMessage."
 				);
 				appState.isCancellationInProgress = false; // Add this line
+				appState.currentActiveOperationId = startMessage.value.operationId; // Assign operationId
 				appendMessage(
 					elements,
 					"Model",
@@ -306,7 +317,7 @@ export function initializeMessageBusHandler(
 					"ai-message",
 					true,
 					undefined,
-					message.value.relevantFiles,
+					startMessage.value.relevantFiles,
 					undefined, // messageIndexForHistory
 					undefined, // isRelevantFilesExpandedForHistory
 					false // isPlanExplanationForRender
@@ -314,8 +325,16 @@ export function initializeMessageBusHandler(
 				break;
 			}
 			case "aiResponseChunk": {
-				if (message.value !== undefined) {
-					appState.typingBuffer += message.value;
+				const chunkMessage = message as AiResponseChunkMessage; // Cast message
+				if (chunkMessage.operationId !== appState.currentActiveOperationId) {
+					console.debug(
+						"Ignoring AI chunk from old operation:",
+						chunkMessage.operationId
+					);
+					return;
+				}
+				if (chunkMessage.value !== undefined) {
+					appState.typingBuffer += chunkMessage.value;
 					if (appState.typingTimer === null) {
 						startTypingAnimation(elements);
 					}
@@ -323,26 +342,35 @@ export function initializeMessageBusHandler(
 				break;
 			}
 			case "aiResponseEnd": {
+				const endMessage = message as AiResponseEndMessage; // Cast message
+				if (endMessage.operationId !== appState.currentActiveOperationId) {
+					console.debug(
+						"Ignoring AI response end from old operation:",
+						endMessage.operationId
+					);
+					return;
+				}
+
 				finalizeStreamingMessage(elements);
 				console.log("Received aiResponseEnd. Stream finished.");
 
 				const isCancellation =
-					typeof message.error === "string" &&
-					message.error.includes("cancelled");
+					typeof endMessage.error === "string" &&
+					endMessage.error.includes("cancelled");
 
 				if (appState.currentAiMessageContentElement) {
 					appState.currentAccumulatedText += appState.typingBuffer;
 					let finalContentHtml: string;
 
-					if (!message.success && isCancellation) {
+					if (!endMessage.success && isCancellation) {
 						finalContentHtml = "";
 						appState.currentAiMessageContentElement.dataset.originalMarkdown =
 							"";
 						appState.currentAccumulatedText = "";
-					} else if (!message.success && message.error) {
+					} else if (!endMessage.success && endMessage.error) {
 						const errorMessageContent =
-							typeof message.error === "string"
-								? message.error
+							typeof endMessage.error === "string"
+								? endMessage.error
 								: "Unknown error occurred during AI response streaming.";
 						const errorText = `Error: ${errorMessageContent}`;
 						finalContentHtml = md.render(errorText);
@@ -375,7 +403,11 @@ export function initializeMessageBusHandler(
 							".generate-plan-button"
 						) as HTMLButtonElement | null;
 
-						if (message.success && message.isPlanResponse && message.planData) {
+						if (
+							endMessage.success &&
+							endMessage.isPlanResponse &&
+							endMessage.planData
+						) {
 							if (generatePlanButton) {
 								generatePlanButton.style.display = "none";
 							}
@@ -392,11 +424,11 @@ export function initializeMessageBusHandler(
 					);
 					// Fallback: If for some reason the element wasn't tracked, append a new message.
 					// This should generally only happen if a previous streaming message was somehow malformed or lost.
-					if (!message.success && isCancellation) {
-					} else if (!message.success && message.error) {
+					if (!endMessage.success && isCancellation) {
+					} else if (!endMessage.success && endMessage.error) {
 						const errorMessageContent =
-							typeof message.error === "string"
-								? message.error
+							typeof endMessage.error === "string"
+								? endMessage.error
 								: "Unknown error occurred during AI operation.";
 						appendMessage(
 							elements,
@@ -440,22 +472,26 @@ export function initializeMessageBusHandler(
 				appState.isCommitActionInProgress = false;
 
 				// Handle status bar updates for errors/cancellations
-				if (!message.success) {
+				if (!endMessage.success) {
 					const statusMessage = isCancellation
 						? ""
-						: typeof message.error === "string"
-						? `AI Operation Failed: ${message.error}`
+						: typeof endMessage.error === "string"
+						? `AI Operation Failed: ${endMessage.error}`
 						: "AI operation failed or was cancelled.";
 					updateStatus(elements, statusMessage, true);
-				} else if (message.statusMessageOverride) {
+				} else if (endMessage.statusMessageOverride) {
 					// Handle custom success messages like "No changes staged"
-					updateStatus(elements, message.statusMessageOverride, false);
+					updateStatus(elements, endMessage.statusMessageOverride, false);
 				}
 
 				// This block is the SOLE place where showPlanConfirmationUI is called for newly generated plans.
 				// It must contain calls to createPlanConfirmationUI, set appState.pendingPlanData, call showPlanConfirmationUI,
 				// and hide the cancel button.
-				if (message.success && message.isPlanResponse && message.planData) {
+				if (
+					endMessage.success &&
+					endMessage.isPlanResponse &&
+					endMessage.planData
+				) {
 					console.log("aiResponseEnd indicates confirmable plan.");
 					createPlanConfirmationUI(
 						elements,
@@ -463,7 +499,7 @@ export function initializeMessageBusHandler(
 						updateStatus,
 						setLoadingState
 					);
-					appState.pendingPlanData = message.planData as {
+					appState.pendingPlanData = endMessage.planData as {
 						type: string;
 						originalRequest?: string;
 						originalInstruction?: string;
@@ -487,15 +523,15 @@ export function initializeMessageBusHandler(
 				}
 				// 2. Add a new else if for commit review.
 				else if (
-					message.success &&
-					message.isCommitReviewPending &&
-					message.commitReviewData
+					endMessage.success &&
+					endMessage.isCommitReviewPending &&
+					endMessage.commitReviewData
 				) {
-					appState.pendingCommitReviewData = message.commitReviewData;
+					appState.pendingCommitReviewData = endMessage.commitReviewData;
 					showCommitReviewUI(
 						elements,
-						message.commitReviewData.commitMessage,
-						message.commitReviewData.stagedFiles,
+						endMessage.commitReviewData.commitMessage,
+						endMessage.commitReviewData.stagedFiles,
 						postMessageToExtension,
 						updateStatus,
 						setLoadingState
@@ -505,7 +541,7 @@ export function initializeMessageBusHandler(
 					}
 				}
 				// 4. Ensure the final else if handles standard UI re-enablement.
-				else if (message.success) {
+				else if (endMessage.success) {
 					// Ensure setLoadingState(false, elements) is NOT called if appState.isCancellationInProgress is true.
 					if (!appState.isCancellationInProgress) {
 						setLoadingState(false, elements);
@@ -516,7 +552,7 @@ export function initializeMessageBusHandler(
 					}
 				}
 				// Ensure error paths do not prematurely re-enable UI if cancellation is in progress
-				else if (!message.success) {
+				else if (!endMessage.success) {
 					// If it's an error and not a cancellation, or an error path where UI should still be loading due to cancellation
 					if (!isCancellation) {
 						// If it's a real error, not a cancellation
@@ -540,6 +576,7 @@ export function initializeMessageBusHandler(
 						}
 					}
 				}
+				appState.currentActiveOperationId = null; // Set currentActiveOperationId to null after processing
 				break;
 			}
 

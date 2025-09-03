@@ -317,6 +317,16 @@ export function initializeInputEventListeners(
 		}
 	});
 
+	// Add event listener to cancelGenerationButton
+	elements.cancelGenerationButton.addEventListener("click", () => {
+		console.log(
+			"[inputEventHandlers] Cancel Generation button clicked. Sending universalCancel."
+		);
+		postMessageToExtension({ type: "universalCancel" });
+		setLoadingState(false, elements); // Immediately reset webview's loading state
+		elements.chatInput.focus(); // Return focus to the input field
+	});
+
 	// Blur event listener for the chat input field
 	// Use a small timeout to allow click events on command suggestions to fire first,
 	// before the blur event hides the suggestions. This prevents the suggestions from

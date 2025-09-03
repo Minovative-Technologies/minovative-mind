@@ -29,10 +29,28 @@ export class ChatService {
 		const apiKey = this.provider.apiKeyManager.getActiveApiKey();
 		const modelName = DEFAULT_FLASH_LITE_MODEL; // Set modelName to DEFAULT_FLASH_LITE_MODEL directly
 
-		const tokenSourceForThisOperation = new vscode.CancellationTokenSource();
-		this.provider.activeOperationCancellationTokenSource =
-			tokenSourceForThisOperation;
-		const token = tokenSourceForThisOperation.token;
+		// 1. After calling this.provider.startUserOperation(), declare a local const operationId.
+		// The activeOperationCancellationTokenSource and currentActiveChatOperationId are expected to be set by startUserOperation.
+		await this.provider.startUserOperation("chat");
+		const operationId = this.provider.currentActiveChatOperationId;
+		const token = this.provider.activeOperationCancellationTokenSource?.token;
+
+		if (!operationId || !token) {
+			console.error(
+				"[ChatService] Operation ID or token not available after startUserOperation."
+			);
+			this.provider.postMessageToWebview({
+				type: "aiResponseEnd",
+				success: false,
+				error: "Internal error: Operation ID or token not available.",
+				operationId: operationId as string,
+			});
+			// Ensure cleanup if we exit early
+			this.provider.activeOperationCancellationTokenSource?.dispose();
+			this.provider.activeOperationCancellationTokenSource = undefined;
+			this.provider.currentActiveChatOperationId = null; // MODIFIED line 51
+			return;
+		}
 
 		let success = true;
 		let finalAiResponseText: string | null = null;
@@ -46,6 +64,7 @@ export class ChatService {
 				type: "aiResponseEnd",
 				success: false,
 				error: "Gemini API key is not set.",
+				operationId: operationId as string, // Include operationId in error message too
 			});
 			return; // Exit early if API key is missing
 		}
@@ -58,6 +77,7 @@ export class ChatService {
 				type: "aiResponseEnd",
 				success: false,
 				error: "Gemini model is not selected.",
+				operationId: operationId as string, // Include operationId in error message too
 			});
 			return; // Exit early if model name is missing
 		}
@@ -74,6 +94,7 @@ export class ChatService {
 				type: "aiResponseEnd",
 				success: false,
 				error: `Failed to initialize Gemini AI with model '${modelName}'.`,
+				operationId: operationId as string, // Include operationId
 			});
 			throw new Error(
 				formatUserFacingErrorMessage(
@@ -117,17 +138,23 @@ export class ChatService {
 				throw new Error(projectContext.contextString);
 			}
 
-			// 2. Initialize this.provider.currentAiStreamingState
+			// 2. Initialize this.provider.currentAiStreamingState with the operationId property
 			this.provider.currentAiStreamingState = {
 				content: "",
 				relevantFiles: projectContext.relevantFiles,
 				isComplete: false,
 				isError: false,
+				operationId: operationId, // Set the operationId property
 			};
 
+			// 3. When posting messages to the webview for aiResponseStart, include the operationId
 			this.provider.postMessageToWebview({
 				type: "aiResponseStart",
-				value: { modelName, relevantFiles: projectContext.relevantFiles },
+				value: {
+					modelName,
+					relevantFiles: projectContext.relevantFiles,
+					operationId: operationId,
+				}, // Add operationId
 			});
 
 			// Revise construction of input for aiRequestService.generateWithRetry
@@ -161,13 +188,14 @@ export class ChatService {
 					{
 						onChunk: (chunk: string) => {
 							accumulatedResponse += chunk;
-							// 3. In the onChunk callback, append the chunk
+							// 3. In the onChunk callback, append the chunk and include operationId
 							if (this.provider.currentAiStreamingState) {
 								this.provider.currentAiStreamingState.content += chunk;
 							}
 							this.provider.postMessageToWebview({
 								type: "aiResponseChunk",
 								value: chunk,
+								operationId: operationId as string, // MODIFIED line 168
 							});
 						},
 					},
@@ -214,11 +242,9 @@ export class ChatService {
 				this.provider.currentAiStreamingState.isError = true;
 			}
 		} finally {
-			// Check if *this* operation's token source is still the one actively managed by the provider.
-			// This prevents cleanup logic from interfering with a new operation that might have started.
+			// 4. Modify the condition for isThisOperationStillActiveGlobally
 			const isThisOperationStillActiveGlobally =
-				this.provider.activeOperationCancellationTokenSource ===
-				tokenSourceForThisOperation;
+				this.provider.currentActiveChatOperationId === operationId;
 
 			if (isThisOperationStillActiveGlobally) {
 				// === Global Cleanup (Operation is truly finished and is the last one) ===
@@ -237,6 +263,7 @@ export class ChatService {
 				}
 
 				// Notify the webview that the AI response has ended.
+				// 3. When posting messages to the webview for aiResponseEnd, include the operationId
 				this.provider.postMessageToWebview({
 					type: "aiResponseEnd",
 					success: success, // Pass the success status from the try/catch block.
@@ -245,12 +272,14 @@ export class ChatService {
 						: success
 						? null // No error if successful.
 						: finalAiResponseText, // Pass the actual error message otherwise.
+					operationId: operationId as string, // Add operationId
 				});
 
-				// Dispose of this operation's specific token source.
-				tokenSourceForThisOperation.dispose();
-				// Clear the provider's reference to the active operation token source.
+				// Dispose of the globally active token source associated with THIS operation.
+				// 5. Cleanup for activeOperationCancellationTokenSource and currentActiveChatOperationId
+				this.provider.activeOperationCancellationTokenSource?.dispose();
 				this.provider.activeOperationCancellationTokenSource = undefined;
+				this.provider.currentActiveChatOperationId = null; // MODIFIED line 282
 
 				// Restore the chat history to the webview, reflecting the final state.
 				this.provider.chatHistoryManager.restoreChatHistoryToWebview();
@@ -260,11 +289,10 @@ export class ChatService {
 				// A new AI operation has superseded this one.
 				// Only clean up resources specific to *this* operation.
 				// Do NOT modify global provider state (activeOperationCancellationTokenSource, streaming state, history).
-
-				// Dispose of this operation's specific token source.
-				tokenSourceForThisOperation.dispose();
+				// 5. If isThisOperationStillActiveGlobally is false, ensure provider.activeOperationCancellationTokenSource is NOT cleared or disposed.
+				// This is inherently handled as the global state is only modified in the `if` block.
 				console.log(
-					"[ChatService] Old chat operation's finally block detected new operation, skipping global state modification."
+					`[ChatService] Old chat operation (${operationId})'s finally block detected new operation, skipping global state modification.`
 				);
 				// === End Local Cleanup Only ===
 			}
@@ -282,12 +310,28 @@ export class ChatService {
 		} = this.provider;
 		const modelName = DEFAULT_FLASH_LITE_MODEL; // Use the default model for regeneration
 
-		// Capture the CancellationTokenSource for this specific operation.
-		const tokenSourceForThisOperation = new vscode.CancellationTokenSource();
-		// Assign it to the provider's active operation token source, cancelling any previous one.
-		this.provider.activeOperationCancellationTokenSource =
-			tokenSourceForThisOperation;
-		const token = tokenSourceForThisOperation.token;
+		// 1. After calling this.provider.startUserOperation(), declare a local const operationId.
+		// The activeOperationCancellationTokenSource and currentActiveChatOperationId are expected to be set by startUserOperation.
+		await this.provider.startUserOperation("chat");
+		const operationId = this.provider.currentActiveChatOperationId;
+		const token = this.provider.activeOperationCancellationTokenSource?.token;
+
+		if (!operationId || !token) {
+			console.error(
+				"[ChatService] Operation ID or token not available after startUserOperation."
+			);
+			this.provider.postMessageToWebview({
+				type: "aiResponseEnd",
+				success: false,
+				error: "Internal error: Operation ID or token not available.",
+				operationId: operationId as string,
+			});
+			// Ensure cleanup if we exit early
+			this.provider.activeOperationCancellationTokenSource?.dispose();
+			this.provider.activeOperationCancellationTokenSource = undefined;
+			this.provider.currentActiveChatOperationId = null; // MODIFIED line 332
+			return;
+		}
 
 		let success = true;
 		let finalAiResponseText: string | null = null;
@@ -348,18 +392,23 @@ export class ChatService {
 			}
 			relevantFiles = projectContext.relevantFiles;
 
-			// 5. Initialize this.provider.currentAiStreamingState with empty content and relevant files from projectContext.
+			// 2. Initialize this.provider.currentAiStreamingState with the operationId property
 			this.provider.currentAiStreamingState = {
 				content: "",
 				relevantFiles: relevantFiles,
 				isComplete: false,
 				isError: false,
+				operationId: operationId, // Set the operationId property
 			};
 
-			// 6. Post an aiResponseStart message to the webview.
+			// 3. Post an aiResponseStart message to the webview with operationId
 			this.provider.postMessageToWebview({
 				type: "aiResponseStart",
-				value: { modelName, relevantFiles: relevantFiles },
+				value: {
+					modelName,
+					relevantFiles: relevantFiles,
+					operationId: operationId,
+				}, // Add operationId
 			});
 
 			// Construct the full user turn contents, including system prompt and user input
@@ -388,10 +437,11 @@ export class ChatService {
 						if (this.provider.currentAiStreamingState) {
 							this.provider.currentAiStreamingState.content += chunk;
 						}
-						// Then post an aiResponseChunk message.
+						// Then post an aiResponseChunk message including operationId.
 						this.provider.postMessageToWebview({
 							type: "aiResponseChunk",
 							value: chunk,
+							operationId: operationId as string, // MODIFIED line 392
 						});
 					},
 				},
@@ -440,11 +490,9 @@ export class ChatService {
 				);
 			}
 		} finally {
-			// Check if *this* operation's token source is still the one actively managed by the provider.
-			// This prevents cleanup logic from interfering with a new operation that might have started.
+			// 4. Modify the condition for isThisOperationStillActiveGlobally
 			const isThisOperationStillActiveGlobally =
-				this.provider.activeOperationCancellationTokenSource ===
-				tokenSourceForThisOperation;
+				this.provider.currentActiveChatOperationId === operationId;
 
 			if (isThisOperationStillActiveGlobally) {
 				// === Global Cleanup (Operation is truly finished and is the last one) ===
@@ -463,6 +511,7 @@ export class ChatService {
 				}
 
 				// Notify the webview that the AI response has ended.
+				// 3. When posting messages to the webview for aiResponseEnd, include the operationId
 				this.provider.postMessageToWebview({
 					type: "aiResponseEnd",
 					success: success, // Pass the success status from the try/catch block.
@@ -471,12 +520,14 @@ export class ChatService {
 						: success
 						? null // No error if successful.
 						: finalAiResponseText, // Pass the actual error message otherwise.
+					operationId: operationId as string, // Add operationId
 				});
 
-				// Dispose of this operation's specific token source.
-				tokenSourceForThisOperation.dispose();
-				// Clear the provider's reference to the active operation token source.
+				// Dispose of the globally active token source associated with THIS operation.
+				// 5. Cleanup for activeOperationCancellationTokenSource and currentActiveChatOperationId
+				this.provider.activeOperationCancellationTokenSource?.dispose();
 				this.provider.activeOperationCancellationTokenSource = undefined;
+				this.provider.currentActiveChatOperationId = null; // MODIFIED line 530
 
 				// Restore the chat history to the webview, reflecting the final state.
 				this.provider.chatHistoryManager.restoreChatHistoryToWebview();
@@ -486,11 +537,10 @@ export class ChatService {
 				// A new AI operation has superseded this one.
 				// Only clean up resources specific to *this* operation.
 				// Do NOT modify global provider state (activeOperationCancellationTokenSource, streaming state, history).
-
-				// Dispose of this operation's specific token source.
-				tokenSourceForThisOperation.dispose();
+				// 5. If isThisOperationStillActiveGlobally is false, ensure provider.activeOperationCancellationTokenSource is NOT cleared or disposed.
+				// This is inherently handled as the global state is only modified in the `if` block.
 				console.log(
-					"[ChatService] Old regeneration operation's finally block detected new operation, skipping global state modification."
+					`[ChatService] Old regeneration operation (${operationId})'s finally block detected new operation, skipping global state modification.`
 				);
 				// === End Local Cleanup Only ===
 			}

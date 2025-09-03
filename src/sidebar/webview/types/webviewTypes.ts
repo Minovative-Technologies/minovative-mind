@@ -125,4 +125,5 @@ export interface WebviewAppState {
 	currentSuggestionType: SuggestionType;
 	editingMessageIndex: number | null;
 	isEditingMessage: boolean;
+	currentActiveOperationId: string | null;
 }

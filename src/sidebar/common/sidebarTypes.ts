@@ -116,41 +116,43 @@ export interface FileUriLoadedMessage {
 
 // Placeholder interfaces for other ExtensionToWebviewMessages inferred from usage
 // These are not exhaustive but represent common message types.
-interface StatusUpdateMessage {
+export interface StatusUpdateMessage {
 	type: "statusUpdate";
 	value: string;
 	isError?: boolean;
 	subPlanId?: string;
 }
 
-interface AiResponseStartMessage {
+export interface AiResponseStartMessage {
 	type: "aiResponseStart";
-	value: { modelName: string; relevantFiles: string[] };
+	value: { modelName: string; relevantFiles: string[]; operationId: string };
 }
 
-interface AiResponseChunkMessage {
+export interface AiResponseChunkMessage {
 	type: "aiResponseChunk";
 	value: string;
+	operationId: string;
 }
 
-interface AiResponseEndMessage {
+export interface AiResponseEndMessage {
 	type: "aiResponseEnd";
 	success: boolean;
-	error?: string | null;
+	error: string | null;
 	isPlanResponse?: boolean;
 	requiresConfirmation?: boolean;
 	planData?: any;
 	isCommitReviewPending?: boolean;
 	commitReviewData?: { commitMessage: string; stagedFiles: string[] } | null;
 	statusMessageOverride?: string;
+	operationId: string;
 }
 
-interface UpdateLoadingStateMessage {
+export interface UpdateLoadingStateMessage {
 	type: "updateLoadingState";
 	value: boolean;
 }
 
-interface ReenableInputMessage {
+export interface ReenableInputMessage {
 	type: "reenableInput";
 }
 
@@ -159,7 +161,7 @@ export interface UpdateCancellationStateMessage {
 	value: boolean;
 }
 
-interface ApiKeyStatusMessage {
+export interface ApiKeyStatusMessage {
 	type: "apiKeyStatus";
 	value: string;
 }
@@ -169,12 +171,12 @@ export interface ModelInfo {
 	description: string;
 }
 
-interface UpdateModelListMessage {
+export interface UpdateModelListMessage {
 	type: "updateModelList";
 	value: { availableModels: ModelInfo[]; selectedModel: string };
 }
 
-interface UpdateOptimizationSettingsMessage {
+export interface UpdateOptimizationSettingsMessage {
 	type: "updateOptimizationSettings";
 	value: any;
 }
@@ -208,21 +210,21 @@ export interface AppendRealtimeModelMessage {
 	subPlanId?: string;
 }
 
-interface RestorePendingPlanConfirmationMessage {
+export interface RestorePendingPlanConfirmationMessage {
 	type: "restorePendingPlanConfirmation";
 	value: PersistedPlanData;
 }
 
-interface StructuredPlanParseFailedMessage {
+export interface StructuredPlanParseFailedMessage {
 	type: "structuredPlanParseFailed";
 	value: { error: string; failedJson: string };
 }
 
-interface PlanExecutionStartedMessage {
+export interface PlanExecutionStartedMessage {
 	type: "planExecutionStarted";
 }
 
-interface PlanExecutionEndedMessage {
+export interface PlanExecutionEndedMessage {
 	type: "planExecutionEnded";
 }
 
@@ -437,4 +439,5 @@ export interface AiStreamingState {
 	relevantFiles?: string[];
 	isComplete: boolean;
 	isError: boolean;
+	operationId: string;
 }

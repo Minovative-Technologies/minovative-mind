@@ -1,6 +1,6 @@
 # The Holy Grail of AI agents: Minovative Mind, an Integrated AI-Driven Development & Automation Platform for VS Code
 
-A deeper analysis of the file structure, class responsibilities, and how different components interact, here is a more comprehensive breakdown of the systems that work together in this project. This results in approximately **6** core, distinct systems:
+A deeper analysis of the file structure, class responsibilities, and how different components interact, here is a more comprehensive breakdown of the systems that work together in this project. This results in approximately **7** core, distinct systems:
 
 ## In a nutshell, Minovative Mind is powered by
 
@@ -14,203 +14,259 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 ### Core Extension (Foundation)
 
-1. **VS Code Extension Core**:
+- **Responsibility**: Handles the main VS Code extension lifecycle, including activation, deactivation, and registration of top-level commands that initiate workflows. It serves as the entry point and orchestrator for the extension's overall functionality, providing core commands and user interaction mechanisms.
+- **Uses AI**: No (Indirectly, by prefilling prompts for AI services)
 
-   - **Responsibility**: Handles the main VS Code extension lifecycle, including activation, deactivation, and registration of top-level commands that initiate workflows. It serves as the entry point and orchestrator for the extension's overall functionality.
-   - **Key Files**: `src/extension.ts`
-   - **Uses AI**: No
+#### 1. VS Code Extension Core
 
-2. **Sidebar UI & Communication**:
+- **Responsibility**: Manages the core lifecycle of the VS Code extension, including activation, deactivation, and registration of main commands.
+- **Key Files**: `src/extension.ts`
 
-   - **Responsibility**: Manages the webview-based sidebar interface. This includes its rendering, handling all user interactions within the sidebar (e.g., chat input, button clicks, settings changes), and establishing the crucial bidirectional communication channel between the extension's backend (TypeScript) and the webview frontend (HTML/CSS/JavaScript). It also ensures the preservation and restoration of relevant UI states for a continuous user experience across sessions.
-   - **Key Files**: `src/sidebar/SidebarProvider.ts`, `src/sidebar/ui/webviewHelper.ts` (and implied `src/services/webviewMessageHandler.ts`).
-   - **Uses AI**: No
+#### 2. Expanded `modifySelection` Command Workflow
 
-3. **Application Configuration Management**:
+- **Responsibility**: Provides a streamlined interface for various AI-driven code modifications, accessible via `ctrl+m` or the editor context menu. It intelligently selects relevant code and orchestrates the prefilling of chat input for AI operations.
+- **Action Selection**: Presents a quick pick menu for actions like `/fix`, `/merge`, `chat`, or `custom prompt`.
+- **Intelligent Code Selection**: Automatically selects relevant code based on diagnostics (for `/fix`), Git conflicts (for `/merge`), or active file context.
+- **Workflow Orchestration**: Prefills a `composedMessage` into the sidebar chat input, allowing user review before initiating the AI operation.
+- **Key Files**: `src/extension.ts`, `src/services/codeSelectionService.ts`, `src/utils/diagnosticUtils.ts`, `src/utils/mergeUtils.ts`
 
-   - **Responsibility**: Manages user-specific settings and preferences for the extension. This involves loading default configuration values, persisting user-made changes across VS Code sessions, and providing a centralized access point for other components to retrieve configured values (e.g., AI model preferences, context building parameters).
-   - **Key Files**: `src/sidebar/managers/settingsManager.ts`.
-   - **Uses AI**: No
+#### 3. Refined `executeExplainAction` Implementation
 
-4. **AI API Key Management**:
-   - **Responsibility**: Securely handles the storage, retrieval, and validation of API keys required for accessing AI services (specifically Google Gemini APIs). It ensures that API keys are managed safely and are readily available for AI requests when needed, abstracting the complexities of credential management from other parts of the system.
-   - **Key Files**: `src/sidebar/managers/apiKeyManager.ts`.
-   - **Uses AI**: No
+- **Responsibility**: Offers a direct command to explain selected code, ensuring clarity and consistency with the overall AI request orchestration.
+- **Mechanism**: Captures user selection, constructs a precise prompt for AI explanation, and sends it to `aiRequestService.generateWithRetry`.
+- **Error Handling**: Handles `ERROR_QUOTA_EXCEEDED` and other `gemini.ts` errors with user-friendly notifications.
+- **Model Usage**: Consistently uses `DEFAULT_FLASH_LITE_MODEL` for quick, cost-effective explanations.
+- **Key Files**: `src/extension.ts`, `src/ai/gemini.ts`, `src/services/aiRequestService.ts`, `src/utils/codeUtils.ts`
 
 ### AI Services (Core AI Interaction)
 
-1. **AI Model Integration (Gemini Client)**:
+- **Responsibility**: Manages all direct and orchestrated interactions with AI models, ensuring robust, efficient, and quality-controlled AI operations. This includes API integration, request handling, token management, prompt engineering, and output validation.
+- **Uses AI**: Yes
 
-   - **Responsibility**: Provides the low-level, direct interface for communicating with the Google Gemini API. This includes handling API initialization, managing streaming responses from the model, performing basic error mapping for common API issues, and accurately counting tokens for both input prompts and generated responses. It supports various Gemini models (e.g., `gemini-2.5-pro`, `flash`, `flash-lite`). Users can input their own API key to utilize these services. The client now supports configuring the `FunctionCallingMode` for API requests, enhancing control over AI interaction behavior. Model selection for this client is managed by higher-level services like `ChatService` and `PlanService`.
-   - **Key Files**: `src/ai/gemini.ts`.
-   - **Uses AI**: Yes (direct API calls).
+#### 1. AI Model Integration (Gemini Client)
 
-2. **AI Request Orchestration & Robustness**:
+- **Responsibility**: Provides the low-level interface for communicating with the Google Gemini API, including API initialization, streaming responses, error mapping, and token counting.
+- **New Error Constants**: Introduces specific error constants (`ERROR_QUOTA_EXCEEDED`, `ERROR_OPERATION_CANCELLED`, `ERROR_SERVICE_UNAVAILABLE`, `ERROR_STREAM_PARSING_FAILED`) for clearer error handling.
+- **Enhanced `initializeGenerativeAI` Logic**: Leverages `systemInstruction` (`MINO_SYSTEM_INSTRUCTION`) for consistent AI persona and tracks `currentToolsHash` for optimization.
+- **Robust Streaming (`generateContentStream`)**: Provides `AsyncIterableIterator` for real-time responses, integrates `CancellationToken` support, and includes comprehensive error handling.
+- **Function Call Generation (`generateFunctionCall`)**: Enables the AI to generate structured function calls based on `tools`, supporting `FunctionCallingMode` for fine-grained control.
+- **Key Files**: `src/ai/gemini.ts`, `src/ai/prompts/systemInstructions.ts`
 
-   - **Responsibility**: Manages the overall process of making AI requests with a focus on reliability and efficiency. It implements robust **retry logic** for transient network errors, API rate limits, or service unavailability, and handles **cancellation requests** allowing users to terminate ongoing AI operations. It also orchestrates and optimizes concurrent AI calls through **parallel processing and batching** via integration with `src/utils/parallelProcessor.ts`, and reports token usage to `src/services/tokenTrackingService.ts`. This system acts as a critical abstraction layer over the direct API client, enhancing scalability and fault tolerance. Specifically, `aiRequestService.generateFunctionCall` now accepts and forwards the `functionCallingMode` parameter, which is leveraged to enforce `FunctionCallingMode.ANY` for plan generation workflows. This requires careful adjustment of argument passing, including the cancellation token, to ensure correct handling of this mode. It dynamically accepts model names from calling services for flexible AI model selection.
-   - **Key Files**: `src/services/aiRequestService.ts` (`AIRequestService` class, `generateWithRetry`, `generateMultipleInParallel`, `generateInBatches`, `processFilesInParallel`).
-   - **Uses AI**: Yes (orchestrates all direct AI calls).
+#### 2. AI Request Orchestration & Robustness
 
-3. **Token Usage Tracking**:
+- **Responsibility**: Manages the overall process of making AI requests with a focus on reliability and efficiency, including retry logic, cancellation handling, parallel processing, and token usage reporting.
+- **Key Features**: Implements robust retry logic for transient errors, handles cancellation requests, orchestrates concurrent AI calls through `src/utils/parallelProcessor.ts`, and reports token usage to `src/services/tokenTrackingService.ts`.
+- **Function Calling Mode**: Accepts and forwards `functionCallingMode` to enforce specific modes (e.g., `FunctionCallingMode.ANY` for plan generation).
+- **Key Files**: `src/services/aiRequestService.ts` (`AIRequestService` class, `generateWithRetry`, `generateMultipleInParallel`, `generateInBatches`, `processFilesInParallel`)
 
-   - **Responsibility**: Monitors and tracks the consumption of AI tokens across different types of AI requests. It provides real-time and aggregate usage statistics to the user, offering transparency and insights into AI service costs.
-   - **Key Files**: `src/services/tokenTrackingService.ts`
-   - **Key Methods**: `trackTokenUsage` (records token usage for each request), `getTokenStatistics` (calsulates total, average, and grouped statistics by request type and model), `estimateTokens` (provides heuristic token estimation for text content for real-time streaming updates), `getRealTimeTokenEstimates`, `getCurrentStreamingEstimates`, `onTokenUpdate`, `triggerRealTimeUpdate`, `clearTokenHistory`, `getFormattedStatistics`.
-   - **Uses AI**: Yes (directly involved in tracking AI model usage).
+#### 3. Token Usage Tracking
 
-4. **AI Prompt Management & Engineering**:
+- **Responsibility**: Monitors and tracks the consumption of AI tokens across various requests, providing real-time and aggregate usage statistics for transparency and cost insight.
+- **Key Methods**: `trackTokenUsage`, `getTokenStatistics`, `estimateTokens`, `getRealTimeTokenEstimates`, `getCurrentStreamingEstimates`, `onTokenUpdate`, `triggerRealTimeUpdate`, `clearTokenHistory`, `getFormattedStatistics`.
+- **Key Files**: `src/services/tokenTrackingService.ts`
 
-   - **Responsibility**: This system is central to effective communication with AI models. It is responsible for the definition, dynamic generation, structuring, and precise management of prompts sent to the AI. It ensures that prompts are contextually relevant, effectively formatted (e.g., using specific delimiters, incorporating structured data), and meticulously aligned with specific AI tasks (e.g., planning, code generation, summarization).
-   - **Key Files and Components**:
-     - Prompt Definition & Templates: `src/ai/prompts/` (e.g., `correctionPrompts.ts`, `enhancedCodeGenerationPrompts.ts`, `lightweightPrompts.ts`, `planningPrompts.ts`).
-     - Task-Specific Prompt Generation: `src/ai/enhancedCodeGeneration.ts` (`EnhancedCodeGenerator` class's role in creating prompts for code generation and modification), `src/services/sequentialFileProcessor.ts` (for file summarization prompts).
-     - Workflow Planning Prompts: `src/services/planService.ts` (generating planning-related prompts, e.g., `createInitialPlanningExplanationPrompt`, `createPlanningPrompt`).
-     - AI Request Interface: `src/services/aiRequestService.ts` (functions as the primary interface for sending prepared prompt content, often as `HistoryEntryPart` arrays, to the AI model, including prompt encapsulation and transmission).
-   - **Uses AI**: Yes (directly structures input for AI).
+#### 4. AI Prompt Management & Engineering
 
-5. **AI Code Quality Assurance**:
-   - **Responsibility**: Ensures the quality, correctness, and adherence to formatting standards of code generated or modified by AI models. This system, primarily implemented in `src/services/codeValidationService.ts`, integrates directly with VS Code's diagnostic capabilities to identify syntax errors, unused imports, security vulnerabilities, and best practice violations. It also implements custom validation rules for code structure, including specific delimiter checks, serving as a crucial quality gatekeeper for all AI-generated code within the platform.
-   - **Key Files**: `src/services/codeValidationService.ts` (`CodeValidationService` class, `validateCode`, `checkPureCodeFormat`).
-   - **Uses AI**: Yes (directly validates AI outputs).
+- **Responsibility**: Defines, dynamically generates, structures, and precisely manages prompts sent to AI models, ensuring they are contextually relevant and aligned with specific AI tasks.
+- **Key Components**:
+  - **Prompt Definition & Templates**: `src/ai/prompts/` (e.g., `correctionPrompts.ts`, `enhancedCodeGenerationPrompts.ts`, `lightweightPrompts.ts`, `planningPrompts.ts`).
+  - **Task-Specific Prompt Generation**: `src/ai/enhancedCodeGeneration.ts` (for code generation/modification), `src/services/sequentialFileProcessor.ts` (for file summarization).
+  - **Workflow Planning Prompts**: `src/services/planService.ts` (e.g., `createInitialPlanningExplanationPrompt`, `createPlanningPrompt`).
+  - **AI Request Interface**: `src/services/aiRequestService.ts` (primary interface for sending prepared prompt content as `HistoryEntryPart` arrays).
+- **Key Files**: `src/ai/prompts/`, `src/ai/enhancedCodeGeneration.ts`, `src/services/sequentialFileProcessor.ts`, `src/services/planService.ts`, `src/services/aiRequestService.ts`
+
+#### 5. AI Code Quality Assurance
+
+- **Responsibility**: Ensures the quality, correctness, and adherence to formatting standards of AI-generated or modified code by integrating with VS Code's diagnostic capabilities and implementing custom validation rules.
+- **Key Files**: `src/services/codeValidationService.ts` (`CodeValidationService` class, `validateCode`, `checkPureCodeFormat`)
 
 ### Context Management (Project Understanding)
 
-1. **Workspace File Scanning**:
+- **Responsibility**: Gathers, processes, and synthesizes all relevant contextual data from the user's project and external sources to provide AI models with a deep and accurate understanding of the codebase and task at hand.
+- **Uses AI**: Yes (for smart context selection and sequential context processing/summarization)
 
-   - **Responsibility**: Efficiently scans the VS Code workspace to discover and identify relevant project files and directories. It rigorously respects `.gitignore` rules, applies configurable size and file type filters (supporting user-defined relevant file extensions), and allows for the provision of custom ignore patterns for granular control over the scan scope. It also utilizes caching for performance optimization.
-   - **Key Files**: `src/context/workspaceScanner.ts` (`scanWorkspace`, `clearScanCache`, `getScanCacheStats`).
-   - **Uses AI**: No
+#### 1. Workspace File Scanning
 
-2. **Code & Project Structure Analysis**:
+- **Responsibility**: Efficiently scans the VS Code workspace to discover and identify relevant project files and directories, respecting `.gitignore` rules and applying configurable filters. It also utilizes caching for performance.
+- **Key Files**: `src/context/workspaceScanner.ts` (`scanWorkspace`, `clearScanCache`, `getScanCacheStats`)
 
-   - **Responsibility**: A collection of services dedicated to deeply understanding the project's codebase. This includes:
-     - Extracting Document Symbols: `src/services/symbolService.ts` provides functions to retrieve detailed symbol information (classes, functions, variables, etc.) from files.
-     - Fetching & Formatting Diagnostic Information: `src/utils/diagnosticUtils.ts` retrieves and formats real-time diagnostic data (errors, warnings, info, hints) from VS Code, often contextualizing it around selected code.
-     - Detecting Project Type: `src/services/projectTypeDetector.ts` analyzes project manifests (e.g., `package.json`, `pom.xml`, `go.mod`) and file structures to detect the project's primary language, framework, and type (e.g., frontend, backend, library, CLI).
-     - Building Dependency Graph: `src/context/dependencyGraphBuilder.ts` analyzes import/export statements to build forward and reverse dependency graphs between files, providing insight into code relationships.
-   - **Key Files**: `src/services/symbolService.ts`, `src/utils/diagnosticUtils.ts`, `src/services/projectTypeDetector.ts`, `src/context/dependencyGraphBuilder.ts`.
-   - **Uses AI**: No (provides foundational data for AI context).
+#### 2. Code & Project Structure Analysis
 
-3. **Context Building & Selection**:
+- **Responsibility**: Provides deep insights into the project's codebase, including extracting document symbols, fetching and formatting diagnostic information, detecting project type, and building dependency graphs.
+- **Key Components**:
+  - **Document Symbols**: `src/services/symbolService.ts` (retrieves detailed symbol information).
+  - **Diagnostic Information**: `src/utils/diagnosticUtils.ts` (retrieves and formats real-time diagnostic data).
+  - **Project Type Detection**: `src/services/projectTypeDetector.ts` (analyzes manifests and file structures).
+  - **Dependency Graph**: `src/context/dependencyGraphBuilder.ts` (analyzes import/export statements).
+- **Key Files**: `src/services/symbolService.ts`, `src/utils/diagnosticUtils.ts`, `src/services/projectTypeDetector.ts`, `src/context/dependencyGraphBuilder.ts`
 
-   - **Responsibility**: Orchestrates the entire process of building semantic-aware and highly relevant contextual data for AI models from the user's project. This sophisticated system employs a multi-faceted approach:
-     - **Orchestration**: `src/services/contextService.ts` is the central coordinator, integrating outputs from various sub-components. It also manages performance monitoring (`PERFORMANCE_THRESHOLDS`) to identify and log slow context-building phases.
-     - **File Content Summarization**: `src/context/fileContentProcessor.ts` intelligently summarizes file content, prioritizing active symbols, important definitions, and imports, while respecting configurable token limits.
-     - **Heuristic Selection**: `src/context/heuristicContextSelector.ts` applies rule-based scoring (e.g., proximity to active file, call hierarchy, direct/reverse dependencies) to quickly identify strong candidates for inclusion.
-     - **Smart AI-Driven Selection**: `src/context/smartContextSelector.ts` refines heuristic results by using an AI model to make nuanced relevance decisions based on detailed symbol information and file summaries, including caching AI selection results.
-     - **Context Assembly**: `src/context/contextBuilder.ts` (using `DEFAULT_CONTEXT_CONFIG`) assembles all disparate information (file structure, recent changes, file paths, symbol info, active symbol details, file contents) into a cohesive, token-optimized prompt string, adhering to configurable token limits. It constructs and includes an `ActiveSymbolDetailedInfo` structure capturing comprehensive details about the symbol at the cursor (definition, implementations, type definitions, references, call hierarchy, children hierarchy).
-     - **Large Context Handling**: `src/services/sequentialContextService.ts` provides a sequential processing mode for very large codebases to efficiently analyze and summarize files in batches, preventing memory and token overflow, especially useful when deep understanding of numerous files is required. It now leverages **workspace dependency computation and caching** (from `dependencyGraphBuilder.ts`) and integrates these file dependency graphs to enhance its context selection and refinement.
-       `src/services/sequentialFileProcessor.ts` works in conjunction with it, employing **internal file caching** to improve performance, generating **richer context and stricter output format for AI analysis prompts**, implementing **detailed file complexity estimation** using multiple metrics, **enhanced main purpose detection** based on path and extension, **expanded and refined dependency extraction** from code, and **refined relevance scoring** for prior file context, considering dependencies and user intent.
-   - **Key Files**: `src/services/contextService.ts`, `src/context/contextBuilder.ts`, `src/context/fileContentProcessor.ts`, `src/context/heuristicContextSelector.ts`, `src/context/smartContextSelector.ts`, `src/services/sequentialContextService.ts`.
-   - **Uses AI**: Yes (for smart context selection and for sequential context processing/summarization).
+#### 3. Advanced Context Building & AI-Driven Selection
 
-4. **URL Context Retrieval**:
-   - **Responsibility**: Automatically identifies URLs within user input (e.g., chat messages) and fetches their content to provide additional contextual information for AI models.
-   - **Key Methods**: `extractUrls` (for regex-based URL extraction from text), `fetchUrlContext` (for performing HTTP requests to retrieve content, handling various content types like HTML and plain text, and managing errors), `parseHtmlContent` (for stripping HTML tags, normalizing whitespace, and extracting titles from fetched HTML), and `formatUrlContexts` (for presenting the retrieved URL information in a structured, AI-readable format for inclusion in prompts).
-   - **Key Files**: `src/services/urlContextService.ts`.
-   - **Uses AI**: No (prepares external web content as context for AI).
+- **Responsibility**: Orchestrates the entire process of building semantic-aware and highly relevant contextual data for AI models, employing a multi-faceted approach to understand the codebase, including AI-driven file selection and sequential processing for large codebases.
+- **Key Features**:
+  - **Workspace Scanning and Project Type Detection**: Initiates with `scanWorkspace` and `detectProjectType` for foundational context.
+  - **Comprehensive `activeSymbolDetailedInfo` Gathering**: Gathers detailed symbol information (definitions, implementations, references, call hierarchy) for precise AI modifications.
+  - **Refined AI-Driven File Selection**: Uses `selectRelevantFilesAI` for dynamic file identification, intelligent file summarization (`intelligentlySummarizeFileContent`), and a robust fallback mechanism.
+  - **Sequential Project Context (`buildSequentialProjectContext`)**: Handles very large codebases by processing and summarizing files in batches using `SequentialContextService`.
+  - **Performance Monitoring**: Monitors duration of operations and logs warnings for performance optimization.
+  - **Context Assembly**: Integrates all collected data into a cohesive, token-optimized prompt string (`buildContextString`).
+- **Key Files**: `src/services/contextService.ts`, `src/context/workspaceScanner.ts`, `src/context/dependencyGraphBuilder.ts`, `src/context/smartContextSelector.ts`, `src/context/contextBuilder.ts`, `src/services/symbolService.ts`, `src/utils/diagnosticUtils.ts`, `src/context/fileContentProcessor.ts`, `src/services/sequentialContextService.ts`, `src/services/projectTypeDetector.ts`
+
+#### 4. URL Context Retrieval
+
+- **Responsibility**: Automatically identifies URLs in user input and fetches their content to provide additional contextual information for AI models.
+- **Key Methods**: `extractUrls`, `fetchUrlContext`, `parseHtmlContent`, `formatUrlContexts`.
+- **Key Files**: `src/services/urlContextService.ts`
 
 ### Code Generation & Modification
 
-1. **Enhanced Code Generation & Modification**:
-   - **Responsibility**: Orchestrates advanced AI-driven code generation and modification workflows. It exposes core public methods: `generateFileContent` for creating entirely new files and `modifyFileContent` for intelligently updating existing files. Both methods support **streaming responses** for real-time user feedback. A critical feature is its integrated **validation loop**, which leverages `src/services/codeValidationService.ts` to ensure generated code meets quality, correctness, and formatting standards. It also uses `src/utils/codeAnalysisUtils.ts` for file structure analysis (e.g., `analyzeFileStructure`) and `src/utils/codeUtils.ts` for tasks like stripping markdown fences (`cleanCodeOutput`) and applying precise text edits (`applyAITextEdits`). The internal `_generateInitialContent` and `_modifyFileContentFull` methods handle the core AI interaction and multi-step refinement.
-   - **Key Files**: `src/ai/enhancedCodeGeneration.ts` (`EnhancedCodeGenerator` class).
-   - **Uses AI**: Yes (generates and modifies code, leveraging AI feedback).
+- **Responsibility**: Orchestrates advanced AI-driven code generation and modification workflows, ensuring the creation of new files and intelligent updates to existing ones with an emphasis on quality and robustness through integrated validation and utility integrations.
+- **Uses AI**: Yes
+
+#### 1. Enhanced Code Generator
+
+- **Responsibility**: Acts as the central hub for creating new files (`generateFileContent`) and intelligently updating existing ones (`modifyFileContent`), supporting streaming responses.
+- **Integrated Validation Loop**: Leverages `CodeValidationService` to rigorously check AI-generated code before applying changes.
+- **File Structure Analysis**: Utilizes `src/utils/codeAnalysisUtils.ts` for understanding file organization to make contextually aware modifications.
+- **Code Utility Integration**: Employs `src/utils/codeUtils.ts` for tasks like stripping markdown fences (`cleanCodeOutput`) and applying precise text edits (`applyAITextEdits`).
+- **AI Interaction**: Manages core interaction with the AI model for initial generation and multi-step refinement.
+- **Key Files**: `src/ai/enhancedCodeGeneration.ts` (`EnhancedCodeGenerator` class), `src/services/codeValidationService.ts`, `src/utils/codeAnalysisUtils.ts`, `src/utils/codeUtils.ts`
 
 ### Plan & Workflow Management
 
-1. **Workflow Planning Structure**:
+- **Responsibility**: Manages the full lifecycle of AI-generated action plans, from initial conceptualization and strict schema definition to automated execution, post-execution handling, and change logging for reversibility.
+- **Uses AI**: Yes (for initial textual plan, structured plan generation, and code generation/modification within plan steps)
 
-   - **Responsibility**: Defines the strict schema, type guards, and initial validation rules for AI-generated multi-step execution plans. This system ensures that the AI's output is structured, machine-readable, and executable by the extension.
-   - **Key Files**: `src/ai/workflowPlanner.ts`
-   - **Key Interfaces/Enums**: `PlanStepAction` (enum defining allowed actions: `create_directory`, `create_file`, `modify_file`, `run_command`), `PlanStep` (base interface for any step), `CreateDirectoryStep`, `CreateFileStep`, `ModifyFileStep`, `RunCommandStep` (specific step types extending `PlanStep` with action-specific properties), `ExecutionPlan` (overall plan structure containing `planDescription` and an array of `steps`).
-   - **Key Functions**: `isCreateDirectoryStep`, `isCreateFileStep`, `isModifyFileStep`, `isRunCommandStep` (type guards for runtime validation), `parseAndValidatePlan` (parses a raw JSON string into an `ExecutionPlan` object, performing comprehensive validation including adherence to schema, relative path safety, and `.gitignore` checks).
-   - **Uses AI**: No (defines the structure for AI outputs).
+#### 1. Workflow Planning Structure
 
-2. **Plan Service & Execution Orchestration**:
+- **Responsibility**: Defines the strict schema, type guards, and initial validation rules for AI-generated multi-step execution plans, ensuring machine-readable and executable output.
+- **Key Interfaces/Enums**: `PlanStepAction`, `PlanStep`, `CreateDirectoryStep`, `CreateFileStep`, `ModifyFileStep`, `RunCommandStep`, `ExecutionPlan`.
+- **Key Functions**: `isCreateDirectoryStep`, `isCreateFileStep`, `isModifyFileStep`, `isRunCommandStep` (type guards), `parseAndValidatePlan`.
+- **Key Files**: `src/ai/workflowPlanner.ts`
 
-   - **Responsibility**: Manages the full lifecycle of AI-generated action plans, from initial conceptualization to automated execution and post-execution handling. This includes:
-     - **Initial Plan Generation**: Uses lightweight AI models (Gemini Flash Lite) via `src/services/aiRequestService.ts` to generate high-level textual plan explanations based on user requests and project context (`createInitialPlanningExplanationPrompt`).
-     - **Structured Planning**: Utilizes `createPlanningPromptForFunctionCall` to guide the AI, via `aiRequestService.ts`, to convert textual explanations into detailed, multi-step executable JSON plans. For this, `FunctionCallingMode.ANY` is specifically applied to force the AI to generate a `generateExecutionPlan` tool call, ensuring a deterministic JSON output that strictly adheres to the schema defined in `src/ai/workflowPlanner.ts`. This strategic use of 'ANY' mode is crucial for the reliability of automated planning.
-     - **Validation & Repair**: Employs `parseAndValidatePlanWithFix` (which wraps `parseAndValidatePlan` from `workflowPlanner.ts`) to rigorously validate generated plans against the schema, including programmatic repair for common JSON escape sequence errors that AI models might introduce. With `FunctionCallingMode.ANY` now enforcing a tool call for planning, the focus of validation shifts more heavily towards the content and structure of the `functionCall.args` (the JSON plan) itself, ensuring it's syntactically correct and semantically valid, rather than primarily checking if a function call was made. `parseAndValidatePlanWithFix` and its underlying repair mechanisms remain critical for handling any malformed JSON arguments.
-     - **Step Execution Logic**: Interprets and executes each concrete step of the structured plan (e.g., `_handleCreateDirectoryStep`, `_handleCreateFileStep`, `_handleModifyFileStep`, `_handleRunCommandStep`), managing step-level retries for transient errors and providing user intervention options (retry, skip, cancel).
-     - **File System & Code Integration**: Directly utilizes `enhancedCodeGenerator` (from `src/ai/enhancedCodeGeneration.ts`) for AI-driven file creation and modification, `gitConflictResolutionService.ts` for automated conflict resolution in specific scenarios, `commandExecution.ts` for securely running shell commands (with user confirmation), and `ProjectChangeLogger.ts` for meticulously recording all file modifications.
-     - **User Interaction**: Manages user prompts for command execution confirmation, provides real-time progress updates (`_logStepProgress`), handles comprehensive error reporting (`_reportStepError`), and notifies the user upon plan completion or cancellation. It also tracks and persists the overall execution outcome and changes for review and potential reversion.
-   - **Key Files**: `src/services/planService.ts` (`PlanService` class, `handleInitialPlanRequest`, `initiatePlanFromEditorAction`, `generateStructuredPlanAndExecute`, `_executePlan`, `_executePlanSteps`, `parseAndValidatePlanWithFix`), `src/ai/workflowPlanner.ts`, `src/services/aiRequestService.ts`, `src/ai/enhancedCodeGeneration.ts`, `src/services/gitConflictResolutionService.ts`, `src/utils/commandExecution.ts`, `src/workflow/ProjectChangeLogger.ts`.
-   - **Uses AI**: Yes (for initial textual plan, structured plan generation, and code generation/modification within plan steps).
-   - A key distinction exists in AI model usage: general chat interactions typically use a lightweight model for responsiveness, while structured plan generation prioritizes accuracy and capability, often leveraging a model optimized for function calling.
-     - **Chat Model Usage**: `ChatService` (specifically the `handleRegularChat` method) consistently utilizes the `DEFAULT_FLASH_LITE_MODEL` for general conversational interactions, ensuring speed and cost-effectiveness.
-     - **Plan Model Usage**: For initial plan generation, `PlanService` retrieves the `modelName` from user settings (via `sidebarConstants.MODEL_SELECTION_STORAGE_KEY`). This applies to both chat-initiated (`handleInitialPlanRequest`) and editor-initiated (`initiatePlanFromEditorAction`) plans. If no user setting is found, it defaults to `DEFAULT_FLASH_LITE_MODEL` for initial textual plan explanations.
-     - **Model Usage in Execution**: When `generateStructuredPlanAndExecute` is called, the `modelName` from the `planContext` (which was determined during the initial plan generation phase) is used for all subsequent AI calls within that plan's execution, including structured plan generation and any AI-driven code modifications.
+#### 2. Plan Service & Execution Orchestration
 
-3. **Project Change Logging**:
+- **Responsibility**: Manages the full lifecycle of AI-generated action plans, from initial conceptualization to automated execution and post-execution handling.
+- **Structured Plan Generation**: Relies on `FunctionCallingMode.ANY` when interacting with `aiRequestService.generateFunctionCall` to force deterministic JSON output adhering to the `ExecutionPlan` schema.
+- **Validation & Repair**: Employs `parseAndValidatePlanWithFix` for rigorous validation and programmatic repair of plans.
+- **Step Execution Logic**: Interprets and executes each step, managing retries and providing user intervention options.
+- **Deep Integration**: Utilizes `EnhancedCodeGenerator` for file operations, `GitConflictResolutionService` for merge conflicts, `ProjectChangeLogger` for recording changes, and `commandExecution.ts` for shell commands.
+- **User Interaction & Monitoring**: Manages user prompts, provides real-time progress updates, reports errors, and notifies on completion or cancellation.
+- **Model Usage Distinction**: Dynamically retrieves model names, using `DEFAULT_FLASH_LITE_MODEL` for initial textual plans and optimized models for function calling.
+- **Key Files**: `src/services/planService.ts` (`PlanService` class, `handleInitialPlanRequest`, `initiatePlanFromEditorAction`, `generateStructuredPlanAndExecute`, `_executePlan`, `_executePlanSteps`, `parseAndValidatePlanWithFix`), `src/ai/workflowPlanner.ts`, `src/services/aiRequestService.ts`, `src/ai/enhancedCodeGeneration.ts`, `src/services/gitConflictResolutionService.ts`, `src/utils/commandExecution.ts`, `src/workflow/ProjectChangeLogger.ts`, `src/services/RevertService.ts`
 
-   - **Responsibility**: Provides a comprehensive, auditable log of all file system modifications (creations, modifications, deletions) performed by AI-driven workflows. It meticulously tracks individual changes (`FileChangeEntry`) during an active plan execution and then archives them into `RevertibleChangeSet` objects upon successful plan completion, ensuring a traceable and reversible development process.
-   - **Key Files**: `src/workflow/ProjectChangeLogger.ts`
-   - **Key Structures**: `FileChangeEntry` (records `filePath`, `changeType`, `summary`, `diffContent`, `timestamp`, `originalContent`, `newContent` for individual file changes), `RevertibleChangeSet` (groups related `FileChangeEntry` objects for a single completed plan execution, along with a unique `id` and `summary`).
-   - **Key Methods**: `logChange` (adds individual changes to the current in-memory log buffer), `getChangeLog` (retrieves the current set of changes), `clear` (resets the current log buffer), `saveChangesAsLastCompletedPlan` (transfers current changes to an archived `RevertibleChangeSet` and clears the buffer), `getCompletedPlanChangeSets` (retrieves all archived change sets), `popLastCompletedPlanChanges` (removes the most recent archived set from the stack), `clearAllCompletedPlanChanges`).
-   - **Uses AI**: No (records actions taken by the system, not directly by AI).
+#### 3. Project Change Logging
 
-4. **Reversion Service**:
-   - **Responsibility**: Provides critical functionality for safely undoing file system changes made by AI-driven workflows. It accesses detailed logs of created, modified, and deleted files through `src/workflow/ProjectChangeLogger.ts`, using the stored `originalContent` (or lack thereof) to restore the project state.
-   - **Key Methods**: The core `revertChanges` method iterates through a provided list of `FileChangeEntry` objects in reverse chronological order. For 'created' files, it deletes them; for 'modified' files, it restores their `originalContent`; and for 'deleted' files, it recreates them with their `originalContent`. It handles file system errors and provides user notifications.
-   - **Key Files**: `src/services/RevertService.ts` (`RevertService` class).
-   - **Uses AI**: No.
+- **Responsibility**: Provides a comprehensive, auditable log of all file system modifications performed by AI-driven workflows, tracking individual changes (`FileChangeEntry`) and archiving them into `RevertibleChangeSet` objects for traceability and reversibility.
+- **Key Structures**: `FileChangeEntry`, `RevertibleChangeSet`.
+- **Key Methods**: `logChange`, `getChangeLog`, `clear`, `saveChangesAsLastCompletedPlan`, `getCompletedPlanChangeSets`, `popLastCompletedPlanChanges`, `clearAllCompletedPlanChanges`.
+- **Key Files**: `src/workflow/ProjectChangeLogger.ts`
+
+#### 4. Revert Service
+
+- **Responsibility**: Provides critical functionality for safely undoing file system changes made by AI-driven workflows, using logs from `src/workflow/ProjectChangeLogger.ts` to restore the project state.
+- **Key Methods**: The core `revertChanges` method iterates through changes in reverse, deleting created files, restoring original content for modified files, and recreating deleted files.
+- **Key Files**: `src/services/RevertService.ts` (`RevertService` class)
+
+### User Interface & Interactive Chat Systems
+
+- **Responsibility**: This system handles all user-facing webview and interactive chat functionalities, providing the primary interface for users to interact with Minovative Mind, including multimodal input, displaying AI responses, and managing UI state.
+- **Uses AI**: Yes
+
+#### 1. Multimodal Interaction
+
+- The system supports multimodal input, allowing users to engage with the AI using both text prompts and image uploads. Image data is processed as Base64 strings encapsulated within `ImageInlineData` objects, which are then part of the `HistoryEntryPart` union type defined in `src/sidebar/common/sidebarTypes.ts`.
+- User-sent chat messages are structured as `chatMessage` objects (type `WebviewToExtensionChatMessageType`) which can include an optional `imageParts` array.
+- These messages are initially handled by `src/sidebar/webview/messageSender.ts` on the webview side and dispatched to the extension for processing by `src/services/chatService.ts`.
+
+#### 2. Message Flow and Communication
+
+- Communication between the webview (responsible for rendering and user input) and the extension (handling business logic, AI calls, and VS Code API interactions) maintains a clear separation of concerns.
+- Messages from the webview to the extension are centrally dispatched by `src/services/webviewMessageHandler.ts`. This service validates incoming messages and routes them to the appropriate backend service.
+- Messages back to the UI are handled by `SidebarProvider.postMessageToWebview`, which now includes an improved throttling mechanism to prevent the webview from becoming unresponsive during high-volume updates (e.g., AI streaming). This mechanism categorizes messages into `immediateTypes` (critical, real-time updates) and `throttledTypes` (less time-critical updates) to ensure smooth performance.
+
+#### 3. Unified Operation Management
+
+- The `operationId` is a unique identifier (`currentActiveChatOperationId` in `SidebarProvider`) assigned to each primary AI task (chat, plan, commit, edit, planPrompt). This ID ensures that the system can correctly track and manage concurrent AI operations, allowing for robust state management and proper cleanup.
+- `SidebarProvider.startUserOperation` is called at the beginning of any major AI workflow, generating a new `operationId` and a `vscode.CancellationTokenSource`. If another operation is already active, the existing `CancellationTokenSource` is cancelled and disposed, gracefully terminating the previous task. `SidebarProvider.endUserOperation` is called upon completion (success, failure, or review) to clean up state and re-enable UI elements.
+- `SidebarProvider.triggerUniversalCancellation` provides an immediate and comprehensive way to terminate all active background processes, including AI generation and child processes, ensuring the system can always be reset to a stable state.
+
+#### 4. Interactive Chat Message Elements
+
+- The dynamic rendering of chat messages is managed by `src/sidebar/webview/ui/chatMessageRenderer.ts`. This component is responsible for displaying markdown, code diffs, relevant files, and newly introduced action buttons.
+- Newly introduced action buttons (Copy, Delete, Edit, Generate Plan Prompt) are now displayed on chat messages, enhancing user interaction.
+- The **Edit Message** feature allows users to modify a previous message. When activated, `editChatMessage` is sent from the webview, `isEditingMessageActive` is managed in `SidebarProvider` to prevent conflicting actions, and `chatService.regenerateAiResponseFromHistory` is invoked to re-process the edited prompt.
+- The **Generate Plan Prompt** feature allows users to pre-fill the chat input with a `/plan` command based on an AI response, effectively turning an AI suggestion into a structured task. This is handled by sending `generatePlanPromptFromAIMessage` to the extension.
+- These buttons are dynamically enabled/disabled by `disableAllMessageActionButtons` and `reenableAllMessageActionButtons` based on the UI state (e.g., during AI streaming, plan execution) to prevent conflicting actions and guide the user through the workflow.
+
+#### 5. Webview State and UI Management
+
+- The `setLoadingState` function in `src/sidebar/webview/main.ts` plays a critical role in controlling the responsiveness and disabled states of various UI elements. It uses global application states (`appState.isLoading`, `appState.isAwaitingUserReview`, `appState.isCancellationInProgress`, `appState.isPlanExecutionInProgress`) to determine the interactive status of chat input, send button, API key controls, chat history buttons, and image upload controls.
+- `SidebarProvider.handleWebviewReady` is crucial for ensuring a consistent UI state upon webview initialization or visibility changes. It calls private restoration methods such as `_restorePlanExecutionState`, `_restorePendingPlanConfirmationState`, `_restoreAiStreamingState`, and `_restorePendingCommitReviewState` to re-display progress or pending user actions for long-running operations across VS Code restarts or sidebar toggles.
+
+#### 6. Enhanced Chat History Management
+
+- This sub-system manages the persistence, retrieval, truncation, and display of the conversational history between the user and the AI within the sidebar. It ensures that the full context and conversational state are seamlessly restored across VS Code sessions, providing continuity for ongoing dialogues.
+- New messages for robust chat history control include `requestClearChatConfirmation` (initiates a user confirmation dialog), `confirmClearChatAndRevert` (executes the clear and revert action), and `cancelClearChat` (cancels the operation). These messages are handled by `src/services/webviewMessageHandler.ts`.
+- **Key Files for History**: `src/sidebar/managers/chatHistoryManager.ts`
+
+#### 7. Workspace Interaction from Webview
+
+- The webview can now request a list of workspace files from the extension using `requestWorkspaceFiles`. The extension processes this request and sends back the list of relative file paths via `receiveWorkspaceFiles`, allowing the webview to dynamically display relevant project context.
+
+- **Key Files**:
+  - `src/services/chatService.ts`
+  - `src/services/webviewMessageHandler.ts`
+  - `src/sidebar/SidebarProvider.ts`
+  - `src/sidebar/common/sidebarTypes.ts`
+  - `src/sidebar/webview/main.ts`
+  - `src/sidebar/webview/messageSender.ts`
+  - `src/sidebar/webview/ui/chatMessageRenderer.ts`
+  - `src/sidebar/managers/chatHistoryManager.ts`
 
 ### Supporting Services & Utilities
 
-1. **Chat History Management**:
+- **Responsibility**: Provides a collection of foundational services and general-purpose utilities that support and enhance the core functionalities of Minovative Mind, including Git integration, concurrency management, code selection, diffing, and common code manipulation tasks.
+- **Uses AI**: Yes (for Git commit message generation and AI-guided conflict resolution)
 
-   - **Responsibility**: Manages the persistence, retrieval, truncation, and display of the conversational history between the user and the AI within the sidebar. It ensures that the full context and conversational state are seamlessly restored across VS Code sessions, providing continuity for ongoing dialogues.
-   - **Key Files**: `src/sidebar/managers/chatHistoryManager.ts`.
-   - **Uses AI**: No
+#### 1. Git Integration & Automation
 
-2. **Chat Interaction & Response**:
+- **Responsibility**: Facilitates various Git operations within AI-driven workflows, including staging changes, generating insightful commit messages, and providing automated Git merge conflict resolution.
+- **Key Components**: Programmatically checks for and clears conflict markers, updates Git status, and works with `src/utils/diffingUtils.ts` and `src/utils/mergeUtils.ts`.
+- **Key Files**: `src/services/commitService.ts`, `src/sidebar/services/gitService.ts` (implied), `src/services/gitConflictResolutionService.ts`, `src/utils/mergeUtils.ts`
 
-   - **Responsibility**: Orchestrates the user's general conversational experience with the AI within the chat interface. This includes receiving user messages, integrating various contextual data (such as URL context prepared by `urlContextService`), managing the AI's textual responses for display, and handling actions like regenerating AI responses.
-   - **Key Files**: `src/services/chatService.ts`.
-   - **Uses AI**: Yes
+#### 2. Concurrency Management (Infrastructure)
 
-3. **Git Integration & Automation**:
+- **Responsibility**: Provides generic, reusable utilities for managing parallel tasks and controlling concurrency across various operations, optimizing AI request handling and resource usage.
+- **Key Features**: Allows defining maximum concurrent tasks, timeouts, and retries for individual parallel operations.
+- **Key Files**: `src/utils/parallelProcessor.ts` (`ParallelProcessor` class, `executeParallel`, `processFilesInParallel`, `executeInBatches`)
 
-   - **Responsibility**: Facilitates various Git operations within AI-driven workflows, including staging changes automatically after modifications, generating insightful commit messages based on detected diffs, and providing advanced functionality for automated Git merge conflict resolution. Specifically for conflict resolution, it programmatically checks for and clears conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) from files, updating VS Code's Git status to reflect resolution. This system works closely with `src/utils/diffingUtils.ts` for change analysis and `src/utils/mergeUtils.ts` for robust conflict detection.
-   - **Key Files**: `src/services/commitService.ts`, `src/sidebar/services/gitService.ts` (implied), `src/services/gitConflictResolutionService.ts`, `src/utils/mergeUtils.ts`.
-   - **Uses AI**: Yes (for commit message generation, and for orchestrating AI-guided conflict resolution).
+#### 3. Code Selection Logic Utilities
 
-4. **Concurrency Management (Infrastructure)**:
+- **Responsibility**: Provides a set of static utility functions for intelligently selecting relevant code segments or symbols within a document for AI analysis, modification, or targeted fixes.
+- **Key Methods**: `findEnclosingSymbol`, `findSymbolWithDiagnostics`, `findLogicalCodeUnitForPrompt`.
+- **Key Files**: `src/services/codeSelectionService.ts` (`CodeSelectionService` class)
 
-   - **Responsibility**: Provides generic, reusable utilities for managing parallel tasks and controlling concurrency across various operations within the extension. It is notably used for optimizing AI request handling, enhancing resource usage efficiency (e.g., preventing too many concurrent API calls), and preventing timeouts for long-running operations. It allows for defining maximum concurrent tasks, timeouts, and retries for individual parallel operations.
-   - **Key Files**: `src/utils/parallelProcessor.ts` (`ParallelProcessor` class, `executeParallel`, `processFilesInParallel`, `executeInBatches`).
-   - **Uses AI**: No
+#### 4. File Change Summarization Utilities
 
-5. **Code Selection Logic Utilities**:
+- **Responsibility**: Generates human-readable summaries and precise diffs of file modifications using the `diff-match-patch` library. These summaries are crucial for logging changes, user feedback, and re-contextualizing AI.
+- **Key Methods**: `generateFileChangeSummary`, `analyzeDiff`, `generatePreciseTextEdits`, `parseDiffHunkToTextEdits`, `applyDiffHunkToDocument`.
+- **Key Files**: `src/utils/diffingUtils.ts`
 
-   - **Responsibility**: Provides a set of static utility functions for intelligently selecting relevant code segments or symbols within a document. These functions are crucial for pinpointing the most critical parts of the code for AI analysis, modification, or for applying targeted fixes.
-   - **Key Files**: `src/services/codeSelectionService.ts` (`CodeSelectionService` class).
-   - **Key Methods**: `findEnclosingSymbol` (finds the smallest symbol containing a given position), `findSymbolWithDiagnostics` (identifies the most important symbol associated with active diagnostics, prioritizing by severity and proximity), `findLogicalCodeUnitForPrompt` (expands a selection from a smaller component to its containing major code unit like a function or class for broader context in AI prompts).
-   - **Uses AI**: No (prepares data for AI context).
+#### 5. Code Utilities
 
-6. **File Change Summarization Utilities**:
+- **Responsibility**: Provides general-purpose, low-level utility functions for manipulating and analyzing code content, fundamental to code generation, validation, and context building.
+- **Key Methods**:
+  - `src/utils/codeUtils.ts`: `cleanCodeOutput`, `applyAITextEdits`.
+  - `src/utils/codeAnalysisUtils.ts`: `analyzeFileStructure`, `isAIOutputLikelyErrorMessage`, `isRewriteIntentDetected`, `getLanguageId`, `getCodeSnippet`, `formatSelectedFilesIntoSnippets`.
+- **Key Files**: `src/utils/codeUtils.ts`, `src/utils/codeAnalysisUtils.ts`
 
-   - **Responsibility**: Generates human-readable summaries and precise diffs of file modifications. It utilizes the `diff-match-patch` library to robustly compare old and new content, identify added/removed lines, and extract semantically meaningful changes (e.g., modified functions, added classes, import changes). These summaries are crucial for logging changes, providing concise feedback to the user, and re-contextualizing AI for follow-up tasks (e.g., in a feedback loop or for commit messages).
-   - **Key Files**: `src/utils/diffingUtils.ts`
-   - **Key Methods**: `generateFileChangeSummary` (creates a summary including affected entities, line counts, and a formatted diff string), `analyzeDiff` (provides a high-level analysis of change magnitude, e.g., checking for drastic changes or removal of all imports), `generatePreciseTextEdits` (generates VS Code compatible text edits from content diffs for seamless application), `parseDiffHunkToTextEdits`, `applyDiffHunkToDocument`.
-   - **Uses AI**: No (assists in reporting and processing changes).
+#### 6. Command Execution Utility
 
-7. **Code Utilities**:
-
-   - **Responsibility**: Provides general-purpose, low-level utility functions for manipulating and analyzing code content. These functions are fundamental helpers used across various parts of the extension, particularly in code generation, validation, and context building processes.
-   - **Key Files**: `src/utils/codeUtils.ts`, `src/utils/codeAnalysisUtils.ts`
-   - **Key Methods**:
-     - `src/utils/codeUtils.ts`: `cleanCodeOutput` (removes markdown code fences and other non-code elements from raw AI output to extract pure code), `applyAITextEdits` (applies a set of precise text edits to a VS Code editor instance, ensuring undo/redo compatibility).
-     - `src/utils/codeAnalysisUtils.ts`: `analyzeFileStructure` (extracts high-level structural information like imports, exports, functions, classes, and variables within a file for context), `isAIOutputLikelyErrorMessage` (heuristically determines if a raw AI text response is an error message rather than valid output), `isRewriteIntentDetected` (detects if the user's prompt suggests a major code rewrite operation for strategic AI handling), `getLanguageId` (maps file extensions to VS Code language IDs), `getCodeSnippet` (extracts a code snippet around a specific line number), `formatSelectedFilesIntoSnippets` (formats file contents into markdown fenced blocks suitable for AI prompts).
-   - **Uses AI**: No (supports AI-driven features).
-
-8. **Command Execution Utility**:
-   - **Responsibility**: Provides a robust and cancellable mechanism for executing external shell commands. This utility is critical for enabling AI-driven workflows to interact with the file system beyond simple read/write operations (e.g., running build commands, Git commands, package manager commands). It captures standard output and error, returns exit codes, and integrates with VS Code's cancellation tokens to ensure processes can be safely terminated. It also tracks active child processes for global management.
-   - **Key Files**: `src/utils/commandExecution.ts` (`executeCommand` function).
-   - **Key Interfaces**: `CommandResult` (defines the structure of the command's output, including `stdout`, `stderr`, and `exitCode`).
-   - **Uses AI**: No (executes commands as part of automated workflows).
+- **Responsibility**: Provides a robust and cancellable mechanism for executing external shell commands, critical for AI-driven workflows to interact with the file system beyond simple read/write.
+- **Key Features**: Captures stdout/stderr, returns exit codes, integrates with VS Code cancellation tokens, and tracks active child processes.
+- **Key Interfaces**: `CommandResult`.
+- **Key Files**: `src/utils/commandExecution.ts` (`executeCommand` function)
 
 ---
 

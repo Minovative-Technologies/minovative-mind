@@ -112,7 +112,7 @@ export async function handleWebviewMessage(
 
 		case "planRequest": {
 			const userRequest = validatedData.value;
-			await provider.startUserOperation(); // Start the operation and set generating state
+			await provider.startUserOperation("plan"); // Start the operation and set generating state
 			provider.chatHistoryManager.addHistoryEntry(
 				"user",
 				`/plan ${userRequest}`
@@ -123,7 +123,7 @@ export async function handleWebviewMessage(
 		}
 
 		case "confirmPlanExecution": {
-			await provider.startUserOperation(); // Start the operation and set generating state
+			await provider.startUserOperation("planExecution"); // Start the operation and set generating state
 			if (provider.pendingPlanGenerationContext) {
 				const contextForExecution = {
 					...provider.pendingPlanGenerationContext,
@@ -147,7 +147,7 @@ export async function handleWebviewMessage(
 		}
 
 		case "retryStructuredPlanGeneration": {
-			await provider.startUserOperation(); // Start the operation and set generating state
+			await provider.startUserOperation("retryPlan"); // Start the operation and set generating state
 			if (provider.lastPlanGenerationContext) {
 				const contextForRetry = { ...provider.lastPlanGenerationContext };
 				provider.chatHistoryManager.addHistoryEntry(
@@ -177,7 +177,7 @@ export async function handleWebviewMessage(
 			break;
 
 		case "chatMessage": {
-			await provider.startUserOperation(); // Start the operation and set generating state
+			await provider.startUserOperation("chat"); // Start the operation and set generating state
 			const userMessageText = validatedData.value;
 			const incomingImageParts = validatedData.imageParts; // Array of ImageInlineData | undefined
 
@@ -241,7 +241,7 @@ export async function handleWebviewMessage(
 		}
 
 		case "commitRequest": {
-			await provider.startUserOperation(); // Start the operation and set generating state
+			await provider.startUserOperation("commit"); // Start the operation and set generating state
 			await provider.commitService.handleCommitCommand(
 				provider.activeOperationCancellationTokenSource!.token
 			);
@@ -582,7 +582,7 @@ export async function handleWebviewMessage(
 			await provider.triggerUniversalCancellation(); // Cancel any ongoing operations
 
 			try {
-				await provider.startUserOperation(); // Start new operation and set `isGeneratingUserRequest`
+				await provider.startUserOperation("edit"); // Start new operation and set `isGeneratingUserRequest`
 				provider.postMessageToWebview({
 					type: "updateLoadingState",
 					value: true,
@@ -704,7 +704,7 @@ export async function handleWebviewMessage(
 				break;
 			}
 
-			await provider.startUserOperation(); // Start the operation and set generating state
+			await provider.startUserOperation("planPrompt"); // Start the operation and set generating state
 			const token = provider.activeOperationCancellationTokenSource!.token; // Get the token for the new operation
 
 			try {

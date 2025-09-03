@@ -83,6 +83,11 @@ export class PlanService {
 		); // Use selected model for initial plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
+		// Start a new user operation, which creates a new cancellation token source and operation ID
+		await this.provider.startUserOperation("plan");
+		const operationId = this.provider.currentActiveChatOperationId;
+		const token = this.provider.activeOperationCancellationTokenSource!.token;
+
 		if (!apiKey) {
 			this.provider.postMessageToWebview({
 				type: "statusUpdate",
@@ -93,10 +98,6 @@ export class PlanService {
 			return;
 		}
 
-		this.provider.activeOperationCancellationTokenSource =
-			new vscode.CancellationTokenSource();
-		const token = this.provider.activeOperationCancellationTokenSource.token;
-
 		changeLogger.clear();
 
 		const rootFolder = vscode.workspace.workspaceFolders?.[0];
@@ -106,6 +107,7 @@ export class PlanService {
 				success: false,
 				error:
 					"Action blocked: No VS Code workspace folder is currently open. Please open a project folder to proceed.",
+				operationId: operationId as string,
 			});
 			return;
 		}
@@ -130,7 +132,11 @@ export class PlanService {
 			const { contextString, relevantFiles } = buildContextResult;
 
 			// Refactored: Call new helper method to initialize streaming state
-			this._initializeStreamingState(modelName, relevantFiles);
+			this._initializeStreamingState(
+				modelName,
+				relevantFiles,
+				operationId as string
+			);
 
 			if (contextString.startsWith("[Error")) {
 				throw new Error(contextString);
@@ -169,6 +175,7 @@ export class PlanService {
 							this.provider.postMessageToWebview({
 								type: "aiResponseChunk",
 								value: chunk,
+								operationId: operationId as string, // Cast as requested
 							});
 						},
 					},
@@ -249,19 +256,19 @@ export class PlanService {
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
 				success: success,
-				// Conditionally include error
-				...((!success || isCancellation) && {
-					error: isCancellation
-						? "Plan generation cancelled."
-						: formatUserFacingErrorMessage(
-								finalErrorForDisplay
-									? new Error(finalErrorForDisplay)
-									: new Error("Unknown error"), // Pass an actual Error instance
-								"An unexpected error occurred during initial plan generation.",
-								"AI response error: ",
-								rootFolder.uri
-						  ),
-				}),
+				operationId: operationId as string, // Cast as requested
+				error: success
+					? null
+					: isCancellation
+					? "Plan generation cancelled."
+					: formatUserFacingErrorMessage(
+							finalErrorForDisplay
+								? new Error(finalErrorForDisplay)
+								: new Error("Unknown error during initial plan generation."), // Pass an actual Error instance
+							"An unexpected error occurred during initial plan generation.",
+							"AI response error: ",
+							rootFolder.uri
+					  ),
 				// Conditionally include plan-related data if it's a confirmable plan response
 				...(isConfirmablePlanResponse &&
 					this.provider.pendingPlanGenerationContext && {
@@ -313,6 +320,12 @@ export class PlanService {
 		); // Use selected model for editor-initiated plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
+		// Start a new user operation, which creates a new cancellation token source and operation ID
+		await this.provider.startUserOperation("plan");
+		const operationId = this.provider.currentActiveChatOperationId;
+		const activeOpToken =
+			this.provider.activeOperationCancellationTokenSource!.token;
+
 		const rootFolder = vscode.workspace.workspaceFolders?.[0];
 		if (!rootFolder) {
 			initialProgress?.report({
@@ -325,11 +338,6 @@ export class PlanService {
 					"Action blocked: No VS Code workspace folder is currently open. Please open a project folder to proceed.",
 			};
 		}
-
-		this.provider.activeOperationCancellationTokenSource =
-			new vscode.CancellationTokenSource();
-		const activeOpToken =
-			this.provider.activeOperationCancellationTokenSource.token;
 
 		const disposable = initialToken?.onCancellationRequested(() => {
 			this.provider.activeOperationCancellationTokenSource?.cancel();
@@ -350,6 +358,7 @@ export class PlanService {
 			success: false,
 			error: "An unexpected error occurred during plan generation.",
 		};
+		let isCancellation: boolean = false; // Declared as let to extend scope
 
 		try {
 			this.provider.pendingPlanGenerationContext = null;
@@ -381,7 +390,11 @@ export class PlanService {
 			const { contextString, relevantFiles } = buildContextResult;
 
 			// Refactored: Call new helper method to initialize streaming state
-			this._initializeStreamingState(modelName, relevantFiles);
+			this._initializeStreamingState(
+				modelName,
+				relevantFiles,
+				operationId as string
+			);
 
 			if (contextString.startsWith("[Error")) {
 				throw new Error(contextString);
@@ -415,6 +428,7 @@ export class PlanService {
 							this.provider.postMessageToWebview({
 								type: "aiResponseChunk",
 								value: chunk,
+								operationId: operationId as string, // Cast as requested
 							});
 						},
 					},
@@ -483,7 +497,7 @@ export class PlanService {
 				context: this.provider.pendingPlanGenerationContext,
 			};
 		} catch (genError: any) {
-			const isCancellation = genError.message === ERROR_OPERATION_CANCELLED;
+			isCancellation = genError.message === ERROR_OPERATION_CANCELLED; // Assignment to existing let variable
 			if (this.provider.currentAiStreamingState) {
 				this.provider.currentAiStreamingState.isError = true;
 			}
@@ -513,11 +527,20 @@ export class PlanService {
 			this.provider.postMessageToWebview({
 				type: "aiResponseEnd",
 				success: finalResult.success,
-				// Conditionally include error
-				...(!finalResult.success &&
-					finalResult.error && {
-						error: finalResult.error,
-					}),
+				operationId: operationId as string, // Cast as requested
+				error: finalResult.success
+					? null
+					: isCancellation
+					? "Plan generation cancelled."
+					: finalResult.error || // If finalResult.error already contains formatted message
+					  formatUserFacingErrorMessage(
+							new Error(
+								"Unknown error occurred during editor action plan generation."
+							), // Fallback Error
+							"An unexpected error occurred during editor action generation.",
+							"Error: ",
+							rootFolder.uri
+					  ),
 				// Conditionally include plan-related data if it's a confirmable plan response
 				...(isConfirmablePlanResponse &&
 					this.provider.pendingPlanGenerationContext && {
@@ -631,17 +654,23 @@ export class PlanService {
 	// New private method to encapsulate streaming state initialization
 	private _initializeStreamingState(
 		modelName: string,
-		relevantFiles: string[] | undefined
+		relevantFiles: string[] | undefined,
+		operationId: string
 	): void {
 		this.provider.currentAiStreamingState = {
 			content: "",
 			relevantFiles: relevantFiles ?? [], // Ensure relevantFiles is always string[]
 			isComplete: false,
 			isError: false,
+			operationId: operationId,
 		};
 		this.provider.postMessageToWebview({
 			type: "aiResponseStart",
-			value: { modelName, relevantFiles: relevantFiles ?? [] }, // Ensure relevantFiles is always string[]
+			value: {
+				modelName,
+				relevantFiles: relevantFiles ?? [],
+				operationId: operationId,
+			}, // Ensure relevantFiles is always string[]
 		});
 		this.provider.postMessageToWebview({
 			type: "updateStreamingRelevantFiles",

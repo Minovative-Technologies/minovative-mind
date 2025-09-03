@@ -93,7 +93,7 @@ export class AIRequestService {
 		}
 
 		let consecutiveTransientErrorCount = 0;
-		const baseDelayMs = 60000;
+		const baseDelayMs = 15000;
 		const maxDelayMs = 10 * 60 * 1000;
 
 		// Initialize these variables at the top of generateWithRetry
@@ -290,13 +290,13 @@ export class AIRequestService {
 					console.warn(
 						`[AIRequestService] Quota/Rate limit hit for key ...${currentApiKey?.slice(
 							-4
-						)}. Pausing for ${(currentDelay / 60000).toFixed(0)} minutes.`
+						)}. Pausing for ${(currentDelay / 1000).toFixed(0)} minutes.`
 					);
 					this.postMessageToWebview({
 						type: "statusUpdate",
 						value: `API quota limit hit. Pausing for ${(
-							currentDelay / 60000
-						).toFixed(0)} minutes before retrying with the same key.`,
+							currentDelay / 1000
+						).toFixed(0)} seconds before retrying with the same API key.`,
 						isError: true,
 					});
 					await new Promise((resolve) => setTimeout(resolve, currentDelay));

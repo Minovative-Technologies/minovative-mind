@@ -29,6 +29,7 @@ import { DiagnosticService } from "../utils/diagnosticUtils";
 import { ContextRefresherService } from "../services/contextRefresherService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
+import * as crypto from "crypto"; // Import crypto for UUID generation
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = "minovativeMindSidebarView";
@@ -65,6 +66,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		null;
 	public completedPlanChangeSets: RevertibleChangeSet[] = [];
 	public isPlanExecutionActive: boolean = false;
+	public currentActiveChatOperationId: string | null = null; // New property added
 
 	// --- MANAGERS & SERVICES ---
 	public apiKeyManager: ApiKeyManager;
@@ -571,6 +573,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		console.log(
 			"[SidebarProvider] Restoring active AI streaming progress to webview."
 		);
+		// The operationId will be passed within streamingState once AiStreamingState is updated.
 		this.postMessageToWebview({
 			type: "restoreStreamingProgress",
 			value: streamingState,
@@ -624,7 +627,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
 	// --- OPERATION & STATE HELPERS ---
 
-	public async startUserOperation(): Promise<void> {
+	public async startUserOperation(operationType: string): Promise<void> {
+		// Generate a new unique operationId and assign it
+		this.currentActiveChatOperationId = crypto.randomUUID();
+		console.log(
+			`[SidebarProvider] Starting user operation of type '${operationType}' with ID: ${this.currentActiveChatOperationId}`
+		);
+
 		// Set Generation State
 		this.isGeneratingUserRequest = true;
 		await this.workspaceState.update(
@@ -669,6 +678,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.activeOperationCancellationTokenSource = undefined;
 		}
 		this.currentAiStreamingState = null;
+		this.currentActiveChatOperationId = null; // Clear the operation ID
 	}
 
 	public async endCancellationOperation(): Promise<void> {
@@ -793,6 +803,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		await this.updatePersistedPendingPlanData(null);
 		this.lastPlanGenerationContext = null;
 		this.pendingCommitReviewData = null;
+		this.currentActiveChatOperationId = null; // Clear the operation ID on universal cancellation
 
 		await this.workspaceState.update(
 			"minovativeMind.isGeneratingUserRequest",

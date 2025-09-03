@@ -29,15 +29,23 @@ export class CommitService {
 
 		let success = false; // Added variable
 		let errorMessage: string | null = null; // Added variable
+		let operationId: string | null = null; // Declare operationId here to be accessible in finally block and change type to string | null
 
 		try {
+			this.provider.startUserOperation("commit");
+			operationId = this.provider.currentActiveChatOperationId; // Retrieve the generated ID
+
 			if (token.isCancellationRequested) {
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 
 			this.provider.postMessageToWebview({
 				type: "aiResponseStart",
-				value: { modelName, relevantFiles: [] },
+				value: {
+					modelName,
+					relevantFiles: [] as string[],
+					operationId: operationId!,
+				}, // Include operationId and explicitly type relevantFiles
 			});
 			this.provider.chatHistoryManager.addHistoryEntry("user", "/commit");
 
@@ -206,6 +214,7 @@ Prioritize file-by-file summaries, use the overall diff for additional context, 
 					success && errorMessage === "No changes staged to commit."
 						? errorMessage
 						: undefined,
+				operationId: operationId!, // Include operationId here
 			});
 			this.provider.isGeneratingUserRequest = false;
 

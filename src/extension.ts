@@ -443,7 +443,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					diagnosticsString || "No errors found."
 				}\n\n---\n\nHighlevel thinking first. No coding yet.`;
 			} else if (instruction === "/merge") {
-				composedMessage = `/plan Please resolve the merge conflicts in ${displayFileName}. Provide the implementation solution before code. Here's the full file content with conflicts:\n\n\`\`\`${languageId}\n${fullText}\n\`\`\`\n\nHighlevel thinking first. No coding yet.`;
+				composedMessage = `/plan Please resolve the merge conflicts in ${displayFileName}. Provide the implementation solution before code. Here's the full file content with conflicts:\n\n\`\`\`${languageId}\n${fullText}\n\`\`\`\n. Highlevel thinking first. No coding yet.`;
 			} else if (instruction === "chat") {
 				if (originalSelection.isEmpty) {
 					composedMessage = `Message: ${userProvidedMessage} \n\nIn this project, focus on the conversation within the context of file \`${displayFileName}\`. Do not code.`;
