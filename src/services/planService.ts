@@ -729,11 +729,11 @@ export class PlanService {
 
 			for (let attempt = 1; attempt <= this.MAX_PLAN_PARSE_RETRIES; attempt++) {
 				console.log(
-					`Generating structured plan - ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} `
+					`Generating execution plan - ${attempt}/${this.MAX_PLAN_PARSE_RETRIES}`
 				);
 				this.provider.postMessageToWebview({
 					type: "statusUpdate",
-					value: `Generating structured plan...`,
+					value: `Generating execution plan - ${attempt}/${this.MAX_PLAN_PARSE_RETRIES} `,
 					isError: false,
 				});
 

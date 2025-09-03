@@ -1049,7 +1049,6 @@ export function initializeMessageBusHandler(
 							);
 						}
 					});
-					updateStatus(elements, "Chat history restored.");
 
 					// Select all elements within elements.chatContainer that have the class .user-message-edited-pending-ai.
 					const editedMessages = elements.chatContainer.querySelectorAll(
