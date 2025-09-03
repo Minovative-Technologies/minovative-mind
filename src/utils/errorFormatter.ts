@@ -65,10 +65,10 @@ export function formatUserFacingErrorMessage(
 	// Add new AI-specific error mappings here, after 'No workspace folder open' and before 'HTTP 401'
 	else if (message.includes(ERROR_STREAM_PARSING_FAILED)) {
 		message =
-			"AI response parsing failed: The AI returned an unexpected or malformed response (parsing failed). Please try again.";
+			"AI response parsing failed: The AI returned an unexpected or malformed response (parsing failed). Please wait...AI Retrying again.";
 	} else if (message.includes(ERROR_SERVICE_UNAVAILABLE)) {
 		message =
-			"AI service temporarily overloaded: The AI service is currently experiencing high load (overloaded). Please try again in a few moments.";
+			"AI service temporarily overloaded: The AI service is currently experiencing high load (overloaded). Please wait...AI Retrying again.";
 	} else if (
 		message.includes("SAFETY") ||
 		message.includes("safety policy") ||
@@ -122,7 +122,7 @@ export function formatUserFacingErrorMessage(
 	} else if (message.includes("HTTP 50")) {
 		// Covers 500, 502, 503, 504 etc. for server-side issues
 		message =
-			"AI service unavailable: The AI service is temporarily unavailable due to a server error. Please try again in a few moments.";
+			"AI service unavailable: The AI service is temporarily unavailable due to a server error. Please wait...Retrying again.";
 	} else if (message.toLowerCase().startsWith("error: ")) {
 		// If the message already starts with "Error: ", it might be a more specific AI-generated error.
 		// We can keep it but still sanitize paths if available.
