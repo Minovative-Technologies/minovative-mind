@@ -100,8 +100,6 @@ export class AIRequestService {
 		let finalInputTokens = 0;
 		let finalOutputTokens = 0; // Initialize here for broader scope
 
-		let result = ""; // Stores the last error type or the successful generation result
-
 		const historyForGemini =
 			history && history.length > 0
 				? this.transformHistoryForGemini(history as HistoryEntry[])
@@ -224,7 +222,6 @@ export class AIRequestService {
 						await streamCallbacks.onChunk(chunk);
 					}
 				}
-				result = accumulatedResult; // Store successful final result
 
 				// Accurately count and track output tokens after the response is complete
 				if (this.tokenTrackingService && currentApiKey) {
@@ -266,7 +263,7 @@ export class AIRequestService {
 					streamCallbacks.onComplete();
 				}
 				consecutiveTransientErrorCount = 0; // Reset counter on success
-				return result; // Success: return immediately
+				return accumulatedResult; // Success: return immediately
 			} catch (error: unknown) {
 				const err = error as Error;
 				const errorMessage = err.message;
@@ -282,7 +279,6 @@ export class AIRequestService {
 				}
 
 				if (errorMessage === ERROR_QUOTA_EXCEEDED) {
-					result = ERROR_QUOTA_EXCEEDED; // Mark result for outer handling (key switch)
 					const currentDelay = Math.min(
 						maxDelayMs,
 						baseDelayMs * 2 ** consecutiveTransientErrorCount
@@ -290,7 +286,7 @@ export class AIRequestService {
 					console.warn(
 						`[AIRequestService] Quota/Rate limit hit for key ...${currentApiKey?.slice(
 							-4
-						)}. Pausing for ${(currentDelay / 1000).toFixed(0)} minutes.`
+						)}. Pausing for ${(currentDelay / 1000).toFixed(0)} seconds.`
 					);
 					this.postMessageToWebview({
 						type: "statusUpdate",
@@ -306,11 +302,11 @@ export class AIRequestService {
 					consecutiveTransientErrorCount++;
 					continue;
 				} else {
-					// For any other non-retryable error, set result and exit the loop / return immediately
-					consecutiveTransientErrorCount = 0; // Reset counter for non-transient errors
-					result = `Error: ${errorMessage}`;
-					console.error(`[AIRequestService] Error during generation:`, err);
-					return result; // Return other errors immediately (they are not retryable)
+					// For other errors, re-throw to allow higher-level handlers to manage them.
+					if (streamCallbacks?.onComplete) {
+						streamCallbacks.onComplete();
+					}
+					throw err;
 				}
 			}
 		}

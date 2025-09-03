@@ -295,19 +295,9 @@ export class EnhancedCodeGenerator {
 				false
 			);
 		} catch (error: any) {
-			return {
-				isValid: false,
-				finalContent: "",
-				issues: [
-					{
-						type: "other",
-						message: `AI generation failed: ${error.message}`,
-						line: 1,
-						severity: "error",
-					},
-				],
-				suggestions: ["Check AI service status."],
-			};
+			// Re-throw the error to be handled by the PlanExecutorService's retry logic.
+			// This prevents silent failures where an empty file is created.
+			throw error;
 		}
 	}
 
