@@ -628,6 +628,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	// --- OPERATION & STATE HELPERS ---
 
 	public async startUserOperation(operationType: string): Promise<void> {
+		// If an operation is already in progress, log a warning and exit to prevent a race condition.
+		if (this.isGeneratingUserRequest) {
+			console.warn(
+				`[SidebarProvider] Attempted to start operation '${operationType}' while an operation is already in progress. Ignoring duplicate request.`
+			);
+			return;
+		}
+
 		// Generate a new unique operationId and assign it
 		this.currentActiveChatOperationId = crypto.randomUUID();
 		console.log(
