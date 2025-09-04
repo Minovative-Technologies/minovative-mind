@@ -497,12 +497,36 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 			this.currentAiStreamingState &&
 			!this.currentAiStreamingState.isComplete
 		) {
-			await this._restoreAiStreamingState(this.currentAiStreamingState);
+			// Check for active token source when restoring streaming state
+			if (this.activeOperationCancellationTokenSource) {
+				await this._restoreAiStreamingState(this.currentAiStreamingState);
+			} else {
+				// Stale streaming state: streaming state is active but no cancellation token source
+				console.warn(
+					"[SidebarProvider] Detected stale AI streaming state: currentAiStreamingState is active but activeOperationCancellationTokenSource is undefined. Resetting."
+				);
+				await this._resetStaleLoadingState();
+			}
 		} else if (this.pendingCommitReviewData) {
 			await this._restorePendingCommitReviewState(this.pendingCommitReviewData);
+		} else if (
+			this.isGeneratingUserRequest &&
+			!this.activeOperationCancellationTokenSource
+		) {
+			// Explicitly handle the case where isGeneratingUserRequest is true but token source is undefined.
+			console.warn(
+				"[SidebarProvider] Detected stale generic loading state: isGeneratingUserRequest is true but activeOperationCancellationTokenSource is undefined. Resetting."
+			);
+			await this._resetStaleLoadingState();
 		} else if (this.isGeneratingUserRequest) {
-			// Generic `isGeneratingUserRequest` is true, but no specific active operation found above.
-			// This indicates a stale state that needs to be reset.
+			// isGeneratingUserRequest is true AND activeOperationCancellationTokenSource IS defined,
+			// but it wasn't caught by planExecutionActive, persistedPlanData, currentAiStreamingState, or pendingCommitReviewData.
+			// This means there's an active, but unidentified or generic operation.
+			// For robustness, we should also treat this as stale or at least re-enable inputs.
+			// `_resetStaleLoadingState` calls `endUserOperation` which will clear active state and re-enable inputs.
+			console.warn(
+				"[SidebarProvider] Detected generic active operation (isGeneratingUserRequest true, token source defined) without specific context. Assuming stale and resetting."
+			);
 			await this._resetStaleLoadingState();
 		} else {
 			// No active or pending operations detected. Ensure UI is fully re-enabled.
@@ -628,45 +652,54 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	// --- OPERATION & STATE HELPERS ---
 
 	public async startUserOperation(operationType: string): Promise<void> {
-		// If an operation is already in progress, log a warning and exit to prevent a race condition.
+		// Generate a new unique operationId at the very beginning
+		const newOperationId = crypto.randomUUID();
+
+		// Immediate concurrency check: If an operation is already in progress, warn and exit.
 		if (this.isGeneratingUserRequest) {
 			console.warn(
-				`[SidebarProvider] Attempted to start operation '${operationType}' while an operation is already in progress. Ignoring duplicate request.`
+				`[SidebarProvider] Attempted to start operation '${operationType}' (new ID: ${newOperationId}) while an operation ` +
+					`(current ID: ${this.currentActiveChatOperationId}) is already in progress. Ignoring duplicate request.`
 			);
 			return;
 		}
 
-		// Generate a new unique operationId and assign it
-		this.currentActiveChatOperationId = crypto.randomUUID();
 		console.log(
-			`[SidebarProvider] Starting user operation of type '${operationType}' with ID: ${this.currentActiveChatOperationId}`
+			`[SidebarProvider] Starting user operation of type '${operationType}' with ID: ${newOperationId}`
 		);
 
-		// Set Generation State
-		this.isGeneratingUserRequest = true;
-		await this.workspaceState.update(
-			"minovativeMind.isGeneratingUserRequest",
-			true
-		);
+		// Post an initial loading state message early
+		this.postMessageToWebview({ type: "updateLoadingState", value: true });
 
-		// Manage Cancellation Token
-		console.log("[SidebarProvider] Starting user operation.");
-
-		// Check if an activeOperationCancellationTokenSource already exists
+		// Dispose of any existing activeOperationCancellationTokenSource unconditionally
 		if (this.activeOperationCancellationTokenSource) {
-			// Cancel the existing token source
-			this.activeOperationCancellationTokenSource.cancel();
-			// Dispose of the existing token source to release resources
+			console.log(
+				"[SidebarProvider] Disposing existing activeOperationCancellationTokenSource."
+			);
+			this.activeOperationCancellationTokenSource.cancel(); // Cancel any lingering tasks associated with the old token
 			this.activeOperationCancellationTokenSource.dispose();
+			this.activeOperationCancellationTokenSource = undefined;
 		}
 
 		// Create a new vscode.CancellationTokenSource instance
 		this.activeOperationCancellationTokenSource =
 			new vscode.CancellationTokenSource();
 
-		// Log the creation of the new token source for debugging purposes
+		// Assign the new operation ID
+		this.currentActiveChatOperationId = newOperationId;
+
+		// Set isGeneratingUserRequest and persist it *after* the new token source is assigned, as per instructions.
+		// NOTE: This order makes the initial concurrency check above (`if (this.isGeneratingUserRequest)`)
+		// only reliable for *previous* operations that have fully set their state.
+		// For true immediate concurrency control, isGeneratingUserRequest would ideally be set *before* token creation.
+		this.isGeneratingUserRequest = true;
+		await this.workspaceState.update(
+			"minovativeMind.isGeneratingUserRequest",
+			true
+		);
+
 		console.log(
-			"[SidebarProvider] Created new CancellationTokenSource for the operation."
+			"[SidebarProvider] Created new CancellationTokenSource and updated generation state for the operation."
 		);
 	}
 
@@ -788,14 +821,23 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 	public async triggerUniversalCancellation(): Promise<void> {
 		console.log("[SidebarProvider] Triggering universal cancellation...");
 
+		// Set `isGeneratingUserRequest` to false first, and persist it.
 		this.isGeneratingUserRequest = false;
+		await this.workspaceState.update(
+			"minovativeMind.isGeneratingUserRequest",
+			false
+		);
+
 		this.isCancellingOperation = true;
+
+		// Cancel the active operation token source if it exists.
 		if (this.activeOperationCancellationTokenSource) {
 			this.activeOperationCancellationTokenSource.cancel();
-			// The clearActiveOperationState() call is intentionally removed here
-			// to allow individual components to manage their state clean-up
-			// without being reset prematurely during universal cancellation.
 		}
+
+		// Now, dispose and clear the token source, which is safe to do after `isGeneratingUserRequest` is false.
+		// This also ensures `activeOperationCancellationTokenSource` is set to `undefined`.
+		this.clearActiveOperationState();
 
 		this.activeChildProcesses.forEach((cp) => {
 			console.log(
@@ -813,10 +855,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		this.pendingCommitReviewData = null;
 		this.currentActiveChatOperationId = null; // Clear the operation ID on universal cancellation
 
-		await this.workspaceState.update(
-			"minovativeMind.isGeneratingUserRequest",
-			false
-		);
 		// this.isEditingMessageActive = false; // Removed as per instructions
 
 		// Ensure these messages are always sent to re-enable UI regardless of active token source

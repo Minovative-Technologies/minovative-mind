@@ -86,7 +86,21 @@ export class PlanService {
 		// Start a new user operation, which creates a new cancellation token source and operation ID
 		await this.provider.startUserOperation("plan");
 		const operationId = this.provider.currentActiveChatOperationId;
-		const token = this.provider.activeOperationCancellationTokenSource!.token;
+
+		if (!this.provider.activeOperationCancellationTokenSource) {
+			console.error(
+				"[PlanService] activeOperationCancellationTokenSource is undefined in handleInitialPlanRequest after startUserOperation."
+			);
+			this.provider.postMessageToWebview({
+				type: "aiResponseEnd",
+				success: false,
+				error: "Internal error: Failed to initialize cancellation token.",
+				operationId: operationId as string,
+			});
+			await this.provider.endUserOperation("failed");
+			return;
+		}
+		const token = this.provider.activeOperationCancellationTokenSource.token;
 
 		if (!apiKey) {
 			this.provider.postMessageToWebview({
@@ -323,8 +337,19 @@ export class PlanService {
 		// Start a new user operation, which creates a new cancellation token source and operation ID
 		await this.provider.startUserOperation("plan");
 		const operationId = this.provider.currentActiveChatOperationId;
+
+		if (!this.provider.activeOperationCancellationTokenSource) {
+			console.error(
+				"[PlanService] activeOperationCancellationTokenSource is undefined in initiatePlanFromEditorAction after startUserOperation."
+			);
+			await this.provider.endUserOperation("failed");
+			return {
+				success: false,
+				error: "Internal error: Failed to initialize cancellation token.",
+			};
+		}
 		const activeOpToken =
-			this.provider.activeOperationCancellationTokenSource!.token;
+			this.provider.activeOperationCancellationTokenSource.token;
 
 		const rootFolder = vscode.workspace.workspaceFolders?.[0];
 		if (!rootFolder) {
@@ -682,6 +707,15 @@ export class PlanService {
 		planContext: sidebarTypes.PlanGenerationContext
 	): Promise<void> {
 		const token = this.provider.activeOperationCancellationTokenSource?.token;
+		// Add check for token immediately after retrieval
+		if (!token) {
+			console.error(
+				"[PlanService] activeOperationCancellationTokenSource or its token is undefined in generateStructuredPlanAndExecute."
+			);
+			await this.provider.endUserOperation("failed"); // Signal failure
+			return; // Exit early if token is not available
+		}
+
 		let executablePlan: ExecutionPlan | null = null;
 		let lastError: Error | null = null;
 
@@ -696,7 +730,7 @@ export class PlanService {
 
 			await this.provider.updatePersistedPendingPlanData(null); // Clear persisted data as it's no longer pending confirmation
 
-			if (token?.isCancellationRequested) {
+			if (token.isCancellationRequested) {
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 
@@ -748,7 +782,7 @@ export class PlanService {
 							token
 						);
 
-					if (token?.isCancellationRequested) {
+					if (token.isCancellationRequested) {
 						throw new Error(ERROR_OPERATION_CANCELLED);
 					}
 					if (!functionCall) {
@@ -832,7 +866,7 @@ export class PlanService {
 			await this.planExecutorService.executePlan(
 				executablePlan,
 				planContext,
-				token ?? new vscode.CancellationTokenSource().token
+				token
 			);
 		} catch (error: any) {
 			const isCancellation = error.message === ERROR_OPERATION_CANCELLED;
