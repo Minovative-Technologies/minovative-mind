@@ -16,7 +16,11 @@ import {
 } from "./statusManager";
 import { RequiredDomElements } from "../types/webviewTypes";
 import { ImageInlineData } from "../../common/sidebarTypes";
-import { faChevronDown, faChevronUp } from "@fortawesome/free-solid-svg-icons";
+import {
+	faChevronDown,
+	faChevronUp,
+	faFolderTree,
+} from "@fortawesome/free-solid-svg-icons";
 
 // Global reference to setLoadingState function
 let globalSetLoadingState:
@@ -399,6 +403,7 @@ export function appendMessage(
 	let copyButton: HTMLButtonElement | null = null;
 	let deleteButton: HTMLButtonElement | null = null;
 	let editButton: HTMLButtonElement | null = null;
+	let copyContextButton: HTMLButtonElement | null = null; // Declare the new button
 	// Declare planButton and its container
 	let generatePlanButton: HTMLButtonElement | null = null;
 	let planButtonContainer: HTMLDivElement | null = null;
@@ -425,6 +430,39 @@ export function appendMessage(
 				editButton.classList.add("edit-button");
 				editButton.title = "Edit Message";
 				setIconForButton(editButton, faPenToSquare);
+
+				// Create the "Copy Context" button for user messages
+				copyContextButton = document.createElement("button");
+				copyContextButton.classList.add("copy-context-button");
+				copyContextButton.title = "Copy Message Context with Relevant Files";
+				setIconForButton(copyContextButton, faFolderTree); // Set icon
+
+				copyContextButton.addEventListener("click", () => {
+					const messageIndexStr = messageElement.dataset.messageIndex;
+					const messageIndex = messageIndexStr
+						? parseInt(messageIndexStr, 10)
+						: -1;
+
+					if (isNaN(messageIndex) || messageIndex < 0) {
+						console.error(
+							"[ChatMessageRenderer] Invalid message index for copy context:",
+							messageIndexStr
+						);
+						updateStatus(
+							elements,
+							"Error: Cannot copy context. Please try again or refresh.",
+							true
+						);
+						return;
+					}
+
+					postMessageToExtension({
+						type: "copyMessageContext", // New message type
+						messageIndex: messageIndex,
+					});
+
+					updateStatus(elements, "Copying message context...");
+				});
 			}
 
 			// "Generate Plan" button creation (for ai-message only)
@@ -464,6 +502,10 @@ export function appendMessage(
 				if (editButton) {
 					editButton.disabled = false;
 				}
+				if (copyContextButton) {
+					// New: enable for copy context button
+					copyContextButton.disabled = false;
+				}
 			} else if (className.includes("ai-message")) {
 				const shouldDisableAiStreamingButtons =
 					(sender === "Model" &&
@@ -487,6 +529,7 @@ export function appendMessage(
 						generatePlanButton.style.display = "none";
 					}
 				}
+				// copyContextButton is only for user messages, so no need to handle here
 			}
 
 			const messageActions = document.createElement("div");
@@ -496,6 +539,10 @@ export function appendMessage(
 			// --- Append Edit Button ---
 			if (editButton) {
 				messageActions.appendChild(editButton);
+			}
+			// Append "Copy Context" button
+			if (copyContextButton) {
+				messageActions.appendChild(copyContextButton);
 			}
 			// Append "Generate Plan" button container
 			if (planButtonContainer) {
@@ -588,6 +635,7 @@ export function appendMessage(
 				if (generatePlanButton) {
 					generatePlanButton.disabled = true;
 				}
+				// copyContextButton is only for user messages, so no need to handle here
 			} else {
 				// Complete message or history message (not streaming)
 				stopTypingAnimation();
@@ -629,6 +677,10 @@ export function appendMessage(
 					if (editButton) {
 						editButton.disabled = false;
 					}
+					if (copyContextButton) {
+						// New: enable for copy context button
+						copyContextButton.disabled = false;
+					}
 					if (
 						generatePlanButton &&
 						!isPlanExplanationForRender &&
@@ -650,6 +702,10 @@ export function appendMessage(
 					}
 					if (editButton) {
 						editButton.style.display = "none";
+					}
+					if (copyContextButton) {
+						// New: hide for copy context button
+						copyContextButton.style.display = "none";
 					}
 					if (generatePlanButton) {
 						generatePlanButton.style.display = "none";
@@ -703,6 +759,9 @@ export function disableAllMessageActionButtons(
 		const editButton = messageElement.querySelector(
 			".edit-button"
 		) as HTMLButtonElement | null;
+		const copyContextButton = messageElement.querySelector(
+			".copy-context-button"
+		) as HTMLButtonElement | null; // Get the new button
 		const generatePlanButton = messageElement.querySelector(
 			".generate-plan-button"
 		) as HTMLButtonElement | null;
@@ -714,6 +773,7 @@ export function disableAllMessageActionButtons(
 			copyButton,
 			deleteButton,
 			editButton,
+			copyContextButton, // Add the new button here
 			generatePlanButton,
 		];
 
@@ -768,6 +828,9 @@ export function reenableAllMessageActionButtons(
 		const editButton = messageElement.querySelector(
 			".edit-button"
 		) as HTMLButtonElement | null;
+		const copyContextButton = messageElement.querySelector(
+			".copy-context-button"
+		) as HTMLButtonElement | null; // Get the new button
 		const generatePlanButton = messageElement.querySelector(
 			".generate-plan-button"
 		) as HTMLButtonElement | null;
@@ -790,6 +853,12 @@ export function reenableAllMessageActionButtons(
 			editButton.disabled = false;
 			editButton.style.opacity = "";
 			editButton.style.pointerEvents = "";
+		}
+		if (copyContextButton) {
+			// New: re-enable copy context button
+			copyContextButton.disabled = false;
+			copyContextButton.style.opacity = "";
+			copyContextButton.style.pointerEvents = "";
 		}
 
 		// Logic for the .generate-plan-button

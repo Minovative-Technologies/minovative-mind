@@ -12,6 +12,7 @@ import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 import { generateLightweightPlanPrompt } from "../ai/prompts/lightweightPrompts";
 import { scanWorkspace } from "../context/workspaceScanner";
+import { createAsciiTree } from "../utils/treeFormatter"; // Import createAsciiTree
 
 export async function handleWebviewMessage(
 	data: any,
@@ -69,6 +70,7 @@ export async function handleWebviewMessage(
 		"cancelClearChat", // Allowed as a direct user interaction during clear chat flow
 		"requestWorkspaceFiles", // Allow workspace file requests during background operations
 		"operationCancelledConfirmation", // Allowed to update UI state after cancellation
+		"copyContextMessage", // Allowed during background operations
 	];
 
 	if (
@@ -778,6 +780,127 @@ export async function handleWebviewMessage(
 				} finally {
 					// The token source is disposed in provider.endUserOperation or triggerUniversalCancellation
 					// No need for redundant disposal here.
+				}
+				break;
+			}
+
+			case "copyContextMessage": {
+				console.log("[MessageHandler] Received copyContextMessage request.");
+				if (!provider.workspaceRootUri) {
+					const errorMessage = "No workspace is open to copy context from.";
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: errorMessage,
+						isError: true,
+					});
+					break;
+				}
+
+				try {
+					const messageIndex = validatedData.payload.messageIndex;
+
+					// 2. Retrieve the user message history
+					const chatHistory = provider.chatHistoryManager.getChatHistory();
+					if (messageIndex < 0 || messageIndex >= chatHistory.length) {
+						throw new Error("Invalid message index provided.");
+					}
+					const historyEntry = chatHistory[messageIndex];
+					if (historyEntry.role !== "user" || !historyEntry.parts.length) {
+						throw new Error(
+							"Selected message is not a user message or has no content."
+						);
+					}
+
+					let userMessageText = "";
+					// Extract text content from HistoryEntryPart array
+					historyEntry.parts.forEach((part) => {
+						if ("text" in part && part.text) {
+							userMessageText += part.text + "\n";
+						}
+					});
+					userMessageText = userMessageText.trim();
+
+					if (!userMessageText) {
+						throw new Error("User message content is empty.");
+					}
+
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Building project context for the message...",
+						showLoadingDots: true,
+					});
+
+					// 3. Call provider.contextService.buildProjectContext
+					const contextResult =
+						await provider.contextService.buildProjectContext(
+							provider.activeOperationCancellationTokenSource?.token,
+							userMessageText,
+							undefined, // editorContext
+							undefined, // initialDiagnosticsString
+							{
+								useScanCache: true,
+								useDependencyCache: true,
+								useAISelectionCache: true,
+								forceAISelectionRecalculation: false,
+							},
+							false, // includePersona
+							false // includeVerboseHeaders
+						);
+
+					// 4. From the buildProjectContext result, get relevantFiles
+					const relevantFiles = contextResult.relevantFiles;
+
+					// 5. Construct the file tree content
+					const fileTreeContent = createAsciiTree(
+						relevantFiles,
+						"Project Root"
+					);
+
+					// 6. Read the content of each relevant file
+					let allFileContents = "";
+					for (const relativePath of relevantFiles) {
+						const uri = vscode.Uri.joinPath(
+							provider.workspaceRootUri,
+							relativePath
+						);
+						try {
+							const contentBytes = await vscode.workspace.fs.readFile(uri);
+							const fileContent = Buffer.from(contentBytes).toString("utf-8");
+							allFileContents += `--- File: ${relativePath} ---\n${fileContent}\n\n`;
+						} catch (fileReadError: any) {
+							console.warn(
+								`[MessageHandler] Could not read file ${relativePath}: ${fileReadError.message}`
+							);
+							allFileContents += `--- File: ${relativePath} ---\n[Error reading file: ${fileReadError.message}]\n\n`;
+						}
+					}
+
+					// 7. Combine the user message, file tree, and all file contents
+					const finalCombinedContent = `User message: ${userMessageText}\n\nFile Tree:\n${fileTreeContent}\n\nFile Content:\n${allFileContents}`;
+
+					// 8. Copy this combined string to the clipboard
+					await vscode.env.clipboard.writeText(finalCombinedContent);
+
+					// 9. Send a statusUpdate message to the webview indicating success
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: "Message context copied to clipboard successfully!",
+						isError: false,
+					});
+					console.log("[MessageHandler] Message context copied to clipboard.");
+				} catch (error: any) {
+					// 10. Wrap the logic in a try-catch block for error handling
+					const errorMessage = formatUserFacingErrorMessage(
+						error,
+						"Failed to copy message context to clipboard.",
+						"Error copying context: "
+					);
+					console.error(`[MessageHandler] ${errorMessage}`, error);
+					provider.postMessageToWebview({
+						type: "statusUpdate",
+						value: errorMessage,
+						isError: true,
+					});
 				}
 				break;
 			}

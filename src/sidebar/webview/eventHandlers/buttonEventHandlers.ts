@@ -13,6 +13,7 @@ import {
 	faPlus,
 	faUndo,
 	faImage, // Added faImage import
+	faFolderTree, // Import faFolderTree
 } from "@fortawesome/free-solid-svg-icons";
 import { setIconForButton } from "../utils/iconHelpers";
 import { postMessageToExtension } from "../utils/vscodeApi";
@@ -256,6 +257,11 @@ export function initializeButtonEventListeners(
 			".code-copy-button"
 		) as HTMLButtonElement | null;
 
+		// Check for copy context button
+		const copyContextButton = target.closest(
+			".copy-context-button"
+		) as HTMLButtonElement | null;
+
 		if (generatePlanButton && !generatePlanButton.disabled) {
 			const messageIndexStr = generatePlanButton.dataset.messageIndex;
 			if (messageIndexStr) {
@@ -299,6 +305,79 @@ export function initializeButtonEventListeners(
 				updateStatus(elements, `Opening file: ${filePath}`); // Pass elements
 			}
 			return;
+		}
+
+		// Handle .copy-context-button clicks
+		if (copyContextButton && !copyContextButton.disabled) {
+			event.preventDefault();
+			copyContextButton.disabled = true; // Disable button immediately
+
+			const messageElement = copyContextButton.closest(
+				".message"
+			) as HTMLElement;
+			if (!messageElement) {
+				console.error(
+					"Copy context button clicked, but parent message element not found."
+				);
+				updateStatus(
+					elements,
+					"Error: Could not find message context to copy.",
+					true
+				);
+				copyContextButton.disabled = false;
+				return;
+			}
+
+			const messageIndexStr = messageElement.dataset.messageIndex;
+			const parsedIndex = messageIndexStr ? parseInt(messageIndexStr, 10) : NaN;
+
+			if (isNaN(parsedIndex)) {
+				console.error(
+					"Invalid data-message-index for copy context button:",
+					messageIndexStr
+				);
+				updateStatus(
+					elements,
+					"Error: Invalid message index for copying context.",
+					true
+				);
+				copyContextButton.disabled = false;
+				return;
+			}
+
+			const originalIconHTML = copyContextButton.innerHTML;
+			const originalTitle = copyContextButton.title;
+
+			try {
+				updateStatus(elements, "Copying message context...");
+
+				postMessageToExtension({
+					type: "copyContextMessage",
+					payload: { messageIndex: parsedIndex },
+				});
+
+				// UI Feedback: Change icon to faCheck
+				setIconForButton(copyContextButton, faCheck);
+				copyContextButton.title = "Copied!";
+
+				setTimeout(() => {
+					// Revert to faFolderTree icon
+					setIconForButton(copyContextButton, faFolderTree);
+					copyContextButton.title = originalTitle; // Restore original title
+					copyContextButton.disabled = false; // Re-enable button
+				}, 1500);
+
+				console.log("Copied message context request sent.");
+			} catch (err) {
+				console.error("Failed to copy message context: ", err);
+				let errorMessage = "Failed to copy message context.";
+				if (err instanceof Error && err.message) {
+					errorMessage += ` Details: ${err.message}`;
+				}
+				updateStatus(elements, errorMessage, true);
+				copyContextButton.disabled = false;
+			}
+			return; // Crucially return to prevent further event propagation.
 		}
 
 		// Handle .code-copy-button clicks before the general .copy-button

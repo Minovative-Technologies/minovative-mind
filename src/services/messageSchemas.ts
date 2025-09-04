@@ -142,6 +142,13 @@ const operationCancelledConfirmationSchema = z.object({
 	type: z.literal("operationCancelledConfirmation"),
 });
 
+const copyContextMessageSchema = z.object({
+	type: z.literal("copyContextMessage"),
+	payload: z.object({
+		messageIndex: z.number().int().nonnegative(),
+	}),
+});
+
 export const allMessageSchemas = z.discriminatedUnion("type", [
 	planRequestSchema,
 	chatMessageSchema,
@@ -179,6 +186,7 @@ export const allMessageSchemas = z.discriminatedUnion("type", [
 	operationCancelledConfirmationSchema, // Integrated new schema here
 	requestWorkspaceFilesSchema, // Added here, before the final schema
 	newFeatureRequestSchema,
+	copyContextMessageSchema, // New schema added here
 ]);
 
 // Export individual schemas if they are needed for more granular error reporting
@@ -188,4 +196,5 @@ export {
 	editChatMessageSchema,
 	openFileSchema,
 	newFeatureRequestSchema,
+	copyContextMessageSchema,
 };

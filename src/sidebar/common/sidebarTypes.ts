@@ -89,6 +89,11 @@ export interface RequestWorkspaceFilesMessage {
 	type: "requestWorkspaceFiles";
 }
 
+export interface CopyContextMessagePayload {
+	messageIndex: number;
+	contentToCopy: string;
+}
+
 /**
  * Union type for all messages sent from the Webview to the Extension.
  * Each member should have a distinct 'type' literal property.
@@ -98,9 +103,10 @@ export type WebviewToExtensionMessages =
 	| UpdateRelevantFilesDisplayMessage
 	| EditChatMessage
 	| GeneratePlanPromptFromAIMessage
-	| RevertRequestMessage // Added RevertRequestMessage
+	| RevertRequestMessage
 	| WebviewToExtensionChatMessageType
-	| RequestWorkspaceFilesMessage;
+	| RequestWorkspaceFilesMessage
+	| { type: "copyContextMessage"; payload: CopyContextMessagePayload };
 
 // Extension to Webview for pre-filling chat input
 export interface PrefillChatInput {
@@ -121,6 +127,7 @@ export interface StatusUpdateMessage {
 	value: string;
 	isError?: boolean;
 	subPlanId?: string;
+	showLoadingDots?: boolean;
 }
 
 export interface AiResponseStartMessage {
@@ -360,7 +367,7 @@ export type ExtensionToWebviewMessages =
 	  }
 	| UpdateLoadingStateMessage
 	| ReenableInputMessage
-	| UpdateCancellationStateMessage // Added UpdateCancellationStateMessage
+	| UpdateCancellationStateMessage
 	| ApiKeyStatusMessage
 	| UpdateModelListMessage
 	| UpdateOptimizationSettingsMessage
@@ -370,10 +377,10 @@ export type ExtensionToWebviewMessages =
 	| PlanExecutionEndedMessage
 	| PrefillChatInput
 	| UpdateStreamingRelevantFilesMessage
-	| PlanExecutionFinishedMessage // Added PlanExecutionFinishedMessage
+	| PlanExecutionFinishedMessage
 	| RevertCompletedMessage
 	| AppendRealtimeModelMessage
-	| UpdateTokenStatisticsMessage // Added UpdateTokenStatisticsMessage
+	| UpdateTokenStatisticsMessage
 	| UpdateCurrentTokenEstimatesMessage
 	| RestoreStreamingProgressMessage
 	| RestorePendingCommitReviewMessage

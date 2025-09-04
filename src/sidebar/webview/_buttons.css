@@ -115,6 +115,39 @@
 	border-color: var(--vscode-focusBorder);
 }
 
+.copy-context-button {
+	padding: var(--copy-button-padding);
+	width: var(--copy-button-size);
+	min-width: var(--copy-button-size);
+	height: var(--copy-button-size);
+	background-color: var(--vscode-button-secondaryBackground);
+	border: 1px solid var(--vscode-button-border);
+	color: var(--vscode-icon-foreground);
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+	user-select: none;
+	font-size: 0.8em;
+}
+.copy-context-button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+.copy-context-button:active {
+	background-color: rgba(128, 128, 128, 0.3);
+	border-color: var(--vscode-focusBorder);
+}
+.copy-context-button:disabled {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
 .generate-plan-button {
 	padding: var(--copy-button-padding); /* MODIFIED */
 	width: var(--copy-button-size); /* ADDED */
@@ -151,7 +184,8 @@
 
 .copy-button .fa-icon,
 .delete-button .fa-icon,
-.generate-plan-button .fa-icon {
+.generate-plan-button .fa-icon,
+.copy-context-button .fa-icon {
 	/* ADDED .generate-plan-button .fa-icon */
 	font-size: 1em; /* Icon size relative to button font size */
 }
