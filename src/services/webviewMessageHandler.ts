@@ -191,6 +191,7 @@ export async function handleWebviewMessage(
 				// Handle /commit command first (existing logic)
 				if (userMessageText.trim().toLowerCase() === "/commit") {
 					// The token is already available via provider.activeOperationCancellationTokenSource
+					await provider.startUserOperation("commit");
 					await provider.commitService.handleCommitCommand(
 						provider.activeOperationCancellationTokenSource!.token
 					);
@@ -631,6 +632,7 @@ export async function handleWebviewMessage(
 						await provider.planService.handleInitialPlanRequest(planRequest);
 					} else if (lowerCaseNewContent === "/commit") {
 						// Use the token from the currently active operation, created by startUserOperation
+						await provider.startUserOperation("commit");
 						await provider.commitService.handleCommitCommand(
 							provider.activeOperationCancellationTokenSource!.token
 						);

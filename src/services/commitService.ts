@@ -32,7 +32,6 @@ export class CommitService {
 		let operationId: string | null = null; // Declare operationId here to be accessible in finally block and change type to string | null
 
 		try {
-			this.provider.startUserOperation("commit");
 			operationId = this.provider.currentActiveChatOperationId; // Retrieve the generated ID
 
 			if (token.isCancellationRequested) {
