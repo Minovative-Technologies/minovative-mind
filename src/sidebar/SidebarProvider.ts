@@ -655,7 +655,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		// Generate a new unique operationId at the very beginning
 		const newOperationId = crypto.randomUUID();
 
-		// Immediate concurrency check: If an operation is already in progress, warn and exit.
+		// Stale state check: If `isGeneratingUserRequest` is true but `currentActiveChatOperationId` is null,
+		// it indicates a previous operation might have crashed or not cleaned up properly.
+		// In this case, we reset the state and allow the new operation to proceed.
+		if (
+			this.isGeneratingUserRequest &&
+			this.currentActiveChatOperationId === null
+		) {
+			console.warn(
+				`[SidebarProvider] Detected stale 'isGeneratingUserRequest' state (true) with no active operation ID. ` +
+					`Resetting state for new operation '${operationType}' (ID: ${newOperationId}).`
+			);
+			this.clearActiveOperationState(); // Clears token source and operation ID
+			this.isGeneratingUserRequest = false; // Explicitly set to false
+			await this.workspaceState.update(
+				"minovativeMind.isGeneratingUserRequest",
+				false
+			);
+			// After resetting, the method will continue to the normal concurrency check
+			// and then start the new operation.
+		}
+
+		// Immediate concurrency check: If an operation is truly in progress (i.e., isGeneratingUserRequest is true
+		// AND currentActiveChatOperationId is NOT null, or the stale state check above wasn't triggered and
+		// isGeneratingUserRequest is still true from a legitimately ongoing operation), warn and exit.
 		if (this.isGeneratingUserRequest) {
 			console.warn(
 				`[SidebarProvider] Attempted to start operation '${operationType}' (new ID: ${newOperationId}) while an operation ` +
@@ -671,7 +694,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		// Post an initial loading state message early
 		this.postMessageToWebview({ type: "updateLoadingState", value: true });
 
-		// Dispose of any existing activeOperationCancellationTokenSource unconditionally
+		// Dispose of any existing activeOperationCancellationTokenSource unconditionally.
+		// This is important even if currentActiveChatOperationId was null (stale state)
+		// but the cancellation token source somehow remained.
 		if (this.activeOperationCancellationTokenSource) {
 			console.log(
 				"[SidebarProvider] Disposing existing activeOperationCancellationTokenSource."
@@ -688,10 +713,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 		// Assign the new operation ID
 		this.currentActiveChatOperationId = newOperationId;
 
-		// Set isGeneratingUserRequest and persist it *after* the new token source is assigned, as per instructions.
-		// NOTE: This order makes the initial concurrency check above (`if (this.isGeneratingUserRequest)`)
-		// only reliable for *previous* operations that have fully set their state.
-		// For true immediate concurrency control, isGeneratingUserRequest would ideally be set *before* token creation.
+		// Set isGeneratingUserRequest and persist it.
 		this.isGeneratingUserRequest = true;
 		await this.workspaceState.update(
 			"minovativeMind.isGeneratingUserRequest",
