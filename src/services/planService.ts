@@ -308,9 +308,6 @@ export class PlanService {
 						},
 					}),
 			});
-
-			this.provider.activeOperationCancellationTokenSource?.dispose();
-			this.provider.activeOperationCancellationTokenSource = undefined;
 		}
 	}
 
