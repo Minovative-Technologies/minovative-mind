@@ -97,7 +97,6 @@ export function initializeInputEventListeners(
 
 		// 1. Declare local flags:
 		let commandSuggestionsActive = false;
-		let fileSuggestionsActive = false;
 
 		// 2. Command Suggestion Handling:
 		if (text.startsWith("/")) {
@@ -120,54 +119,8 @@ export function initializeInputEventListeners(
 			commandSuggestionsActive = false;
 		}
 
-		// 3. File Suggestion Handling:
-		// This section must execute independently of the command block, after command processing.
-		const currentInputText = chatInput.value;
-		const lastAtSymbolIndex = currentInputText.lastIndexOf("@");
-
-		let isAtTriggerValid = false;
-		let queryPart = "";
-		if (
-			lastAtSymbolIndex !== -1 &&
-			currentInputText.length > lastAtSymbolIndex + 1 &&
-			currentInputText[lastAtSymbolIndex + 1] !== " "
-		) {
-			const textBeforeAt = currentInputText.substring(0, lastAtSymbolIndex);
-			const backtickCountBeforeAt = (textBeforeAt.match(/`/g) || []).length;
-
-			if (backtickCountBeforeAt % 2 === 0) {
-				// Even backticks means it's not inside a code block
-				queryPart = currentInputText
-					.substring(lastAtSymbolIndex + 1)
-					.trim()
-					.toLowerCase();
-				if (queryPart.length > 0) {
-					// Only valid if there's a non-empty query part after '@'
-					isAtTriggerValid = true;
-				}
-			}
-		}
-
-		if (isAtTriggerValid) {
-			if (
-				appState.allWorkspaceFiles.length === 0 &&
-				!appState.isRequestingWorkspaceFiles
-			) {
-				appState.isRequestingWorkspaceFiles = true;
-				postMessageToExtension({ type: "requestWorkspaceFiles" });
-				showSuggestions([], "loading", elements, setLoadingState);
-				fileSuggestionsActive = true;
-			} else {
-				const filteredFiles = appState.allWorkspaceFiles.filter((file) =>
-					file.toLowerCase().includes(queryPart)
-				);
-				showSuggestions(filteredFiles, "file", elements, setLoadingState);
-				fileSuggestionsActive = true;
-			}
-		}
-
 		// 4. Final Conditional Hiding:
-		if (!commandSuggestionsActive && !fileSuggestionsActive) {
+		if (!commandSuggestionsActive) {
 			hideSuggestions(elements, setLoadingState);
 		}
 	});
@@ -342,46 +295,38 @@ export function initializeInputEventListeners(
 				return;
 			}
 
+			// --- Prevent Unwanted Hiding of Suggestions ---
+			// This conditional check evaluates if:
+			// 1. File suggestions are the current type being displayed (`appState.currentSuggestionType === "file"`).
+			// 2. Suggestions are currently visible (`appState.isCommandSuggestionsVisible` is true).
+			// 3. The `chatInput` itself has lost focus (`document.activeElement` is no longer the `chatInput`).
+			// If all these conditions are met, it indicates that the blur event was likely caused by
+			// clicking the "Open File List" button, and we should prevent `hideSuggestions` from running.
+			const activeElement = document.activeElement as HTMLElement | null;
+			const isChatInputFocused = activeElement === chatInput;
+
+			if (
+				appState.currentSuggestionType === "file" &&
+				appState.isCommandSuggestionsVisible &&
+				!isChatInputFocused
+			) {
+				console.log(
+					"[Blur Handler] Skipping hideSuggestions: File suggestions are active and input lost focus (likely button interaction)."
+				);
+				// Exit the setTimeout callback early to prevent hideSuggestions from being called.
+				return;
+			}
+			// --- End of New Logic ---
+
 			if (appState.isEditingMessage) {
 				clearEditingState(elements, false);
 				console.log("Message edit cancelled due to blur.");
 			}
 
-			// Capture the state of currentSuggestionType at the beginning of this blur event processing.
-			const originalSuggestionType = appState.currentSuggestionType;
-
-			// Condition to NOT hide suggestions:
-			// If suggestions are currently visible AND the current suggestion type is 'file'
-			// AND the chat input value still starts with '@'
-			const shouldKeepFileSuggestionsVisible =
-				appState.isCommandSuggestionsVisible &&
-				originalSuggestionType === "file" &&
-				chatInput.value.includes("@"); // Changed from startsWith('@') to includes('@') for more robust blur behavior
-
-			if (shouldKeepFileSuggestionsVisible) {
-				// Do NOT hide suggestions as per instruction.
-				console.log("[Blur] Keeping file suggestions visible due to @ input.");
-			} else {
-				// Otherwise, call hideSuggestions.
-				console.log("[Blur] Hiding suggestions as per general rule.");
-				hideSuggestions(elements, setLoadingState);
-				// Note: hideSuggestions internally sets appState.currentSuggestionType to 'none'.
-			}
-
-			// Additionally, if the input no longer contains '@' and the current suggestion type *was* 'file',
-			// reset appState.currentSuggestionType to 'none'.
-			// This handles cases where file suggestions might have been active, and the '@' was removed,
-			// requiring a state cleanup even if `hideSuggestions` wasn't called by the main branch (which it would be).
-			// This explicitly follows the instruction for robustness.
-			if (
-				!chatInput.value.includes("@") && // Changed from startsWith('@') to includes('@') for consistency
-				originalSuggestionType === "file"
-			) {
-				console.log(
-					"[Blur] Additional cleanup: Resetting currentSuggestionType from 'file' to 'none' as @ removed."
-				);
-				appState.currentSuggestionType = "none";
-			}
+			// Unconditionally hide suggestions.
+			console.log("[Blur] Hiding suggestions as per general rule.");
+			hideSuggestions(elements, setLoadingState);
+			// Note: hideSuggestions internally sets appState.currentSuggestionType to 'none'.
 		}, 150); // 150ms delay to allow click event to propagate
 	});
 

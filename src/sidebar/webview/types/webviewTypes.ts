@@ -57,6 +57,7 @@ export interface RequiredDomElements {
 	attachImageButton: HTMLButtonElement;
 	imagePreviewsContainer: HTMLDivElement;
 	clearImagesButton: HTMLButtonElement;
+	openFileListButton: HTMLButtonElement;
 }
 
 export interface PendingPlanData {
@@ -123,6 +124,7 @@ export interface WebviewAppState {
 	allWorkspaceFiles: string[];
 	isRequestingWorkspaceFiles: boolean;
 	currentSuggestionType: SuggestionType;
+	currentFileSearchQuery: string;
 	editingMessageIndex: number | null;
 	isEditingMessage: boolean;
 	currentActiveOperationId: string | null;

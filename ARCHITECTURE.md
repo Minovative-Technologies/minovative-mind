@@ -88,6 +88,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 #### 1. Workspace File Scanning
 
 - **Responsibility**: Efficiently scans the VS Code workspace to discover and identify relevant project files and directories, respecting `.gitignore` rules and applying configurable filters. It also utilizes caching for performance.
+- **Enhancement Note**: The scanned workspace files are now presented through a rich, interactive 'Open File List' UI in the sidebar, complete with search, filtering, and keyboard navigation, significantly improving user discoverability and file selection workflows.
 - **Key Files**: `src/context/workspaceScanner.ts` (`scanWorkspace`, `clearScanCache`, `getScanCacheStats`)
 
 #### 2. Code & Project Structure Analysis
@@ -214,15 +215,9 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 
 - The webview can now request a list of workspace files from the extension using `requestWorkspaceFiles`. The extension processes this request and sends back the list of relative file paths via `receiveWorkspaceFiles`, allowing the webview to dynamically display relevant project context.
 
-- **Key Files**:
-  - `src/services/chatService.ts`
-  - `src/services/webviewMessageHandler.ts`
-  - `src/sidebar/SidebarProvider.ts`
-  - `src/sidebar/common/sidebarTypes.ts`
-  - `src/sidebar/webview/main.ts`
-  - `src/sidebar/webview/messageSender.ts`
-  - `src/sidebar/webview/ui/chatMessageRenderer.ts`
-  - `src/sidebar/managers/chatHistoryManager.ts`
+#### 8. Enhanced File Selection UI: The 'Open File List' Feature
+
+- This feature introduces a dedicated 'Open File List' button in the chat interface that, when clicked, dynamically fetches and displays a searchable, filterable list of all workspace files. Users can interact with this list using the mouse or keyboard navigation (e.g., `Tab` to cycle, `Shift+Tab` to reverse, `ESC` to close). Selecting a file inserts its path (enclosed in backticks) directly into the chat input at the current cursor position, enhancing context-aware conversations. The UI is designed with a themed button, a blurred search input field, and an 'ESC' indicator for improved usability and visual consistency.
 
 ### Supporting Services & Utilities
 

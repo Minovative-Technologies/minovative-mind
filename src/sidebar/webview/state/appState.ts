@@ -47,6 +47,7 @@ export const appState: WebviewAppState = {
 	allWorkspaceFiles: [],
 	isRequestingWorkspaceFiles: false,
 	currentSuggestionType: "none",
+	currentFileSearchQuery: "",
 	editingMessageIndex: null,
 	isEditingMessage: false,
 	currentActiveOperationId: null,

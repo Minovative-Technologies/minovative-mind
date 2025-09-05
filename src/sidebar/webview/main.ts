@@ -20,6 +20,7 @@ import {
 import { RequiredDomElements } from "./types/webviewTypes";
 import { setIconForButton } from "./utils/iconHelpers";
 import { faChartLine } from "./utils/iconHelpers";
+import { hideSuggestions } from "./ui/commandSuggestions";
 
 /**
  * Updates token usage display with current statistics
@@ -108,6 +109,7 @@ function setLoadingState(
 	elements.chatInput.disabled = !canInteractWithMainChatControls;
 	elements.modelSelect.disabled = !canInteractWithMainChatControls;
 	elements.sendButton.disabled = !canSendCurrentInput;
+	elements.openFileListButton.disabled = !canInteractWithMainChatControls; // Instruction 1: Enable/disable openFileListButton
 
 	// Apply disabled states to API key management controls
 	const enableApiKeyControls =
@@ -306,7 +308,8 @@ function initializeWebview(): void {
 
 	elements.clearChatButton.disabled = true;
 	elements.saveChatButton.disabled = true;
-	elements.loadChatButton.disabled = false; // Load chat button is typically active from start
+	elements.loadChatButton.disabled = false;
+	elements.openFileListButton.disabled = true;
 
 	elements.prevKeyButton.disabled = true;
 	elements.nextKeyButton.disabled = true;
@@ -321,6 +324,9 @@ function initializeWebview(): void {
 
 	// Initialize all event listeners for buttons, inputs, and the message bus
 	initializeInputEventListeners(elements, setLoadingState);
+	// Instruction 3: ensure initializeButtonEventListeners is called after initializeDomElements.
+	// This is already the case as initializeDomElements returns `elements`, which is then passed
+	// to initializeButtonEventListeners. The order here is correct.
 	initializeButtonEventListeners(elements, setLoadingState);
 	initializeMessageBusHandler(elements, setLoadingState);
 
@@ -350,6 +356,16 @@ function initializeWebview(): void {
 
 	// Set up global reference to setLoadingState for use in chatMessageRenderer
 	setGlobalSetLoadingState(setLoadingState);
+
+	// Add global keydown event listener for Escape key
+	document.addEventListener("keydown", (event) => {
+		if (event.key === "Escape") {
+			if (appState.isCommandSuggestionsVisible) {
+				event.preventDefault(); // Prevent default browser behavior (e.g., closing context menus)
+				hideSuggestions(elements, setLoadingState);
+			}
+		}
+	});
 }
 
 // Ensure the webview is initialized once the DOM is fully loaded.

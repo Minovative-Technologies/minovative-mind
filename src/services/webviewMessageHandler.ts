@@ -12,7 +12,10 @@ import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
 import { generateLightweightPlanPrompt } from "../ai/prompts/lightweightPrompts";
 import { scanWorkspace } from "../context/workspaceScanner";
-import { createAsciiTree } from "../utils/treeFormatter"; // Import createAsciiTree
+import { createAsciiTree } from "../utils/treeFormatter";
+
+export const PRE_PROMPT_MESSAGE =
+	"You are an expert software engineer. Your task is to provide production-ready code that is robust, maintainable, secure, clean, efficient, and follows industry best practices. No placeholders, no todo comments";
 
 export async function handleWebviewMessage(
 	data: any,
@@ -876,7 +879,7 @@ export async function handleWebviewMessage(
 					}
 
 					// 7. Combine the user message, file tree, and all file contents
-					const finalCombinedContent = `User message: ${userMessageText}\n\nFile Tree:\n${fileTreeContent}\n\nFile Content:\n${allFileContents}`;
+					const finalCombinedContent = `${PRE_PROMPT_MESSAGE}\n\nUser message: ${userMessageText}\n\nFile Tree:\n${fileTreeContent}\n\nFile Content:\n${allFileContents}`;
 
 					// 8. Copy this combined string to the clipboard
 					await vscode.env.clipboard.writeText(finalCombinedContent);

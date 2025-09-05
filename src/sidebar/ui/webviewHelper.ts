@@ -53,6 +53,19 @@ export async function getHtmlForWebview(
 		);
 		htmlContent = htmlContent.replace(/__SCRIPT_URI__/g, scriptUri.toString());
 
+		// Add the new "Open File List" button within a div just before chat-input-controls-wrapper
+		const openFileListButtonHtml = `
+            <div class="input-actions-above">
+                <button id="openFileListButton" title="Open File List">
+                    <i class="fas fa-fw fa-folder-tree"></i>
+                </button>
+            </div>
+        `;
+		htmlContent = htmlContent.replace(
+			'<div class="chat-input-controls-wrapper">',
+			`${openFileListButtonHtml}<div class="chat-input-controls-wrapper">`
+		);
+
 		return htmlContent;
 	} catch (e) {
 		console.error("Error reading webview HTML file:", e);

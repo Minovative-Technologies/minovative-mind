@@ -186,7 +186,6 @@
 .delete-button .fa-icon,
 .generate-plan-button .fa-icon,
 .copy-context-button .fa-icon {
-	/* ADDED .generate-plan-button .fa-icon */
 	font-size: 1em; /* Icon size relative to button font size */
 }
 
@@ -215,4 +214,43 @@
 }
 #signUpButton:active {
 	transform: translateY(1px);
+}
+
+/* Styling for the "Open File List" Button */
+#openFileListButton {
+	padding: 0;
+	width: var(--icon-button-size);
+	min-width: var(--icon-button-size);
+	height: var(--icon-button-size);
+	background-color: var(--vscode-button-secondaryBackground);
+	border: 1px solid var(--vscode-button-border);
+	color: var(--vscode-button-secondaryForeground);
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out;
+	user-select: none;
+	font-size: 0.9em; /* Adjust icon size slightly if needed */
+}
+
+#openFileListButton:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	border-color: var(--vscode-focusBorder);
+	color: var(--vscode-button-hoverForeground);
+}
+
+#openFileListButton:active {
+	background-color: rgba(128, 128, 128, 0.3); /* Subtle active state */
+	border-color: var(--vscode-focusBorder);
+}
+
+#openFileListButton:disabled {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	opacity: 0.5;
+	cursor: not-allowed;
+	border-color: var(--vscode-button-border);
 }

@@ -41,6 +41,7 @@ import {
 	handleCodeFileStreamEnd,
 	resetCodeStreams,
 } from "./codeStreamHandler";
+import { showSuggestions } from "../ui/commandSuggestions";
 
 export function initializeMessageBusHandler(
 	elements: RequiredDomElements,
@@ -83,21 +84,20 @@ export function initializeMessageBusHandler(
 					// Modified conditional logic
 					appState.allWorkspaceFiles = message.value as string[]; // Updated data assignment and type cast
 					appState.isRequestingWorkspaceFiles = false;
-					const chatInput = elements.chatInput;
-					if (chatInput && chatInput.value.includes("@")) {
-						const event = new Event("input", { bubbles: true });
-						chatInput.dispatchEvent(event);
-					}
-					setLoadingState(appState.isLoading, elements);
+					showSuggestions(
+						appState.allWorkspaceFiles,
+						"file",
+						elements,
+						setLoadingState
+					);
 				} else {
-					// Added new else block for unexpected payload format
 					console.error(
 						"[MessageBusHandler] Received unexpected payload for receiveWorkspaceFiles:",
 						message.value
 					);
 					appState.allWorkspaceFiles = []; // Clear files on unexpected format
 					appState.isRequestingWorkspaceFiles = false; // Reset request status
-					setLoadingState(appState.isLoading, elements); // Reset loading state
+					showSuggestions([], "file", elements, setLoadingState);
 				}
 				break;
 
@@ -775,7 +775,7 @@ export function initializeMessageBusHandler(
 					const restoredPlanData = message.value as PersistedPlanData; // Use the more complete type from sidebarTypes
 					appState.pendingPlanData = restoredPlanData; // Assign to appState
 
-					// ADDED: Append the restored textual plan explanation to the chat UI
+					// Append the restored textual plan explanation to the chat UI
 					appendMessage(
 						elements,
 						"Model",

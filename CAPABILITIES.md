@@ -24,6 +24,11 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 - **Edit Message & Chat History Re-evaluation**: Users can edit previous messages, triggering `chatService` to re-evaluate the conversation with the updated context.
 - **Robust Confirmation Dialogs**: Clear chat history with explicit user confirmation, managed by the `SidebarProvider`.
 - **Convert AI Responses to Executable Plans**: AI-generated responses can be seamlessly converted into actionable `/plan` commands for structured execution.
+- **Interactive File Selector & Path Insertion**: Introduces an "Open File List" button that reveals a dynamic, searchable, and navigable popup. Users can efficiently select workspace files to insert their paths directly into the chat input at the cursor's current position. This enhancement includes:
+  - **Search and Filtering:** A dedicated search bar allows real-time filtering of file suggestions for quick discoverability.
+  - **Keyboard Navigation:** Supports `Tab`/`Shift+Tab` keys for cycling through file suggestions and the `ESC` key for globally dismissing the popup, regardless of element focus.
+  - **Visual Enhancements:** Features a themed button, a blurred search input for visual separation, an 'ESC' indicator for clear dismissal cues, and prevents UI element duplication on repeated interaction.
+  - **Underlying Mechanism:** Leverages the project's workspace scanning capabilities for providing the file list.
 
 ### 1.2 Token Management
 
@@ -59,7 +64,11 @@ Minovative Mind is a powerful AI-augmented Visual Studio Code extension that int
 ### 2.1 AI Planning & Execution
 
 - **Structured Task Breakdown**: The `/plan` command, managed by the `PlanService`, enables the AI to break down complex goals into detailed, executable JSON steps, aligning with the `AI Planning Engine (Structured)` system in `ARCHITECTURE.md`.
-- **Comprehensive Execution Flow**: Plans can include atomic actions such as `create_directory`, `create_file`, `modify_file`, and `run_command`.
+- **Comprehensive Execution Flow**: Plans can include atomic actions such as:
+  - `create_directory`: For creating new directories (folders) within the workspace.
+  - `create_file`: For creating new files, optionally with AI-generated content or predefined content.
+  - `modify_file`: For updating the content of existing files based on AI instructions or specific prompts.
+  - `run_command`: For executing shell commands (e.g., `npm install`, `git add`) within the workspace context, always requiring explicit user confirmation.
 - **Mandatory Shell Command Confirmation**: Explicit user confirmation is required for all `run_command` steps to ensure security and control.
 - **Real-time Progress & Control**: Provides granular progress updates for AI planning steps and execution phases within VS Code (`vscode.window.withProgress`), allowing users to monitor workflow progress and cancel specific ongoing plan tasks.
 - **Automatic Retry Mechanism**: Automatically retries plan generation in case of transient errors, ensuring resilience.

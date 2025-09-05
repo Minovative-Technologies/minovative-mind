@@ -24,6 +24,7 @@ import { hidePlanParseErrorUI } from "../ui/confirmationAndReviewUIs";
 import { stopTypingAnimation } from "../ui/typingAnimation";
 import { RequiredDomElements } from "../types/webviewTypes";
 import { clearImagePreviews } from "../utils/imageUtils";
+import { showSuggestions } from "../ui/commandSuggestions"; // Import showSuggestions
 
 /**
  * Initializes all button and interactive element event listeners in the webview.
@@ -55,6 +56,7 @@ export function initializeButtonEventListeners(
 		revertChangesButton,
 		attachImageButton, // Modified destructuring: rename uploadImageButton to attachImageButton
 		clearImagesButton,
+		openFileListButton, // Destructure openFileListButton
 	} = elements;
 
 	// Initial icon setup for buttons
@@ -72,10 +74,9 @@ export function initializeButtonEventListeners(
 	setIconForButton(confirmCommitButton, faCheck);
 	setIconForButton(cancelCommitButton, faTimes);
 	setIconForButton(revertChangesButton, faUndo);
-	setIconForButton(attachImageButton, faImage); // Added icon for attachImageButton
+	setIconForButton(attachImageButton, faImage);
 	setIconForButton(clearImagesButton, faTimes);
-	// `createPlanConfirmationUI` is called during webview initialization (e.g., in main.ts)
-	// and it handles its own button icon setup internally.
+	setIconForButton(openFileListButton, faFolderTree);
 
 	// Send Button
 	sendButton.addEventListener("click", () => {
@@ -147,6 +148,26 @@ export function initializeButtonEventListeners(
 		console.log("Load Chat button clicked.");
 		postMessageToExtension({ type: "loadChatRequest" });
 		updateStatus(elements, "Requesting chat load..."); // Pass elements
+	});
+
+	// Open File List Button
+	openFileListButton.addEventListener("click", () => {
+		console.log("Open File List button clicked.");
+		if (
+			appState.allWorkspaceFiles.length === 0 &&
+			!appState.isRequestingWorkspaceFiles
+		) {
+			appState.isRequestingWorkspaceFiles = true;
+			postMessageToExtension({ type: "requestWorkspaceFiles" });
+			showSuggestions([], "loading", elements, setLoadingState);
+		} else {
+			showSuggestions(
+				appState.allWorkspaceFiles,
+				"file",
+				elements,
+				setLoadingState
+			);
+		}
 	});
 
 	// Revert Changes Button

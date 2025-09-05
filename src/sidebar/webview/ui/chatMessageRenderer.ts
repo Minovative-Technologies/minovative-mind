@@ -19,7 +19,7 @@ import { ImageInlineData } from "../../common/sidebarTypes";
 import {
 	faChevronDown,
 	faChevronUp,
-	faFolderTree,
+	faFileImport,
 } from "@fortawesome/free-solid-svg-icons";
 
 // Global reference to setLoadingState function
@@ -435,7 +435,7 @@ export function appendMessage(
 				copyContextButton = document.createElement("button");
 				copyContextButton.classList.add("copy-context-button");
 				copyContextButton.title = "Copy Message Context with Relevant Files";
-				setIconForButton(copyContextButton, faFolderTree); // Set icon
+				setIconForButton(copyContextButton, faFileImport); // Set icon
 
 				copyContextButton.addEventListener("click", () => {
 					const messageIndexStr = messageElement.dataset.messageIndex;

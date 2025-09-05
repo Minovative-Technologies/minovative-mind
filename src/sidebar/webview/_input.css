@@ -74,7 +74,7 @@
 
 .input-action-buttons {
 	display: flex;
-	gap: 7px;
+	gap: 5px;
 	margin-left: auto; /* Push buttons to the right */
 	align-items: end; /* Align buttons to the bottom */
 }
@@ -250,6 +250,7 @@
 	display: flex; /* Added for gap and flex-direction to work */
 	flex-direction: column;
 }
+
 .command-item {
 	padding: 8px 10px;
 	cursor: pointer;
@@ -315,4 +316,78 @@
 
 #command-suggestions-container .command-item:last-child {
 	margin-bottom: 0;
+}
+
+.file-search-input-wrapper {
+	display: flex;
+	position: sticky;
+	top: 1px;
+	z-index: 10;
+	padding-bottom: 5px;
+	padding-left: 5px;
+	padding-right: 5px;
+	padding-top: 1px;
+	gap: var(--element-spacing, 8px);
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box; /* Include padding and border in the element's total width and height */
+	width: 100%; /* Take full width of its container */
+}
+
+.esc-indicator {
+	background-color: rgba(45, 45, 45, 0.3);
+	backdrop-filter: blur(5px);
+	border: 1px solid var(--vscode-input-border);
+	color: var(--vscode-input-foreground);
+	padding: 6px 8px; /* Consistent padding with chat input */
+	font-family: inherit;
+	font-size: inherit;
+	outline: none; /* Remove default focus outline */
+	border-radius: var(--border-radius); /* Match general border-radius */
+	box-sizing: border-box; /* Include padding and border in the element's total width and height */
+	font-size: 10px;
+}
+
+/* Styling for the file search input within the suggestions popup */
+.file-search-input {
+	flex-grow: 1; /* Allow it to take available width */
+	background-color: rgba(45, 45, 45, 0.3);
+	backdrop-filter: blur(5px);
+	border: 1px solid var(--vscode-input-border);
+	color: var(--vscode-input-foreground);
+	padding: 6px 8px; /* Consistent padding with chat input */
+	font-family: inherit;
+	font-size: inherit;
+	outline: none; /* Remove default focus outline */
+	border-radius: var(--border-radius); /* Match general border-radius */
+	box-sizing: border-box; /* Include padding and border in the element's total width and height */
+	width: 100%; /* Take full width of its container */
+	margin-bottom: 0; /* Removed margin-bottom as per instructions */
+}
+
+.file-search-input::placeholder {
+	color: var(--vscode-input-placeholderForeground);
+}
+
+.file-search-input:focus {
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+.file-search-esc-indicator {
+	color: var(--vscode-toolbar-activeForeground);
+	padding: 2px 6px;
+	border-radius: var(--border-radius);
+	font-weight: 500;
+	text-transform: uppercase;
+	user-select: none;
+	flex-shrink: 0;
+	background-color: rgba(45, 45, 45, 0.3);
+	backdrop-filter: blur(5px);
+	border: 1px solid var(--vscode-input-border);
+	padding: 6px 8px; /* Consistent padding with chat input */
+	font-family: inherit;
+	font-size: inherit;
+	outline: none; /* Remove default focus outline */
+	box-sizing: border-box; /* Include padding and border in the element's total width and height */
 }

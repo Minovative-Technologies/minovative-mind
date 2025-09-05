@@ -1,6 +1,59 @@
 import { appState } from "../state/appState";
 import { MINOVATIVE_COMMANDS } from "../../common/sidebarConstants";
-import { RequiredDomElements, SuggestionType } from "../types/webviewTypes"; // Import the type for DOM elements and new SuggestionType
+import { RequiredDomElements, SuggestionType } from "../types/webviewTypes";
+
+/**
+ * Filters and renders file suggestions based on the current search query.
+ * @param elements DOM elements required for displaying suggestions.
+ * @param setLoadingState A callback function to update the global loading state.
+ */
+function renderFileSuggestionsList(
+	elements: RequiredDomElements,
+	setLoadingState: (loading: boolean, elements: RequiredDomElements) => void
+): void {
+	const { commandSuggestionsContainer } = elements;
+
+	// Clear existing suggestion items, preserving the search input wrapper if it exists
+	Array.from(commandSuggestionsContainer.children).forEach((child) => {
+		if (child.id !== "fileSearchInputWrapper") {
+			child.remove();
+		}
+	});
+
+	const query = appState.currentFileSearchQuery.toLowerCase();
+	const filteredFiles = appState.allWorkspaceFiles.filter((file) =>
+		file.toLowerCase().includes(query)
+	);
+
+	appState.filteredCommands = filteredFiles; // Update filteredCommands with file paths
+	appState.activeCommandIndex = -1; // Reset active index for the new list
+
+	if (filteredFiles.length === 0) {
+		const noMatchesItem = document.createElement("div");
+		noMatchesItem.classList.add("command-item", "no-matches");
+		noMatchesItem.textContent = "No matching files";
+		commandSuggestionsContainer.appendChild(noMatchesItem);
+	} else {
+		filteredFiles.forEach((suggestion) => {
+			const suggestionItem = document.createElement("div");
+			suggestionItem.classList.add("command-item");
+			suggestionItem.textContent = suggestion;
+			suggestionItem.dataset.suggestion = suggestion;
+			suggestionItem.dataset.type = "file";
+			suggestionItem.addEventListener("click", () => {
+				selectSuggestion(suggestion, "file", elements, setLoadingState);
+			});
+			commandSuggestionsContainer.appendChild(suggestionItem);
+		});
+	}
+
+	commandSuggestionsContainer.style.display = "flex";
+	appState.isCommandSuggestionsVisible = true;
+	setLoadingState(appState.isLoading, elements);
+	console.log(
+		`[Suggestions] File suggestions rendered. Query: "${query}", Matches: ${filteredFiles.length}`
+	);
+}
 
 /**
  * Displays suggestions in the UI.
@@ -30,42 +83,165 @@ export function showSuggestions(
 		return;
 	}
 
-	appState.filteredCommands = suggestions; // 'filteredCommands' now holds generic suggestions
-	appState.currentSuggestionType = type; // Set the current suggestion type
-	commandSuggestionsContainer.innerHTML = "";
-	appState.activeCommandIndex = -1;
-
-	if (suggestions.length === 0) {
-		const noMatchesItem = document.createElement("div");
-		noMatchesItem.classList.add("command-item", "no-matches");
-		let noMatchesText = "No matches";
-		if (type === "command") {
-			noMatchesText = "No matching commands";
-		} else if (type === "file") {
-			noMatchesText = "No matching files";
-		}
-		noMatchesItem.textContent = noMatchesText;
-		commandSuggestionsContainer.appendChild(noMatchesItem);
+	appState.currentSuggestionType = type;
+	// Clear existing suggestions for all types initially, but do not clear the file search input wrapper if it exists for type 'file'.
+	if (type !== "file") {
+		commandSuggestionsContainer.innerHTML = "";
 	} else {
-		suggestions.forEach((suggestion) => {
-			const suggestionItem = document.createElement("div");
-			suggestionItem.classList.add("command-item");
-			suggestionItem.textContent = suggestion;
-			suggestionItem.dataset.suggestion = suggestion; // Renamed from dataset.command
-			suggestionItem.dataset.type = type; // Store the type for the click handler
-			suggestionItem.addEventListener("click", () => {
-				selectSuggestion(suggestion, type, elements, setLoadingState);
-			});
-			commandSuggestionsContainer.appendChild(suggestionItem);
+		// For 'file' type, ensure only suggestion items are cleared, not the search input wrapper.
+		Array.from(commandSuggestionsContainer.children).forEach((child) => {
+			if (child.id !== "fileSearchInputWrapper") {
+				child.remove();
+			}
 		});
 	}
+	appState.activeCommandIndex = -1;
 
-	commandSuggestionsContainer.style.display = "flex";
-	appState.isCommandSuggestionsVisible = true;
-	setLoadingState(appState.isLoading, elements); // Call setLoadingState after updating visibility state
+	if (type === "file") {
+		let fileSearchInputWrapper =
+			commandSuggestionsContainer.querySelector<HTMLDivElement>(
+				"#fileSearchInputWrapper"
+			);
+		let fileSearchInput: HTMLInputElement;
+		let escIndicator: HTMLSpanElement;
+
+		if (!fileSearchInputWrapper) {
+			// Create elements if they don't exist
+			fileSearchInputWrapper = document.createElement("div");
+			fileSearchInputWrapper.id = "fileSearchInputWrapper";
+			fileSearchInputWrapper.classList.add("file-search-input-wrapper");
+
+			fileSearchInput = document.createElement("input");
+			fileSearchInput.id = "fileSearchInput";
+			fileSearchInput.type = "text";
+			fileSearchInput.placeholder = "Search files...";
+			fileSearchInput.classList.add("file-search-input");
+
+			escIndicator = document.createElement("span");
+			escIndicator.classList.add("esc-indicator");
+			escIndicator.textContent = "ESC";
+
+			fileSearchInputWrapper.appendChild(fileSearchInput);
+			fileSearchInputWrapper.appendChild(escIndicator);
+			commandSuggestionsContainer.appendChild(fileSearchInputWrapper);
+
+			// Attach event listeners only during initial creation
+			fileSearchInput.addEventListener("input", () => {
+				appState.currentFileSearchQuery = fileSearchInput.value;
+				renderFileSuggestionsList(elements, setLoadingState);
+			});
+
+			fileSearchInput.addEventListener("keydown", (e) => {
+				const numSuggestions = appState.filteredCommands.length;
+				let currentActiveSuggestionIndex = appState.activeCommandIndex;
+
+				if (e.key === "Escape") {
+					e.preventDefault();
+					hideSuggestions(elements, setLoadingState);
+				} else if (e.key === "Tab") {
+					e.preventDefault(); // Prevent default tab behavior
+					if (numSuggestions === 0) {
+						return;
+					}
+
+					if (e.shiftKey) {
+						// Shift + Tab: navigate up
+						currentActiveSuggestionIndex =
+							(currentActiveSuggestionIndex - 1 + numSuggestions) %
+							numSuggestions;
+					} else {
+						// Tab: navigate down
+						currentActiveSuggestionIndex =
+							(currentActiveSuggestionIndex + 1) % numSuggestions;
+					}
+					appState.activeCommandIndex = currentActiveSuggestionIndex;
+					highlightCommand(currentActiveSuggestionIndex, elements);
+				} else if (e.key === "Enter") {
+					e.preventDefault(); // Prevent new line in textarea and form submission
+
+					if (
+						currentActiveSuggestionIndex !== -1 &&
+						appState.currentSuggestionType === "file"
+					) {
+						const selectedSuggestion =
+							appState.filteredCommands[currentActiveSuggestionIndex];
+						selectSuggestion(
+							selectedSuggestion,
+							appState.currentSuggestionType,
+							elements,
+							setLoadingState
+						);
+					}
+				}
+			});
+		} else {
+			// Retrieve existing elements
+			fileSearchInput = fileSearchInputWrapper.querySelector(
+				"#fileSearchInput"
+			) as HTMLInputElement;
+			escIndicator = fileSearchInputWrapper.querySelector(
+				".esc-indicator"
+			) as HTMLSpanElement;
+
+			// Ensure escIndicator's text content is correct
+			escIndicator.textContent = "ESC";
+		}
+
+		// Always update value and focus
+		fileSearchInput.value = appState.currentFileSearchQuery;
+		fileSearchInput.focus();
+
+		// Ensure searchInputWrapper is the first child
+		if (
+			commandSuggestionsContainer.firstChild !== fileSearchInputWrapper &&
+			fileSearchInputWrapper.parentNode === commandSuggestionsContainer
+		) {
+			commandSuggestionsContainer.prepend(fileSearchInputWrapper);
+		}
+
+		commandSuggestionsContainer.style.display = "flex";
+		appState.isCommandSuggestionsVisible = true;
+		setLoadingState(appState.isLoading, elements);
+		renderFileSuggestionsList(elements, setLoadingState);
+	} else {
+		// Set UI visibility and focus logic for "command" or other types
+		commandSuggestionsContainer.style.display = "flex";
+		appState.isCommandSuggestionsVisible = true;
+		setLoadingState(appState.isLoading, elements);
+
+		// type === "command" or other types, use the provided 'suggestions' list
+		appState.filteredCommands = suggestions; // 'filteredCommands' now holds generic suggestions for commands
+
+		if (suggestions.length === 0) {
+			const noMatchesItem = document.createElement("div");
+			noMatchesItem.classList.add("command-item", "no-matches");
+			let noMatchesText = "No matches";
+			if (type === "command") {
+				noMatchesText = "No matching commands";
+			}
+			noMatchesItem.textContent = noMatchesText;
+			commandSuggestionsContainer.appendChild(noMatchesItem);
+		} else {
+			suggestions.forEach((suggestion) => {
+				const suggestionItem = document.createElement("div");
+				suggestionItem.classList.add("command-item");
+				suggestionItem.textContent = suggestion;
+				suggestionItem.dataset.suggestion = suggestion;
+				suggestionItem.dataset.type = type;
+				suggestionItem.addEventListener("click", () => {
+					selectSuggestion(suggestion, type, elements, setLoadingState);
+				});
+				commandSuggestionsContainer.appendChild(suggestionItem);
+			});
+		}
+	}
 
 	chatInputControlsWrapper.style.zIndex = "100";
-	console.log(`[Suggestions] Suggestions shown (${type}):`, suggestions);
+	// Log the actual filtered suggestions from appState, which is the source of truth for rendered items.
+	console.log(
+		`[Suggestions] Suggestions shown (${type}):`,
+		appState.filteredCommands
+	);
 }
 
 /**
@@ -81,6 +257,7 @@ export function hideSuggestions(
 
 	appState.isCommandSuggestionsVisible = false;
 	appState.currentSuggestionType = "none"; // Set current suggestion type to none
+	appState.currentFileSearchQuery = ""; // Reset file search query
 	commandSuggestionsContainer.style.display = "none";
 	setLoadingState(appState.isLoading, elements); // Call setLoadingState after updating visibility state
 
@@ -112,39 +289,25 @@ export function selectSuggestion(
 		return;
 	}
 
-	const currentText = chatInput.value;
-	let replacementStartIndex = -1;
-
-	// Re-evaluate the trigger condition to find where to replace
-	const lastAtIndex = currentText.lastIndexOf("@");
-	if (
-		lastAtIndex === 0 ||
-		(lastAtIndex > 0 && currentText[lastAtIndex - 1] === " ")
-	) {
-		replacementStartIndex = lastAtIndex;
-	}
-
 	if (type === "file") {
-		if (replacementStartIndex !== -1) {
-			// Replace "@" trigger and query with the suggestion, wrapped in backticks
-			chatInput.value =
-				currentText.substring(0, replacementStartIndex) + `\`${suggestion}\``;
-		} else {
-			// Fallback: If the "@" trigger cannot be found for replacement,
-			// replace the entire input with the suggestion, wrapped in backticks.
-			console.warn(
-				`[@File Suggestion Selection] Could not find valid '@' trigger in "${currentText}". Replacing entire input with "${suggestion}" wrapped in backticks.`
-			);
-			chatInput.value = `\`${suggestion}\``;
-		}
+		const cursorPosition = chatInput.selectionStart ?? 0;
+		const currentValue = chatInput.value;
+		const insertedText = `\`${suggestion}\``;
+
+		const newValue =
+			currentValue.substring(0, cursorPosition) +
+			insertedText +
+			currentValue.substring(cursorPosition);
+
+		chatInput.value = newValue;
+		const newCursorPosition = cursorPosition + insertedText.length;
+		chatInput.setSelectionRange(newCursorPosition, newCursorPosition);
 
 		chatInput.focus();
-		// Set cursor to the end of the input field
-		chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
 		hideSuggestions(elements, setLoadingState);
 		console.log(`[Suggestions] Suggestion selected (${type}): ${suggestion}`);
 	} else if (type === "command") {
-		// Existing logic for command selection (no change needed for this request)
+		// Existing logic for command selection
 		chatInput.value = suggestion + " ";
 		chatInput.focus();
 		chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
@@ -171,16 +334,24 @@ export function highlightCommand(
 ): void {
 	const { commandSuggestionsContainer } = elements;
 
-	const items = Array.from(
-		commandSuggestionsContainer.children
+	// The 'fileSearchInputWrapper' is now a direct child. We need to get the actual command items.
+	const items = Array.from(commandSuggestionsContainer.children);
+
+	// Filter out the fileSearchInputWrapper if it exists, and any non-suggestion items.
+	// Suggestion items will have the class "command-item".
+	const actualSuggestionItems = items.filter(
+		(item) =>
+			item.id !== "fileSearchInputWrapper" &&
+			item.classList.contains("command-item")
 	) as HTMLDivElement[];
-	// Remove 'active' class from all items
-	items.forEach((item) => item.classList.remove("active"));
+
+	// Remove 'active' class from all (actual) suggestion items
+	actualSuggestionItems.forEach((item) => item.classList.remove("active"));
 
 	// Add 'active' class to the item at the specified index and scroll into view
-	if (index >= 0 && index < items.length) {
-		items[index].classList.add("active");
-		items[index].scrollIntoView({ block: "nearest" });
+	if (index >= 0 && index < actualSuggestionItems.length) {
+		actualSuggestionItems[index].classList.add("active");
+		actualSuggestionItems[index].scrollIntoView({ block: "nearest" });
 		console.log(`[Suggestions] Highlighted item at index: ${index}`);
 	} else {
 		console.log(

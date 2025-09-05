@@ -103,6 +103,9 @@ export function initializeDomElements(): RequiredDomElements | null {
 	const commandSuggestionsContainer = document.getElementById(
 		"command-suggestions-container"
 	) as HTMLDivElement;
+	const openFileListButton = document.getElementById(
+		"openFileListButton"
+	) as HTMLButtonElement;
 	// const groundingToggle = document.getElementById(
 	// 	"grounding-toggle"
 	// ) as HTMLInputElement;
@@ -177,6 +180,7 @@ export function initializeDomElements(): RequiredDomElements | null {
 
 		chatInputControlsWrapper,
 		commandSuggestionsContainer,
+		openFileListButton, // Add the new element here
 		// groundingToggle,
 
 		// Token usage elements
