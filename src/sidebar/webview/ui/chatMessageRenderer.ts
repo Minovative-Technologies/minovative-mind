@@ -522,13 +522,13 @@ export function appendMessage(
 			if (editButton) {
 				messageActions.appendChild(editButton);
 			}
+			// Append "Generate Plan" button container (moved before "Copy Context")
+			if (planButtonContainer) {
+				messageActions.appendChild(planButtonContainer);
+			}
 			// Append "Copy Context" button (now for AI messages)
 			if (copyContextButton) {
 				messageActions.appendChild(copyContextButton);
-			}
-			// Append "Generate Plan" button container
-			if (planButtonContainer) {
-				messageActions.appendChild(planButtonContainer);
 			}
 
 			messageElement.appendChild(messageActions);

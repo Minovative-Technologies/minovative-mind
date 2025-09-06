@@ -92,6 +92,14 @@ export interface ImageUploadState {
 	previewElement: HTMLDivElement; // Reference to the DOM element displaying the preview
 }
 
+/**
+ * Represents image data that is sent inline, typically Base64 encoded.
+ */
+export interface ImageInlineData {
+	mimeType: string;
+	data: string;
+}
+
 export type SuggestionType = "command" | "file" | "loading" | "none";
 
 export interface WebviewAppState {

@@ -3,8 +3,9 @@ import { appState } from "./state/appState";
 import { appendMessage } from "./ui/chatMessageRenderer";
 import { MINOVATIVE_COMMANDS } from "../common/sidebarConstants";
 import { updateStatus } from "./ui/statusManager";
-import { RequiredDomElements } from "./types/webviewTypes";
+import { ImageInlineData, RequiredDomElements } from "./types/webviewTypes";
 import { clearImagePreviews } from "./utils/imageUtils";
+import { adjustChatInputHeight } from "./eventHandlers/inputEventHandlers";
 
 /**
  * Sends a chat message or command to the VS Code extension.
@@ -21,10 +22,21 @@ export function sendMessage(
 	// Replace direct accesses to DOM elements with 'elements' properties
 	const fullMessage = elements.chatInput.value.trim();
 	elements.chatInput.value = ""; // Clear input immediately
+	adjustChatInputHeight(elements.chatInput); // Reset input height after clearing
 	const imagePartsToSend = appState.selectedImages.map((img) => ({
-		mimeType: img.mimeType,
-		data: img.data,
+		inlineData: {
+			// Wrap mimeType and data in an inlineData object
+			mimeType: img.mimeType,
+			data: img.data,
+		},
 	}));
+
+	const imagePartsForDisplay: ImageInlineData[] = appState.selectedImages.map(
+		(img) => ({
+			mimeType: img.mimeType,
+			data: img.data,
+		})
+	);
 
 	// Replace direct DOM checks and global state with 'elements' and 'appState'
 	if (
@@ -105,7 +117,7 @@ export function sendMessage(
 			false, // isRelevantFilesExpandedForHistory
 			false, // isPlanExplanationForRender
 			false, // isPlanStepUpdateForRender
-			imagePartsToSend.length > 0 ? imagePartsToSend : undefined // imageParts
+			imagePartsForDisplay.length > 0 ? imagePartsForDisplay : undefined // imageParts
 		);
 		updateStatus(elements, "Requesting plan generation...");
 		postMessageToExtension({ type: "planRequest", value: planRequest });
@@ -143,7 +155,7 @@ export function sendMessage(
 			false, // isRelevantFilesExpandedForHistory
 			false, // isPlanExplanationForRender
 			false, // isPlanStepUpdateForRender
-			imagePartsToSend.length > 0 ? imagePartsToSend : undefined // imageParts
+			imagePartsForDisplay.length > 0 ? imagePartsForDisplay : undefined // imageParts
 		);
 		updateStatus(elements, "Sending message to AI...");
 		// const groundingEnabled = elements.groundingToggle?.checked ?? false;

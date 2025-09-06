@@ -13,7 +13,8 @@ import {
 	faPlus,
 	faUndo,
 	faImage, // Added faImage import
-	faFolderTree, // Import faFolderTree
+	faFolder,
+	faFileExport, // Import faFolder
 } from "@fortawesome/free-solid-svg-icons";
 import { setIconForButton } from "../utils/iconHelpers";
 import { postMessageToExtension } from "../utils/vscodeApi";
@@ -76,7 +77,7 @@ export function initializeButtonEventListeners(
 	setIconForButton(revertChangesButton, faUndo);
 	setIconForButton(attachImageButton, faImage);
 	setIconForButton(clearImagesButton, faTimes);
-	setIconForButton(openFileListButton, faFolderTree);
+	setIconForButton(openFileListButton, faFolder);
 
 	// Send Button
 	sendButton.addEventListener("click", () => {
@@ -382,8 +383,8 @@ export function initializeButtonEventListeners(
 				copyContextButton.title = "Copied!";
 
 				setTimeout(() => {
-					// Revert to faFolderTree icon
-					setIconForButton(copyContextButton, faFolderTree);
+					// Revert to faFolder icon
+					setIconForButton(copyContextButton, faFileExport);
 					copyContextButton.title = originalTitle; // Restore original title
 					copyContextButton.disabled = false; // Re-enable button
 				}, 1500);
