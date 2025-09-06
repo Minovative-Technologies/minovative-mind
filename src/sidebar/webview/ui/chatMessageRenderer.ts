@@ -21,6 +21,7 @@ import {
 	faChevronUp,
 	faFileImport,
 } from "@fortawesome/free-solid-svg-icons";
+import { adjustChatInputHeight } from "../eventHandlers/inputEventHandlers"; // Import adjustChatInputHeight
 
 // Global reference to setLoadingState function
 let globalSetLoadingState:
@@ -430,39 +431,14 @@ export function appendMessage(
 				editButton.classList.add("edit-button");
 				editButton.title = "Edit Message";
 				setIconForButton(editButton, faPenToSquare);
+			}
 
-				// Create the "Copy Context" button for user messages
+			// Add `copyContextButton` creation to the `ai-message` block
+			if (className.includes("ai-message")) {
 				copyContextButton = document.createElement("button");
 				copyContextButton.classList.add("copy-context-button");
 				copyContextButton.title = "Copy Message Context with Relevant Files";
 				setIconForButton(copyContextButton, faFileImport); // Set icon
-
-				copyContextButton.addEventListener("click", () => {
-					const messageIndexStr = messageElement.dataset.messageIndex;
-					const messageIndex = messageIndexStr
-						? parseInt(messageIndexStr, 10)
-						: -1;
-
-					if (isNaN(messageIndex) || messageIndex < 0) {
-						console.error(
-							"[ChatMessageRenderer] Invalid message index for copy context:",
-							messageIndexStr
-						);
-						updateStatus(
-							elements,
-							"Error: Cannot copy context. Please try again or refresh.",
-							true
-						);
-						return;
-					}
-
-					postMessageToExtension({
-						type: "copyMessageContext", // New message type
-						messageIndex: messageIndex,
-					});
-
-					updateStatus(elements, "Copying message context...");
-				});
 			}
 
 			// "Generate Plan" button creation (for ai-message only)
@@ -502,10 +478,7 @@ export function appendMessage(
 				if (editButton) {
 					editButton.disabled = false;
 				}
-				if (copyContextButton) {
-					// New: enable for copy context button
-					copyContextButton.disabled = false;
-				}
+				// Removed: if (copyContextButton) { copyContextButton.disabled = false; }
 			} else if (className.includes("ai-message")) {
 				const shouldDisableAiStreamingButtons =
 					(sender === "Model" &&
@@ -529,7 +502,16 @@ export function appendMessage(
 						generatePlanButton.style.display = "none";
 					}
 				}
-				// copyContextButton is only for user messages, so no need to handle here
+				// Disable copyContextButton during streaming for AI messages
+				if (
+					copyContextButton &&
+					sender === "Model" &&
+					text === "" &&
+					className.includes("ai-message") &&
+					!className.includes("error-message")
+				) {
+					copyContextButton.disabled = true;
+				}
 			}
 
 			const messageActions = document.createElement("div");
@@ -540,7 +522,7 @@ export function appendMessage(
 			if (editButton) {
 				messageActions.appendChild(editButton);
 			}
-			// Append "Copy Context" button
+			// Append "Copy Context" button (now for AI messages)
 			if (copyContextButton) {
 				messageActions.appendChild(copyContextButton);
 			}
@@ -579,6 +561,7 @@ export function appendMessage(
 
 					// Copy the message text to elements.chatInput.value
 					elements.chatInput.value = originalText.trim();
+					adjustChatInputHeight(elements.chatInput); // Adjust height after setting value
 
 					// Set appState.editingMessageIndex and appState.isEditingMessage
 					appState.editingMessageIndex = messageIndex;
@@ -635,7 +618,10 @@ export function appendMessage(
 				if (generatePlanButton) {
 					generatePlanButton.disabled = true;
 				}
-				// copyContextButton is only for user messages, so no need to handle here
+				// Disable copyContextButton during streaming
+				if (copyContextButton) {
+					copyContextButton.disabled = true;
+				}
 			} else {
 				// Complete message or history message (not streaming)
 				stopTypingAnimation();
@@ -677,8 +663,8 @@ export function appendMessage(
 					if (editButton) {
 						editButton.disabled = false;
 					}
+					// Enable copyContextButton for complete/history AI messages (not streaming)
 					if (copyContextButton) {
-						// New: enable for copy context button
 						copyContextButton.disabled = false;
 					}
 					if (
@@ -703,8 +689,8 @@ export function appendMessage(
 					if (editButton) {
 						editButton.style.display = "none";
 					}
+					// Hide copyContextButton for isPlanStepUpdateForRender
 					if (copyContextButton) {
-						// New: hide for copy context button
 						copyContextButton.style.display = "none";
 					}
 					if (generatePlanButton) {

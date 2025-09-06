@@ -23,6 +23,16 @@ import {
 import { startTypingAnimation } from "../ui/typingAnimation";
 
 /**
+ * Adjusts the height of the chat input textarea based on its scroll height,
+ * allowing it to expand and shrink dynamically.
+ * @param textArea The HTMLTextAreaElement to adjust.
+ */
+export function adjustChatInputHeight(textArea: HTMLTextAreaElement): void {
+	textArea.style.height = "auto"; // Temporarily reset height to calculate scrollHeight correctly
+	textArea.style.height = textArea.scrollHeight + "px"; // Set height to scrollHeight
+}
+
+/**
  * Initializes all event listeners related to the chat input field and command suggestions,
  * and now also image file uploads.
  * @param elements The necessary DOM elements, encapsulated in RequiredDomElements.
@@ -82,6 +92,7 @@ export function initializeInputEventListeners(
 		if (shouldRefocus) {
 			els.chatInput.focus(); // Return focus to input
 		}
+		adjustChatInputHeight(els.chatInput); // Adjust height after clearing text
 	};
 
 	// Add event listener to cancelEditButton
@@ -94,6 +105,9 @@ export function initializeInputEventListeners(
 	// Event listener for input changes in the chat input field (for command suggestions)
 	chatInput.addEventListener("input", () => {
 		const text = chatInput.value;
+
+		// Adjust height of the chat input
+		adjustChatInputHeight(elements.chatInput);
 
 		// 1. Declare local flags:
 		let commandSuggestionsActive = false;

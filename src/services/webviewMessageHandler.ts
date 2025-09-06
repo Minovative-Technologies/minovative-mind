@@ -802,29 +802,31 @@ export async function handleWebviewMessage(
 				try {
 					const messageIndex = validatedData.payload.messageIndex;
 
-					// 2. Retrieve the user message history
 					const chatHistory = provider.chatHistoryManager.getChatHistory();
 					if (messageIndex < 0 || messageIndex >= chatHistory.length) {
 						throw new Error("Invalid message index provided.");
 					}
 					const historyEntry = chatHistory[messageIndex];
-					if (historyEntry.role !== "user" || !historyEntry.parts.length) {
+					if (
+						!["user", "model"].includes(historyEntry.role) ||
+						!historyEntry.parts.length
+					) {
 						throw new Error(
-							"Selected message is not a user message or has no content."
+							"Selected message is not a user or AI message or has no content."
 						);
 					}
 
-					let userMessageText = "";
+					let messageContentText = "";
 					// Extract text content from HistoryEntryPart array
 					historyEntry.parts.forEach((part) => {
 						if ("text" in part && part.text) {
-							userMessageText += part.text + "\n";
+							messageContentText += part.text + "\n";
 						}
 					});
-					userMessageText = userMessageText.trim();
+					messageContentText = messageContentText.trim();
 
-					if (!userMessageText) {
-						throw new Error("User message content is empty.");
+					if (!messageContentText) {
+						throw new Error("Message content is empty.");
 					}
 
 					provider.postMessageToWebview({
@@ -833,11 +835,10 @@ export async function handleWebviewMessage(
 						showLoadingDots: true,
 					});
 
-					// 3. Call provider.contextService.buildProjectContext
 					const contextResult =
 						await provider.contextService.buildProjectContext(
 							provider.activeOperationCancellationTokenSource?.token,
-							userMessageText,
+							messageContentText,
 							undefined, // editorContext
 							undefined, // initialDiagnosticsString
 							{
@@ -850,16 +851,13 @@ export async function handleWebviewMessage(
 							false // includeVerboseHeaders
 						);
 
-					// 4. From the buildProjectContext result, get relevantFiles
 					const relevantFiles = contextResult.relevantFiles;
 
-					// 5. Construct the file tree content
 					const fileTreeContent = createAsciiTree(
 						relevantFiles,
 						"Project Root"
 					);
 
-					// 6. Read the content of each relevant file
 					let allFileContents = "";
 					for (const relativePath of relevantFiles) {
 						const uri = vscode.Uri.joinPath(
@@ -878,13 +876,12 @@ export async function handleWebviewMessage(
 						}
 					}
 
-					// 7. Combine the user message, file tree, and all file contents
-					const finalCombinedContent = `${PRE_PROMPT_MESSAGE}\n\nUser message: ${userMessageText}\n\nFile Tree:\n${fileTreeContent}\n\nFile Content:\n${allFileContents}`;
+					const header =
+						historyEntry.role === "user" ? "User message" : "AI message";
+					const finalCombinedContent = `${PRE_PROMPT_MESSAGE}\n\n${header}: ${messageContentText}\n\nFile Tree:\n${fileTreeContent}\n\nFile Content:\n${allFileContents}`;
 
-					// 8. Copy this combined string to the clipboard
 					await vscode.env.clipboard.writeText(finalCombinedContent);
 
-					// 9. Send a statusUpdate message to the webview indicating success
 					provider.postMessageToWebview({
 						type: "statusUpdate",
 						value: "Message context copied to clipboard successfully!",
@@ -892,7 +889,6 @@ export async function handleWebviewMessage(
 					});
 					console.log("[MessageHandler] Message context copied to clipboard.");
 				} catch (error: any) {
-					// 10. Wrap the logic in a try-catch block for error handling
 					const errorMessage = formatUserFacingErrorMessage(
 						error,
 						"Failed to copy message context to clipboard.",
