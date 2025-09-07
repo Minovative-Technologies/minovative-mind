@@ -129,6 +129,10 @@ export function initializeGenerativeAI(
 ): boolean {
 	geminiLogger.log(
 		modelName,
+		`[gemini.ts] initializeGenerativeAI called with modelName: ${modelName}`
+	);
+	geminiLogger.log(
+		modelName,
 		`Attempting to initialize GoogleGenerativeAI with model: ${modelName}...`
 	);
 	try {
@@ -174,6 +178,10 @@ export function initializeGenerativeAI(
 			currentApiKey = apiKey;
 			currentModelName = modelName;
 			currentToolsHash = newToolsHash; // Update tools hash after successful initialization
+			geminiLogger.log(
+				modelName,
+				`[gemini.ts] currentModelName set to: ${currentModelName}`
+			);
 			geminiLogger.log(
 				modelName,
 				"GoogleGenerativeAI initialized successfully."
@@ -263,7 +271,10 @@ export async function* generateContentStream(
 		if (isMergeOperation) {
 			geminiLogger.log(modelName, `This is a merge operation.`);
 		}
-
+		geminiLogger.log(
+			modelName,
+			`[gemini.ts] generateContentStream using currentModelName: ${currentModelName}`
+		);
 		const result = await model.generateContentStream({
 			contents: contents,
 			generationConfig: requestConfig,
@@ -384,7 +395,10 @@ export async function generateFunctionCall(
 				},
 			};
 		}
-
+		geminiLogger.log(
+			modelName,
+			`[gemini.ts] generateFunctionCall using currentModelName: ${currentModelName}`
+		);
 		const result = await model.generateContent(requestOptions); // Modified call
 		const response = result.response;
 

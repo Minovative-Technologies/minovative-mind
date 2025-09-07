@@ -18,6 +18,7 @@ import {
 	AiResponseStartMessage,
 	AiResponseChunkMessage,
 	AiResponseEndMessage,
+	FormattedTokenStatistics, // Import FormattedTokenStatistics
 } from "../../common/sidebarTypes";
 import {
 	stopTypingAnimation,
@@ -596,7 +597,11 @@ export function initializeMessageBusHandler(
 					"[Webview] Received token statistics update:",
 					message.value
 				);
-				const stats = message.value;
+				const stats = message.value as FormattedTokenStatistics;
+				console.log(
+					`[Webview] updateTokenStatistics: Received stats object:`,
+					stats
+				);
 
 				// Update token usage display
 				const totalInputElement = document.getElementById("total-input-tokens");
@@ -626,6 +631,51 @@ export function initializeMessageBusHandler(
 				if (avgOutputElement) {
 					avgOutputElement.textContent = stats.averageOutput;
 				}
+
+				// Model Usage Breakdown
+				if (elements.modelUsagePercentagesList) {
+					elements.modelUsagePercentagesList.innerHTML = ""; // Clear existing content
+
+					const heading = document.createElement("h4");
+					heading.textContent = "Model Usage Breakdown";
+					elements.modelUsagePercentagesList.appendChild(heading);
+
+					let modelUsageMap: Map<string, number>;
+
+					if (Array.isArray(stats.modelUsagePercentages)) {
+						modelUsageMap = new Map(
+							stats.modelUsagePercentages as [string, number][]
+						);
+					} else {
+						console.warn(
+							"[Webview] updateTokenStatistics: Received modelUsagePercentages not as an array of entries. Initializing empty Map. Received:",
+							stats.modelUsagePercentages
+						);
+						modelUsageMap = new Map();
+					}
+
+					console.log(
+						`[Webview] updateTokenStatistics: modelUsageMap.size = ${
+							modelUsageMap.size
+						}, modelUsageMap contents = ${JSON.stringify(
+							Array.from(modelUsageMap.entries())
+						)}`
+					);
+
+					if (modelUsageMap.size > 0) {
+						modelUsageMap.forEach((percentage, modelName) => {
+							const div = document.createElement("div");
+							div.textContent = `- ${modelName}: ${percentage.toFixed(2)}%`;
+							elements.modelUsagePercentagesList.appendChild(div);
+						});
+					} else {
+						// Fallback message if the map is empty
+						const noDataParagraph = document.createElement("p");
+						noDataParagraph.textContent = "No model usage data available yet.";
+						elements.modelUsagePercentagesList.appendChild(noDataParagraph);
+					}
+				}
+				appState.lastFormattedTokenStats = stats; // Assign the stats object to appState.lastFormattedTokenStats
 				break;
 			}
 

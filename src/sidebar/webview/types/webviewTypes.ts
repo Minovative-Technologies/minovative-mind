@@ -1,3 +1,4 @@
+import { FormattedTokenStatistics } from "../../common/sidebarTypes";
 import { VsCodeWebviewApi } from "../vscode.d";
 
 export interface VsCodeApi extends VsCodeWebviewApi {}
@@ -45,7 +46,9 @@ export interface RequiredDomElements {
 	tokenUsageContainer: HTMLDivElement;
 	tokenUsageDisplay: HTMLDivElement;
 	tokenUsageToggle: HTMLButtonElement;
+	copyStatsButton: HTMLButtonElement; // NEW: Copy token statistics button
 	revertChangesButton: HTMLButtonElement;
+	modelUsagePercentagesList: HTMLDivElement; // NEW: Display for model usage percentages
 
 	// Clear chat confirmation
 	chatClearConfirmationContainer: HTMLDivElement | null;
@@ -127,6 +130,7 @@ export interface WebviewAppState {
 	hasRevertibleChanges: boolean;
 	totalKeys: number;
 	isTokenUsageVisible: boolean;
+	lastFormattedTokenStats: FormattedTokenStatistics | null; // NEW: Store last formatted token stats
 	nextMessageIndex: number;
 	selectedImages: ImageUploadState[];
 	allWorkspaceFiles: string[];

@@ -26,7 +26,7 @@ export class AIRequestService {
 	constructor(
 		private apiKeyManager: ApiKeyManager,
 		private postMessageToWebview: (message: any) => void,
-		private tokenTrackingService?: TokenTrackingService
+		private tokenTrackingService: TokenTrackingService // Made tokenTrackingService a required dependency
 	) {}
 
 	/**
@@ -247,6 +247,9 @@ export class AIRequestService {
 						);
 					}
 
+					console.log(
+						`[AIRequestService] generateWithRetry: Tracking usage for model: ${modelName}, requestType: ${requestType}`
+					);
 					// Update the trackTokenUsage call with the accurately counted tokens
 					this.tokenTrackingService.trackTokenUsage(
 						finalInputTokens, // Use the accurately counted input tokens
@@ -439,6 +442,7 @@ export class AIRequestService {
 	 * @param tools An array of `Tool` objects defining the functions the model can call.
 	 * @param functionCallingMode An optional `FunctionCallingMode` to specify how function calls are handled (e.g., "AUTO", "NONE", "ANY").
 	 * @param token An optional `CancellationToken` to signal if the operation should be cancelled.
+	 * @param contextString A descriptive string for the token tracking event, defaults to 'function_call'.
 	 * @returns A Promise that resolves to a `FunctionCall` object, or rejects if the operation is cancelled or an error occurs.
 	 */
 	public async generateFunctionCall(
@@ -447,13 +451,45 @@ export class AIRequestService {
 		contents: Content[],
 		tools: Tool[],
 		functionCallingMode?: FunctionCallingMode,
-		token?: vscode.CancellationToken
+		token?: vscode.CancellationToken,
+		contextString: string = "function_call" // New parameter with default value
 	): Promise<FunctionCall> {
 		if (token?.isCancellationRequested) {
 			console.log(
 				"[AIRequestService] Function call generation cancelled at start."
 			);
 			throw new Error(gemini.ERROR_OPERATION_CANCELLED);
+		}
+
+		let inputTokens = 0;
+		let outputTokens = 0;
+
+		// Prepare input text for context string and token estimation
+		const contentsText = contents
+			.map((content) =>
+				content.parts.map((part) => ("text" in part ? part.text : "")).join(" ")
+			)
+			.join(" ");
+		const inputContextForTracking =
+			contentsText.length > 1000
+				? contentsText.substring(0, 1000) + "..."
+				: contentsText;
+
+		// 1. Count input tokens
+		try {
+			inputTokens = await gemini.countGeminiTokens(apiKey, modelName, contents);
+			console.log(
+				`[AIRequestService] Accurately counted ${inputTokens} input tokens for function call (${modelName}).`
+			);
+		} catch (e) {
+			console.warn(
+				`[AIRequestService] Failed to get accurate input token count from Gemini API for function call (${modelName}), falling back to estimate. Error:`,
+				e
+			);
+			inputTokens = this.tokenTrackingService.estimateTokens(contentsText);
+			console.log(
+				`[AIRequestService] Estimated ${inputTokens} input tokens using heuristic for function call (${modelName}).`
+			);
 		}
 
 		const functionCall = await gemini.generateFunctionCall(
@@ -465,10 +501,59 @@ export class AIRequestService {
 		);
 
 		if (functionCall === null) {
+			console.log(
+				`[AIRequestService] generateFunctionCall: Tracking usage for model: ${modelName}, contextString: ${contextString}`
+			);
+			// Track usage even on error if possible, but output tokens would be 0
+			this.tokenTrackingService.trackTokenUsage(
+				inputTokens,
+				0, // 0 output tokens on null response
+				contextString,
+				modelName,
+				inputContextForTracking
+			);
 			throw new Error(
 				`AI response did not contain a valid function call for model ${modelName}`
 			);
 		}
+
+		// Convert functionCall to string for output token estimation
+		const functionCallString = JSON.stringify({
+			name: functionCall.name,
+			args: functionCall.args,
+		});
+
+		// 2. Count output tokens
+		try {
+			outputTokens = await gemini.countGeminiTokens(apiKey, modelName, [
+				{ role: "model", parts: [{ text: functionCallString }] },
+			]);
+			console.log(
+				`[AIRequestService] Accurately counted ${outputTokens} output tokens for function call (${modelName}).`
+			);
+		} catch (e) {
+			console.warn(
+				`[AIRequestService] Failed to get accurate output token count from Gemini API for function call (${modelName}), falling back to estimate. Error:`,
+				e
+			);
+			outputTokens =
+				this.tokenTrackingService.estimateTokens(functionCallString);
+			console.log(
+				`[AIRequestService] Estimated ${outputTokens} output tokens using heuristic for function call (${modelName}).`
+			);
+		}
+
+		console.log(
+			`[AIRequestService] generateFunctionCall: Tracking usage for model: ${modelName}, contextString: ${contextString}`
+		);
+		// 3. Track token usage
+		this.tokenTrackingService.trackTokenUsage(
+			inputTokens,
+			outputTokens,
+			contextString,
+			modelName,
+			inputContextForTracking // Use the truncated input context for tracking
+		);
 
 		if (token?.isCancellationRequested) {
 			console.log(

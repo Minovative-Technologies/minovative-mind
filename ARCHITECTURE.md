@@ -62,6 +62,10 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 #### 3. Token Usage Tracking
 
 - **Responsibility**: Monitors and tracks the consumption of AI tokens across various requests, providing real-time and aggregate usage statistics for transparency and cost insight.
+- **Enhanced Statistics**: `TokenTrackingService` (`src/services/tokenTrackingService.ts`) now computes comprehensive statistics, including the aggregation of token usage by individual AI model (`byModel` map) and the calculation of each model's percentage contribution to total token consumption (`modelUsagePercentages`).
+- **Webview Display**: These detailed statistics, including the model usage breakdown, are now prominently displayed in the 'Token Usage Statistics' panel within the webview.
+- **Copy All Stats Button**: A 'Copy All Stats' button is available, allowing users to copy all displayed statistics to the clipboard in a human-readable format for easy sharing or analysis.
+- **Robust Data Handling**: Serialization and deserialization mechanisms are in place to correctly transmit `Map` objects (like `modelUsagePercentages`) between the extension host and the webview, ensuring data integrity and consistency.
 - **Key Methods**: `trackTokenUsage`, `getTokenStatistics`, `estimateTokens`, `getRealTimeTokenEstimates`, `getCurrentStreamingEstimates`, `onTokenUpdate`, `triggerRealTimeUpdate`, `clearTokenHistory`, `getFormattedStatistics`.
 - **Key Files**: `src/services/tokenTrackingService.ts`
 

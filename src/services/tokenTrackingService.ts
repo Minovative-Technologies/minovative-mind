@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+// src/services/tokenTrackingService.ts
+import { FormattedTokenStatistics } from "../sidebar/common/sidebarTypes";
 
 export interface TokenUsage {
 	inputTokens: number;
@@ -35,6 +36,7 @@ export interface TokenStatistics {
 			totalTokens: number;
 		}
 	>;
+	modelUsagePercentages: Map<string, number>;
 }
 
 export class TokenTrackingService {
@@ -174,6 +176,9 @@ export class TokenTrackingService {
 	 * Get current token statistics
 	 */
 	public getTokenStatistics(): TokenStatistics {
+		console.log(
+			`[TokenTrackingService] getTokenStatistics: tokenUsageHistory.length = ${this.tokenUsageHistory.length}`
+		);
 		if (this.tokenUsageHistory.length === 0) {
 			return {
 				totalInputTokens: 0,
@@ -184,6 +189,7 @@ export class TokenTrackingService {
 				averageOutputTokens: 0,
 				byRequestType: new Map(),
 				byModel: new Map(),
+				modelUsagePercentages: new Map(),
 			};
 		}
 
@@ -249,6 +255,35 @@ export class TokenTrackingService {
 			existing.totalTokens += usage.totalTokens;
 			byModel.set(usage.modelName, existing);
 		}
+		console.log(
+			`[TokenTrackingService] getTokenStatistics: byModel.size = ${
+				byModel.size
+			}, byModel contents = ${JSON.stringify(Array.from(byModel.entries()))}`
+		);
+
+		// Calculate model usage percentages
+		const modelUsagePercentages = new Map<string, number>();
+		let grandTotalModelTokens = 0;
+		for (const data of byModel.values()) {
+			grandTotalModelTokens += data.totalTokens;
+		}
+
+		if (grandTotalModelTokens > 0) {
+			for (const [modelName, data] of byModel.entries()) {
+				const percentage = (data.totalTokens / grandTotalModelTokens) * 100;
+				modelUsagePercentages.set(modelName, percentage);
+			}
+		} else {
+			// If no tokens consumed, all percentages are 0
+			for (const modelName of byModel.keys()) {
+				modelUsagePercentages.set(modelName, 0);
+			}
+		}
+		console.log(
+			`[TokenTrackingService] getTokenStatistics: grandTotalModelTokens = ${grandTotalModelTokens}, modelUsagePercentages contents = ${JSON.stringify(
+				Array.from(modelUsagePercentages.entries())
+			)}`
+		);
 
 		return {
 			totalInputTokens,
@@ -259,6 +294,7 @@ export class TokenTrackingService {
 			averageOutputTokens,
 			byRequestType,
 			byModel,
+			modelUsagePercentages,
 		};
 	}
 
@@ -541,14 +577,7 @@ export class TokenTrackingService {
 	/**
 	 * Get formatted token statistics for display
 	 */
-	public getFormattedStatistics(): {
-		totalInput: string;
-		totalOutput: string;
-		total: string;
-		requestCount: string;
-		averageInput: string;
-		averageOutput: string;
-	} {
+	public getFormattedStatistics(): FormattedTokenStatistics {
 		const stats = this.getTokenStatistics();
 
 		const formatNumber = (num: number): string => {
@@ -568,6 +597,7 @@ export class TokenTrackingService {
 			requestCount: stats.requestCount.toString(),
 			averageInput: formatNumber(stats.averageInputTokens),
 			averageOutput: formatNumber(stats.averageOutputTokens),
+			modelUsagePercentages: Array.from(stats.modelUsagePercentages.entries()),
 		};
 	}
 }

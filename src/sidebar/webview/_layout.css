@@ -8,6 +8,18 @@
 	min-height: 35px;
 }
 
+#model-percentages-list {
+	margin-top: 5px;
+	padding: 10px;
+	background-color: var(--vscode-editor-background);
+	border-radius: 5px;
+}
+#model-percentages-list > div,
+#model-percentages-list > p {
+	font-size: 0.9em;
+	margin-bottom: 5px;
+}
+
 #token-usage-container {
 	background-color: var(--vscode-input-background);
 	border: 1px solid var(--border-color);

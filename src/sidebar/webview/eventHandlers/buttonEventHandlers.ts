@@ -58,6 +58,7 @@ export function initializeButtonEventListeners(
 		attachImageButton, // Modified destructuring: rename uploadImageButton to attachImageButton
 		clearImagesButton,
 		openFileListButton, // Destructure openFileListButton
+		copyStatsButton, // Destructure copyStatsButton
 	} = elements;
 
 	// Initial icon setup for buttons
@@ -78,6 +79,7 @@ export function initializeButtonEventListeners(
 	setIconForButton(attachImageButton, faImage);
 	setIconForButton(clearImagesButton, faTimes);
 	setIconForButton(openFileListButton, faFolder);
+	setIconForButton(copyStatsButton, faCopy); // Set icon for copyStatsButton
 
 	// Send Button
 	sendButton.addEventListener("click", () => {
@@ -168,6 +170,64 @@ export function initializeButtonEventListeners(
 				elements,
 				setLoadingState
 			);
+		}
+	});
+
+	// Copy Token Statistics Button
+	copyStatsButton.addEventListener("click", async () => {
+		console.log("Copy Stats button clicked.");
+
+		if (!appState.lastFormattedTokenStats) {
+			updateStatus(
+				elements,
+				"No token statistics available to copy yet.",
+				true
+			);
+			return;
+		}
+
+		const stats = appState.lastFormattedTokenStats;
+		let statsString = `# Token Usage Statistics\n\n`;
+
+		// Overall Totals
+		statsString += `- Overall Totals:\n`;
+		statsString += `  - Total Input Tokens: ${stats.totalInput}\n`;
+		statsString += `  - Total Output Tokens: ${stats.totalOutput}\n`;
+		statsString += `  - Total Tokens: ${stats.total}\n`;
+		statsString += `  - Total Requests: ${stats.requestCount}\n`;
+		statsString += `  - Average Input Tokens/Request: ${stats.averageInput}\n`;
+		statsString += `  - Average Output Tokens/Request: ${stats.averageOutput}\n`;
+
+		// Model Usage Percentages
+		if (stats.modelUsagePercentages && stats.modelUsagePercentages.length > 0) {
+			statsString += `\n- Model Usage Percentages:\n`;
+			for (const [modelName, percentage] of stats.modelUsagePercentages) {
+				statsString += `  - ${modelName}: ${percentage.toFixed(2)}%\n`;
+			}
+		} else {
+			statsString += `\nNo specific model usage data available.\n`;
+		}
+
+		try {
+			await navigator.clipboard.writeText(statsString);
+			console.log("Token statistics copied to clipboard.");
+			updateStatus(elements, "Token statistics copied to clipboard!");
+
+			const originalTitle = copyStatsButton.title;
+			setIconForButton(copyStatsButton, faCheck);
+			copyStatsButton.title = "Copied!";
+
+			setTimeout(() => {
+				setIconForButton(copyStatsButton, faCopy);
+				copyStatsButton.title = originalTitle;
+			}, 1500);
+		} catch (err) {
+			console.error("Failed to copy token statistics: ", err);
+			let errorMessage = "Failed to copy token statistics.";
+			if (err instanceof Error && err.message) {
+				errorMessage += ` Details: ${err.message}`;
+			}
+			updateStatus(elements, errorMessage, true);
 		}
 	});
 

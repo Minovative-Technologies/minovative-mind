@@ -776,7 +776,8 @@ export class PlanService {
 							[{ role: "user", parts: [{ text: promptForAIForFunctionCall }] }],
 							[{ functionDeclarations: [generateExecutionPlanTool] }],
 							FunctionCallingMode.ANY,
-							token
+							token,
+							"plan generation via function call"
 						);
 
 					if (token.isCancellationRequested) {

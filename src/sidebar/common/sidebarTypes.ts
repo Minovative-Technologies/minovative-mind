@@ -244,16 +244,19 @@ export interface RevertCompletedMessage {
 	type: "revertCompleted";
 }
 
+export interface FormattedTokenStatistics {
+	totalInput: string;
+	totalOutput: string;
+	total: string;
+	requestCount: string;
+	averageInput: string;
+	averageOutput: string;
+	modelUsagePercentages: Array<[string, number]>;
+}
+
 export interface UpdateTokenStatisticsMessage {
 	type: "updateTokenStatistics";
-	value: {
-		totalInput: string;
-		totalOutput: string;
-		total: string;
-		requestCount: string;
-		averageInput: string;
-		averageOutput: string;
-	};
+	value: FormattedTokenStatistics;
 }
 
 export interface UpdateStreamingRelevantFilesMessage {

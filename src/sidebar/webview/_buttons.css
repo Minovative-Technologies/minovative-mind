@@ -189,6 +189,42 @@
 	font-size: 1em; /* Icon size relative to button font size */
 }
 
+#copy-stats-button {
+	margin-top: 5px;
+	padding: var(--copy-button-padding); /* Padding inside the button */
+	width: var(--copy-button-size); /* Fixed width */
+	min-width: var(--copy-button-size);
+	height: var(--copy-button-size); /* Fixed height */
+	background-color: var(
+		--vscode-button-secondaryBackground
+	); /* Subtle background */
+	border: 1px solid var(--vscode-button-border); /* Subtle border */
+	color: var(--copy-button-color); /* Icon color */
+	border-radius: var(--border-radius); /* Match parent border radius */
+	cursor: pointer;
+	display: inline-flex; /* Use flexbox to center icon */
+	align-items: center; /* Vertically center icon */
+	justify-content: center;
+	transition: background-color 0.1s ease-in-out, color 0.1s ease-in-out,
+		border-color 0.1s ease-in-out; /* Smooth transitions */
+	user-select: none; /* Prevent text selection interference */
+	font-size: 0.8em; /* Make icon slightly smaller if needed */
+}
+
+#copy-stats-button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+#copy-stats-button:active {
+	background-color: var(--vscode-button-background);
+	border-color: var(--vscode-focusBorder);
+}
+
+#copy-stats-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
 .auth-button-group {
 	display: flex;
 	gap: 10px;
