@@ -731,6 +731,7 @@ export class PlanExecutorService {
 					false,
 					formattedDiff
 				);
+
 				changeLogger.logChange({
 					filePath: step.path,
 					changeType: "modified",
@@ -869,6 +870,7 @@ export class PlanExecutorService {
 				false,
 				formattedDiff
 			);
+
 			changeLogger.logChange({
 				filePath: step.path,
 				changeType: "modified",

@@ -15,7 +15,7 @@
 
 A showcase of implementing a feature: e.g., planning, file creation, and code generation
 
-- [(Outdated but still good) Minovative Mind YouTube Showcase](https://youtu.be/f08_WgmSbUc)
+- [Minovative Mind YouTube Showcase](https://youtu.be/q8fbLxJDbW4)
 
 ---
 
@@ -24,7 +24,7 @@ A showcase of implementing a feature: e.g., planning, file creation, and code ge
 This isn't just another AI assistant. Minovative Mind is a living testament to the future of software development.
 
 > **This entire project—over 35,000 lines of robust, production-ready code—was developed with ~90% contribution from the AI agent itself (Minovative Mind), mostly using gemini-2.5-flash, with zero unit testing, no funding ($0), and by one [developer](https://github.com/Quarantiine)...**
-> Despite its size, it rivals the functionality of tools 10× its codebase
+> Despite its size (~6.48MB), it rivals the functionality of tools 10×-50x its codebase
 
 It masterfully orchestrated its own creation, architecting intricate and complex systems, generated tens of thousands of lines of code, and seamlessly integrated within VS Code's core APIs while autonomously refining its own work. The [Creator](https://github.com/Quarantiine), of this project, didn’t merely build an AI agent; He guided its self-construction, leveraging natural language and the power of the Gemini 2.5 models (Thinking Mode) to bring it to life.
 
