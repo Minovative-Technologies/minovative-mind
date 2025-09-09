@@ -102,3 +102,5 @@ For initial setup and installation, please refer to the [README.md](https://gith
 ## 6. Conclusion
 
 Minovative Mind's AI features are designed to boost your productivity and streamline your development workflow. Explore its capabilities, experiment with different prompts, and discover how AI can enhance your coding experience. We encourage your feedback to help us improve!
+
+> Built by [Daniel Ward](https://github.com/Quarantiine), a USA based developer under Minovative (Minovative = minimal-innovative) Technologies [A DBA registered self-employed company in the US]
