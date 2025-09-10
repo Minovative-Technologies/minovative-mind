@@ -633,8 +633,7 @@ export class PlanExecutorService {
 			undefined,
 			message.isPlanStepUpdate
 		);
-		// This call is intentional to ensure the UI is fully consistent with the updated chat history after each step/status update during plan execution.
-		this.postMessageToWebview(message);
+
 		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
 	}
 
