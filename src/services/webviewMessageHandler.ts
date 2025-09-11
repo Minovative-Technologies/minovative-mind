@@ -561,12 +561,12 @@ export async function handleWebviewMessage(
 
 				try {
 					await vscode.commands.executeCommand("vscode.open", absoluteFileUri);
-					provider.postMessageToWebview({
-						type: "statusUpdate",
-						value: `File opened successfully: ${path.basename(
-							absoluteFileUri.fsPath
-						)}`,
-					});
+					// provider.postMessageToWebview({
+					// 	type: "statusUpdate",
+					// 	value: `File opened successfully: ${path.basename(
+					// 		absoluteFileUri.fsPath
+					// 	)}`,
+					// });
 				} catch (openError: any) {
 					const formattedError = formatUserFacingErrorMessage(
 						openError,
