@@ -85,7 +85,8 @@ export class PlanService {
 
 		// Start a new user operation, which creates a new cancellation token source and operation ID
 		await this.provider.startUserOperation("plan");
-		const operationId = this.provider.currentActiveChatOperationId;
+		const operationId =
+			this.provider.currentActiveChatOperationId ?? "unknown-operation";
 
 		if (!this.provider.activeOperationCancellationTokenSource) {
 			console.error(
@@ -158,7 +159,10 @@ export class PlanService {
 
 			// Process URLs in user request for context
 			const urlContexts =
-				await this.urlContextService.processMessageForUrlContext(userRequest);
+				await this.urlContextService.processMessageForUrlContext(
+					userRequest,
+					operationId
+				);
 			const urlContextString =
 				this.urlContextService.formatUrlContexts(urlContexts);
 
@@ -737,10 +741,13 @@ export class PlanService {
 			const formattedRecentChanges =
 				this._formatRecentChangesForPrompt(recentChanges);
 
+			const operationId = this.provider.currentActiveChatOperationId; // Retrieve operationId
+
 			// Process URLs in the original user request for context
 			const urlContexts =
 				await this.urlContextService.processMessageForUrlContext(
-					planContext.originalUserRequest || ""
+					planContext.originalUserRequest || "",
+					operationId as string
 				);
 			const urlContextString =
 				this.urlContextService.formatUrlContexts(urlContexts);
