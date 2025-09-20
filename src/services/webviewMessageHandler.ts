@@ -877,7 +877,7 @@ export async function handleWebviewMessage(
 					}
 
 					const header =
-						historyEntry.role === "user" ? "User message" : "AI message";
+						historyEntry.role === "user" ? "User message" : "Message";
 					const finalCombinedContent = `${PRE_PROMPT_MESSAGE}\n\n${header}: ${messageContentText}\n\nFile Tree:\n${fileTreeContent}\n\nFile Content:\n${allFileContents}`;
 
 					await vscode.env.clipboard.writeText(finalCombinedContent);
