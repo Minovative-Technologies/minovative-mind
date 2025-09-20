@@ -18,17 +18,87 @@ import {
 	RunCommandStep,
 } from "../ai/workflowPlanner";
 import { generateFileChangeSummary } from "../utils/diffingUtils";
-import { FileChangeEntry } from "../types/workflow";
 import { GitConflictResolutionService } from "./gitConflictResolutionService";
 import { applyAITextEdits, cleanCodeOutput } from "../utils/codeUtils";
 import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 import { UrlContextService } from "./urlContextService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 import { executeCommand, CommandResult } from "../utils/commandExecution";
-import * as sidebarConstants from "../sidebar/common/sidebarConstants"; // Needed for DEFAULT_SIZE
+import * as sidebarConstants from "../sidebar/common/sidebarConstants";
+
+/**
+ * Interface for the configuration of a single executable command for security.
+ */
+interface ExecutableConfig {
+	allowed: boolean;
+	isHighRisk?: boolean; // e.g., python, bash, sh where direct execution is risky
+	strictArgValidation?: boolean; // For deeper path traversal, URL safety, etc.
+	allowedArgs?: string[]; // Array of regex patterns for arguments
+	requiresExplicitConfirmation?: boolean; // For commands like npx that run arbitrary packages
+	allowMetaCharacters?: boolean; // Override default for specific executables (e.g., echo)
+}
+
+/**
+ * Interface for the entire command security configuration.
+ * (No longer loaded from a file, but used for static default configuration).
+ */
+interface CommandSecurityConfig {
+	default: {
+		allowAbsolutePaths: boolean;
+		allowMetaCharacters: boolean; // Default for shell meta-characters
+	};
+	executables: {
+		[key: string]: ExecutableConfig;
+	};
+}
 
 export class PlanExecutorService {
 	private minovativeMindTerminal: vscode.Terminal | undefined;
+	// REMOVED: private commandSecurityConfig: CommandSecurityConfig | undefined;
+	// REMOVED: private configLoadedPromise: Promise<void>;
+
+	// Hardcoded default security settings
+	private static readonly DEFAULT_COMMAND_SECURITY_SETTINGS: CommandSecurityConfig =
+		{
+			default: {
+				allowAbsolutePaths: false,
+				allowMetaCharacters: false,
+			},
+			executables: {
+				git: { allowed: true },
+				npm: { allowed: true },
+				yarn: { allowed: true },
+				node: {
+					allowed: true,
+					isHighRisk: true,
+					strictArgValidation: true,
+					allowedArgs: ["^(?!-e).*$"], // Disallow `-e` (execute string as code)
+				},
+				echo: { allowed: true, allowMetaCharacters: true },
+				mkdir: { allowed: true },
+				rm: { allowed: true },
+				cp: { allowed: true },
+				mv: { allowed: true },
+				ls: { allowed: true },
+				cd: { allowed: true },
+				pwd: { allowed: true },
+				pnpm: { allowed: true },
+				npx: {
+					allowed: true,
+					requiresExplicitConfirmation: true,
+					isHighRisk: true,
+					strictArgValidation: true,
+					allowedArgs: ["^[a-zA-Z0-9-@/.]+$", "^(?!-c).*$"], // Allow typical package names, disallow `-c` (execute command string)
+				},
+				python: {
+					allowed: false, // Disallowed by default for high risk
+					isHighRisk: true,
+					strictArgValidation: true,
+				},
+				bash: { allowed: false, isHighRisk: true, strictArgValidation: true },
+				sh: { allowed: false, isHighRisk: true, strictArgValidation: true },
+			},
+		};
 
 	constructor(
 		private provider: SidebarProvider,
@@ -38,7 +108,11 @@ export class PlanExecutorService {
 		private enhancedCodeGenerator: EnhancedCodeGenerator,
 		private gitConflictResolutionService: GitConflictResolutionService,
 		private readonly MAX_TRANSIENT_STEP_RETRIES: number
-	) {}
+	) {
+		// REMOVED: this.configLoadedPromise = this._loadCommandSecurityConfig();
+	}
+
+	// REMOVED: private async _loadCommandSecurityConfig(): Promise<void> { ... }
 
 	private getOrCreateTerminal(): vscode.Terminal {
 		if (
@@ -48,20 +122,17 @@ export class PlanExecutorService {
 			return this.minovativeMindTerminal;
 		}
 
-		// Look for an existing terminal named "Minovative Mind Commands"
 		this.minovativeMindTerminal = vscode.window.terminals.find(
 			(t) => t.name === "Minovative Mind Commands"
 		);
 
 		if (!this.minovativeMindTerminal) {
-			// If not found, create a new one
 			this.minovativeMindTerminal = vscode.window.createTerminal({
 				name: "Minovative Mind Commands",
-				cwd: this.workspaceRootUri.fsPath, // Set working directory to workspace root
+				cwd: this.workspaceRootUri.fsPath,
 			});
 		}
 
-		// Make it visible without stealing focus
 		this.minovativeMindTerminal.show(true);
 		return this.minovativeMindTerminal;
 	}
@@ -76,13 +147,11 @@ export class PlanExecutorService {
 
 		const rootUri = this.workspaceRootUri;
 
-		// Notify webview that plan execution is starting - this will hide the stop button
 		this.postMessageToWebview({
 			type: "updateLoadingState",
 			value: true,
 		});
 
-		// Notify webview that plan execution has started
 		this.postMessageToWebview({
 			type: "planExecutionStarted",
 		});
@@ -126,7 +195,6 @@ export class PlanExecutorService {
 							originalRootInstruction
 						);
 
-						// If _executePlanSteps completes without throwing and token not cancelled, it's a success
 						if (!combinedToken.isCancellationRequested) {
 							this.provider.currentExecutionOutcome = "success";
 						} else {
@@ -158,7 +226,6 @@ export class PlanExecutorService {
 			this.provider.activeChildProcesses = [];
 			await this.provider.setPlanExecutionActive(false);
 
-			// 1. Determine the final outcome, defaulting to 'failed' if undefined.
 			let outcome: sidebarTypes.ExecutionOutcome;
 			if (this.provider.currentExecutionOutcome === undefined) {
 				outcome = "failed";
@@ -167,27 +234,22 @@ export class PlanExecutorService {
 					.currentExecutionOutcome as sidebarTypes.ExecutionOutcome;
 			}
 
-			// Use the provider's notification method to avoid duplicate notifications
 			await this.provider.showPlanCompletionNotification(
 				plan.planDescription || "Unnamed Plan",
 				outcome
 			);
 
-			// Notify webview that plan execution has ended - this will re-enable inputs and show stop button if needed
 			this.postMessageToWebview({
 				type: "updateLoadingState",
 				value: false,
 			});
 
-			// Notify webview that plan execution has ended
 			this.postMessageToWebview({
 				type: "planExecutionEnded",
 			});
 
-			// Centralized call to end user operation and re-enable inputs
 			await this.provider.endUserOperation(outcome);
 
-			// 2. Construct a planSummary string
 			let planSummary: string;
 			const baseDescription = plan.planDescription || "AI Plan Execution";
 			if (outcome === "success") {
@@ -195,33 +257,26 @@ export class PlanExecutorService {
 			} else if (outcome === "cancelled") {
 				planSummary = `${baseDescription} (Cancelled)`;
 			} else {
-				// outcome === 'failed'
 				planSummary = `${baseDescription} (Failed)`;
 			}
 
-			// 3. Call saveChangesAsLastCompletedPlan regardless of the outcome
 			this.provider.changeLogger.saveChangesAsLastCompletedPlan(planSummary);
 
-			// 4. Update the persistent storage with all completed plan change sets
 			await this.provider.updatePersistedCompletedPlanChangeSets(
 				this.provider.changeLogger.getCompletedPlanChangeSets()
 			);
 
-			// 5. Post the planExecutionFinished message
 			this.postMessageToWebview({
 				type: "planExecutionFinished",
 				hasRevertibleChanges: this.provider.completedPlanChangeSets.length > 0,
 			});
 
-			// 6. Crucially, clear the in-memory log buffer for the next operation AFTER saving the changes
 			this.provider.changeLogger.clear();
 
-			// This should remain at the end of the finally block
 			this.postMessageToWebview({ type: "resetCodeStreamingArea" });
 		}
 	}
 
-	// --- Moved private handler methods ---
 	private async _executePlanSteps(
 		steps: PlanStep[],
 		rootUri: vscode.Uri,
@@ -232,7 +287,7 @@ export class PlanExecutorService {
 	): Promise<Set<vscode.Uri>> {
 		const affectedFileUris = new Set<vscode.Uri>();
 		const totalSteps = steps.length;
-		const { changeLogger } = this.provider; // Access changeLogger via provider
+		const { changeLogger } = this.provider;
 
 		let index = 0;
 		while (index < totalSteps) {
@@ -240,20 +295,17 @@ export class PlanExecutorService {
 			let currentStepCompletedSuccessfullyOrSkipped = false;
 			let currentTransientAttempt = 0;
 
-			// Move formatting utility call outside the inner retry loop
 			const relevantSnippets = await this._formatRelevantFilesForPrompt(
 				context.relevantFiles ?? [],
 				rootUri,
 				combinedToken
 			);
 
-			// Inner loop for auto-retries and user intervention for the *current* step
 			while (!currentStepCompletedSuccessfullyOrSkipped) {
 				if (combinedToken.isCancellationRequested) {
 					throw new Error(ERROR_OPERATION_CANCELLED);
 				}
 
-				// Start of detailedStepDescription logic
 				const detailedStepDescription = this._getStepDescription(
 					step,
 					index,
@@ -293,7 +345,7 @@ export class PlanExecutorService {
 							relevantSnippets,
 							affectedFileUris,
 							changeLogger,
-							this.provider.settingsManager, // Access settingsManager via provider
+							this.provider.settingsManager,
 							combinedToken
 						);
 					} else if (isRunCommandStep(step)) {
@@ -308,7 +360,6 @@ export class PlanExecutorService {
 							combinedToken
 						);
 						if (!commandSuccess) {
-							// If command failed, re-throw to outer error handler
 							throw new Error(
 								`Command execution failed for '${step.command}'.`
 							);
@@ -357,14 +408,12 @@ export class PlanExecutorService {
 							`Minovative Mind: User chose to skip Step ${index + 1}.`
 						);
 					} else {
-						// 'cancel' or unknown
 						throw new Error(ERROR_OPERATION_CANCELLED);
 					}
 				}
-			} // End of inner `while (!currentStepCompletedSuccessfullyOrSkipped)` loop
-
+			}
 			index++;
-		} // End of outer `while (index < totalSteps)` loop
+		}
 		return affectedFileUris;
 	}
 
@@ -438,7 +487,6 @@ export class PlanExecutorService {
 		isError: boolean = false,
 		diffContent?: string
 	): void {
-		// Construct the message object to be sent to both history and webview
 		const appendMessage: sidebarTypes.AppendRealtimeModelMessage = {
 			type: "appendRealtimeModelMessage",
 			value: {
@@ -449,10 +497,8 @@ export class PlanExecutorService {
 			diffContent: diffContent,
 		};
 
-		// Use the internal helper to post to webview AND add to chat history
 		this._postChatUpdateForPlanExecution(appendMessage);
 
-		// Keep console logs for internal debugging, separate from UI/history updates
 		if (isError) {
 			console.error(`Minovative Mind: ${message}`);
 		} else {
@@ -486,8 +532,8 @@ export class PlanExecutorService {
 			errorMsg.includes("network issue") ||
 			errorMsg.includes("AI service unavailable") ||
 			errorMsg.includes("timeout") ||
-			errorMsg.includes("parsing failed") || // Added for streaming parsing errors
-			errorMsg.includes("overloaded") // Added for Gemini overload errors
+			errorMsg.includes("parsing failed") ||
+			errorMsg.includes("overloaded")
 		) {
 			isRetryableTransientError = true;
 		}
@@ -546,7 +592,7 @@ export class PlanExecutorService {
 		}
 
 		const formattedSnippets: string[] = [];
-		const maxFileSizeForSnippet = sidebarConstants.DEFAULT_SIZE; // Access sidebarConstants
+		const maxFileSizeForSnippet = sidebarConstants.DEFAULT_SIZE;
 
 		for (const relativePath of relevantFiles) {
 			if (token.isCancellationRequested) {
@@ -557,10 +603,8 @@ export class PlanExecutorService {
 			let fileContent: string | null = null;
 			let languageId = path.extname(relativePath).substring(1);
 			if (!languageId) {
-				// Fallback for files without extension (e.g., Dockerfile, LICENSE)
 				languageId = path.basename(relativePath).toLowerCase();
 			}
-			// Special handling for common files without extensions where syntax highlighting is helpful
 			if (languageId === "makefile") {
 				languageId = "makefile";
 			} else if (languageId === "dockerfile") {
@@ -580,12 +624,10 @@ export class PlanExecutorService {
 			try {
 				const fileStat = await vscode.workspace.fs.stat(fileUri);
 
-				// Skip directories
 				if (fileStat.type === vscode.FileType.Directory) {
 					continue;
 				}
 
-				// Skip files larger than maxFileSizeForSnippet
 				if (fileStat.size > maxFileSizeForSnippet) {
 					console.warn(
 						`[MinovativeMind] Skipping relevant file '${relativePath}' (size: ${fileStat.size} bytes) due to size limit for prompt inclusion.`
@@ -603,7 +645,6 @@ export class PlanExecutorService {
 				const contentBuffer = await vscode.workspace.fs.readFile(fileUri);
 				const content = Buffer.from(contentBuffer).toString("utf8");
 
-				// Basic heuristic for binary files: check for null characters
 				if (content.includes("\0")) {
 					console.warn(
 						`[MinovativeMind] Skipping relevant file '${relativePath}' as it appears to be binary.`
@@ -624,7 +665,6 @@ export class PlanExecutorService {
 						`[MinovativeMind] Relevant file not found: '${relativePath}'. Skipping.`
 					);
 				} else if (error.message.includes("is not a file")) {
-					// This can happen if fileUri points to a directory
 					console.warn(
 						`[MinovativeMind] Skipping directory '${relativePath}' as a relevant file.`
 					);
@@ -687,7 +727,7 @@ export class PlanExecutorService {
 		totalSteps: number,
 		rootUri: vscode.Uri,
 		context: sidebarTypes.PlanGenerationContext,
-		relevantSnippets: string, // Passed from outer loop
+		relevantSnippets: string,
 		affectedFileUris: Set<vscode.Uri>,
 		changeLogger: SidebarProvider["changeLogger"],
 		combinedToken: vscode.CancellationToken
@@ -705,7 +745,6 @@ export class PlanExecutorService {
 
 			const generatedResult =
 				await this.enhancedCodeGenerator.generateFileContent(
-					// Use injected enhancedCodeGenerator
 					step.path,
 					step.generate_prompt,
 					generationContext,
@@ -820,7 +859,7 @@ export class PlanExecutorService {
 		totalSteps: number,
 		rootUri: vscode.Uri,
 		context: sidebarTypes.PlanGenerationContext,
-		relevantSnippets: string, // Passed from outer loop
+		relevantSnippets: string,
 		affectedFileUris: Set<vscode.Uri>,
 		changeLogger: SidebarProvider["changeLogger"],
 		settingsManager: SidebarProvider["settingsManager"],
@@ -840,7 +879,6 @@ export class PlanExecutorService {
 
 		let modifiedContent = (
 			await this.enhancedCodeGenerator.modifyFileContent(
-				// Use injected enhancedCodeGenerator
 				step.path,
 				step.modification_prompt,
 				existingContent,
@@ -885,7 +923,7 @@ export class PlanExecutorService {
 				context.editorContext &&
 				fileUri.toString() === context.editorContext.documentUri.toString()
 			) {
-				await this.gitConflictResolutionService.unmarkFileAsResolved(fileUri); // Use injected gitConflictResolutionService
+				await this.gitConflictResolutionService.unmarkFileAsResolved(fileUri);
 			}
 
 			this._logStepProgress(
@@ -918,6 +956,224 @@ export class PlanExecutorService {
 		}
 	}
 
+	/**
+	 * Parses a command line string into an executable and an array of arguments,
+	 * respecting single and double quotes.
+	 * @param commandLine The full command string.
+	 * @returns An object containing the executable and arguments.
+	 */
+	private _parseCommandArguments(commandLine: string): {
+		executable: string;
+		args: string[];
+	} {
+		const tokens: string[] = [];
+		const commandRegex = /"([^"]*)"|'([^']*)'|[^\s"']+/g;
+		let match;
+		while ((match = commandRegex.exec(commandLine)) !== null) {
+			tokens.push(match[1] || match[2] || match[0]);
+		}
+		const executable = tokens.length > 0 ? tokens[0] : "";
+		const args = tokens.slice(1);
+		return { executable, args };
+	}
+
+	/**
+	 * Formats an argument for human-readable display in a prompt.
+	 * Encloses arguments with spaces or quotes in single quotes, escaping internal single quotes.
+	 * @param arg The argument string.
+	 * @returns The display-ready argument string.
+	 */
+	private _sanitizeArgumentForDisplay(arg: string): string {
+		if (arg.includes(" ") || arg.includes("'") || arg.includes('"')) {
+			return `'${arg.replace(/'/g, "'\\''")}'`;
+		}
+		return arg;
+	}
+
+	/**
+	 * Performs strict validation and allowlisting on the command and its arguments.
+	 * Throws an error if the command is deemed unsafe or violates policy.
+	 * @param executable The main command executable.
+	 * @param args The arguments to the command.
+	 * @param originalCommandString The full, original command string as provided by the AI.
+	 * @returns The effective ExecutableConfig for the given executable.
+	 */
+	private async _isCommandSafe(
+		executable: string,
+		args: string[],
+		originalCommandString: string
+	): Promise<ExecutableConfig> {
+		const config = PlanExecutorService.DEFAULT_COMMAND_SECURITY_SETTINGS;
+
+		if (!executable) {
+			throw new Error(
+				"Command security violation: Executable cannot be empty."
+			);
+		}
+
+		const lowerExecutable = executable.toLowerCase();
+		const defaultExecConfig: ExecutableConfig = { allowed: false };
+		const executableConfig = config.executables[lowerExecutable];
+		const effectiveExecConfig = executableConfig || defaultExecConfig;
+
+		if (!effectiveExecConfig.allowed) {
+			throw new Error(
+				`Command security violation: Executable '${executable}' is explicitly disallowed or not in the allowlist.`
+			);
+		}
+
+		// Absolute Path Handling: Disallow if default doesn't allow
+		const isAbsolutePath = path.isAbsolute(executable);
+		if (isAbsolutePath) {
+			if (!config.default.allowAbsolutePaths) {
+				throw new Error(
+					`Command security violation: Absolute path executable '${executable}' is disallowed by default for security reasons.`
+				);
+			}
+		}
+
+		// Check for dangerous shell meta-characters
+		const allowsMetaChars =
+			effectiveExecConfig.allowMetaCharacters ||
+			config.default.allowMetaCharacters;
+		if (!allowsMetaChars) {
+			const dangerousShellMetaChars = [
+				"&&",
+				"||",
+				";",
+				"`",
+				"$(",
+				">",
+				"<",
+				"|",
+				"&",
+				"\\",
+			];
+
+			const containsDangerousChars = dangerousShellMetaChars.some((char) =>
+				originalCommandString.includes(char)
+			);
+			if (containsDangerousChars) {
+				throw new Error(
+					`Command security violation: Detected potentially dangerous shell meta-characters ` +
+						`('${dangerousShellMetaChars
+							.filter((c) => originalCommandString.includes(c))
+							.join("', '")}') ` +
+						`in the command string. For safety, complex shell scripting or injection attempts via plan commands are prohibited. ` +
+						`If this is a legitimate command, ensure all special characters are properly quoted or escaped.`
+				);
+			}
+		}
+
+		// Specific checks for dangerous commands/arguments (like rm, git)
+		if (lowerExecutable === "rm") {
+			if (
+				args.some(
+					(arg) =>
+						arg.toLowerCase().includes("-rf") ||
+						arg === "/" ||
+						arg === "/*" ||
+						arg === "./*" ||
+						arg === "*"
+				)
+			) {
+				throw new Error(
+					`Command security violation: Potentially dangerous 'rm' operation detected (e.g., -rf, /, /*, *). Full system deletion commands are prohibited.`
+				);
+			}
+		} else if (lowerExecutable === "git") {
+			if (
+				(args.includes("reset") &&
+					(args.includes("--hard") || args.includes("--force"))) ||
+				(args.includes("clean") &&
+					(args.includes("-f") || args.includes("--force")))
+			) {
+				throw new Error(
+					`Command security violation: Potentially dangerous 'git reset --hard' or 'git clean --force' detected. This can lead to irreversible data loss.`
+				);
+			}
+		} else if (["npm", "yarn", "pnpm"].includes(lowerExecutable)) {
+			if (args.includes("exec") || args.includes("dlx")) {
+				if (lowerExecutable !== "npx") {
+					throw new Error(
+						`Command security violation: '${executable} exec/dlx' can run arbitrary code and is not allowed.`
+					);
+				}
+			}
+		}
+
+		// Enhanced Argument Validation for high-risk commands or those with strictArgValidation
+		if (effectiveExecConfig.strictArgValidation) {
+			this._validateArgumentsStrictly(
+				lowerExecutable,
+				args,
+				effectiveExecConfig.allowedArgs
+			);
+		} else if (
+			effectiveExecConfig.allowedArgs &&
+			effectiveExecConfig.allowedArgs.length > 0
+		) {
+			for (const arg of args) {
+				const isArgAllowed = effectiveExecConfig.allowedArgs.some((pattern) =>
+					new RegExp(pattern).test(arg)
+				);
+				if (!isArgAllowed) {
+					throw new Error(
+						`Command security violation: Argument '${arg}' for '${executable}' does not match any allowed patterns.`
+					);
+				}
+			}
+		}
+
+		return effectiveExecConfig;
+	}
+
+	/**
+	 * Performs deeper, stricter argument validation for commands marked with `strictArgValidation`.
+	 * Checks for path traversal, basic URL safety, and dangerous argument characters.
+	 * @param executable The command executable.
+	 * @param args The arguments to validate.
+	 * @param allowedPatterns Optional array of regex patterns to specifically allow/disallow arguments.
+	 */
+	private _validateArgumentsStrictly(
+		executable: string,
+		args: string[],
+		allowedPatterns?: string[]
+	): void {
+		for (const arg of args) {
+			if (arg.includes("../") || arg.includes("/..")) {
+				throw new Error(
+					`Command security violation: Path traversal detected in argument '${arg}' for '${executable}'.`
+				);
+			}
+
+			if (arg.match(/^(http|https):\/\/[^\s$.?#].[^\s]*$/i)) {
+				console.warn(
+					`Command security warning: URL '${arg}' detected in arguments for '${executable}'. ` +
+						`Ensure this URL is trusted for this command.`
+				);
+			}
+
+			if (allowedPatterns && allowedPatterns.length > 0) {
+				const isArgAllowed = allowedPatterns.some((pattern) =>
+					new RegExp(pattern).test(arg)
+				);
+				if (!isArgAllowed) {
+					throw new Error(
+						`Command security violation: Argument '${arg}' for '${executable}' does not match any allowed patterns.`
+					);
+				}
+			}
+
+			const dangerousArgChars = ["`", "$("];
+			if (dangerousArgChars.some((char) => arg.includes(char))) {
+				throw new Error(
+					`Command security violation: Potentially dangerous command substitution character in argument '${arg}' for '${executable}'.`
+				);
+			}
+		}
+	}
+
 	private async _handleRunCommandStep(
 		step: RunCommandStep,
 		index: number,
@@ -928,27 +1184,120 @@ export class PlanExecutorService {
 		originalRootInstruction: string,
 		combinedToken: vscode.CancellationToken
 	): Promise<boolean> {
+		const commandString = step.command.trim();
+
+		const { executable, args } = this._parseCommandArguments(commandString);
+
+		let effectiveExecConfig: ExecutableConfig;
+		try {
+			effectiveExecConfig = await this._isCommandSafe(
+				executable,
+				args,
+				commandString
+			);
+		} catch (validationError: any) {
+			this._logStepProgress(
+				index + 1,
+				totalSteps,
+				`Command blocked: ${validationError.message}`,
+				0,
+				0,
+				true
+			);
+			if (
+				this.minovativeMindTerminal &&
+				!this.minovativeMindTerminal.exitStatus
+			) {
+				this.minovativeMindTerminal.sendText(
+					`\nERROR: Command Blocked - ${validationError.message}\n`,
+					true
+				);
+			}
+			throw new Error(`Command blocked: ${validationError.message}`);
+		}
+
+		const displayCommand = [
+			executable,
+			...args.map(this._sanitizeArgumentForDisplay),
+		].join(" ");
+
+		let promptMessage = `The plan wants to run this command:\n\n\`${displayCommand}.\`\n\n`;
+		let modalPrompt = false;
+
+		if (
+			effectiveExecConfig.requiresExplicitConfirmation ||
+			effectiveExecConfig.isHighRisk
+		) {
+			modalPrompt = true;
+			promptMessage += `\n\n🚨 CRITICAL SECURITY ALERT: Are you absolutely sure you want to allow this?`;
+		} else {
+			promptMessage += `\n\n⚠️ WARNING: Please review it carefully. Ensure you trust its source and content before proceeding.`;
+		}
+		promptMessage += `\nAllow?`;
+
+		// Add console log before showing the warning message
+		console.log(
+			"Minovative Mind: About to display command execution prompt..."
+		);
+
 		const userChoice = await vscode.window.showWarningMessage(
-			`The plan wants to run a command: \`${step.command}\`\n\nAllow?`,
-			{ modal: true },
+			promptMessage,
+			{ modal: modalPrompt },
 			"Allow",
 			"Skip"
 		);
+
+		// Add console log after capturing user choice
+		console.log(`Minovative Mind: User choice for command: 
+${displayCommand}
+ is: 
+${userChoice}`);
+
+		// Check for cancellation immediately after capturing userChoice
+		if (combinedToken.isCancellationRequested) {
+			throw new Error(ERROR_OPERATION_CANCELLED);
+		}
+
+		// Handle undefined userChoice (prompt dismissed)
+		if (userChoice === undefined) {
+			console.log(
+				"Minovative Mind: User prompt dismissed without selection; treating as skip."
+			);
+			this._logStepProgress(
+				index + 1,
+				totalSteps,
+				`Step SKIPPED by user (prompt dismissed).`,
+				0,
+				0
+			);
+			if (
+				this.minovativeMindTerminal &&
+				!this.minovativeMindTerminal.exitStatus
+			) {
+				this.minovativeMindTerminal.sendText(
+					`\necho --- Command SKIPPED (prompt dismissed): ${displayCommand} ---\n`,
+					true
+				);
+			}
+			return true;
+		}
+
 		if (userChoice === "Allow") {
 			const terminal = this.getOrCreateTerminal();
-			terminal.sendText(`${step.command}\n`); // Directly send the command to the terminal
+			terminal.sendText(`${commandString}\n`);
 
 			try {
 				const commandResult: CommandResult = await executeCommand(
-					step.command,
+					executable,
+					args,
 					rootUri.fsPath,
 					combinedToken,
 					this.provider.activeChildProcesses,
-					terminal // Pass the terminal instance
+					terminal
 				);
 
 				if (commandResult.exitCode !== 0) {
-					const errorMessage = `Command \`${step.command}\` failed with exit code ${commandResult.exitCode}.
+					const errorMessage = `Command \`${displayCommand}\` failed with exit code ${commandResult.exitCode}.
                                     \n--- STDOUT ---\n${commandResult.stdout}
                                     \n--- STDERR ---\n${commandResult.stderr}`;
 
@@ -967,16 +1316,16 @@ export class PlanExecutorService {
 						!this.minovativeMindTerminal.exitStatus
 					) {
 						this.minovativeMindTerminal.sendText(
-							`\necho --- Command FAILED: ${step.command} (Exit Code: ${commandResult.exitCode}) ---\n`,
+							`\necho --- Command FAILED: ${displayCommand} (Exit Code: ${commandResult.exitCode}) ---\n`,
 							false
 						);
 					}
 
 					throw new Error(
-						`Command '${step.command}' failed. Output: ${errorMessage}`
+						`Command '${displayCommand}' failed. Output: ${errorMessage}`
 					);
 				} else {
-					const successMessage = `Command \`${step.command}\` executed successfully.
+					const successMessage = `Command \`${displayCommand}\` executed successfully.
                                     \n--- STDOUT ---\n${commandResult.stdout}
                                     \n--- STDERR ---\n${commandResult.stderr}`;
 
@@ -994,7 +1343,7 @@ export class PlanExecutorService {
 						!this.minovativeMindTerminal.exitStatus
 					) {
 						this.minovativeMindTerminal.sendText(
-							`\necho --- Command SUCCEEDED: ${step.command} ---\n`,
+							`\necho --- Command SUCCEEDED: ${displayCommand} ---\n`,
 							false
 						);
 					}
@@ -1004,7 +1353,7 @@ export class PlanExecutorService {
 				if (commandExecError.message === ERROR_OPERATION_CANCELLED) {
 					throw commandExecError;
 				}
-				let detailedError = `Error executing command \`${step.command}\`: ${commandExecError.message}`;
+				let detailedError = `Error executing command \`${displayCommand}\`: ${commandExecError.message}`;
 				this._logStepProgress(index + 1, totalSteps, detailedError, 0, 0, true);
 
 				if (
@@ -1014,11 +1363,12 @@ export class PlanExecutorService {
 					this.minovativeMindTerminal.sendText(
 						`\nERROR: ${detailedError}\n`,
 						true
-					); // Log errors to the terminal
+					);
 				}
-				throw commandExecError; // Re-throw to be caught by the step retry loop
+				throw commandExecError;
 			}
 		} else {
+			// userChoice is "Skip"
 			this._logStepProgress(
 				index + 1,
 				totalSteps,
@@ -1031,11 +1381,11 @@ export class PlanExecutorService {
 				!this.minovativeMindTerminal.exitStatus
 			) {
 				this.minovativeMindTerminal.sendText(
-					`\necho --- Command SKIPPED: ${step.command} ---\n`,
+					`\necho --- Command SKIPPED: ${displayCommand} ---\n`,
 					true
-				); // Inform about skipped command
+				);
 			}
-			return true; // Command was skipped, consider it successfully handled for this step's flow
+			return true;
 		}
 	}
 }

@@ -15,7 +15,7 @@ import { scanWorkspace } from "../context/workspaceScanner";
 import { createAsciiTree } from "../utils/treeFormatter";
 
 export const PRE_PROMPT_MESSAGE =
-	"You are an expert software engineer. Your task is to provide production-ready code that is robust, maintainable, secure, clean, efficient, and follows industry best practices. No placeholders, no todo comments";
+	"You are an expert software engineer. Your task is to provide production-ready code that is robust, maintainable, secure, clean, efficient, and follows industry best practices. No placeholders, no todo comments. Focus on implementing the following feature/enhancement from the message instructions below.";
 
 export async function handleWebviewMessage(
 	data: any,
