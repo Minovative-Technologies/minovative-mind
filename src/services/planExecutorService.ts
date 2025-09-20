@@ -28,6 +28,8 @@ import { executeCommand, CommandResult } from "../utils/commandExecution";
 import * as sidebarConstants from "../sidebar/common/sidebarConstants"; // Needed for DEFAULT_SIZE
 
 export class PlanExecutorService {
+	private minovativeMindTerminal: vscode.Terminal | undefined;
+
 	constructor(
 		private provider: SidebarProvider,
 		private workspaceRootUri: vscode.Uri,
@@ -37,6 +39,32 @@ export class PlanExecutorService {
 		private gitConflictResolutionService: GitConflictResolutionService,
 		private readonly MAX_TRANSIENT_STEP_RETRIES: number
 	) {}
+
+	private getOrCreateTerminal(): vscode.Terminal {
+		if (
+			this.minovativeMindTerminal &&
+			!this.minovativeMindTerminal.exitStatus
+		) {
+			return this.minovativeMindTerminal;
+		}
+
+		// Look for an existing terminal named "Minovative Mind Commands"
+		this.minovativeMindTerminal = vscode.window.terminals.find(
+			(t) => t.name === "Minovative Mind Commands"
+		);
+
+		if (!this.minovativeMindTerminal) {
+			// If not found, create a new one
+			this.minovativeMindTerminal = vscode.window.createTerminal({
+				name: "Minovative Mind Commands",
+				cwd: this.workspaceRootUri.fsPath, // Set working directory to workspace root
+			});
+		}
+
+		// Make it visible without stealing focus
+		this.minovativeMindTerminal.show(true);
+		return this.minovativeMindTerminal;
+	}
 
 	public async executePlan(
 		plan: ExecutionPlan,
@@ -907,12 +935,16 @@ export class PlanExecutorService {
 			"Skip"
 		);
 		if (userChoice === "Allow") {
+			const terminal = this.getOrCreateTerminal();
+			terminal.sendText(`${step.command}\n`); // Directly send the command to the terminal
+
 			try {
 				const commandResult: CommandResult = await executeCommand(
 					step.command,
 					rootUri.fsPath,
 					combinedToken,
-					this.provider.activeChildProcesses // Access activeChildProcesses via provider
+					this.provider.activeChildProcesses,
+					terminal // Pass the terminal instance
 				);
 
 				if (commandResult.exitCode !== 0) {
@@ -929,6 +961,16 @@ export class PlanExecutorService {
 						true,
 						errorMessage
 					);
+
+					if (
+						this.minovativeMindTerminal &&
+						!this.minovativeMindTerminal.exitStatus
+					) {
+						this.minovativeMindTerminal.sendText(
+							`\necho --- Command FAILED: ${step.command} (Exit Code: ${commandResult.exitCode}) ---\n`,
+							false
+						);
+					}
 
 					throw new Error(
 						`Command '${step.command}' failed. Output: ${errorMessage}`
@@ -947,6 +989,15 @@ export class PlanExecutorService {
 						false,
 						successMessage
 					);
+					if (
+						this.minovativeMindTerminal &&
+						!this.minovativeMindTerminal.exitStatus
+					) {
+						this.minovativeMindTerminal.sendText(
+							`\necho --- Command SUCCEEDED: ${step.command} ---\n`,
+							false
+						);
+					}
 					return true;
 				}
 			} catch (commandExecError: any) {
@@ -955,6 +1006,16 @@ export class PlanExecutorService {
 				}
 				let detailedError = `Error executing command \`${step.command}\`: ${commandExecError.message}`;
 				this._logStepProgress(index + 1, totalSteps, detailedError, 0, 0, true);
+
+				if (
+					this.minovativeMindTerminal &&
+					!this.minovativeMindTerminal.exitStatus
+				) {
+					this.minovativeMindTerminal.sendText(
+						`\nERROR: ${detailedError}\n`,
+						true
+					); // Log errors to the terminal
+				}
 				throw commandExecError; // Re-throw to be caught by the step retry loop
 			}
 		} else {
@@ -965,6 +1026,15 @@ export class PlanExecutorService {
 				0,
 				0
 			);
+			if (
+				this.minovativeMindTerminal &&
+				!this.minovativeMindTerminal.exitStatus
+			) {
+				this.minovativeMindTerminal.sendText(
+					`\necho --- Command SKIPPED: ${step.command} ---\n`,
+					true
+				); // Inform about skipped command
+			}
 			return true; // Command was skipped, consider it successfully handled for this step's flow
 		}
 	}

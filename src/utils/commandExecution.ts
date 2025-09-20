@@ -1,5 +1,6 @@
 import { ChildProcess, spawn } from "child_process";
 import * as vscode from "vscode";
+import { Readable } from "stream";
 
 /**
  * Interface for the result object returned by the executeCommand function.
@@ -25,6 +26,7 @@ export interface CommandResult {
  * @param {vscode.CancellationToken} token - A VS Code CancellationToken to observe for cancellation requests.
  * @param {ChildProcess[]} activeChildProcesses - An array to which the spawned ChildProcess will be added
  *   and from which it will be removed. This allows for global management of active child processes.
+ * @param {vscode.Terminal} [vscodeTerminal] - An optional VS Code terminal to which stdout/stderr will be piped in real-time.
  * @returns {Promise<CommandResult>} A Promise that resolves with an object containing
  *   `stdout`, `stderr`, and `exitCode`. The Promise will reject only if the command
  *   fails to spawn (e.g., command not found, permissions error).
@@ -39,7 +41,8 @@ export async function executeCommand(
 	commandString: string,
 	cwd: string,
 	token: vscode.CancellationToken,
-	activeChildProcesses: ChildProcess[]
+	activeChildProcesses: ChildProcess[],
+	vscodeTerminal?: vscode.Terminal // New optional parameter
 ): Promise<CommandResult> {
 	const stdoutChunks: Buffer[] = [];
 	const stderrChunks: Buffer[] = [];
@@ -61,28 +64,46 @@ export async function executeCommand(
 			disposable.dispose(); // Dispose of the cancellation listener to prevent memory leaks
 		};
 
+		// Helper function to pipe stream data to internal chunks and optionally to VS Code terminal
+		const pipeStreamToTerminal = (
+			stream: Readable | null,
+			chunkBuffer: Buffer[],
+			streamName: "stdout" | "stderr"
+		): void => {
+			if (!stream) {
+				return;
+			}
+			stream.on("data", (data: Buffer) => {
+				chunkBuffer.push(data); // Always collect data into chunks
+				if (vscodeTerminal && !vscodeTerminal.dispose) {
+					const textData = data.toString("utf8");
+					// Pipe to terminal without adding new line by default,
+					// as data can be fragmented. Newlines will come from the stream itself.
+					vscodeTerminal.sendText(textData, false);
+				}
+			});
+		};
+
 		// Register a listener for cancellation requests from the VS Code token
 		const disposable: vscode.Disposable = token.onCancellationRequested(() => {
 			if (!child.killed) {
-				console.log(
-					`Command execution cancelled. Killing process PID: ${
-						child.pid ?? "N/A"
-					} for command: "${commandString}"`
-				);
+				const cancelMsg = `Command execution cancelled. Killing process PID: ${
+					child.pid ?? "N/A"
+				} for command: "${commandString}"`;
+				console.log(cancelMsg);
+				if (vscodeTerminal && !vscodeTerminal.dispose) {
+					vscodeTerminal.sendText(cancelMsg + "\r\n", true);
+				}
 				cancellationInitiatedByToken = true; // Mark that cancellation was initiated by our token
 				child.kill(); // Send SIGTERM to the child process
 			}
 		});
 
-		// Collect stdout data chunks
-		child.stdout?.on("data", (data: Buffer) => {
-			stdoutChunks.push(data);
-		});
+		// Collect stdout data chunks and optionally pipe to terminal
+		pipeStreamToTerminal(child.stdout, stdoutChunks, "stdout");
 
-		// Collect stderr data chunks
-		child.stderr?.on("data", (data: Buffer) => {
-			stderrChunks.push(data);
-		});
+		// Collect stderr data chunks and optionally pipe to terminal
+		pipeStreamToTerminal(child.stderr, stderrChunks, "stderr");
 
 		// Handle errors that occur during spawning or execution of the command
 		// This event is typically emitted if the command cannot be found, permissions are denied, etc.
@@ -95,6 +116,10 @@ export async function executeCommand(
 				errorMessage,
 				err
 			);
+			if (vscodeTerminal && !vscodeTerminal.dispose) {
+				// Ensure error messages are visible with a newline
+				vscodeTerminal.sendText(`Error: ${errorMessage}\r\n`, true);
+			}
 			cleanup(); // Ensure cleanup even if the process failed to spawn
 			reject(new Error(errorMessage)); // Reject the promise as the command couldn't even start
 		});
@@ -106,13 +131,20 @@ export async function executeCommand(
 			const stderr: string = Buffer.concat(stderrChunks).toString("utf8");
 			const exitCode: number | null = code;
 
-			console.log(
-				`Command finished [PID: ${
-					child.pid ?? "N/A"
-				}] for command: "${commandString}" with exit code: ${exitCode}, signal: ${
-					signal ?? "N/A"
-				}`
-			);
+			const closeLogMessage = `Command finished [PID: ${
+				child.pid ?? "N/A"
+			}] for command: "${commandString}" with exit code: ${exitCode}, signal: ${
+				signal ?? "N/A"
+			}`;
+			console.log(closeLogMessage);
+			if (vscodeTerminal && !vscodeTerminal.dispose) {
+				vscodeTerminal.sendText(closeLogMessage + "\r\n", true);
+				if (stderr && !cancellationInitiatedByToken) {
+					// Only log stderr summary to terminal if not cancelled, as raw stream would have already shown it
+					vscodeTerminal.sendText(`--- STDERR ---\r\n${stderr}\r\n`, true);
+				}
+			}
+
 			if (stderr) {
 				// Log stderr output, especially if the command was not explicitly cancelled.
 				// During cancellation, stderr might contain irrelevant output as process is abruptly stopped.
@@ -128,11 +160,13 @@ export async function executeCommand(
 			if (cancellationInitiatedByToken || token.isCancellationRequested) {
 				// If cancellation was initiated by our token, resolve with the available output.
 				// A common exit code for SIGTERM (which child.kill() sends) is 130 on Unix-like systems.
-				console.log(
-					`Command [PID: ${
-						child.pid ?? "N/A"
-					}] was killed due to external cancellation request.`
-				);
+				const cancelledMsg = `Command [PID: ${
+					child.pid ?? "N/A"
+				}] was killed due to external cancellation request.`;
+				console.log(cancelledMsg);
+				if (vscodeTerminal && !vscodeTerminal.dispose) {
+					vscodeTerminal.sendText(cancelledMsg + "\r\n", true);
+				}
 				// Prefer the actual exit code if available, otherwise default for SIGTERM.
 				resolve({
 					stdout,
@@ -149,11 +183,13 @@ export async function executeCommand(
 		// Immediately check if the token was already cancelled before the promise or spawning completed.
 		// This ensures quick termination for already-cancelled operations.
 		if (token.isCancellationRequested) {
-			console.log(
-				`Token already cancelled upon command initiation. Killing command [PID: ${
-					child.pid ?? "N/A"
-				}] immediately for command: "${commandString}"`
-			);
+			const immediateCancelMsg = `Token already cancelled upon command initiation. Killing command [PID: ${
+				child.pid ?? "N/A"
+			}] immediately for command: "${commandString}"`;
+			console.log(immediateCancelMsg);
+			if (vscodeTerminal && !vscodeTerminal.dispose) {
+				vscodeTerminal.sendText(immediateCancelMsg + "\r\n", true);
+			}
 			cancellationInitiatedByToken = true;
 			child.kill();
 		}
