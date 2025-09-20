@@ -286,12 +286,85 @@ export class PlanExecutorService {
 		originalRootInstruction: string
 	): Promise<Set<vscode.Uri>> {
 		const affectedFileUris = new Set<vscode.Uri>();
-		const totalSteps = steps.length;
 		const { changeLogger } = this.provider;
 
+		// 1. Categorize all incoming PlanSteps
+		const createDirectorySteps: CreateDirectoryStep[] = [];
+		const createFileSteps: CreateFileStep[] = [];
+		const runCommandSteps: RunCommandStep[] = [];
+		const modifyFileStepsByPath = new Map<string, ModifyFileStep[]>();
+		const modifyFileOrder: string[] = []; // To preserve the order of first appearance
+
+		for (const step of steps) {
+			if (combinedToken.isCancellationRequested) {
+				throw new Error(ERROR_OPERATION_CANCELLED);
+			}
+
+			// Input Step Validation: Ensure `step` is a valid object before using type guards.
+			// This prevents errors if the steps array contains primitive types or malformed objects.
+			if (
+				typeof step !== "object" ||
+				step === null ||
+				typeof step.step !== "object" ||
+				step.step === null
+			) {
+				console.warn(
+					`Minovative Mind: Skipping invalid plan step (missing 'step' property or not an object): ${JSON.stringify(
+						step
+					)}`
+				);
+				continue; // Skip this invalid step to prevent further errors
+			}
+
+			if (isCreateDirectoryStep(step)) {
+				createDirectorySteps.push(step);
+			} else if (isCreateFileStep(step)) {
+				createFileSteps.push(step);
+			} else if (isRunCommandStep(step)) {
+				runCommandSteps.push(step);
+			} else if (isModifyFileStep(step)) {
+				if (!modifyFileStepsByPath.has(step.step.path)) {
+					modifyFileStepsByPath.set(step.step.path, []);
+					modifyFileOrder.push(step.step.path);
+				}
+				modifyFileStepsByPath.get(step.step.path)!.push(step);
+			}
+		}
+
+		// 2. Aggregate ModifyFileStep actions for each file path
+		const consolidatedModifyFileSteps: ModifyFileStep[] = [];
+		for (const filePath of modifyFileOrder) {
+			const fileModifications = modifyFileStepsByPath.get(filePath)!;
+			// Combine all modification prompts into a single comprehensive prompt
+			const consolidatedPrompt = fileModifications
+				.map((s) => s.step.modification_prompt)
+				.join("\n\n---\n\n"); // Use a clear separator for multiple instructions
+
+			// Create a new ModifyFileStep representing the consolidated changes
+			consolidatedModifyFileSteps.push({
+				step: {
+					action: PlanStepAction.ModifyFile,
+					path: filePath,
+					modification_prompt: consolidatedPrompt,
+					// A general description for the consolidated step
+					description: `Modifications for file: \`${filePath}\``,
+				},
+			});
+		}
+
+		// 3. Reorder the execution sequence
+		const orderedSteps: PlanStep[] = [
+			...createDirectorySteps,
+			...createFileSteps,
+			...consolidatedModifyFileSteps,
+			...runCommandSteps,
+		];
+
+		const totalOrderedSteps = orderedSteps.length;
+
 		let index = 0;
-		while (index < totalSteps) {
-			const step = steps[index];
+		while (index < totalOrderedSteps) {
+			const step = orderedSteps[index];
 			let currentStepCompletedSuccessfullyOrSkipped = false;
 			let currentTransientAttempt = 0;
 
@@ -309,12 +382,12 @@ export class PlanExecutorService {
 				const detailedStepDescription = this._getStepDescription(
 					step,
 					index,
-					totalSteps,
+					totalOrderedSteps, // Use the new total
 					currentTransientAttempt
 				);
 				this._logStepProgress(
 					index + 1,
-					totalSteps,
+					totalOrderedSteps, // Use the new total
 					detailedStepDescription,
 					currentTransientAttempt,
 					this.MAX_TRANSIENT_STEP_RETRIES
@@ -327,7 +400,7 @@ export class PlanExecutorService {
 						await this._handleCreateFileStep(
 							step,
 							index,
-							totalSteps,
+							totalOrderedSteps, // Use the new total
 							rootUri,
 							context,
 							relevantSnippets,
@@ -336,10 +409,11 @@ export class PlanExecutorService {
 							combinedToken
 						);
 					} else if (isModifyFileStep(step)) {
+						// This will now handle the consolidated ModifyFileStep
 						await this._handleModifyFileStep(
 							step,
 							index,
-							totalSteps,
+							totalOrderedSteps, // Use the new total
 							rootUri,
 							context,
 							relevantSnippets,
@@ -352,7 +426,7 @@ export class PlanExecutorService {
 						const commandSuccess = await this._handleRunCommandStep(
 							step,
 							index,
-							totalSteps,
+							totalOrderedSteps, // Use the new total
 							rootUri,
 							context,
 							progress,
@@ -361,7 +435,7 @@ export class PlanExecutorService {
 						);
 						if (!commandSuccess) {
 							throw new Error(
-								`Command execution failed for '${step.command}'.`
+								`Command execution failed for '${step.step.command}'.`
 							);
 						}
 					}
@@ -383,7 +457,7 @@ export class PlanExecutorService {
 						rootUri,
 						detailedStepDescription,
 						index + 1,
-						totalSteps,
+						totalOrderedSteps, // Use the new total
 						currentTransientAttempt,
 						this.MAX_TRANSIENT_STEP_RETRIES
 					);
@@ -399,7 +473,7 @@ export class PlanExecutorService {
 						currentStepCompletedSuccessfullyOrSkipped = true;
 						this._logStepProgress(
 							index + 1,
-							totalSteps,
+							totalOrderedSteps, // Use the new total
 							`Step SKIPPED by user.`,
 							0,
 							0
@@ -424,25 +498,25 @@ export class PlanExecutorService {
 		currentTransientAttempt: number
 	): string {
 		let detailedStepDescription: string;
-		if (step.description && step.description.trim() !== "") {
-			detailedStepDescription = step.description;
+		if (step.step.description && step.step.description.trim() !== "") {
+			detailedStepDescription = step.step.description;
 		} else {
-			switch (step.action) {
+			switch (step.step.action) {
 				case PlanStepAction.CreateDirectory:
 					if (isCreateDirectoryStep(step)) {
-						detailedStepDescription = `Creating directory: \`${step.path}\``;
+						detailedStepDescription = `Creating directory: \`${step.step.path}\``;
 					} else {
 						detailedStepDescription = `Creating directory`;
 					}
 					break;
 				case PlanStepAction.CreateFile:
 					if (isCreateFileStep(step)) {
-						if (step.generate_prompt) {
-							detailedStepDescription = `Creating file: \`${step.path}\``;
-						} else if (step.content) {
-							detailedStepDescription = `Creating file: \`${step.path}\` (with predefined content)`;
+						if (step.step.generate_prompt) {
+							detailedStepDescription = `Creating file: \`${step.step.path}\``;
+						} else if (step.step.content) {
+							detailedStepDescription = `Creating file: \`${step.step.path}\` (with predefined content)`;
 						} else {
-							detailedStepDescription = `Creating file: \`${step.path}\``;
+							detailedStepDescription = `Creating file: \`${step.step.path}\``;
 						}
 					} else {
 						detailedStepDescription = `Creating file`;
@@ -450,21 +524,21 @@ export class PlanExecutorService {
 					break;
 				case PlanStepAction.ModifyFile:
 					if (isModifyFileStep(step)) {
-						detailedStepDescription = `Modifying file: \`${step.path}\``;
+						detailedStepDescription = `Modifying file: \`${step.step.path}\``;
 					} else {
 						detailedStepDescription = `Modifying file`;
 					}
 					break;
 				case PlanStepAction.RunCommand:
 					if (isRunCommandStep(step)) {
-						detailedStepDescription = `Running command: \`${step.command}\``;
+						detailedStepDescription = `Running command: \`${step.step.command}\``;
 					} else {
 						detailedStepDescription = `Running command`;
 					}
 					break;
 				default:
 					detailedStepDescription = `Executing action: ${(
-						step.action as string
+						(step.step as any).action as string
 					).replace(/_/g, " ")}`;
 					break;
 			}
@@ -711,12 +785,12 @@ export class PlanExecutorService {
 		changeLogger: SidebarProvider["changeLogger"]
 	): Promise<void> {
 		await vscode.workspace.fs.createDirectory(
-			vscode.Uri.joinPath(rootUri, step.path)
+			vscode.Uri.joinPath(rootUri, step.step.path)
 		);
 		changeLogger.logChange({
-			filePath: step.path,
+			filePath: step.step.path,
 			changeType: "created",
-			summary: `Created directory: '${step.path}'`,
+			summary: `Created directory: '${step.step.path}'`,
 			timestamp: Date.now(),
 		});
 	}
@@ -732,10 +806,10 @@ export class PlanExecutorService {
 		changeLogger: SidebarProvider["changeLogger"],
 		combinedToken: vscode.CancellationToken
 	): Promise<void> {
-		const fileUri = vscode.Uri.joinPath(rootUri, step.path);
-		let desiredContent: string | undefined = step.content;
+		const fileUri = vscode.Uri.joinPath(rootUri, step.step.path);
+		let desiredContent: string | undefined = step.step.content;
 
-		if (step.generate_prompt) {
+		if (step.step.generate_prompt) {
 			const generationContext = {
 				projectContext: context.projectContext,
 				relevantSnippets: relevantSnippets,
@@ -745,8 +819,8 @@ export class PlanExecutorService {
 
 			const generatedResult =
 				await this.enhancedCodeGenerator.generateFileContent(
-					step.path,
-					step.generate_prompt,
+					step.step.path,
+					step.step.generate_prompt,
 					generationContext,
 					this.provider.settingsManager.getSelectedModelName(),
 					combinedToken
@@ -766,7 +840,7 @@ export class PlanExecutorService {
 				this._logStepProgress(
 					index + 1,
 					totalSteps,
-					`File \`${step.path}\` already has the desired content. Skipping.`,
+					`File \`${step.step.path}\` already has the desired content. Skipping.`,
 					0,
 					0
 				);
@@ -785,13 +859,13 @@ export class PlanExecutorService {
 				const { formattedDiff, summary } = await generateFileChangeSummary(
 					existingContent,
 					newContentAfterApply,
-					step.path
+					step.step.path
 				);
 
 				this._logStepProgress(
 					index + 1,
 					totalSteps,
-					`Modified file \`${step.path}\``,
+					`Modified file \`${step.step.path}\``,
 					0,
 					0,
 					false,
@@ -799,7 +873,7 @@ export class PlanExecutorService {
 				);
 
 				changeLogger.logChange({
-					filePath: step.path,
+					filePath: step.step.path,
 					changeType: "modified",
 					summary,
 					diffContent: formattedDiff,
@@ -825,20 +899,20 @@ export class PlanExecutorService {
 				const { formattedDiff, summary } = await generateFileChangeSummary(
 					"",
 					cleanedDesiredContent,
-					step.path
+					step.step.path
 				);
 
 				this._logStepProgress(
 					index + 1,
 					totalSteps,
-					`Created file \`${step.path}\``,
+					`Created file \`${step.step.path}\``,
 					0,
 					0,
 					false,
 					formattedDiff
 				);
 				changeLogger.logChange({
-					filePath: step.path,
+					filePath: step.step.path,
 					changeType: "created",
 					summary,
 					diffContent: formattedDiff,
@@ -865,7 +939,7 @@ export class PlanExecutorService {
 		settingsManager: SidebarProvider["settingsManager"],
 		combinedToken: vscode.CancellationToken
 	): Promise<void> {
-		const fileUri = vscode.Uri.joinPath(rootUri, step.path);
+		const fileUri = vscode.Uri.joinPath(rootUri, step.step.path);
 		const existingContent = Buffer.from(
 			await vscode.workspace.fs.readFile(fileUri)
 		).toString("utf-8");
@@ -877,10 +951,11 @@ export class PlanExecutorService {
 			activeSymbolInfo: undefined,
 		};
 
+		// The modification_prompt here will be the consolidated prompt from multiple steps
 		let modifiedContent = (
 			await this.enhancedCodeGenerator.modifyFileContent(
-				step.path,
-				step.modification_prompt,
+				step.step.path,
+				step.step.modification_prompt,
 				existingContent,
 				modificationContext,
 				settingsManager.getSelectedModelName(),
@@ -912,7 +987,7 @@ export class PlanExecutorService {
 			await generateFileChangeSummary(
 				existingContent,
 				newContentAfterApply,
-				step.path
+				step.step.path
 			);
 
 		if (addedLines.length > 0 || removedLines.length > 0) {
@@ -929,7 +1004,7 @@ export class PlanExecutorService {
 			this._logStepProgress(
 				index + 1,
 				totalSteps,
-				`Modified file \`${step.path}\``,
+				`Modified file \`${step.step.path}\``,
 				0,
 				0,
 				false,
@@ -937,7 +1012,7 @@ export class PlanExecutorService {
 			);
 
 			changeLogger.logChange({
-				filePath: step.path,
+				filePath: step.step.path,
 				changeType: "modified",
 				summary,
 				diffContent: formattedDiff,
@@ -949,7 +1024,7 @@ export class PlanExecutorService {
 			this._logStepProgress(
 				index + 1,
 				totalSteps,
-				`File \`${step.path}\` content is already as desired, no substantial modifications needed.`,
+				`File \`${step.step.path}\` content is already as desired, no substantial modifications needed.`,
 				0,
 				0
 			);
@@ -1184,7 +1259,7 @@ export class PlanExecutorService {
 		originalRootInstruction: string,
 		combinedToken: vscode.CancellationToken
 	): Promise<boolean> {
-		const commandString = step.command.trim();
+		const commandString = step.step.command.trim();
 
 		const { executable, args } = this._parseCommandArguments(commandString);
 

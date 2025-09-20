@@ -79,7 +79,7 @@ export class PlanService {
 		const { apiKeyManager, changeLogger } = this.provider;
 		const modelName = this.provider.settingsManager.getSetting<string>(
 			sidebarConstants.MODEL_SELECTION_STORAGE_KEY,
-			sidebarConstants.DEFAULT_FLASH_LITE_MODEL
+			sidebarConstants.DEFAULT_FLASH_MODEL
 		); // Use selected model for initial plan generation
 		const apiKey = apiKeyManager.getActiveApiKey();
 
