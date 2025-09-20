@@ -11,12 +11,16 @@ import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import { ChildProcess } from "child_process";
 import { generateFileChangeSummary } from "../utils/diffingUtils";
 import { DEFAULT_FLASH_LITE_MODEL } from "../sidebar/common/sidebarConstants";
-import { executeCommand } from "../utils/commandExecution"; // Import robust command executor
+import { executeCommand } from "../utils/commandExecution";
+import { Logger } from "../utils/logger"; // Import Logger
 
 export class CommitService {
-	private minovativeMindTerminal: vscode.Terminal | undefined; // Terminal instance for Git operations
+	private minovativeMindTerminal: vscode.Terminal | undefined;
+	private logger: Logger; // Add logger property
 
-	constructor(private provider: SidebarProvider) {}
+	constructor(private provider: SidebarProvider) {
+		this.logger = new Logger("CommitService"); // Initialize logger
+	}
 
 	/**
 	 * Handles the /commit command by staging changes, generating a commit message via AI,
@@ -27,7 +31,7 @@ export class CommitService {
 		token: vscode.CancellationToken
 	): Promise<void> {
 		const { settingsManager } = this.provider;
-		const modelName = DEFAULT_FLASH_LITE_MODEL; // Use the default model for commit messages
+		const modelName = DEFAULT_FLASH_LITE_MODEL;
 
 		let success = false;
 		let errorMessage: string | null = null;
@@ -52,12 +56,17 @@ export class CommitService {
 
 			const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			if (!rootPath) {
+				this.logger.error(
+					undefined,
+					"No workspace folder open for git command."
+				);
 				throw new Error("No workspace folder open for git.");
 			}
 
 			const onProcessCallback = (process: ChildProcess) => {
-				console.log(
-					`[CommitService] Git process started: PID ${process.pid}, Command: 'git add .'`
+				this.logger.log(
+					undefined,
+					`Git process started: PID ${process.pid}, Command: 'git add .'`
 				);
 			};
 
@@ -76,8 +85,9 @@ export class CommitService {
 						"model",
 						`Git Staging Error: ${data}`
 					);
+					this.logger.error(undefined, `Git Staging Error: ${data}`);
 				} else if (type === "stdout") {
-					console.log(`[CommitService] Git stdout: ${data}`);
+					this.logger.log(undefined, `Git stdout: ${data}`);
 				}
 			};
 
@@ -122,15 +132,6 @@ export class CommitService {
 					  "\n\n"
 					: "";
 
-			// Clear, deterministic prompt that instructs the model to output ONLY the commit message.
-			// Important constraints:
-			//  - First line must be an imperative subject (e.g., "Add X to Y"), <= 72 chars (50 recommended).
-			//  - Optional blank line, then body (wrap ~72 chars).
-			//  - Do NOT start the subject with '-', '*', or any symbol that could be parsed as an option.
-			//  - Do NOT include quotes (\" or `) or backticks; remove or replace them with plain text.
-			//  - Do NOT include shell characters like $(), &&, ||, ; anywhere.
-			//  - Use plain text only; markdown lists are acceptable inside the body but the response MUST be raw text (no commentary or code fences).
-			//  - Output exactly the commit message text only, nothing else.
 			const commitMessagePrompt = `
 You are an expert Git author. Produce one commit message only — nothing else, no commentary, no headings, no code fences.
 
@@ -165,7 +166,6 @@ ${diff}
 				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 
-			// ENHANCEMENT: Sanitize and validate the AI-generated message
 			const validatedMessage =
 				this._validateAndSanitizeCommitMessage(commitMessage);
 
@@ -174,8 +174,9 @@ ${diff}
 				trimmedCommitMessage.toLowerCase().startsWith("error:") ||
 				trimmedCommitMessage === ""
 			) {
-				console.error(
-					`[CommitService] AI generated an invalid or error-prefixed commit message: "${commitMessage}"`
+				this.logger.error(
+					undefined,
+					`AI generated an invalid or error-prefixed commit message: "${commitMessage}"`
 				);
 				const userFacingError = `AI failed to generate a valid commit message. Received: "${trimmedCommitMessage.substring(
 					0,
@@ -192,8 +193,9 @@ ${diff}
 			);
 
 			this.provider.pendingCommitReviewData = {
-				commitMessage: validatedMessage, // Use the validated message directly
+				commitMessage: validatedMessage,
 				stagedFiles,
+				fileChangeSummaries: fileSummaries,
 			};
 			success = true;
 		} catch (error: any) {
@@ -234,11 +236,141 @@ ${diff}
 	}
 
 	/**
+	 * Removes ASCII control characters (except newline and tab) from the message.
+	 * @param message The raw commit message.
+	 * @returns The message with control characters removed.
+	 */
+	private _removeControlCharacters(message: string): string {
+		return message.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "");
+	}
+
+	/**
+	 * Normalizes newline characters to `\n`.
+	 * @param message The commit message.
+	 * @returns The message with normalized newlines.
+	 */
+	private _normalizeNewlines(message: string): string {
+		return message.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+	}
+
+	/**
+	 * Strips smart quotes, backticks, and backslashes from the message.
+	 * @param message The commit message.
+	 * @returns The message with quotes and backslashes removed.
+	 */
+	private _stripQuotesAndBackslashes(message: string): string {
+		let sanitized = message.replace(/[`"'“”‘’]/g, "");
+		sanitized = sanitized.replace(/\\+/g, "");
+		return sanitized;
+	}
+
+	/**
+	 * Trims trailing spaces on each line and collapses excessive blank lines.
+	 * @param message The commit message.
+	 * @returns The message with trimmed lines and collapsed blank lines.
+	 */
+	private _trimLinesAndCollapseBlankLines(message: string): string {
+		return message
+			.split("\n")
+			.map((l) => l.replace(/[ \t]+$/g, "")) // rtrim
+			.join("\n")
+			.replace(/\n{3,}/g, "\n\n")
+			.trim();
+	}
+
+	/**
+	 * Removes common leading list markers (like '-' or '*') from the first non-empty line.
+	 * @param message The commit message.
+	 * @returns The message with leading list markers removed if present.
+	 */
+	private _removeLeadingListMarkers(message: string): string {
+		return message.replace(/^\s*[-*]\s+/, "");
+	}
+
+	/**
+	 * Checks for shell-like injection patterns and throws an error if found.
+	 * @param message The commit message.
+	 * @throws An error if injection patterns are detected.
+	 */
+	private _checkInjectionPatterns(message: string): void {
+		const injectionPatterns = /\$\(|`|&&|\|\||;/;
+		if (injectionPatterns.test(message)) {
+			throw new Error(
+				"Commit message contains characters or patterns that resemble shell commands (e.g. $(), &&, ||, `, ;). For security, please edit the message without these constructs."
+			);
+		}
+	}
+
+	/**
+	 * Checks for Git exploit patterns (e.g., attempts to manipulate Git config/hooks) and throws an error if found.
+	 * @param message The commit message.
+	 * @throws An error if Git exploit patterns are detected.
+	 */
+	private _checkGitExploitPatterns(message: string): void {
+		const gitExploitPatterns = /\[(?:core|hooks|alias)\].*=/i;
+		if (gitExploitPatterns.test(message)) {
+			throw new Error(
+				"Commit message appears to include Git configuration-style content, which is not allowed."
+			);
+		}
+	}
+
+	/**
+	 * Validates the format of the subject line (first line) of the commit message.
+	 * Throws an error if the subject is empty or starts with disallowed characters.
+	 * @param message The commit message.
+	 * @throws An error if the subject line format is invalid.
+	 */
+	private _validateSubjectLineFormat(message: string): void {
+		const firstLine = message.split("\n", 1)[0].trim();
+		if (!firstLine || firstLine.length === 0) {
+			throw new Error(
+				"Commit message subject is empty. Provide a concise subject line."
+			);
+		}
+
+		const firstNonWhitespaceChar = firstLine.charAt(0);
+		if (firstNonWhitespaceChar === "-" || firstNonWhitespaceChar === "*") {
+			throw new Error(
+				"Commit subject cannot start with '-' or '*' (these can be misinterpreted as CLI flags). Please edit the message to begin with an imperative subject (e.g., 'Add tests for X')."
+			);
+		}
+	}
+
+	/**
+	 * Validates the length of the subject line (first line) of the commit message.
+	 * Throws an error if the subject line exceeds the hard limit.
+	 * @param message The commit message.
+	 * @throws An error if the subject line length is excessive.
+	 */
+	private _validateSubjectLineLength(message: string): void {
+		const firstLine = message.split("\n", 1)[0].trim();
+		const SUBJECT_HARD_LIMIT = 72; // enforce conventional hard limit
+		const SUBJECT_SOFT_LIMIT = 50; // recommended limit
+
+		if (firstLine.length > SUBJECT_HARD_LIMIT) {
+			throw new Error(
+				`Commit subject is too long (${firstLine.length} chars). Please shorten the first line to ${SUBJECT_HARD_LIMIT} characters or fewer (recommended ${SUBJECT_SOFT_LIMIT}).`
+			);
+		}
+	}
+
+	/**
+	 * Performs a final check for unusual unicode sequences and logs a warning if found.
+	 * @param message The commit message.
+	 */
+	private _finalUnicodeCheck(message: string): void {
+		if (/[^\u0000-\u007F\u00A0-\uFFFF\n]/.test(message)) {
+			this.logger.warn(
+				undefined,
+				"Commit message contains unusual unicode characters; proceeding after sanitization."
+			);
+		}
+	}
+
+	/**
 	 * Validates and sanitizes a commit message for security and best practices.
-	 * - Normalizes control characters and smart quotes
-	 * - Removes leading list markers that AIs often add
-	 * - Detects shell-like injection and git-exploit patterns
-	 * - Enforces subject line length constraints (throws with actionable message)
+	 * Orchestrates calls to various helper methods.
 	 * @param message The raw commit message.
 	 * @returns The sanitized commit message.
 	 * @throws An error if the message is invalid or potentially malicious.
@@ -248,85 +380,25 @@ ${diff}
 			throw new Error("Empty commit message returned from AI.");
 		}
 
-		// 1) Remove ASCII control chars (except newline and tab)
-		let sanitized = message.replace(
-			/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g,
-			""
-		);
+		let sanitized = message;
 
-		// 2) Normalize newlines to \n
-		sanitized = sanitized.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+		sanitized = this._removeControlCharacters(sanitized);
+		sanitized = this._normalizeNewlines(sanitized);
+		sanitized = this._stripQuotesAndBackslashes(sanitized);
+		sanitized = this._trimLinesAndCollapseBlankLines(sanitized);
+		sanitized = this._removeLeadingListMarkers(sanitized);
 
-		// 3) Replace smart quotes and backticks with nothing (we disallow quotes)
-		//    Replace types of quotes/backticks intentionally to avoid CLI quoting problems.
-		sanitized = sanitized.replace(/[`"'“”‘’]/g, "");
+		// Security checks (throw errors)
+		this._checkInjectionPatterns(sanitized);
+		this._checkGitExploitPatterns(sanitized);
 
-		// 4) Remove backslashes (avoid escape sequences)
-		sanitized = sanitized.replace(/\\+/g, "");
+		// Format and length checks (throw errors)
+		this._validateSubjectLineFormat(sanitized);
+		this._validateSubjectLineLength(sanitized);
 
-		// 5) Trim trailing spaces on each line and collapse excessive blank lines to at most one blank line
-		sanitized = sanitized
-			.split("\n")
-			.map((l) => l.replace(/[ \t]+$/g, "")) // rtrim
-			.join("\n")
-			.replace(/\n{3,}/g, "\n\n")
-			.trim();
+		// Final warning check
+		this._finalUnicodeCheck(sanitized);
 
-		// If the model emitted a bullet list (common), remove a single leading bullet marker from the first non-empty line.
-		// This makes messages like "- Fix foo" become "Fix foo" automatically.
-		sanitized = sanitized.replace(/^\s*[-*]\s+/, "");
-
-		// 6) Heuristic security checks: shell-like constructs
-		// If any of these are present, fail fast and loudly.
-		const injectionPatterns = /\$\(|`|&&|\|\||;/;
-		if (injectionPatterns.test(sanitized)) {
-			throw new Error(
-				"Commit message contains characters or patterns that resemble shell commands (e.g. $(), &&, ||, `, ;). For security, please edit the message without these constructs."
-			);
-		}
-
-		// 7) Heuristic to detect attempts to manipulate Git config / hooks etc.
-		const gitExploitPatterns = /\[(?:core|hooks|alias)\].*=/i;
-		if (gitExploitPatterns.test(sanitized)) {
-			throw new Error(
-				"Commit message appears to include Git configuration-style content, which is not allowed."
-			);
-		}
-
-		// 8) Prevent messages that start with a hyphen/dash or other single-character flags.
-		//    After earlier bullet-stripping, still reject if it begins with '-' or other symbol.
-		const firstNonWhitespaceChar = sanitized.trim().charAt(0);
-		if (firstNonWhitespaceChar === "-" || firstNonWhitespaceChar === "*") {
-			throw new Error(
-				"Commit subject cannot start with '-' or '*' (these can be misinterpreted as CLI flags). Please edit the message to begin with an imperative subject (e.g., 'Add tests for X')."
-			);
-		}
-
-		// 9) Enforce subject length rule: first line is the subject
-		const firstLine = sanitized.split("\n", 1)[0].trim();
-		if (!firstLine || firstLine.length === 0) {
-			throw new Error(
-				"Commit message subject is empty. Provide a concise subject line."
-			);
-		}
-		const SUBJECT_SOFT_LIMIT = 50;
-		const SUBJECT_HARD_LIMIT = 72; // enforce conventional hard limit
-		if (firstLine.length > SUBJECT_HARD_LIMIT) {
-			throw new Error(
-				`Commit subject is too long (${firstLine.length} chars). Please shorten the first line to ${SUBJECT_HARD_LIMIT} characters or fewer (recommended ${SUBJECT_SOFT_LIMIT}).`
-			);
-		}
-
-		// 10) Final safety: ensure message doesn't contain unprintable unicode sequences (very rare)
-		if (/[^\u0000-\u007F\u00A0-\uFFFF\n]/.test(sanitized)) {
-			// allow basic unicode but block high-control characters
-			// If you need other unicode ranges in the future, adjust this check.
-			console.warn(
-				"[CommitService] Commit message contains unusual unicode characters; proceeding after sanitization."
-			);
-		}
-
-		// 11) Return sanitized message
 		return sanitized;
 	}
 
@@ -353,7 +425,6 @@ ${diff}
 			});
 		}
 
-		this.minovativeMindTerminal.show(true);
 		return this.minovativeMindTerminal;
 	}
 
@@ -364,20 +435,23 @@ ${diff}
 	public async confirmCommit(editedMessage: string): Promise<void> {
 		if (!this.provider.pendingCommitReviewData) {
 			vscode.window.showErrorMessage("No pending commit to confirm.");
+			this.logger.error(undefined, "No pending commit review data found.");
 			return;
 		}
 
 		const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		if (!rootPath) {
 			vscode.window.showErrorMessage("No workspace folder for git commit.");
+			this.logger.error(
+				undefined,
+				"No workspace folder found to perform git commit."
+			);
 			return;
 		}
 
-		// Use a new token source for this specific, short-lived operation.
 		const cancellationTokenSource = new vscode.CancellationTokenSource();
 		const token = cancellationTokenSource.token;
 
-		// The provider should manage the list of active child processes.
 		if (!this.provider.activeChildProcesses) {
 			this.provider.activeChildProcesses = [];
 		}
@@ -385,21 +459,21 @@ ${diff}
 		const terminal = this._getOrCreateTerminal();
 
 		try {
-			// ENHANCEMENT: Re-validate the message in case the user edited it to be malicious.
+			// Re-validate the message in case the user edited it to be malicious.
 			const finalCommitMessage =
 				this._validateAndSanitizeCommitMessage(editedMessage);
+			this.logger.log(
+				undefined,
+				`Commit message re-validated: \n---\n${finalCommitMessage}\n---`
+			);
 
-			// Echo the intended command to the terminal for transparency.
-			terminal.sendText(`> git commit -m "${finalCommitMessage}"\n`);
-
-			// ENHANCEMENT: Use the robust `executeCommand` utility for secure and observable execution.
 			const result = await executeCommand(
 				"git",
 				["commit", "-m", finalCommitMessage],
 				rootPath,
 				token,
-				this.provider.activeChildProcesses, // Pass active process tracker
-				terminal // Pipe output to our terminal
+				this.provider.activeChildProcesses,
+				terminal
 			);
 
 			if (result.exitCode === 0) {
@@ -412,6 +486,50 @@ ${diff}
 					"model",
 					`Commit confirmed and executed successfully:\n---\n${finalCommitMessage}\n---`
 				);
+				this.logger.log(
+					undefined,
+					`Commit successful:\n---\n${finalCommitMessage}\n---`
+				);
+
+				// Execute `git status` after successful commit
+				const gitStatusResult = await executeCommand(
+					"git",
+					["status"],
+					rootPath,
+					token,
+					this.provider.activeChildProcesses,
+					terminal
+				);
+
+				if (gitStatusResult.stdout) {
+					this.logger.log(
+						undefined,
+						`Git status stdout after commit:\n${gitStatusResult.stdout}`
+					);
+				}
+				if (gitStatusResult.stderr) {
+					this.logger.warn(
+						undefined,
+						`Git status stderr after commit:\n${gitStatusResult.stderr}`
+					);
+				}
+
+				let statusOutputForChat = "### Git Status After Commit\n\n";
+				if (gitStatusResult.stdout) {
+					statusOutputForChat += "```bash\n" + gitStatusResult.stdout + "```\n";
+				}
+				if (gitStatusResult.stderr) {
+					statusOutputForChat +=
+						"**Warning (Git Status Stderr):**\n```bash\n" +
+						gitStatusResult.stderr +
+						"```\n";
+				}
+
+				this.provider.chatHistoryManager.addHistoryEntry(
+					"model",
+					statusOutputForChat
+				);
+
 				await this.provider.endUserOperation("success");
 			} else {
 				const errorMessage = `Git commit failed with exit code ${result.exitCode}.\n\nSTDERR:\n${result.stderr}`;
@@ -422,6 +540,7 @@ ${diff}
 					"model",
 					`ERROR: ${errorMessage}`
 				);
+				this.logger.error(undefined, errorMessage);
 				await this.provider.endUserOperation("failed");
 			}
 		} catch (error: any) {
@@ -431,6 +550,7 @@ ${diff}
 				"model",
 				`ERROR: ${errorMessage}`
 			);
+			this.logger.error(undefined, errorMessage, error);
 			await this.provider.endUserOperation("failed");
 		} finally {
 			cancellationTokenSource.dispose();
@@ -441,6 +561,7 @@ ${diff}
 	 * Cancels the pending commit review and re-enables UI.
 	 */
 	public async cancelCommit(): Promise<void> {
+		this.logger.log(undefined, "Commit review cancelled by user.");
 		await this.provider.triggerUniversalCancellation();
 	}
 }

@@ -795,6 +795,7 @@ export function initializeMessageBusHandler(
 						updateStatus,
 						setLoadingState
 					);
+					appState.isAwaitingUserReview = true; // Added as per instructions.
 
 					if (!appState.isCancellationInProgress) {
 						setLoadingState(false, elements);
@@ -852,6 +853,7 @@ export function initializeMessageBusHandler(
 
 					if (elements.planConfirmationContainer) {
 						elements.planConfirmationContainer.style.display = "flex";
+						appState.isAwaitingUserReview = true; // Added as per instructions.
 						updateStatus(
 							elements,
 							"Pending plan confirmation restored. Review and confirm to proceed."

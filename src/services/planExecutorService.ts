@@ -1315,7 +1315,7 @@ export class PlanExecutorService {
 			"Minovative Mind: About to display command execution prompt..."
 		);
 
-		const userChoice = await vscode.window.showWarningMessage(
+		const userChoice = await vscode.window.showInformationMessage(
 			promptMessage,
 			{ modal: modalPrompt },
 			"Allow",
