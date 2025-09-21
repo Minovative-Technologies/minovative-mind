@@ -21,6 +21,7 @@ import {
 	ParallelTaskResult,
 } from "../utils/parallelProcessor";
 import { TokenTrackingService } from "./tokenTrackingService";
+import { formatUserFacingErrorMessage } from "../utils/errorFormatter";
 
 export class AIRequestService {
 	constructor(
@@ -293,9 +294,7 @@ export class AIRequestService {
 					);
 					this.postMessageToWebview({
 						type: "statusUpdate",
-						value: `API quota limit hit. Pausing for ${(
-							currentDelay / 1000
-						).toFixed(0)} seconds before retrying with the same API key.`,
+						value: formatUserFacingErrorMessage(new Error(errorMessage)),
 						isError: true,
 					});
 					await new Promise((resolve) => setTimeout(resolve, currentDelay));
