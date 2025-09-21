@@ -136,7 +136,7 @@ export class CommitService {
 You are an expert Git author. Produce one commit message only — nothing else, no commentary, no headings, no code fences.
 
 FORMAT REQUIREMENTS (strict):
-1) First non-empty line = SUBJECT (imperative mood, e.g., "Add feature X", "Fix bug Y").
+1) First non-empty line = SUBJECT (imperative mood, e.g., "feat: Added feature X", "fix: Fixed bug Y", etc...).
    - SUBJECT must NOT begin with '-', '*', or any punctuation that could look like a CLI flag.
    - SUBJECT must be <= 72 characters (50 chars recommended). If longer, shorten to <=72.
 2) OPTIONAL: blank line, then BODY. Wrap lines at ~72 chars. Body may include short markdown-style lists for clarity but do not use code fences.

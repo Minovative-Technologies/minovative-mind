@@ -34,6 +34,7 @@ interface ExecutableConfig {
 	isHighRisk?: boolean; // e.g., python, bash, sh where direct execution is risky
 	strictArgValidation?: boolean; // For deeper path traversal, URL safety, etc.
 	allowedArgs?: string[]; // Array of regex patterns for arguments
+	allowedUrlPatterns?: string[]; // New: Array of regex patterns for allowed URLs in arguments
 	requiresExplicitConfirmation?: boolean; // For commands like npx that run arbitrary packages
 	allowMetaCharacters?: boolean; // Override default for specific executables (e.g., echo)
 }
@@ -65,9 +66,27 @@ export class PlanExecutorService {
 				allowMetaCharacters: false,
 			},
 			executables: {
-				git: { allowed: true },
-				npm: { allowed: true },
-				yarn: { allowed: true },
+				git: {
+					allowed: true,
+					allowedUrlPatterns: [
+						"^https://github\\.com/.*",
+						"^git@github\\.com:.*",
+					],
+				},
+				npm: {
+					allowed: true,
+					allowedUrlPatterns: [
+						"^https://(registry\\.)?npmjs\\.org/.*",
+						"^https://registry\\.yarnpkg\\.com/.*",
+					],
+				},
+				yarn: {
+					allowed: true,
+					allowedUrlPatterns: [
+						"^https://(registry\\.)?npmjs\\.org/.*",
+						"^https://registry\\.yarnpkg\\.com/.*",
+					],
+				},
 				node: {
 					allowed: true,
 					isHighRisk: true,
@@ -89,6 +108,7 @@ export class PlanExecutorService {
 					isHighRisk: true,
 					strictArgValidation: true,
 					allowedArgs: ["^[a-zA-Z0-9-@/.]+$", "^(?!-c).*$"], // Allow typical package names, disallow `-c` (execute command string)
+					allowedUrlPatterns: ["^https://.*"],
 				},
 				python: {
 					allowed: false, // Disallowed by default for high risk
@@ -1182,7 +1202,7 @@ export class PlanExecutorService {
 			this._validateArgumentsStrictly(
 				lowerExecutable,
 				args,
-				effectiveExecConfig.allowedArgs
+				effectiveExecConfig
 			);
 		} else if (
 			effectiveExecConfig.allowedArgs &&
@@ -1205,15 +1225,15 @@ export class PlanExecutorService {
 
 	/**
 	 * Performs deeper, stricter argument validation for commands marked with `strictArgValidation`.
-	 * Checks for path traversal, basic URL safety, and dangerous argument characters.
+	 * Checks for path traversal, URL safety using allowed patterns, and dangerous argument characters.
 	 * @param executable The command executable.
 	 * @param args The arguments to validate.
-	 * @param allowedPatterns Optional array of regex patterns to specifically allow/disallow arguments.
+	 * @param effectiveExecConfig The resolved ExecutableConfig for the command.
 	 */
 	private _validateArgumentsStrictly(
 		executable: string,
 		args: string[],
-		allowedPatterns?: string[]
+		effectiveExecConfig: ExecutableConfig
 	): void {
 		for (const arg of args) {
 			if (arg.includes("../") || arg.includes("/..")) {
@@ -1222,15 +1242,42 @@ export class PlanExecutorService {
 				);
 			}
 
+			// URL validation block
 			if (arg.match(/^(http|https):\/\/[^\s$.?#].[^\s]*$/i)) {
-				console.warn(
-					`Command security warning: URL '${arg}' detected in arguments for '${executable}'. ` +
-						`Ensure this URL is trusted for this command.`
-				);
+				if (
+					effectiveExecConfig.allowedUrlPatterns &&
+					effectiveExecConfig.allowedUrlPatterns.length > 0
+				) {
+					const isUrlAllowed = effectiveExecConfig.allowedUrlPatterns.some(
+						(pattern) => new RegExp(pattern).test(arg)
+					);
+					if (!isUrlAllowed) {
+						throw new Error(
+							`Command security violation: URL '${arg}' is not permitted for '${executable}'.`
+						);
+					}
+				} else {
+					// If allowedUrlPatterns is not defined or empty
+					if (effectiveExecConfig.strictArgValidation === true) {
+						throw new Error(
+							`Command security violation: URLs are not explicitly allowed for '${executable}' under strict validation.`
+						);
+					} else {
+						// Retain original console.warn if strictArgValidation is false or undefined
+						console.warn(
+							`Command security warning: URL '${arg}' detected in arguments for '${executable}'. ` +
+								`Ensure this URL is trusted for this command.`
+						);
+					}
+				}
 			}
 
-			if (allowedPatterns && allowedPatterns.length > 0) {
-				const isArgAllowed = allowedPatterns.some((pattern) =>
+			// Existing allowedArgs validation
+			if (
+				effectiveExecConfig.allowedArgs &&
+				effectiveExecConfig.allowedArgs.length > 0
+			) {
+				const isArgAllowed = effectiveExecConfig.allowedArgs.some((pattern) =>
 					new RegExp(pattern).test(arg)
 				);
 				if (!isArgAllowed) {
