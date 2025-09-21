@@ -25,100 +25,14 @@ import { UrlContextService } from "./urlContextService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 import { executeCommand, CommandResult } from "../utils/commandExecution";
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
-
-/**
- * Interface for the configuration of a single executable command for security.
- */
-interface ExecutableConfig {
-	allowed: boolean;
-	isHighRisk?: boolean; // e.g., python, bash, sh where direct execution is risky
-	strictArgValidation?: boolean; // For deeper path traversal, URL safety, etc.
-	allowedArgs?: string[]; // Array of regex patterns for arguments
-	allowedUrlPatterns?: string[]; // New: Array of regex patterns for allowed URLs in arguments
-	requiresExplicitConfirmation?: boolean; // For commands like npx that run arbitrary packages
-	allowMetaCharacters?: boolean; // Override default for specific executables (e.g., echo)
-}
-
-/**
- * Interface for the entire command security configuration.
- * (No longer loaded from a file, but used for static default configuration).
- */
-interface CommandSecurityConfig {
-	default: {
-		allowAbsolutePaths: boolean;
-		allowMetaCharacters: boolean; // Default for shell meta-characters
-	};
-	executables: {
-		[key: string]: ExecutableConfig;
-	};
-}
+import {
+	CommandSecurityService,
+	ExecutableConfig,
+} from "./commandSecurityService"; // Added import
 
 export class PlanExecutorService {
 	private minovativeMindTerminal: vscode.Terminal | undefined;
-	// REMOVED: private commandSecurityConfig: CommandSecurityConfig | undefined;
-	// REMOVED: private configLoadedPromise: Promise<void>;
-
-	// Hardcoded default security settings
-	private static readonly DEFAULT_COMMAND_SECURITY_SETTINGS: CommandSecurityConfig =
-		{
-			default: {
-				allowAbsolutePaths: false,
-				allowMetaCharacters: false,
-			},
-			executables: {
-				git: {
-					allowed: true,
-					allowedUrlPatterns: [
-						"^https://github\\.com/.*",
-						"^git@github\\.com:.*",
-					],
-				},
-				npm: {
-					allowed: true,
-					allowedUrlPatterns: [
-						"^https://(registry\\.)?npmjs\\.org/.*",
-						"^https://registry\\.yarnpkg\\.com/.*",
-					],
-				},
-				yarn: {
-					allowed: true,
-					allowedUrlPatterns: [
-						"^https://(registry\\.)?npmjs\\.org/.*",
-						"^https://registry\\.yarnpkg\\.com/.*",
-					],
-				},
-				node: {
-					allowed: true,
-					isHighRisk: true,
-					strictArgValidation: true,
-					allowedArgs: ["^(?!-e).*$"], // Disallow `-e` (execute string as code)
-				},
-				echo: { allowed: true, allowMetaCharacters: true },
-				mkdir: { allowed: true },
-				rm: { allowed: true },
-				cp: { allowed: true },
-				mv: { allowed: true },
-				ls: { allowed: true },
-				cd: { allowed: true },
-				pwd: { allowed: true },
-				pnpm: { allowed: true },
-				npx: {
-					allowed: true,
-					requiresExplicitConfirmation: true,
-					isHighRisk: true,
-					strictArgValidation: true,
-					allowedArgs: ["^[a-zA-Z0-9-@/.]+$", "^(?!-c).*$"], // Allow typical package names, disallow `-c` (execute command string)
-					allowedUrlPatterns: ["^https://.*"],
-				},
-				python: {
-					allowed: false, // Disallowed by default for high risk
-					isHighRisk: true,
-					strictArgValidation: true,
-				},
-				bash: { allowed: false, isHighRisk: true, strictArgValidation: true },
-				sh: { allowed: false, isHighRisk: true, strictArgValidation: true },
-			},
-		};
+	private commandSecurityService: CommandSecurityService; // Added new property
 
 	constructor(
 		private provider: SidebarProvider,
@@ -129,10 +43,8 @@ export class PlanExecutorService {
 		private gitConflictResolutionService: GitConflictResolutionService,
 		private readonly MAX_TRANSIENT_STEP_RETRIES: number
 	) {
-		// REMOVED: this.configLoadedPromise = this._loadCommandSecurityConfig();
+		this.commandSecurityService = new CommandSecurityService(); // Initialize new property
 	}
-
-	// REMOVED: private async _loadCommandSecurityConfig(): Promise<void> { ... }
 
 	private getOrCreateTerminal(): vscode.Terminal {
 		if (
@@ -1051,251 +963,6 @@ export class PlanExecutorService {
 		}
 	}
 
-	/**
-	 * Parses a command line string into an executable and an array of arguments,
-	 * respecting single and double quotes.
-	 * @param commandLine The full command string.
-	 * @returns An object containing the executable and arguments.
-	 */
-	private _parseCommandArguments(commandLine: string): {
-		executable: string;
-		args: string[];
-	} {
-		const tokens: string[] = [];
-		const commandRegex = /"([^"]*)"|'([^']*)'|[^\s"']+/g;
-		let match;
-		while ((match = commandRegex.exec(commandLine)) !== null) {
-			tokens.push(match[1] || match[2] || match[0]);
-		}
-		const executable = tokens.length > 0 ? tokens[0] : "";
-		const args = tokens.slice(1);
-		return { executable, args };
-	}
-
-	/**
-	 * Formats an argument for human-readable display in a prompt.
-	 * Encloses arguments with spaces or quotes in single quotes, escaping internal single quotes.
-	 * @param arg The argument string.
-	 * @returns The display-ready argument string.
-	 */
-	private _sanitizeArgumentForDisplay(arg: string): string {
-		if (arg.includes(" ") || arg.includes("'") || arg.includes('"')) {
-			return `'${arg.replace(/'/g, "'\\''")}'`;
-		}
-		return arg;
-	}
-
-	/**
-	 * Performs strict validation and allowlisting on the command and its arguments.
-	 * Throws an error if the command is deemed unsafe or violates policy.
-	 * @param executable The main command executable.
-	 * @param args The arguments to the command.
-	 * @param originalCommandString The full, original command string as provided by the AI.
-	 * @returns The effective ExecutableConfig for the given executable.
-	 */
-	private async _isCommandSafe(
-		executable: string,
-		args: string[],
-		originalCommandString: string
-	): Promise<ExecutableConfig> {
-		const config = PlanExecutorService.DEFAULT_COMMAND_SECURITY_SETTINGS;
-
-		if (!executable) {
-			throw new Error(
-				"Command security violation: Executable cannot be empty."
-			);
-		}
-
-		const lowerExecutable = executable.toLowerCase();
-		const defaultExecConfig: ExecutableConfig = { allowed: false };
-		const executableConfig = config.executables[lowerExecutable];
-		const effectiveExecConfig = executableConfig || defaultExecConfig;
-
-		if (!effectiveExecConfig.allowed) {
-			throw new Error(
-				`Command security violation: Executable '${executable}' is explicitly disallowed or not in the allowlist.`
-			);
-		}
-
-		// Absolute Path Handling: Disallow if default doesn't allow
-		const isAbsolutePath = path.isAbsolute(executable);
-		if (isAbsolutePath) {
-			if (!config.default.allowAbsolutePaths) {
-				throw new Error(
-					`Command security violation: Absolute path executable '${executable}' is disallowed by default for security reasons.`
-				);
-			}
-		}
-
-		// Check for dangerous shell meta-characters
-		const allowsMetaChars =
-			effectiveExecConfig.allowMetaCharacters ||
-			config.default.allowMetaCharacters;
-		if (!allowsMetaChars) {
-			const dangerousShellMetaChars = [
-				"&&",
-				"||",
-				";",
-				"`",
-				"$(",
-				">",
-				"<",
-				"|",
-				"&",
-				"\\",
-			];
-
-			const containsDangerousChars = dangerousShellMetaChars.some((char) =>
-				originalCommandString.includes(char)
-			);
-			if (containsDangerousChars) {
-				throw new Error(
-					`Command security violation: Detected potentially dangerous shell meta-characters ` +
-						`('${dangerousShellMetaChars
-							.filter((c) => originalCommandString.includes(c))
-							.join("', '")}') ` +
-						`in the command string. For safety, complex shell scripting or injection attempts via plan commands are prohibited. ` +
-						`If this is a legitimate command, ensure all special characters are properly quoted or escaped.`
-				);
-			}
-		}
-
-		// Specific checks for dangerous commands/arguments (like rm, git)
-		if (lowerExecutable === "rm") {
-			if (
-				args.some(
-					(arg) =>
-						arg.toLowerCase().includes("-rf") ||
-						arg === "/" ||
-						arg === "/*" ||
-						arg === "./*" ||
-						arg === "*"
-				)
-			) {
-				throw new Error(
-					`Command security violation: Potentially dangerous 'rm' operation detected (e.g., -rf, /, /*, *). Full system deletion commands are prohibited.`
-				);
-			}
-		} else if (lowerExecutable === "git") {
-			if (
-				(args.includes("reset") &&
-					(args.includes("--hard") || args.includes("--force"))) ||
-				(args.includes("clean") &&
-					(args.includes("-f") || args.includes("--force")))
-			) {
-				throw new Error(
-					`Command security violation: Potentially dangerous 'git reset --hard' or 'git clean --force' detected. This can lead to irreversible data loss.`
-				);
-			}
-		} else if (["npm", "yarn", "pnpm"].includes(lowerExecutable)) {
-			if (args.includes("exec") || args.includes("dlx")) {
-				if (lowerExecutable !== "npx") {
-					throw new Error(
-						`Command security violation: '${executable} exec/dlx' can run arbitrary code and is not allowed.`
-					);
-				}
-			}
-		}
-
-		// Enhanced Argument Validation for high-risk commands or those with strictArgValidation
-		if (effectiveExecConfig.strictArgValidation) {
-			this._validateArgumentsStrictly(
-				lowerExecutable,
-				args,
-				effectiveExecConfig
-			);
-		} else if (
-			effectiveExecConfig.allowedArgs &&
-			effectiveExecConfig.allowedArgs.length > 0
-		) {
-			for (const arg of args) {
-				const isArgAllowed = effectiveExecConfig.allowedArgs.some((pattern) =>
-					new RegExp(pattern).test(arg)
-				);
-				if (!isArgAllowed) {
-					throw new Error(
-						`Command security violation: Argument '${arg}' for '${executable}' does not match any allowed patterns.`
-					);
-				}
-			}
-		}
-
-		return effectiveExecConfig;
-	}
-
-	/**
-	 * Performs deeper, stricter argument validation for commands marked with `strictArgValidation`.
-	 * Checks for path traversal, URL safety using allowed patterns, and dangerous argument characters.
-	 * @param executable The command executable.
-	 * @param args The arguments to validate.
-	 * @param effectiveExecConfig The resolved ExecutableConfig for the command.
-	 */
-	private _validateArgumentsStrictly(
-		executable: string,
-		args: string[],
-		effectiveExecConfig: ExecutableConfig
-	): void {
-		for (const arg of args) {
-			if (arg.includes("../") || arg.includes("/..")) {
-				throw new Error(
-					`Command security violation: Path traversal detected in argument '${arg}' for '${executable}'.`
-				);
-			}
-
-			// URL validation block
-			if (arg.match(/^(http|https):\/\/[^\s$.?#].[^\s]*$/i)) {
-				if (
-					effectiveExecConfig.allowedUrlPatterns &&
-					effectiveExecConfig.allowedUrlPatterns.length > 0
-				) {
-					const isUrlAllowed = effectiveExecConfig.allowedUrlPatterns.some(
-						(pattern) => new RegExp(pattern).test(arg)
-					);
-					if (!isUrlAllowed) {
-						throw new Error(
-							`Command security violation: URL '${arg}' is not permitted for '${executable}'.`
-						);
-					}
-				} else {
-					// If allowedUrlPatterns is not defined or empty
-					if (effectiveExecConfig.strictArgValidation === true) {
-						throw new Error(
-							`Command security violation: URLs are not explicitly allowed for '${executable}' under strict validation.`
-						);
-					} else {
-						// Retain original console.warn if strictArgValidation is false or undefined
-						console.warn(
-							`Command security warning: URL '${arg}' detected in arguments for '${executable}'. ` +
-								`Ensure this URL is trusted for this command.`
-						);
-					}
-				}
-			}
-
-			// Existing allowedArgs validation
-			if (
-				effectiveExecConfig.allowedArgs &&
-				effectiveExecConfig.allowedArgs.length > 0
-			) {
-				const isArgAllowed = effectiveExecConfig.allowedArgs.some((pattern) =>
-					new RegExp(pattern).test(arg)
-				);
-				if (!isArgAllowed) {
-					throw new Error(
-						`Command security violation: Argument '${arg}' for '${executable}' does not match any allowed patterns.`
-					);
-				}
-			}
-
-			const dangerousArgChars = ["`", "$("];
-			if (dangerousArgChars.some((char) => arg.includes(char))) {
-				throw new Error(
-					`Command security violation: Potentially dangerous command substitution character in argument '${arg}' for '${executable}'.`
-				);
-			}
-		}
-	}
-
 	private async _handleRunCommandStep(
 		step: RunCommandStep,
 		index: number,
@@ -1308,11 +975,13 @@ export class PlanExecutorService {
 	): Promise<boolean> {
 		const commandString = step.step.command.trim();
 
-		const { executable, args } = this._parseCommandArguments(commandString);
+		const { executable, args } =
+			CommandSecurityService.parseCommandArguments(commandString); // Refactored
 
 		let effectiveExecConfig: ExecutableConfig;
 		try {
-			effectiveExecConfig = await this._isCommandSafe(
+			effectiveExecConfig = await this.commandSecurityService.isCommandSafe(
+				// Refactored
 				executable,
 				args,
 				commandString
@@ -1340,22 +1009,20 @@ export class PlanExecutorService {
 
 		const displayCommand = [
 			executable,
-			...args.map(this._sanitizeArgumentForDisplay),
+			...args.map(CommandSecurityService.sanitizeArgumentForDisplay), // Refactored
 		].join(" ");
 
-		let promptMessage = `The plan wants to run this command:\n\n\`${displayCommand}.\`\n\n`;
-		let modalPrompt = false;
+		let promptMessage = `Command:\n[ \`${displayCommand}.\` ]`;
+		let modalPrompt = true;
 
 		if (
 			effectiveExecConfig.requiresExplicitConfirmation ||
 			effectiveExecConfig.isHighRisk
 		) {
-			modalPrompt = true;
 			promptMessage += `\n\n🚨 CRITICAL SECURITY ALERT: Are you absolutely sure you want to allow this?`;
 		} else {
-			promptMessage += `\n\n⚠️ WARNING: Please review it carefully. Ensure you trust its source and content before proceeding.`;
+			promptMessage += `\n\n⚠️ WARNING: Please review it carefully. The plan wants to run the command above. Allow?`;
 		}
-		promptMessage += `\nAllow?`;
 
 		// Add console log before showing the warning message
 		console.log(
@@ -1397,7 +1064,7 @@ ${userChoice}`);
 				!this.minovativeMindTerminal.exitStatus
 			) {
 				this.minovativeMindTerminal.sendText(
-					`\necho --- Command SKIPPED (prompt dismissed): ${displayCommand} ---\n`,
+					`\necho --- Command SKIPPED (prompt dismissed) ---\n`,
 					true
 				);
 			}
@@ -1465,7 +1132,7 @@ ${userChoice}`);
 						!this.minovativeMindTerminal.exitStatus
 					) {
 						this.minovativeMindTerminal.sendText(
-							`\necho --- Command SUCCEEDED: ${displayCommand} ---\n`,
+							`\necho --- Command SUCCEEDED ---\n`,
 							false
 						);
 					}
@@ -1503,7 +1170,7 @@ ${userChoice}`);
 				!this.minovativeMindTerminal.exitStatus
 			) {
 				this.minovativeMindTerminal.sendText(
-					`\necho --- Command SKIPPED: ${displayCommand} ---\n`,
+					`\necho --- Command SKIPPED ---\n`,
 					true
 				);
 			}
