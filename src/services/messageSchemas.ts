@@ -70,6 +70,10 @@ const addApiKeySchema = z.object({
 	type: z.literal("addApiKey"),
 	value: z.string(),
 }); // Based on usage
+const setApiActiveKeySchema = z.object({
+	type: z.literal("setApiActiveKey"),
+	value: z.number().int().nonnegative(),
+});
 const requestDeleteConfirmationSchema = z.object({
 	type: z.literal("requestDeleteConfirmation"),
 });
@@ -167,6 +171,7 @@ export const allMessageSchemas = z.discriminatedUnion("type", [
 	getCurrentTokenEstimatesSchema,
 	openSidebarSchema,
 	addApiKeySchema,
+	setApiActiveKeySchema,
 	requestDeleteConfirmationSchema,
 	switchToNextKeySchema,
 	switchToPrevKeySchema,

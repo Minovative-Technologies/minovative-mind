@@ -117,14 +117,21 @@ export function initializeButtonEventListeners(
 
 	// Previous Key Button
 	prevKeyButton.addEventListener("click", () => {
-		postMessageToExtension({ type: "switchToPrevKey" });
-		updateApiKeyStatus(elements, "Switching key..."); // Pass elements
+		if (appState.totalKeys > 1) {
+			const newIndex =
+				(appState.activeIndex - 1 + appState.totalKeys) % appState.totalKeys;
+			postMessageToExtension({ type: "setApiActiveKey", value: newIndex });
+			updateApiKeyStatus(elements, "Switching key...");
+		}
 	});
 
 	// Next Key Button
 	nextKeyButton.addEventListener("click", () => {
-		postMessageToExtension({ type: "switchToNextKey" });
-		updateApiKeyStatus(elements, "Switching key..."); // Pass elements
+		if (appState.totalKeys > 1) {
+			const newIndex = (appState.activeIndex + 1) % appState.totalKeys;
+			postMessageToExtension({ type: "setApiActiveKey", value: newIndex });
+			updateApiKeyStatus(elements, "Switching key...");
+		}
 	});
 
 	// Delete Key Button

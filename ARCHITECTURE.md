@@ -50,6 +50,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 - **Enhanced `initializeGenerativeAI` Logic**: Leverages `systemInstruction` (`MINO_SYSTEM_INSTRUCTION`) for consistent AI persona and tracks `currentToolsHash` for optimization.
 - **Robust Streaming (`generateContentStream`)**: Provides `AsyncIterableIterator` for real-time responses, integrates `CancellationToken` support, and includes comprehensive error handling.
 - **Function Call Generation (`generateFunctionCall`)**: Enables the AI to generate structured function calls based on `tools`, supporting `FunctionCallingMode` for fine-grained control.
+- **API Key Management**: The `ApiKeyManager` class is now responsible for managing API key storage, retrieval, and the selection of the currently active key. It utilizes `vscode.SecretStorage` for securely storing multiple API keys in a JSON format. The `initializeGenerativeAI` function in `gemini.ts` obtains the currently active API key from `ApiKeyManager` before initializing the Gemini client.
 - **Key Files**: `src/ai/gemini.ts`, `src/ai/prompts/systemInstructions.ts`
 
 #### 2. AI Request Orchestration & Robustness
@@ -57,6 +58,7 @@ A deeper analysis of the file structure, class responsibilities, and how differe
 - **Responsibility**: Manages the overall process of making AI requests with a focus on reliability and efficiency, including retry logic, cancellation handling, parallel processing, and token usage reporting.
 - **Key Features**: Implements robust retry logic for transient errors, handles cancellation requests, orchestrates concurrent AI calls through `src/utils/parallelProcessor.ts`, and reports token usage to `src/services/tokenTrackingService.ts`.
 - **Function Calling Mode**: Accepts and forwards `functionCallingMode` to enforce specific modes (e.g., `FunctionCallingMode.ANY` for plan generation).
+- **API Key Dependency**: The `AIRequestService` has a dependency on `ApiKeyManager`. Methods such as `generateWithRetry` retrieve the active API key by interacting with `ApiKeyManager` to ensure the correct key is used for AI operations.
 - **Key Files**: `src/services/aiRequestService.ts` (`AIRequestService` class, `generateWithRetry`, `generateMultipleInParallel`, `generateInBatches`, `processFilesInParallel`)
 
 #### 3. Token Usage Tracking
