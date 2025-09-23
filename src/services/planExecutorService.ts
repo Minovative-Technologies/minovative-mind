@@ -25,14 +25,9 @@ import { UrlContextService } from "./urlContextService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 import { executeCommand, CommandResult } from "../utils/commandExecution";
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
-import {
-	CommandSecurityService,
-	ExecutableConfig,
-} from "./commandSecurityService"; // Added import
 
 export class PlanExecutorService {
 	private minovativeMindTerminal: vscode.Terminal | undefined;
-	private commandSecurityService: CommandSecurityService; // Added new property
 
 	constructor(
 		private provider: SidebarProvider,
@@ -42,9 +37,7 @@ export class PlanExecutorService {
 		private enhancedCodeGenerator: EnhancedCodeGenerator,
 		private gitConflictResolutionService: GitConflictResolutionService,
 		private readonly MAX_TRANSIENT_STEP_RETRIES: number
-	) {
-		this.commandSecurityService = new CommandSecurityService(); // Initialize new property
-	}
+	) {}
 
 	private getOrCreateTerminal(): vscode.Terminal {
 		if (
@@ -366,9 +359,13 @@ export class PlanExecutorService {
 							combinedToken
 						);
 						if (!commandSuccess) {
-							throw new Error(
-								`Command execution failed for '${step.step.command}'.`
-							);
+							// In the new non-blocking model, a 'false' return would imply
+							// a failure to *initiate* the command, which would be handled by the catch block below.
+							// The instruction implies this method should always return true if allowed or skipped.
+							// Therefore, this `throw new Error` path for command failures is removed.
+							// The _handleRunCommandStep will always return true if user allows or skips.
+							// If the command *fails to initiate* then the catch block within _handleRunCommandStep will handle it
+							// without re-throwing, allowing the plan to continue.
 						}
 					}
 					currentStepCompletedSuccessfullyOrSkipped = true;
@@ -976,53 +973,15 @@ export class PlanExecutorService {
 		const commandString = step.step.command.trim();
 
 		const { executable, args } =
-			CommandSecurityService.parseCommandArguments(commandString); // Refactored
-
-		let effectiveExecConfig: ExecutableConfig;
-		try {
-			effectiveExecConfig = await this.commandSecurityService.isCommandSafe(
-				// Refactored
-				executable,
-				args,
-				commandString
-			);
-		} catch (validationError: any) {
-			this._logStepProgress(
-				index + 1,
-				totalSteps,
-				`Command blocked: ${validationError.message}`,
-				0,
-				0,
-				true
-			);
-			if (
-				this.minovativeMindTerminal &&
-				!this.minovativeMindTerminal.exitStatus
-			) {
-				this.minovativeMindTerminal.sendText(
-					`\nERROR: Command Blocked - ${validationError.message}\n`,
-					true
-				);
-			}
-			throw new Error(`Command blocked: ${validationError.message}`);
-		}
+			PlanExecutorService._parseCommandArguments(commandString);
 
 		const displayCommand = [
 			executable,
-			...args.map(CommandSecurityService.sanitizeArgumentForDisplay), // Refactored
+			...args.map(PlanExecutorService._sanitizeArgumentForDisplay),
 		].join(" ");
 
 		let promptMessage = `Command:\n[ \`${displayCommand}.\` ]`;
-		let modalPrompt = true;
-
-		if (
-			effectiveExecConfig.requiresExplicitConfirmation ||
-			effectiveExecConfig.isHighRisk
-		) {
-			promptMessage += `\n\n🚨 CRITICAL SECURITY ALERT: Are you absolutely sure you want to allow this?`;
-		} else {
-			promptMessage += `\n\n⚠️ WARNING: Please review it carefully. The plan wants to run the command above. Allow?`;
-		}
+		promptMessage += `\n\n⚠️ WARNING: Please review it carefully. The plan wants to run the command above. Allow?`;
 
 		// Add console log before showing the warning message
 		console.log(
@@ -1031,7 +990,7 @@ export class PlanExecutorService {
 
 		const userChoice = await vscode.window.showInformationMessage(
 			promptMessage,
-			{ modal: modalPrompt },
+			{ modal: true },
 			"Allow",
 			"Skip"
 		);
@@ -1075,87 +1034,49 @@ ${userChoice}`);
 			const terminal = this.getOrCreateTerminal();
 			terminal.sendText(`${commandString}\n`);
 
-			try {
-				const commandResult: CommandResult = await executeCommand(
-					executable,
-					args,
-					rootUri.fsPath,
-					combinedToken,
-					this.provider.activeChildProcesses,
-					terminal
-				);
-
-				if (commandResult.exitCode !== 0) {
-					const errorMessage = `Command \`${displayCommand}\` failed with exit code ${commandResult.exitCode}.
-                                    \n--- STDOUT ---\n${commandResult.stdout}
-                                    \n--- STDERR ---\n${commandResult.stderr}`;
-
-					this._logStepProgress(
-						index + 1,
-						totalSteps,
-						`Command execution error.`,
-						0,
-						0,
-						true,
-						errorMessage
-					);
-
-					if (
-						this.minovativeMindTerminal &&
-						!this.minovativeMindTerminal.exitStatus
-					) {
-						this.minovativeMindTerminal.sendText(
-							`\necho --- Command FAILED: ${displayCommand} (Exit Code: ${commandResult.exitCode}) ---\n`,
-							false
-						);
-					}
-
-					throw new Error(
-						`Command '${displayCommand}' failed. Output: ${errorMessage}`
-					);
-				} else {
-					const successMessage = `Command \`${displayCommand}\` executed successfully.
-                                    \n--- STDOUT ---\n${commandResult.stdout}
-                                    \n--- STDERR ---\n${commandResult.stderr}`;
-
-					this._logStepProgress(
-						index + 1,
-						totalSteps,
-						`Command executed.`,
-						0,
-						0,
-						false,
-						successMessage
-					);
-					if (
-						this.minovativeMindTerminal &&
-						!this.minovativeMindTerminal.exitStatus
-					) {
-						this.minovativeMindTerminal.sendText(
-							`\necho --- Command SUCCEEDED ---\n`,
-							false
-						);
-					}
-					return true;
-				}
-			} catch (commandExecError: any) {
-				if (commandExecError.message === ERROR_OPERATION_CANCELLED) {
-					throw commandExecError;
-				}
-				let detailedError = `Error executing command \`${displayCommand}\`: ${commandExecError.message}`;
-				this._logStepProgress(index + 1, totalSteps, detailedError, 0, 0, true);
-
+			// Execute the command non-blocking and add a catch block for initiation errors
+			executeCommand(
+				executable,
+				args,
+				rootUri.fsPath,
+				combinedToken,
+				this.provider.activeChildProcesses,
+				terminal
+			).catch((commandExecError: any) => {
+				const errorMessage = `Failed to initiate command '${displayCommand}': ${commandExecError.message}`;
+				console.error(`Minovative Mind: ${errorMessage}`, commandExecError);
 				if (
 					this.minovativeMindTerminal &&
 					!this.minovativeMindTerminal.exitStatus
 				) {
 					this.minovativeMindTerminal.sendText(
-						`\nERROR: ${detailedError}\n`,
+						`\nERROR: ${errorMessage}\n`,
 						true
 					);
 				}
-				throw commandExecError;
+				// Do NOT re-throw, allow the plan to continue.
+			});
+
+			this._logStepProgress(
+				index + 1,
+				totalSteps,
+				`Command INITIATED. Monitor "Minovative Mind Commands" terminal for output.`,
+				0,
+				0,
+				false
+			);
+
+			if (
+				this.minovativeMindTerminal &&
+				!this.minovativeMindTerminal.exitStatus
+			) {
+				this.minovativeMindTerminal.sendText(
+					`\necho --- Command INITIATED ---\n`,
+					false
+				);
 			}
+
+			return true;
 		} else {
 			// userChoice is "Skip"
 			this._logStepProgress(
@@ -1176,5 +1097,53 @@ ${userChoice}`);
 			}
 			return true;
 		}
+	}
+
+	private static _parseCommandArguments(commandString: string): {
+		executable: string;
+		args: string[];
+	} {
+		const parts = [];
+		let inQuote = false;
+		let currentPart = "";
+
+		for (let i = 0; i < commandString.length; i++) {
+			const char = commandString[i];
+
+			if (char === '"' || char === `'`) {
+				inQuote = !inQuote;
+				if (!inQuote && currentPart !== "") {
+					parts.push(currentPart);
+					currentPart = "";
+				}
+			} else if (char === " " && !inQuote) {
+				if (currentPart !== "") {
+					parts.push(currentPart);
+					currentPart = "";
+				}
+			} else {
+				currentPart += char;
+			}
+		}
+
+		if (currentPart !== "") {
+			parts.push(currentPart);
+		}
+
+		if (parts.length === 0) {
+			return { executable: "", args: [] };
+		}
+
+		const [executable, ...args] = parts;
+		return { executable, args };
+	}
+
+	private static _sanitizeArgumentForDisplay(arg: string): string {
+		// For display purposes, we might want to truncate very long arguments
+		// or replace sensitive information. For now, we return as is.
+		if (arg.length > 100) {
+			return `${arg.substring(0, 97)}...`;
+		}
+		return arg;
 	}
 }

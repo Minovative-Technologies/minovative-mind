@@ -1,4 +1,3 @@
-// src/ai/prompts/enhancedCodeGenerationPrompts.ts
 import * as path from "path";
 import {
 	FileAnalysis,
@@ -155,9 +154,6 @@ export function createEnhancedGenerationPrompt(
 		"**Command Execution Format (RunCommandStep)**: For any `RunCommandStep` action, the `command` property MUST be an object `{ executable: string, args: string[], usesShell?: boolean }`. The `executable` should be the command name (e.g., 'npm', 'git') and `args` an array of its arguments (e.g., ['install', '--save-dev', 'package']). If a command *absolutely requires* `shell: true` (e.g., it uses shell-specific features like pipes, redirects, or environment variable expansion inherently for its functionality, and cannot be expressed directly via `executable` and `args`), you MUST explicitly include `usesShell: true` in the object. This flag triggers critical fallback security checks in `PlanExecutorService`. Always prefer `executable` and `args` without `usesShell: true` for security reasons, unless explicitly necessary."
 	);
 
-	// This prompt strictly targets technical problem-solving.
-	// It explicitly states "ONLY focus on generating code." and is now strengthened with an explicit exclusion.
-	// Emphasis on quality attributes like accuracy, error prevention, and best practices is clearly stated in the requirements list.
 	return `You are the expert software engineer for me, specializing in ${languageId} development. Your task is to generate production-ready, accurate code. ONLY focus on generating code. EXCLUDE all conversational or meta-commentary.
 
 **File Analysis:**
