@@ -27,7 +27,7 @@ import { executeCommand, CommandResult } from "../utils/commandExecution";
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
 
 export class PlanExecutorService {
-	private minovativeMindTerminal: vscode.Terminal | undefined;
+	private commandExecutionTerminals: vscode.Terminal[] = [];
 
 	constructor(
 		private provider: SidebarProvider,
@@ -38,29 +38,6 @@ export class PlanExecutorService {
 		private gitConflictResolutionService: GitConflictResolutionService,
 		private readonly MAX_TRANSIENT_STEP_RETRIES: number
 	) {}
-
-	private getOrCreateTerminal(): vscode.Terminal {
-		if (
-			this.minovativeMindTerminal &&
-			!this.minovativeMindTerminal.exitStatus
-		) {
-			return this.minovativeMindTerminal;
-		}
-
-		this.minovativeMindTerminal = vscode.window.terminals.find(
-			(t) => t.name === "Minovative Mind Commands"
-		);
-
-		if (!this.minovativeMindTerminal) {
-			this.minovativeMindTerminal = vscode.window.createTerminal({
-				name: "Minovative Mind Commands",
-				cwd: this.workspaceRootUri.fsPath,
-			});
-		}
-
-		this.minovativeMindTerminal.show(true);
-		return this.minovativeMindTerminal;
-	}
 
 	public async executePlan(
 		plan: ExecutionPlan,
@@ -149,6 +126,10 @@ export class PlanExecutorService {
 		} finally {
 			this.provider.activeChildProcesses.forEach((cp) => cp.kill());
 			this.provider.activeChildProcesses = [];
+
+			// Dedicated terminals are not disposed automatically here; they persist.
+			// This allows users to review command output after the plan completes.
+
 			await this.provider.setPlanExecutionActive(false);
 
 			let outcome: sidebarTypes.ExecutionOutcome;
@@ -348,7 +329,7 @@ export class PlanExecutorService {
 							combinedToken
 						);
 					} else if (isRunCommandStep(step)) {
-						const commandSuccess = await this._handleRunCommandStep(
+						await this._handleRunCommandStep(
 							step,
 							index,
 							totalOrderedSteps, // Use the new total
@@ -358,15 +339,6 @@ export class PlanExecutorService {
 							originalRootInstruction,
 							combinedToken
 						);
-						if (!commandSuccess) {
-							// In the new non-blocking model, a 'false' return would imply
-							// a failure to *initiate* the command, which would be handled by the catch block below.
-							// The instruction implies this method should always return true if allowed or skipped.
-							// Therefore, this `throw new Error` path for command failures is removed.
-							// The _handleRunCommandStep will always return true if user allows or skips.
-							// If the command *fails to initiate* then the catch block within _handleRunCommandStep will handle it
-							// without re-throwing, allowing the plan to continue.
-						}
 					}
 					currentStepCompletedSuccessfullyOrSkipped = true;
 				} catch (error: any) {
@@ -980,6 +952,13 @@ export class PlanExecutorService {
 			...args.map(PlanExecutorService._sanitizeArgumentForDisplay),
 		].join(" ");
 
+		const commandTerminal = vscode.window.createTerminal({
+			name: `Minovative Mind: Cmd ${index + 1}/${totalSteps}`,
+			cwd: rootUri.fsPath,
+		});
+		commandTerminal.show(true);
+		this.commandExecutionTerminals.push(commandTerminal); // Store the reference
+
 		let promptMessage = `Command:\n[ \`${displayCommand}.\` ]`;
 		promptMessage += `\n\n⚠️ WARNING: Please review it carefully. The plan wants to run the command above. Allow?`;
 
@@ -1018,65 +997,72 @@ ${userChoice}`);
 				0,
 				0
 			);
-			if (
-				this.minovativeMindTerminal &&
-				!this.minovativeMindTerminal.exitStatus
-			) {
-				this.minovativeMindTerminal.sendText(
-					`\necho --- Command SKIPPED (prompt dismissed) ---\n`,
-					true
-				);
-			}
 			return true;
 		}
 
 		if (userChoice === "Allow") {
-			const terminal = this.getOrCreateTerminal();
-			terminal.sendText(`${commandString}\n`);
+			commandTerminal.sendText(`${displayCommand}`, true);
 
-			// Execute the command non-blocking and add a catch block for initiation errors
-			executeCommand(
-				executable,
-				args,
-				rootUri.fsPath,
-				combinedToken,
-				this.provider.activeChildProcesses,
-				terminal
-			).catch((commandExecError: any) => {
-				const errorMessage = `Failed to initiate command '${displayCommand}': ${commandExecError.message}`;
-				console.error(`Minovative Mind: ${errorMessage}`, commandExecError);
-				if (
-					this.minovativeMindTerminal &&
-					!this.minovativeMindTerminal.exitStatus
-				) {
-					this.minovativeMindTerminal.sendText(
-						`\nERROR: ${errorMessage}\n`,
+			try {
+				const commandResult: CommandResult = await executeCommand(
+					executable,
+					args,
+					rootUri.fsPath,
+					combinedToken,
+					this.provider.activeChildProcesses,
+					commandTerminal // Pass the dedicated terminal
+				);
+
+				if (commandResult.exitCode === 0) {
+					this._logStepProgress(
+						index + 1,
+						totalSteps,
+						`Command completed successfully: \`${displayCommand}\`.`,
+						0,
+						0,
+						false
+					);
+					commandTerminal.sendText(
+						`\n--- Command (${
+							index + 1
+						}/${totalSteps}) Completed Successfully --- \n\n`,
 						true
 					);
+					return true;
+				} else {
+					const errorMessage = `Command failed with exit code ${commandResult.exitCode}: \`${displayCommand}\`.`;
+					this._logStepProgress(
+						index + 1,
+						totalSteps,
+						`ERROR: ${errorMessage}`,
+						0,
+						0,
+						true
+					);
+					commandTerminal.sendText(
+						`\n--- Command (${index + 1}/${totalSteps}) Failed --- \n`,
+						true
+					);
+					throw new Error("RunCommandStep failed with non-zero exit code.");
 				}
-				// Do NOT re-throw, allow the plan to continue.
-			});
-
-			this._logStepProgress(
-				index + 1,
-				totalSteps,
-				`Command INITIATED. Monitor "Minovative Mind Commands" terminal for output.`,
-				0,
-				0,
-				false
-			);
-
-			if (
-				this.minovativeMindTerminal &&
-				!this.minovativeMindTerminal.exitStatus
-			) {
-				this.minovativeMindTerminal.sendText(
-					`\necho --- Command INITIATED ---\n`,
-					false
+			} catch (commandSpawnError: any) {
+				const errorMessage = `Failed to execute command '${displayCommand}': ${commandSpawnError.message}`;
+				console.error(`Minovative Mind: ${errorMessage}`, commandSpawnError);
+				commandTerminal.sendText(`\nERROR: ${errorMessage}\n`, true);
+				commandTerminal.sendText(
+					`\n--- Command (${index + 1}/${totalSteps}) Failed --- \n`,
+					true
 				);
+				this._logStepProgress(
+					index + 1,
+					totalSteps,
+					`ERROR: ${errorMessage}`,
+					0,
+					0,
+					true
+				);
+				throw new Error("RunCommandStep failed during spawning or execution.");
 			}
-
-			return true;
 		} else {
 			// userChoice is "Skip"
 			this._logStepProgress(
@@ -1086,15 +1072,10 @@ ${userChoice}`);
 				0,
 				0
 			);
-			if (
-				this.minovativeMindTerminal &&
-				!this.minovativeMindTerminal.exitStatus
-			) {
-				this.minovativeMindTerminal.sendText(
-					`\necho --- Command SKIPPED ---\n`,
-					true
-				);
-			}
+			commandTerminal.sendText(
+				`\n--- Command (${index + 1}/${totalSteps}) Skipped --- \n\n`,
+				true
+			);
 			return true;
 		}
 	}
