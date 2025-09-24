@@ -6,7 +6,10 @@ import {
 	EnhancedGenerationContext,
 	CodeIssue,
 } from "../types/codeGenerationTypes";
-import { DiagnosticService } from "../utils/diagnosticUtils"; // New import
+import {
+	DiagnosticService,
+	FormatDiagnosticsOptions,
+} from "../utils/diagnosticUtils"; // Updated import to include FormatDiagnosticsOptions
 
 export class ContextRefresherService {
 	constructor(
@@ -29,21 +32,33 @@ export class ContextRefresherService {
 		try {
 			const fileUri = vscode.Uri.file(filePath);
 
+			// Asynchronously read the content of fileUri
+			const fileContentBytes = await vscode.workspace.fs.readFile(fileUri);
+			const fileContent = Buffer.from(fileContentBytes).toString("utf8");
+
+			// Construct a FormatDiagnosticsOptions object
+			const formatOptions: FormatDiagnosticsOptions = {
+				fileContent: fileContent,
+				enableEnhancedDiagnosticContext: true,
+				includeSeverities: [
+					vscode.DiagnosticSeverity.Error,
+					vscode.DiagnosticSeverity.Warning,
+					vscode.DiagnosticSeverity.Information,
+					vscode.DiagnosticSeverity.Hint,
+				],
+				requestType: "full", // Changed from "fix" to "full" to resolve type mismatch
+				token: token, // Use the existing token parameter
+				selection: undefined,
+				maxTotalChars: undefined,
+				snippetContextLines: undefined,
+				maxPerSeverity: 25, // Set maxPerSeverity to 25 as per instructions
+			};
+
 			const formattedDiagnostics =
 				await DiagnosticService.formatContextualDiagnostics(
 					fileUri,
 					this.workspaceRoot,
-					undefined, // selection: No specific text selection focus for this context
-					undefined, // maxTotalChars: Use default from DiagnosticService (25000 chars)
-					25, // maxPerSeverity: Include up to 25 diagnostics per severity level.
-					token,
-					[
-						// includeSeverities: For issue resolution ('fix' request type), all severities are relevant.
-						vscode.DiagnosticSeverity.Error,
-						vscode.DiagnosticSeverity.Warning,
-						vscode.DiagnosticSeverity.Information,
-						vscode.DiagnosticSeverity.Hint,
-					]
+					formatOptions // Pass the newly constructed formatOptions object
 				);
 
 			if (!formattedDiagnostics) {

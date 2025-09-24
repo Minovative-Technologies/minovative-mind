@@ -1,6 +1,22 @@
 import * as vscode from "vscode";
 import * as path from "path";
 
+/**
+ * Options for formatting contextual diagnostics.
+ */
+export interface FormatDiagnosticsOptions {
+	fileContent: string;
+	enableEnhancedDiagnosticContext: boolean;
+	includeSeverities: vscode.DiagnosticSeverity[];
+	// Changed from "full" | "selection" to "full" | "hint_only" to resolve type incompatibility.
+	requestType: "full" | "hint_only";
+	token?: vscode.CancellationToken;
+	selection?: vscode.Range;
+	maxTotalChars?: number;
+	maxPerSeverity?: number;
+	snippetContextLines?: SnippetContextLines;
+}
+
 async function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -19,12 +35,6 @@ export function getSeverityName(severity: vscode.DiagnosticSeverity): string {
 			return "Unknown";
 	}
 }
-
-/**
- * Defines the type of request for diagnostic formatting,
- * which influences filtering and prioritization.
- */
-export type DiagnosticRequestType = "fix" | "explain" | "general";
 
 /**
  * Defines the context lines for code snippets.
@@ -49,100 +59,64 @@ export class DiagnosticService {
 	 *
 	 * @param documentUri The URI of the document to get diagnostics for.
 	 * @param workspaceRoot The root URI of the workspace for relative paths.
-	 * @param selection An optional vscode.Range representing the user's text selection.
-	 * @param maxTotalChars The maximum character length for the output string.
-	 * @param maxPerSeverity The maximum number of diagnostics to include per severity level.
-	 * @param token An optional CancellationToken to allow for early cancellation of the operation.
-	 * @param includeSeverities Which severities to include. Defaults to all for general.
-	 * @param requestType An optional parameter to adjust filtering based on the request's intent.
-	 * @param snippetContextLines Optional configuration for how many lines before/after a diagnostic to include in the snippet.
+	 * @param options Configuration for diagnostic formatting.
 	 * @returns A formatted string of diagnostics, or undefined if no relevant diagnostics.
 	 */
 	public static async formatContextualDiagnostics(
 		documentUri: vscode.Uri,
 		workspaceRoot: vscode.Uri,
-		selection?: vscode.Range,
-		maxTotalChars: number = 25000,
-		maxPerSeverity: number = 25,
-		token?: vscode.CancellationToken,
-		includeSeverities: vscode.DiagnosticSeverity[] = [
-			vscode.DiagnosticSeverity.Error,
-			vscode.DiagnosticSeverity.Warning,
-			vscode.DiagnosticSeverity.Information,
-			vscode.DiagnosticSeverity.Hint,
-		],
-		requestType: DiagnosticRequestType = "general",
-		snippetContextLines: SnippetContextLines = { before: 3, after: 3 }
+		options: FormatDiagnosticsOptions
 	): Promise<string | undefined> {
 		const allDiagnostics = DiagnosticService.getDiagnosticsForUri(documentUri);
 		if (!allDiagnostics || allDiagnostics.length === 0) {
 			return undefined;
 		}
 
-		let fileContentLines: string[] | undefined;
-		try {
-			const fileBuffer = await vscode.workspace.fs.readFile(documentUri);
-			fileContentLines = Buffer.from(fileBuffer)
-				.toString("utf8")
-				.split(/\r?\n/);
-		} catch (error: any) {
-			if (token?.isCancellationRequested) {
-				throw new Error("Operation cancelled during file content read.");
-			}
-			if (error instanceof vscode.FileSystemError) {
-				if (
-					error.code === "FileNotFound" ||
-					error.code === "EntryIsDirectory"
-				) {
-					console.warn(
-						`[DiagnosticService] Skipping code snippet for '${documentUri.fsPath}': ${error.message}`
-					);
-				} else {
-					console.error(
-						`[DiagnosticService] Error reading file content for snippet '${documentUri.fsPath}': ${error.message}`
-					);
-				}
-			} else {
-				console.error(
-					`[DiagnosticService] Unexpected error reading file content for snippet '${documentUri.fsPath}': ${error.message}`
-				);
-			}
-			fileContentLines = undefined;
-		}
+		const fileContentLines = options.fileContent.split(/\r?\n/);
 
-		// Determine effective filtering and limits based on requestType
-		let effectiveIncludeSeverities = new Set(includeSeverities);
-		let effectiveMaxPerSeverity = maxPerSeverity;
-		let effectiveMaxPerSeverityInfo = maxPerSeverity / 2;
-		let effectiveMaxPerSeverityHint = maxPerSeverity / 4;
+		const actualMaxTotalChars = options.maxTotalChars ?? 25000;
+		const actualMaxPerSeverity = options.maxPerSeverity ?? 25;
+		const actualSnippetContextLines = options.snippetContextLines ?? {
+			before: 3,
+			after: 3,
+		};
 
-		if (requestType === "fix") {
+		// Determine effective filtering and limits based on options.requestType
+		let effectiveIncludeSeverities = new Set(options.includeSeverities);
+		let effectiveMaxPerSeverity = actualMaxPerSeverity;
+		let effectiveMaxPerSeverityInfo = actualMaxPerSeverity / 2;
+		let effectiveMaxPerSeverityHint = actualMaxPerSeverity / 4;
+
+		if (options.requestType === "hint_only") {
+			// Focus on Information and Hints, potentially with higher limits for them.
 			effectiveIncludeSeverities = new Set([
-				vscode.DiagnosticSeverity.Error,
-				vscode.DiagnosticSeverity.Warning,
-				...(includeSeverities.includes(vscode.DiagnosticSeverity.Information)
+				...(options.includeSeverities.includes(
+					vscode.DiagnosticSeverity.Information
+				)
 					? [vscode.DiagnosticSeverity.Information]
 					: []),
-				...(includeSeverities.includes(vscode.DiagnosticSeverity.Hint)
+				...(options.includeSeverities.includes(vscode.DiagnosticSeverity.Hint)
 					? [vscode.DiagnosticSeverity.Hint]
 					: []),
 			]);
-			effectiveMaxPerSeverity = Math.max(maxPerSeverity, 50); // More errors/warnings for 'fix'
-			effectiveMaxPerSeverityInfo = Math.min(effectiveMaxPerSeverityInfo, 5); // Fewer info for 'fix'
-			effectiveMaxPerSeverityHint = Math.min(effectiveMaxPerSeverityHint, 2); // Even fewer hints for 'fix'
-		} else if (requestType === "explain" || requestType === "general") {
-			effectiveMaxPerSeverity = Math.max(maxPerSeverity, 30); // Broader range for explain/general
+			effectiveMaxPerSeverity = Math.max(actualMaxPerSeverity, 30);
+			effectiveMaxPerSeverityInfo = Math.max(effectiveMaxPerSeverityInfo, 15);
+			effectiveMaxPerSeverityHint = Math.max(effectiveMaxPerSeverityHint, 10);
+		} else if (options.requestType === "full") {
+			// This is the comprehensive mode, similar to 'general' or 'explain' previously.
+			// The defaults or explicit options.includeSeverities apply.
+			effectiveMaxPerSeverity = Math.max(actualMaxPerSeverity, 30);
 			effectiveMaxPerSeverityInfo = Math.max(effectiveMaxPerSeverityInfo, 10);
 			effectiveMaxPerSeverityHint = Math.max(effectiveMaxPerSeverityHint, 5);
 		}
 
 		let filteredDiagnostics: vscode.Diagnostic[] = [];
 
-		if (selection) {
+		if (options.selection) {
 			// Scenario 1: User has a selection - prioritize diagnostics within selection
 			filteredDiagnostics = allDiagnostics.filter(
 				(d) =>
-					selection?.intersection(d.range) &&
+					options.selection?.intersection(d.range) &&
 					effectiveIncludeSeverities.has(d.severity)
 			);
 		} else {
@@ -219,7 +193,7 @@ export class DiagnosticService {
 			.replace(/\\/g, "/");
 
 		for (const diag of filteredDiagnostics) {
-			if (token?.isCancellationRequested) {
+			if (options.token?.isCancellationRequested) {
 				diagnosticsString += `... (${
 					filteredDiagnostics.length - filteredDiagnostics.indexOf(diag)
 				} more diagnostics truncated due to cancellation)\n`;
@@ -245,8 +219,8 @@ export class DiagnosticService {
 				const diagnosticSpan = diag.range.end.line - diag.range.start.line;
 
 				// Dynamically adjust snippet context based on span
-				let linesBefore = snippetContextLines.before;
-				let linesAfter = snippetContextLines.after;
+				let linesBefore = actualSnippetContextLines.before;
+				let linesAfter = actualSnippetContextLines.after;
 
 				// If it's a multi-line issue, ensure we capture the full span plus a buffer
 				if (diagnosticSpan > 0) {
@@ -379,7 +353,7 @@ export class DiagnosticService {
 
 			diagLine += codeSnippetString;
 
-			if (currentLength + diagLine.length > maxTotalChars) {
+			if (currentLength + diagLine.length > actualMaxTotalChars) {
 				diagnosticsString += `... (${
 					filteredDiagnostics.length - filteredDiagnostics.indexOf(diag)
 				} more diagnostics truncated)\n`;

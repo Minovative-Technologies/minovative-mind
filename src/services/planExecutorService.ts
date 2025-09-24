@@ -25,6 +25,7 @@ import { UrlContextService } from "./urlContextService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 import { executeCommand, CommandResult } from "../utils/commandExecution";
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
+import { DiagnosticService } from "../utils/diagnosticUtils"; // Corrected import path for DiagnosticService
 
 export class PlanExecutorService {
 	private commandExecutionTerminals: vscode.Terminal[] = [];
@@ -656,8 +657,24 @@ export class PlanExecutorService {
 			}
 
 			if (fileContent !== null) {
+				const diagnostics = await DiagnosticService.formatContextualDiagnostics(
+					fileUri,
+					this.workspaceRootUri,
+					{
+						fileContent: fileContent,
+						enableEnhancedDiagnosticContext:
+							this.provider.settingsManager.getOptimizationSettings()
+								.enableEnhancedDiagnosticContext,
+						includeSeverities: [
+							vscode.DiagnosticSeverity.Information,
+							vscode.DiagnosticSeverity.Hint,
+						],
+						requestType: "hint_only",
+						token: token,
+					}
+				);
 				formattedSnippets.push(
-					`--- Relevant File: ${relativePath} ---\n\`\`\`${languageId}\n${fileContent}\n\`\`\`\n`
+					`--- Relevant File: ${relativePath} ---\n\`\`\`${languageId}\n${fileContent}\n\`\`\`\n${diagnostics}`
 				);
 			}
 		}
@@ -953,7 +970,7 @@ export class PlanExecutorService {
 		].join(" ");
 
 		const commandTerminal = vscode.window.createTerminal({
-			name: `Minovative Mind: Cmd ${index + 1}/${totalSteps}`,
+			name: `echo Minovative Mind: Cmd ${index + 1}/${totalSteps}`,
 			cwd: rootUri.fsPath,
 		});
 		commandTerminal.show(true);
@@ -1023,7 +1040,7 @@ ${userChoice}`);
 						false
 					);
 					commandTerminal.sendText(
-						`\n--- Command (${
+						`\necho --- Command (${
 							index + 1
 						}/${totalSteps}) Completed Successfully --- \n\n`,
 						true
@@ -1040,7 +1057,7 @@ ${userChoice}`);
 						true
 					);
 					commandTerminal.sendText(
-						`\n--- Command (${index + 1}/${totalSteps}) Failed --- \n`,
+						`\necho --- Command (${index + 1}/${totalSteps}) Failed --- \n`,
 						true
 					);
 					throw new Error("RunCommandStep failed with non-zero exit code.");
@@ -1048,9 +1065,9 @@ ${userChoice}`);
 			} catch (commandSpawnError: any) {
 				const errorMessage = `Failed to execute command '${displayCommand}': ${commandSpawnError.message}`;
 				console.error(`Minovative Mind: ${errorMessage}`, commandSpawnError);
-				commandTerminal.sendText(`\nERROR: ${errorMessage}\n`, true);
+				commandTerminal.sendText(`\necho ERROR: ${errorMessage}\n`, true);
 				commandTerminal.sendText(
-					`\n--- Command (${index + 1}/${totalSteps}) Failed --- \n`,
+					`\necho --- Command (${index + 1}/${totalSteps}) Failed --- \n`,
 					true
 				);
 				this._logStepProgress(
@@ -1073,7 +1090,7 @@ ${userChoice}`);
 				0
 			);
 			commandTerminal.sendText(
-				`\n--- Command (${index + 1}/${totalSteps}) Skipped --- \n\n`,
+				`\necho --- Command (${index + 1}/${totalSteps}) Skipped --- \n\n`,
 				true
 			);
 			return true;
