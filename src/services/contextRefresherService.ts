@@ -6,11 +6,7 @@ import {
 	EnhancedGenerationContext,
 	CodeIssue,
 } from "../types/codeGenerationTypes";
-import { getLanguageId } from "../utils/codeAnalysisUtils";
-import {
-	formatGroupedIssuesForPrompt,
-	groupAndPrioritizeIssues,
-} from "../utils/issueProcessingUtils";
+import { DiagnosticService } from "../utils/diagnosticUtils"; // New import
 
 export class ContextRefresherService {
 	constructor(
@@ -21,23 +17,40 @@ export class ContextRefresherService {
 
 	public async refreshErrorFocusedContext(
 		filePath: string,
-		currentContent: string,
-		currentIssues: CodeIssue[],
+		currentContent: string, // Parameter kept for signature compatibility, no longer used internally
+		currentIssues: CodeIssue[], // Parameter kept for signature compatibility, no longer used internally
 		currentContext: EnhancedGenerationContext,
 		token?: vscode.CancellationToken
 	): Promise<EnhancedGenerationContext> {
-		if (currentIssues.length === 0) {
-			return currentContext;
-		}
+		// The original `if (currentIssues.length === 0)` check is now implicitly handled
+		// by `DiagnosticService.formatContextualDiagnostics`, which returns `undefined`
+		// if no diagnostics are found for the file.
 
 		try {
-			const languageId = getLanguageId(path.extname(filePath));
+			const fileUri = vscode.Uri.file(filePath);
 
-			const formattedDiagnostics = formatGroupedIssuesForPrompt(
-				groupAndPrioritizeIssues(currentIssues),
-				languageId,
-				currentContent
-			);
+			const formattedDiagnostics =
+				await DiagnosticService.formatContextualDiagnostics(
+					fileUri,
+					this.workspaceRoot,
+					undefined, // selection: No specific text selection focus for this context
+					undefined, // maxTotalChars: Use default from DiagnosticService (25000 chars)
+					25, // maxPerSeverity: Include up to 25 diagnostics per severity level.
+					token,
+					[
+						// includeSeverities: For issue resolution ('fix' request type), all severities are relevant.
+						vscode.DiagnosticSeverity.Error,
+						vscode.DiagnosticSeverity.Warning,
+						vscode.DiagnosticSeverity.Information,
+						vscode.DiagnosticSeverity.Hint,
+					]
+				);
+
+			if (!formattedDiagnostics) {
+				// If no diagnostics were found or formatted by the DiagnosticService,
+				// return the current context without changes to projectContext.
+				return currentContext;
+			}
 
 			return {
 				...currentContext,

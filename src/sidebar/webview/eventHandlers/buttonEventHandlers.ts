@@ -209,7 +209,9 @@ export function initializeButtonEventListeners(
 		if (stats.modelUsagePercentages && stats.modelUsagePercentages.length > 0) {
 			statsString += `\nModel Usage Percentages:\n`;
 			for (const [modelName, percentage] of stats.modelUsagePercentages) {
-				statsString += `- ${modelName}: ${percentage.toFixed(2)}%\n`;
+				statsString += `- ${modelName} (with Thinking Mode): ${percentage.toFixed(
+					2
+				)}%\n`;
 			}
 		} else {
 			statsString += `\nNo specific model usage data available.\n`;
