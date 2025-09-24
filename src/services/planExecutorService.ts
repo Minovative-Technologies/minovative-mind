@@ -970,7 +970,7 @@ export class PlanExecutorService {
 		].join(" ");
 
 		const commandTerminal = vscode.window.createTerminal({
-			name: `echo Minovative Mind: Cmd ${index + 1}/${totalSteps}`,
+			name: `Minovative Mind: Cmd ${index + 1}/${totalSteps}`,
 			cwd: rootUri.fsPath,
 		});
 		commandTerminal.show(true);
@@ -1039,12 +1039,6 @@ ${userChoice}`);
 						0,
 						false
 					);
-					commandTerminal.sendText(
-						`\necho --- Command (${
-							index + 1
-						}/${totalSteps}) Completed Successfully --- \n\n`,
-						true
-					);
 					return true;
 				} else {
 					const errorMessage = `Command failed with exit code ${commandResult.exitCode}: \`${displayCommand}\`.`;
@@ -1056,20 +1050,12 @@ ${userChoice}`);
 						0,
 						true
 					);
-					commandTerminal.sendText(
-						`\necho --- Command (${index + 1}/${totalSteps}) Failed --- \n`,
-						true
-					);
 					throw new Error("RunCommandStep failed with non-zero exit code.");
 				}
 			} catch (commandSpawnError: any) {
 				const errorMessage = `Failed to execute command '${displayCommand}': ${commandSpawnError.message}`;
 				console.error(`Minovative Mind: ${errorMessage}`, commandSpawnError);
-				commandTerminal.sendText(`\necho ERROR: ${errorMessage}\n`, true);
-				commandTerminal.sendText(
-					`\necho --- Command (${index + 1}/${totalSteps}) Failed --- \n`,
-					true
-				);
+
 				this._logStepProgress(
 					index + 1,
 					totalSteps,
@@ -1088,10 +1074,6 @@ ${userChoice}`);
 				`Step SKIPPED by user.`,
 				0,
 				0
-			);
-			commandTerminal.sendText(
-				`\necho --- Command (${index + 1}/${totalSteps}) Skipped --- \n\n`,
-				true
 			);
 			return true;
 		}
