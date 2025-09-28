@@ -25,7 +25,7 @@ import { UrlContextService } from "./urlContextService";
 import { EnhancedCodeGenerator } from "../ai/enhancedCodeGeneration";
 import { executeCommand, CommandResult } from "../utils/commandExecution";
 import * as sidebarConstants from "../sidebar/common/sidebarConstants";
-import { DiagnosticService } from "../utils/diagnosticUtils"; // Corrected import path for DiagnosticService
+import { DiagnosticService } from "../utils/diagnosticUtils";
 
 export class PlanExecutorService {
 	private commandExecutionTerminals: vscode.Terminal[] = [];
@@ -45,6 +45,7 @@ export class PlanExecutorService {
 		planContext: sidebarTypes.PlanGenerationContext,
 		operationToken: vscode.CancellationToken
 	): Promise<void> {
+		this._disposeExecutionTerminals();
 		this.provider.currentExecutionOutcome = undefined;
 		this.provider.activeChildProcesses = [];
 
@@ -184,31 +185,14 @@ export class PlanExecutorService {
 		}
 	}
 
-	private async _executePlanSteps(
-		steps: PlanStep[],
-		rootUri: vscode.Uri,
-		context: sidebarTypes.PlanGenerationContext,
-		combinedToken: vscode.CancellationToken,
-		progress: vscode.Progress<{ message?: string; increment?: number }>,
-		originalRootInstruction: string
-	): Promise<Set<vscode.Uri>> {
-		const affectedFileUris = new Set<vscode.Uri>();
-		const { changeLogger } = this.provider;
-
-		// 1. Categorize all incoming PlanSteps
+	private _prepareAndOrderSteps(steps: PlanStep[]): PlanStep[] {
 		const createDirectorySteps: CreateDirectoryStep[] = [];
 		const createFileSteps: CreateFileStep[] = [];
 		const runCommandSteps: RunCommandStep[] = [];
 		const modifyFileStepsByPath = new Map<string, ModifyFileStep[]>();
-		const modifyFileOrder: string[] = []; // To preserve the order of first appearance
+		const modifyFileOrder: string[] = [];
 
 		for (const step of steps) {
-			if (combinedToken.isCancellationRequested) {
-				throw new Error(ERROR_OPERATION_CANCELLED);
-			}
-
-			// Input Step Validation: Ensure `step` is a valid object before using type guards.
-			// This prevents errors if the steps array contains primitive types or malformed objects.
 			if (
 				typeof step !== "object" ||
 				step === null ||
@@ -220,7 +204,7 @@ export class PlanExecutorService {
 						step
 					)}`
 				);
-				continue; // Skip this invalid step to prevent further errors
+				continue;
 			}
 
 			if (isCreateDirectoryStep(step)) {
@@ -238,35 +222,43 @@ export class PlanExecutorService {
 			}
 		}
 
-		// 2. Aggregate ModifyFileStep actions for each file path
 		const consolidatedModifyFileSteps: ModifyFileStep[] = [];
 		for (const filePath of modifyFileOrder) {
 			const fileModifications = modifyFileStepsByPath.get(filePath)!;
-			// Combine all modification prompts into a single comprehensive prompt
 			const consolidatedPrompt = fileModifications
 				.map((s) => s.step.modification_prompt)
-				.join("\n\n---\n\n"); // Use a clear separator for multiple instructions
+				.join("\n\n---\n\n");
 
-			// Create a new ModifyFileStep representing the consolidated changes
 			consolidatedModifyFileSteps.push({
 				step: {
 					action: PlanStepAction.ModifyFile,
 					path: filePath,
 					modification_prompt: consolidatedPrompt,
-					// A general description for the consolidated step
 					description: `Modifications for file: \`${filePath}\``,
 				},
 			});
 		}
 
-		// 3. Reorder the execution sequence
-		const orderedSteps: PlanStep[] = [
+		return [
 			...createDirectorySteps,
 			...createFileSteps,
 			...consolidatedModifyFileSteps,
 			...runCommandSteps,
 		];
+	}
 
+	private async _executePlanSteps(
+		steps: PlanStep[],
+		rootUri: vscode.Uri,
+		context: sidebarTypes.PlanGenerationContext,
+		combinedToken: vscode.CancellationToken,
+		progress: vscode.Progress<{ message?: string; increment?: number }>,
+		originalRootInstruction: string
+	): Promise<Set<vscode.Uri>> {
+		const affectedFileUris = new Set<vscode.Uri>();
+		const { changeLogger } = this.provider;
+
+		const orderedSteps = this._prepareAndOrderSteps(steps);
 		const totalOrderedSteps = orderedSteps.length;
 
 		let index = 0;
@@ -289,12 +281,12 @@ export class PlanExecutorService {
 				const detailedStepDescription = this._getStepDescription(
 					step,
 					index,
-					totalOrderedSteps, // Use the new total
+					totalOrderedSteps,
 					currentTransientAttempt
 				);
 				this._logStepProgress(
 					index + 1,
-					totalOrderedSteps, // Use the new total
+					totalOrderedSteps,
 					detailedStepDescription,
 					currentTransientAttempt,
 					this.MAX_TRANSIENT_STEP_RETRIES
@@ -305,9 +297,9 @@ export class PlanExecutorService {
 						await this._handleCreateDirectoryStep(step, rootUri, changeLogger);
 					} else if (isCreateFileStep(step)) {
 						await this._handleCreateFileStep(
-							step,
+							step as CreateFileStep,
 							index,
-							totalOrderedSteps, // Use the new total
+							totalOrderedSteps,
 							rootUri,
 							context,
 							relevantSnippets,
@@ -316,11 +308,10 @@ export class PlanExecutorService {
 							combinedToken
 						);
 					} else if (isModifyFileStep(step)) {
-						// This will now handle the consolidated ModifyFileStep
 						await this._handleModifyFileStep(
-							step,
+							step as ModifyFileStep,
 							index,
-							totalOrderedSteps, // Use the new total
+							totalOrderedSteps,
 							rootUri,
 							context,
 							relevantSnippets,
@@ -333,7 +324,7 @@ export class PlanExecutorService {
 						await this._handleRunCommandStep(
 							step,
 							index,
-							totalOrderedSteps, // Use the new total
+							totalOrderedSteps,
 							rootUri,
 							context,
 							progress,
@@ -359,7 +350,7 @@ export class PlanExecutorService {
 						rootUri,
 						detailedStepDescription,
 						index + 1,
-						totalOrderedSteps, // Use the new total
+						totalOrderedSteps,
 						currentTransientAttempt,
 						this.MAX_TRANSIENT_STEP_RETRIES
 					);
@@ -375,7 +366,7 @@ export class PlanExecutorService {
 						currentStepCompletedSuccessfullyOrSkipped = true;
 						this._logStepProgress(
 							index + 1,
-							totalOrderedSteps, // Use the new total
+							totalOrderedSteps,
 							`Step SKIPPED by user.`,
 							0,
 							0
@@ -391,6 +382,11 @@ export class PlanExecutorService {
 			index++;
 		}
 		return affectedFileUris;
+	}
+
+	private _disposeExecutionTerminals() {
+		this.commandExecutionTerminals.forEach((terminal) => terminal.dispose());
+		this.commandExecutionTerminals = [];
 	}
 
 	private _getStepDescription(

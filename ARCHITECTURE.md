@@ -150,6 +150,9 @@ This system ensures that diagnostic information, particularly 'Information' and 
 - **Deep Integration**: Utilizes `EnhancedCodeGenerator` for file operations, `GitConflictResolutionService` for merge conflicts, `ProjectChangeLogger` for recording changes, and `commandExecution.ts` for shell commands.
 - **User Interaction & Monitoring**: Manages user prompts, provides real-time progress updates, reports errors, and notifies on completion or cancellation.
 - **Model Usage Distinction**: Dynamically retrieves model names, using `DEFAULT_FLASH_LITE_MODEL` for initial textual plans and optimized models for function calling.
+- **Enhanced Execution Modularity (PlanExecutorService)**: This service optimizes execution ordering and resource management:
+  1. The private method `_prepareAndOrderSteps` consolidates multiple `ModifyFileStep` entries targeting the same file into a single, unified modification step (merging prompts). It ensures a strict execution order: Directories, Files (Create/Modify), and then Commands.
+  2. The `executePlan` method calls `_disposeExecutionTerminals` at the start of execution to ensure resource hygiene by closing and clearing temporary VS Code terminals used for previous command executions.
 - **Key Files**: `src/services/planService.ts` (`PlanService` class, `handleInitialPlanRequest`, `initiatePlanFromEditorAction`, `generateStructuredPlanAndExecute`, `_executePlan`, `_executePlanSteps`, `parseAndValidatePlanWithFix`), `src/ai/workflowPlanner.ts`, `src/services/aiRequestService.ts`, `src/ai/enhancedCodeGeneration.ts`, `src/services/gitConflictResolutionService.ts`, `src/utils/commandExecution.ts`, `src/workflow/ProjectChangeLogger.ts`, `src/services/RevertService.ts`
 
 #### 3. Project Change Logging
@@ -271,9 +274,6 @@ This system ensures that diagnostic information, particularly 'Information' and 
 - **Key Files**: `src/utils/commandExecution.ts` (`executeCommand` function), `src/services/planExecutorService.ts` (`_handleRunCommandStep`, `_isCommandSafe` methods)
 
 ---
-
-> Remember, Minovative Mind is designed to assist, not replace, the brilliance of human developers! Happy Coding!
-> Built by [Daniel Ward](https://github.com/Quarantiine), a USA based developer under Minovative (Minovative = minimal-innovative) Technologies [A DBA registered self-employed company in the US]
 
 > Remember, Minovative Mind is designed to assist, not replace, the brilliance of human developers! Happy Coding!
 > Built by [Daniel Ward](https://github.com/Quarantiine), a USA based developer under Minovative (Minovative = minimal-innovative) Technologies [A DBA registered self-employed company in the US]
