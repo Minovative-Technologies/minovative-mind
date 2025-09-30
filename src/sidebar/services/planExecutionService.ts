@@ -628,9 +628,6 @@ export class PlanExecutionService {
 		let originalContent: string;
 
 		try {
-			progress.report({
-				message: `Opening file: ${path.basename(targetFileUri.fsPath)}...`,
-			});
 			document = await vscode.workspace.openTextDocument(targetFileUri);
 			editor = await vscode.window.showTextDocument(document);
 			originalContent = editor.document.getText();
