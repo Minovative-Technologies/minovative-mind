@@ -98,6 +98,19 @@
 	width: 100%;
 }
 
+.message-text-content table {
+	display: block;
+	width: fit-content;
+	overflow-x: auto;
+	white-space: nowrap;
+	min-width: 100%;
+}
+
+.message-text-content table td,
+.message-text-content table th {
+	white-space: normal;
+}
+
 .user-message {
 	padding: var(--message-padding);
 	background-color: var(--vscode-list-activeSelectionBackground);

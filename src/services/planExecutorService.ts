@@ -45,7 +45,6 @@ export class PlanExecutorService {
 		planContext: sidebarTypes.PlanGenerationContext,
 		operationToken: vscode.CancellationToken
 	): Promise<void> {
-		this._disposeExecutionTerminals();
 		this.provider.currentExecutionOutcome = undefined;
 		this.provider.activeChildProcesses = [];
 
@@ -128,6 +127,7 @@ export class PlanExecutorService {
 		} finally {
 			this.provider.activeChildProcesses.forEach((cp) => cp.kill());
 			this.provider.activeChildProcesses = [];
+			this._disposeExecutionTerminals();
 
 			// Dedicated terminals are not disposed automatically here; they persist.
 			// This allows users to review command output after the plan completes.
@@ -359,9 +359,22 @@ export class PlanExecutorService {
 						currentTransientAttempt = shouldRetry.resetTransientCount
 							? 0
 							: currentTransientAttempt + 1;
-						await new Promise((resolve) =>
-							setTimeout(resolve, 10000 + currentTransientAttempt * 5000)
-						);
+						const delayMs = 10000 + currentTransientAttempt * 5000;
+						await new Promise<void>((resolve, reject) => {
+							if (combinedToken.isCancellationRequested) {
+								return reject(new Error(ERROR_OPERATION_CANCELLED));
+							}
+							let disposable: vscode.Disposable;
+							const timeout = setTimeout(() => {
+								disposable.dispose();
+								resolve();
+							}, delayMs);
+							disposable = combinedToken.onCancellationRequested(() => {
+								clearTimeout(timeout);
+								disposable.dispose();
+								reject(new Error(ERROR_OPERATION_CANCELLED));
+							});
+						});
 					} else if (shouldRetry.type === "skip") {
 						currentStepCompletedSuccessfullyOrSkipped = true;
 						this._logStepProgress(
