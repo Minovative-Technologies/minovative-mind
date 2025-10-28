@@ -1,6 +1,7 @@
 // src/workflow/ProjectChangeLogger.ts
 import { FileChangeEntry } from "../types/workflow";
 import { v4 as uuidv4 } from "uuid";
+import { createInversePatch } from "../utils/diffingUtils";
 
 export interface RevertibleChangeSet {
 	id: string;
@@ -15,9 +16,24 @@ export class ProjectChangeLogger {
 
 	/**
 	 * Logs a new file change entry.
+	 * If the change is a modification, it creates an inverse patch for reverting
+	 * and removes the original content from the log to save space.
 	 * @param entry The FileChangeEntry object to log.
 	 */
 	logChange(entry: FileChangeEntry) {
+		if (
+			entry.changeType === "modified" &&
+			typeof entry.originalContent === "string" &&
+			typeof entry.newContent === "string"
+		) {
+			const inversePatch = createInversePatch(
+				entry.originalContent,
+				entry.newContent
+			);
+			entry.inversePatch = inversePatch;
+			entry.originalContent = undefined;
+		}
+
 		this.changes.push(entry);
 		console.log(
 			`[ProjectChangeLogger] Logged change for ${entry.filePath}: ${

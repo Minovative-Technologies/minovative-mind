@@ -129,6 +129,37 @@ export async function generateFileChangeSummary(
 	}
 
 	const formattedDiff = formattedDiffLines.join("\n");
+	const addedLineCount = addedLines.length;
+	const removedLineCount = removedLines.length;
+	const LARGE_CHANGE_THRESHOLD = 500;
+
+	if (addedLineCount + removedLineCount > LARGE_CHANGE_THRESHOLD) {
+		const lineSummaryParts: string[] = [];
+		if (addedLineCount > 0) {
+			lineSummaryParts.push(
+				`Added ${addedLineCount} line${addedLineCount === 1 ? "" : "s"}`
+			);
+		}
+		if (removedLineCount > 0) {
+			lineSummaryParts.push(
+				`Removed ${removedLineCount} line${removedLineCount === 1 ? "" : "s"}`
+			);
+		}
+		let quantitativeSummary = "";
+		if (lineSummaryParts.length > 0) {
+			quantitativeSummary = ` (${lineSummaryParts.join(", ")})`;
+		}
+
+		const summaryWithFilePath = `${filePath}: major changes detected${quantitativeSummary}`;
+
+		return {
+			summary: summaryWithFilePath,
+			addedLines: addedLines,
+			removedLines: removedLines,
+			formattedDiff: formattedDiff,
+		};
+	}
+
 	const addedContentFlat = addedLines.join("\n");
 	const removedContentFlat = removedLines.join("\n");
 
@@ -343,9 +374,6 @@ export async function generateFileChangeSummary(
 
 	let finalSummary = summaries.length > 0 ? summaries.join(", ") : "";
 
-	const addedLineCount = addedLines.length;
-	const removedLineCount = removedLines.length;
-
 	// General summary if specific entities aren't found
 	if (finalSummary === "") {
 		if (addedLineCount > 0 && removedLineCount === 0) {
@@ -392,6 +420,26 @@ export async function generateFileChangeSummary(
 		removedLines: removedLines,
 		formattedDiff: formattedDiff,
 	};
+}
+
+export function createInversePatch(
+	originalContent: string,
+	newContent: string
+): string {
+	const dmp = new diff_match_patch();
+	// To create an inverse patch, we calculate the diff from new to original
+	const diffs = dmp.diff_main(newContent, originalContent);
+	const patch = dmp.patch_make(newContent, diffs);
+	return dmp.patch_toText(patch);
+}
+
+export function applyPatch(content: string, patchString: string): string {
+	const dmp = new diff_match_patch();
+	const patches = dmp.patch_fromText(patchString);
+	// The patch_apply function returns an array where the first element is the new text
+	// and the second is an array of booleans indicating which patches were applied.
+	const [patchedContent] = dmp.patch_apply(patches, content);
+	return patchedContent;
 }
 
 /**

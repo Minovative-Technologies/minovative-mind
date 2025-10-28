@@ -29,6 +29,7 @@ import { DiagnosticService } from "../utils/diagnosticUtils";
 
 export class PlanExecutorService {
 	private commandExecutionTerminals: vscode.Terminal[] = [];
+	private contextCache = new Map<string, string>();
 
 	constructor(
 		private provider: SidebarProvider,
@@ -45,6 +46,7 @@ export class PlanExecutorService {
 		planContext: sidebarTypes.PlanGenerationContext,
 		operationToken: vscode.CancellationToken
 	): Promise<void> {
+		this.contextCache.clear();
 		this.provider.currentExecutionOutcome = undefined;
 		this.provider.activeChildProcesses = [];
 
@@ -260,18 +262,29 @@ export class PlanExecutorService {
 
 		const orderedSteps = this._prepareAndOrderSteps(steps);
 		const totalOrderedSteps = orderedSteps.length;
+		const modifyStepsToBatch: ModifyFileStep[] = [];
+
+		let relevantSnippets = "";
+		const relevantFiles = context.relevantFiles ?? [];
+		if (relevantFiles.length > 0) {
+			const cacheKey = relevantFiles.sort().join("|");
+			if (this.contextCache.has(cacheKey)) {
+				relevantSnippets = this.contextCache.get(cacheKey)!;
+			} else {
+				relevantSnippets = await this._formatRelevantFilesForPrompt(
+					relevantFiles,
+					rootUri,
+					combinedToken
+				);
+				this.contextCache.set(cacheKey, relevantSnippets);
+			}
+		}
 
 		let index = 0;
 		while (index < totalOrderedSteps) {
 			const step = orderedSteps[index];
 			let currentStepCompletedSuccessfullyOrSkipped = false;
 			let currentTransientAttempt = 0;
-
-			const relevantSnippets = await this._formatRelevantFilesForPrompt(
-				context.relevantFiles ?? [],
-				rootUri,
-				combinedToken
-			);
 
 			while (!currentStepCompletedSuccessfullyOrSkipped) {
 				if (combinedToken.isCancellationRequested) {
@@ -308,18 +321,7 @@ export class PlanExecutorService {
 							combinedToken
 						);
 					} else if (isModifyFileStep(step)) {
-						await this._handleModifyFileStep(
-							step as ModifyFileStep,
-							index,
-							totalOrderedSteps,
-							rootUri,
-							context,
-							relevantSnippets,
-							affectedFileUris,
-							changeLogger,
-							this.provider.settingsManager,
-							combinedToken
-						);
+						modifyStepsToBatch.push(step);
 					} else if (isRunCommandStep(step)) {
 						await this._handleRunCommandStep(
 							step,
@@ -394,6 +396,19 @@ export class PlanExecutorService {
 			}
 			index++;
 		}
+
+		if (modifyStepsToBatch.length > 0) {
+			await this._batchHandleModifySteps(
+				modifyStepsToBatch,
+				rootUri,
+				context,
+				relevantSnippets,
+				affectedFileUris,
+				changeLogger,
+				combinedToken
+			);
+		}
+
 		return affectedFileUris;
 	}
 
@@ -734,6 +749,52 @@ export class PlanExecutorService {
 		combinedToken: vscode.CancellationToken
 	): Promise<void> {
 		const fileUri = vscode.Uri.joinPath(rootUri, step.step.path);
+
+		if (step.step.content && !step.step.generate_prompt) {
+			try {
+				await vscode.workspace.fs.stat(fileUri);
+			} catch (error: any) {
+				if (
+					error instanceof vscode.FileSystemError &&
+					(error.code === "FileNotFound" || error.code === "EntryNotFound")
+				) {
+					const cleanedContent = cleanCodeOutput(step.step.content);
+					await vscode.workspace.fs.writeFile(
+						fileUri,
+						Buffer.from(cleanedContent)
+					);
+
+					const { formattedDiff, summary } = await generateFileChangeSummary(
+						"",
+						cleanedContent,
+						step.step.path
+					);
+					this._logStepProgress(
+						index + 1,
+						totalSteps,
+						`Created file \`${step.step.path}\``,
+						0,
+						0,
+						false,
+						formattedDiff
+					);
+
+					changeLogger.logChange({
+						filePath: step.step.path,
+						changeType: "created",
+						summary,
+						diffContent: formattedDiff,
+						timestamp: Date.now(),
+						originalContent: "",
+						newContent: cleanedContent,
+					});
+					affectedFileUris.add(fileUri);
+					return;
+				}
+				throw error;
+			}
+		}
+
 		let desiredContent: string | undefined = step.step.content;
 
 		if (step.step.generate_prompt) {
@@ -744,14 +805,50 @@ export class PlanExecutorService {
 				activeSymbolInfo: undefined,
 			};
 
-			const generatedResult =
-				await this.enhancedCodeGenerator.generateFileContent(
-					step.step.path,
-					step.step.generate_prompt,
-					generationContext,
-					this.provider.settingsManager.getSelectedModelName(),
-					combinedToken
+			let generatedResult: { content: string } | undefined;
+			let attempt = 0;
+			let success = false;
+			while (!success && attempt <= this.MAX_TRANSIENT_STEP_RETRIES) {
+				if (combinedToken.isCancellationRequested) {
+					throw new Error(ERROR_OPERATION_CANCELLED);
+				}
+				try {
+					generatedResult =
+						await this.enhancedCodeGenerator.generateFileContent(
+							step.step.path,
+							step.step.generate_prompt,
+							generationContext,
+							this.provider.settingsManager.getSelectedModelName(),
+							combinedToken
+						);
+					success = true;
+				} catch (error: any) {
+					const errorMsg = formatUserFacingErrorMessage(error, "", "", rootUri);
+					const isRetryable =
+						errorMsg.includes("quota") ||
+						errorMsg.includes("rate limit") ||
+						errorMsg.includes("network issue") ||
+						errorMsg.includes("service unavailable") ||
+						errorMsg.includes("timeout") ||
+						errorMsg.includes("parsing failed") ||
+						errorMsg.includes("overloaded");
+
+					if (isRetryable && attempt < this.MAX_TRANSIENT_STEP_RETRIES) {
+						attempt++;
+						console.warn(
+							`AI generation for ${step.step.path} failed, retrying (${attempt}/${this.MAX_TRANSIENT_STEP_RETRIES})... Error: ${errorMsg}`
+						);
+						await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+					} else {
+						throw error;
+					}
+				}
+			}
+			if (!generatedResult) {
+				throw new Error(
+					`AI generation for ${step.step.path} failed after multiple retries.`
 				);
+			}
 			desiredContent = generatedResult.content;
 		}
 
@@ -854,107 +951,153 @@ export class PlanExecutorService {
 		}
 	}
 
-	private async _handleModifyFileStep(
-		step: ModifyFileStep,
-		index: number,
-		totalSteps: number,
+	private async _batchHandleModifySteps(
+		steps: ModifyFileStep[],
 		rootUri: vscode.Uri,
 		context: sidebarTypes.PlanGenerationContext,
 		relevantSnippets: string,
 		affectedFileUris: Set<vscode.Uri>,
 		changeLogger: SidebarProvider["changeLogger"],
-		settingsManager: SidebarProvider["settingsManager"],
 		combinedToken: vscode.CancellationToken
 	): Promise<void> {
-		const fileUri = vscode.Uri.joinPath(rootUri, step.step.path);
-		const existingContent = Buffer.from(
-			await vscode.workspace.fs.readFile(fileUri)
-		).toString("utf-8");
-
-		const modificationContext = {
-			projectContext: context.projectContext,
-			relevantSnippets: relevantSnippets,
-			editorContext: context.editorContext,
-			activeSymbolInfo: undefined,
-		};
-
-		// The modification_prompt here will be the consolidated prompt from multiple steps
-		let modifiedContent = (
-			await this.enhancedCodeGenerator.modifyFileContent(
-				step.step.path,
-				step.step.modification_prompt,
-				existingContent,
-				modificationContext,
-				settingsManager.getSelectedModelName(),
-				combinedToken
-			)
-		).content;
-
-		let document: vscode.TextDocument;
-		let editor: vscode.TextEditor;
-		try {
-			document = await vscode.workspace.openTextDocument(fileUri);
-			editor = await vscode.window.showTextDocument(document);
-		} catch (docError: any) {
-			throw new Error(
-				`Failed to open document ${fileUri.fsPath} for modification: ${docError.message}`
-			);
-		}
-
-		await applyAITextEdits(
-			editor,
-			editor.document.getText(),
-			modifiedContent,
-			combinedToken
+		this._logStepProgress(
+			0,
+			0,
+			`Applying ${steps.length} file modifications...`,
+			0,
+			0
 		);
 
-		const newContentAfterApply = editor.document.getText();
+		const workspaceEdit = new vscode.WorkspaceEdit();
+		const originalContents = new Map<string, string>();
+		const newContents = new Map<string, string>();
 
-		const { formattedDiff, summary, addedLines, removedLines } =
-			await generateFileChangeSummary(
-				existingContent,
-				newContentAfterApply,
-				step.step.path
-			);
-
-		if (addedLines.length > 0 || removedLines.length > 0) {
-			affectedFileUris.add(fileUri);
-
-			if (
-				context.isMergeOperation &&
-				context.editorContext &&
-				fileUri.toString() === context.editorContext.documentUri.toString()
-			) {
-				await this.gitConflictResolutionService.unmarkFileAsResolved(fileUri);
+		for (const step of steps) {
+			if (combinedToken.isCancellationRequested) {
+				throw new Error(ERROR_OPERATION_CANCELLED);
 			}
 
-			this._logStepProgress(
-				index + 1,
-				totalSteps,
-				`Modified file \`${step.step.path}\``,
-				0,
-				0,
-				false,
-				formattedDiff
+			const fileUri = vscode.Uri.joinPath(rootUri, step.step.path);
+			const existingContentBuffer = await vscode.workspace.fs.readFile(fileUri);
+			const existingContent = Buffer.from(existingContentBuffer).toString(
+				"utf-8"
 			);
+			originalContents.set(step.step.path, existingContent);
 
-			changeLogger.logChange({
-				filePath: step.step.path,
-				changeType: "modified",
-				summary,
-				diffContent: formattedDiff,
-				timestamp: Date.now(),
-				originalContent: existingContent,
-				newContent: newContentAfterApply,
-			});
-		} else {
-			this._logStepProgress(
-				index + 1,
-				totalSteps,
-				`File \`${step.step.path}\` content is already as desired, no substantial modifications needed.`,
-				0,
-				0
+			const modificationContext = {
+				projectContext: context.projectContext,
+				relevantSnippets: relevantSnippets,
+				editorContext: context.editorContext,
+				activeSymbolInfo: undefined,
+			};
+
+			let modifiedResult: { content: string } | undefined;
+			let attempt = 0;
+			let success = false;
+			while (!success && attempt <= this.MAX_TRANSIENT_STEP_RETRIES) {
+				if (combinedToken.isCancellationRequested) {
+					throw new Error(ERROR_OPERATION_CANCELLED);
+				}
+				try {
+					modifiedResult = await this.enhancedCodeGenerator.modifyFileContent(
+						step.step.path,
+						step.step.modification_prompt,
+						existingContent,
+						modificationContext,
+						this.provider.settingsManager.getSelectedModelName(),
+						combinedToken
+					);
+					success = true;
+				} catch (error: any) {
+					const errorMsg = formatUserFacingErrorMessage(error, "", "", rootUri);
+					const isRetryable =
+						errorMsg.includes("quota") ||
+						errorMsg.includes("rate limit") ||
+						errorMsg.includes("network issue") ||
+						errorMsg.includes("service unavailable") ||
+						errorMsg.includes("timeout") ||
+						errorMsg.includes("parsing failed") ||
+						errorMsg.includes("overloaded");
+
+					if (isRetryable && attempt < this.MAX_TRANSIENT_STEP_RETRIES) {
+						attempt++;
+						console.warn(
+							`AI modification for ${step.step.path} failed, retrying (${attempt}/${this.MAX_TRANSIENT_STEP_RETRIES})... Error: ${errorMsg}`
+						);
+						await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+					} else {
+						throw error;
+					}
+				}
+			}
+			if (!modifiedResult) {
+				throw new Error(
+					`AI modification for ${step.step.path} failed after multiple retries.`
+				);
+			}
+			const modifiedContent = modifiedResult.content;
+			newContents.set(step.step.path, modifiedContent);
+
+			const document = await vscode.workspace.openTextDocument(fileUri);
+			const fullRange = new vscode.Range(
+				document.positionAt(0),
+				document.positionAt(existingContent.length)
 			);
+			workspaceEdit.replace(fileUri, fullRange, modifiedContent);
+		}
+
+		const applyEditSuccess = await vscode.workspace.applyEdit(workspaceEdit);
+		if (!applyEditSuccess) {
+			throw new Error("Batch file modification failed to apply.");
+		}
+
+		for (const step of steps) {
+			if (combinedToken.isCancellationRequested) {
+				break;
+			}
+
+			const fileUri = vscode.Uri.joinPath(rootUri, step.step.path);
+			const originalContent = originalContents.get(step.step.path)!;
+			const newContentAfterApply = newContents.get(step.step.path)!;
+
+			const { formattedDiff, summary, addedLines, removedLines } =
+				await generateFileChangeSummary(
+					originalContent,
+					newContentAfterApply,
+					step.step.path
+				);
+
+			if (addedLines.length > 0 || removedLines.length > 0) {
+				affectedFileUris.add(fileUri);
+
+				this._logStepProgress(
+					0,
+					0,
+					`Modified file \`${step.step.path}\``,
+					0,
+					0,
+					false,
+					formattedDiff
+				);
+
+				changeLogger.logChange({
+					filePath: step.step.path,
+					changeType: "modified",
+					summary,
+					diffContent: formattedDiff,
+					timestamp: Date.now(),
+					originalContent: originalContent,
+					newContent: newContentAfterApply,
+				});
+			} else {
+				this._logStepProgress(
+					0,
+					0,
+					`File \`${step.step.path}\` content is already as desired, no substantial modifications needed.`,
+					0,
+					0
+				);
+			}
 		}
 	}
 

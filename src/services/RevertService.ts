@@ -4,7 +4,7 @@ import { ProjectChangeLogger } from "../workflow/ProjectChangeLogger";
 import { FileChangeEntry } from "../types/workflow";
 import { showErrorNotification } from "../utils/notificationUtils";
 import { applyAITextEdits } from "../utils/codeUtils";
-import { generateFileChangeSummary } from "../utils/diffingUtils";
+import { generateFileChangeSummary, applyPatch } from "../utils/diffingUtils";
 
 export class RevertService {
 	private readonly workspaceRootUri: vscode.Uri;
@@ -116,16 +116,6 @@ export class RevertService {
 
 							case "modified": {
 								// Reverting a "modified" file means restoring its original content.
-								// We assume `change.originalContent` holds the *entire* original content.
-								if (!change.originalContent) {
-									console.warn(
-										`[RevertService] Skipping revert for modified file '${relativePath}': No 'originalContent' available.`
-									);
-									revertSummary = `Skipped revert for modified '${relativePath}': No original content found.`;
-									break;
-								}
-								const originalContentToRestore = change.originalContent;
-
 								let document: vscode.TextDocument;
 								let editor: vscode.TextEditor;
 								let currentContent: string = "";
@@ -140,7 +130,14 @@ export class RevertService {
 										(docError.code === "FileNotFound" ||
 											docError.code === "EntryNotFound")
 									) {
-										// If the modified file no longer exists, recreate it with its assumed original content.
+										// If the modified file no longer exists, we must fall back to originalContent.
+										if (!change.originalContent) {
+											console.warn(
+												`[RevertService] Skipping revert for missing modified file '${relativePath}': No 'originalContent' available.`
+											);
+											revertSummary = `Skipped revert for missing modified '${relativePath}': No original content found.`;
+											break;
+										}
 										console.warn(
 											`[RevertService] Modified file '${relativePath}' not found, attempting to recreate with assumed original content.`
 										);
@@ -161,14 +158,14 @@ export class RevertService {
 										}
 										await vscode.workspace.fs.writeFile(
 											fileUri,
-											Buffer.from(originalContentToRestore)
+											Buffer.from(change.originalContent)
 										);
 										revertSummary = `Reverted modification: Recreated missing '${relativePath}' with original content.`;
 
 										const { formattedDiff, summary } =
 											await generateFileChangeSummary(
 												"",
-												originalContentToRestore,
+												change.originalContent,
 												change.filePath
 											);
 										this.projectChangeLogger.logChange({
@@ -183,11 +180,40 @@ export class RevertService {
 									throw docError; // Re-throw other errors
 								}
 
-								// Apply the edits to restore original content using applyAITextEdits
+								let contentToRestore: string | undefined;
+
+								// Prioritize using the inverse patch if it exists, as it's more precise.
+								if (change.inversePatch) {
+									try {
+										contentToRestore = applyPatch(
+											currentContent,
+											change.inversePatch
+										);
+									} catch (patchError: any) {
+										console.warn(
+											`[RevertService] Failed to apply inverse patch for '${relativePath}'. Falling back to originalContent. Error: ${patchError.message}`
+										);
+										// Fallback to originalContent if patch fails
+										contentToRestore = change.originalContent;
+									}
+								} else {
+									// Fallback for older change entries without an inverse patch.
+									contentToRestore = change.originalContent;
+								}
+
+								if (contentToRestore === undefined) {
+									console.warn(
+										`[RevertService] Skipping revert for modified file '${relativePath}': No content available to restore.`
+									);
+									revertSummary = `Skipped revert for modified '${relativePath}': No original content found.`;
+									break;
+								}
+
+								// Apply the edits to restore content using applyAITextEdits
 								await applyAITextEdits(
 									editor,
 									currentContent,
-									originalContentToRestore,
+									contentToRestore,
 									token
 								);
 
@@ -207,6 +233,8 @@ export class RevertService {
 									summary: summary,
 									timestamp: Date.now(),
 									diffContent: formattedDiff,
+									originalContent: currentContent, // The state before the revert
+									newContent: newContent, // The state after the revert (restored state)
 								});
 								break;
 							}
