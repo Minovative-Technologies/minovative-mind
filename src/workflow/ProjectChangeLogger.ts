@@ -47,7 +47,6 @@ export class ProjectChangeLogger {
 				entry.newContent
 			);
 			entry.inversePatch = inversePatch;
-			entry.originalContent = undefined;
 		}
 
 		this.changes.push(entry);

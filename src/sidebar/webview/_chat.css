@@ -440,7 +440,6 @@
 .active-step {
 	background-color: var(--vscode-button-secondaryBackground);
 	color: var(--vscode-button-foreground);
-	font-weight: bold;
 	overflow-y: scroll;
 	text-overflow: clip;
 	white-space: normal;
