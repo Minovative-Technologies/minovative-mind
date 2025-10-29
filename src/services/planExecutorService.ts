@@ -63,7 +63,21 @@ export class PlanExecutorService {
 
 		// 2.b. Prepare steps and send PlanTimelineInitializeMessage
 		const orderedSteps = this._prepareAndOrderSteps(plan.steps!);
-		const stepDescriptions = orderedSteps.map((step) => {
+
+		// 1. Filter orderedSteps to create trackableSteps containing only non-RunCommand steps.
+		const trackableSteps = orderedSteps.filter(
+			(step) => !isRunCommandStep(step)
+		);
+
+		// 2. Update timelineIndexMap and stepDescriptions to iterate over trackableSteps.
+		const timelineIndexMap = new Map<string, number>();
+		trackableSteps.forEach((step, index) => {
+			if (isModifyFileStep(step)) {
+				timelineIndexMap.set(step.step.path, index);
+			}
+		});
+
+		const stepDescriptions = trackableSteps.map((step) => {
 			// Extract a simplified description for the timeline initialization.
 			// Prioritize the basename of the path for FS operations over generic descriptions.
 			let description: string;
@@ -77,8 +91,6 @@ export class PlanExecutorService {
 			} else if (step.step.description && step.step.description.trim() !== "") {
 				// Use AI provided description for non-FS steps if available
 				description = step.step.description;
-			} else if (isRunCommandStep(step)) {
-				description = `Ran command: ${step.step.command}`;
 			} else {
 				description = `Executed action: ${(
 					step as PlanStep
@@ -124,12 +136,14 @@ export class PlanExecutorService {
 								: planContext.editorContext!.instruction;
 
 						await this._executePlanSteps(
-							orderedSteps, // Pass ordered steps
+							orderedSteps, // Pass all steps
+							trackableSteps, // 3. Pass trackableSteps as new second argument
 							rootUri,
 							planContext,
 							combinedToken,
 							progress,
-							originalRootInstruction
+							originalRootInstruction,
+							timelineIndexMap
 						);
 
 						if (!combinedToken.isCancellationRequested) {
@@ -282,18 +296,23 @@ export class PlanExecutorService {
 	}
 
 	private async _executePlanSteps(
-		orderedSteps: PlanStep[], // Changed parameter to reflect it's now ordered
+		orderedSteps: PlanStep[],
+		trackableSteps: PlanStep[], // Instruction 1 (Signature update)
 		rootUri: vscode.Uri,
 		context: sidebarTypes.PlanGenerationContext,
 		combinedToken: vscode.CancellationToken,
 		progress: vscode.Progress<{ message?: string; increment?: number }>,
-		originalRootInstruction: string
+		originalRootInstruction: string,
+		timelineIndexMap: Map<string, number>
 	): Promise<Set<vscode.Uri>> {
 		const affectedFileUris = new Set<vscode.Uri>();
 		const { changeLogger } = this.provider;
 
-		// Removed: const orderedSteps = this._prepareAndOrderSteps(steps);
+		// Initialize tracking variables (Instruction 2)
 		const totalOrderedSteps = orderedSteps.length;
+		const totalTrackableSteps = trackableSteps.length;
+		let trackableStepIndex = 0;
+
 		const modifyStepsToBatch: ModifyFileStep[] = [];
 
 		let relevantSnippets = "";
@@ -315,6 +334,7 @@ export class PlanExecutorService {
 		let index = 0;
 		while (index < totalOrderedSteps) {
 			const step = orderedSteps[index];
+			const isCurrentStepTrackable = !isRunCommandStep(step); // Instruction 3
 			let currentStepCompletedSuccessfullyOrSkipped = false;
 			let currentTransientAttempt = 0;
 
@@ -323,19 +343,36 @@ export class PlanExecutorService {
 					throw new Error(ERROR_OPERATION_CANCELLED);
 				}
 
+				// Conditional index calculation for descriptions (Instruction 4)
+				const currentStepNumberForDescription = isCurrentStepTrackable
+					? trackableStepIndex + 1
+					: index + 1;
+				const totalStepsForDescription = isCurrentStepTrackable
+					? totalTrackableSteps
+					: totalOrderedSteps;
+
 				const detailedStepDescription = this._getStepDescription(
 					step,
-					index,
-					totalOrderedSteps,
+					currentStepNumberForDescription - 1,
+					totalStepsForDescription,
 					currentTransientAttempt
 				);
-				this._logStepProgress(
-					index + 1,
-					totalOrderedSteps,
-					detailedStepDescription,
-					currentTransientAttempt,
-					this.MAX_TRANSIENT_STEP_RETRIES
-				);
+
+				// Conditional progress logging (Instruction 4)
+				if (isCurrentStepTrackable) {
+					this._logStepProgress(
+						currentStepNumberForDescription,
+						totalStepsForDescription,
+						detailedStepDescription,
+						currentTransientAttempt,
+						this.MAX_TRANSIENT_STEP_RETRIES
+					);
+				} else {
+					// Internal logging for non-trackable steps
+					console.log(
+						`Minovative Mind (Command Step): Starting ${detailedStepDescription}`
+					);
+				}
 
 				try {
 					if (isCreateDirectoryStep(step)) {
@@ -343,8 +380,8 @@ export class PlanExecutorService {
 					} else if (isCreateFileStep(step)) {
 						await this._handleCreateFileStep(
 							step as CreateFileStep,
-							index,
-							totalOrderedSteps,
+							trackableStepIndex + 1, // 1-based index (Instruction 7)
+							totalTrackableSteps, // (Instruction 7)
 							rootUri,
 							context,
 							relevantSnippets,
@@ -379,12 +416,20 @@ export class PlanExecutorService {
 						throw error;
 					}
 
+					// If the step is NOT trackable (RunCommandStep) and it fails, immediately throw (Instruction 5)
+					if (!isCurrentStepTrackable) {
+						console.error(
+							`Minovative Mind: RunCommandStep failed, immediately throwing error.`
+						);
+						throw error;
+					}
+
 					const shouldRetry = await this._reportStepError(
 						error,
 						rootUri,
 						detailedStepDescription,
-						index + 1,
-						totalOrderedSteps,
+						currentStepNumberForDescription,
+						totalStepsForDescription,
 						currentTransientAttempt,
 						this.MAX_TRANSIENT_STEP_RETRIES
 					);
@@ -412,26 +457,34 @@ export class PlanExecutorService {
 					} else if (shouldRetry.type === "skip") {
 						currentStepCompletedSuccessfullyOrSkipped = true;
 						this._logStepProgress(
-							index + 1,
-							totalOrderedSteps,
+							currentStepNumberForDescription,
+							totalStepsForDescription,
 							`Step SKIPPED by user.`,
 							0,
 							0
 						);
 						console.log(
-							`Minovative Mind: User chose to skip Step ${index + 1}.`
+							`Minovative Mind: User chose to skip Step ${currentStepNumberForDescription}.`
 						);
 					} else {
 						throw new Error(ERROR_OPERATION_CANCELLED);
 					}
 				}
 			}
+
+			// If the step was trackable, update index (Instruction 6)
+			if (isCurrentStepTrackable) {
+				trackableStepIndex++;
+			}
+
 			index++;
 		}
 
 		if (modifyStepsToBatch.length > 0) {
 			await this._batchHandleModifySteps(
 				modifyStepsToBatch,
+				totalTrackableSteps, // Use totalTrackableSteps (Instruction 8)
+				timelineIndexMap,
 				rootUri,
 				context,
 				relevantSnippets,
@@ -813,7 +866,7 @@ export class PlanExecutorService {
 
 	private async _handleCreateFileStep(
 		step: CreateFileStep,
-		index: number,
+		currentStepNumber: number, // Renamed parameter
 		totalSteps: number,
 		rootUri: vscode.Uri,
 		context: sidebarTypes.PlanGenerationContext,
@@ -884,7 +937,7 @@ export class PlanExecutorService {
 		const cleanedDesiredContent = cleanCodeOutput(desiredContent ?? "");
 
 		this._logStepProgress(
-			index + 1,
+			currentStepNumber,
 			totalSteps,
 			`Creating file \`${path.basename(step.step.path)}\`...`,
 			0,
@@ -899,7 +952,7 @@ export class PlanExecutorService {
 
 			if (existingContent === cleanedDesiredContent) {
 				this._logStepProgress(
-					index + 1,
+					currentStepNumber,
 					totalSteps,
 					`File \`${path.basename(
 						step.step.path
@@ -926,7 +979,7 @@ export class PlanExecutorService {
 				);
 
 				this._logStepProgress(
-					index + 1,
+					currentStepNumber,
 					totalSteps,
 					`Modified file \`${path.basename(step.step.path)}\``,
 					0,
@@ -966,7 +1019,7 @@ export class PlanExecutorService {
 				);
 
 				this._logStepProgress(
-					index + 1,
+					currentStepNumber,
 					totalSteps,
 					`Created file \`${path.basename(step.step.path)}\``,
 					0,
@@ -992,6 +1045,8 @@ export class PlanExecutorService {
 
 	private async _batchHandleModifySteps(
 		steps: ModifyFileStep[],
+		totalSteps: number, // Renamed parameter
+		timelineIndexMap: Map<string, number>,
 		rootUri: vscode.Uri,
 		context: sidebarTypes.PlanGenerationContext,
 		relevantSnippets: string,
@@ -1001,7 +1056,7 @@ export class PlanExecutorService {
 	): Promise<void> {
 		this._logStepProgress(
 			0,
-			0,
+			totalSteps,
 			`Applying ${steps.length} file modifications...`,
 			0,
 			0
@@ -1106,12 +1161,16 @@ export class PlanExecutorService {
 					step.step.path
 				);
 
+			const stepIndex = timelineIndexMap.get(step.step.path);
+			const currentStepNumber = stepIndex !== undefined ? stepIndex + 1 : 0;
+			// totalSteps parameter is used directly here.
+
 			if (addedLines.length > 0 || removedLines.length > 0) {
 				affectedFileUris.add(fileUri);
 
 				this._logStepProgress(
-					0,
-					0,
+					currentStepNumber,
+					totalSteps,
 					`Modified file \`${path.basename(step.step.path)}\``,
 					0,
 					0,
@@ -1130,8 +1189,8 @@ export class PlanExecutorService {
 				});
 			} else {
 				this._logStepProgress(
-					0,
-					0,
+					currentStepNumber,
+					totalSteps,
 					`File \`${path.basename(
 						step.step.path
 					)}\` content is already as desired, no substantial modifications needed.`,
@@ -1172,9 +1231,11 @@ export class PlanExecutorService {
 		let promptMessage = `Command:\n[ \`${displayCommand}.\` ]`;
 		promptMessage += `\n\n⚠️ WARNING: Please review it carefully. The plan wants to run the command above. Allow?`;
 
-		// Add console log before showing the warning message
+		// Remove all calls to this._logStepProgress (Instruction 1)
 		console.log(
-			"Minovative Mind: About to display command execution prompt..."
+			`Minovative Mind: [Command Step ${
+				index + 1
+			}/${totalSteps}] About to display command execution prompt: ${displayCommand}`
 		);
 
 		const userChoice = await vscode.window.showInformationMessage(
@@ -1184,28 +1245,24 @@ export class PlanExecutorService {
 			"Skip"
 		);
 
-		// Add console log after capturing user choice
-		console.log(`Minovative Mind: User choice for command: 
-${displayCommand}
- is: 
-${userChoice}`);
+		// Remove all calls to this._logStepProgress (Instruction 1)
+		console.log(
+			`Minovative Mind: [Command Step ${
+				index + 1
+			}/${totalSteps}] User choice for command: ${displayCommand} is: ${userChoice}`
+		);
 
 		// Check for cancellation immediately after capturing userChoice
 		if (combinedToken.isCancellationRequested) {
 			throw new Error(ERROR_OPERATION_CANCELLED);
 		}
 
-		// Handle undefined userChoice (prompt dismissed)
+		// Handle undefined userChoice (prompt dismissed) (Instruction 2)
 		if (userChoice === undefined) {
 			console.log(
-				"Minovative Mind: User prompt dismissed without selection; treating as skip."
-			);
-			this._logStepProgress(
-				index + 1,
-				totalSteps,
-				`Step SKIPPED by user (prompt dismissed).`,
-				0,
-				0
+				`Minovative Mind: [Command Step ${
+					index + 1
+				}/${totalSteps}] User prompt dismissed without selection; treating as skip.`
 			);
 			return true;
 		}
@@ -1224,49 +1281,38 @@ ${userChoice}`);
 				);
 
 				if (commandResult.exitCode === 0) {
-					this._logStepProgress(
-						index + 1,
-						totalSteps,
-						`Command completed successfully: \`${displayCommand}\`.`,
-						0,
-						0,
-						false
+					console.log(
+						`Minovative Mind: [Command Step ${
+							index + 1
+						}/${totalSteps}] Command completed successfully: \`${displayCommand}\`.`
 					);
 					return true;
 				} else {
 					const errorMessage = `Command failed with exit code ${commandResult.exitCode}: \`${displayCommand}\`.`;
-					this._logStepProgress(
-						index + 1,
-						totalSteps,
-						`ERROR: ${errorMessage}`,
-						0,
-						0,
-						true
+					console.error(
+						`Minovative Mind: [Command Step ${
+							index + 1
+						}/${totalSteps}] ERROR: ${errorMessage}`
 					);
 					throw new Error("RunCommandStep failed with non-zero exit code.");
 				}
 			} catch (commandSpawnError: any) {
 				const errorMessage = `Failed to execute command '${displayCommand}': ${commandSpawnError.message}`;
-				console.error(`Minovative Mind: ${errorMessage}`, commandSpawnError);
-
-				this._logStepProgress(
-					index + 1,
-					totalSteps,
-					`ERROR: ${errorMessage}`,
-					0,
-					0,
-					true
+				console.error(
+					`Minovative Mind: [Command Step ${
+						index + 1
+					}/${totalSteps}] ERROR: ${errorMessage}`,
+					commandSpawnError
 				);
+
 				throw new Error("RunCommandStep failed during spawning or execution.");
 			}
 		} else {
 			// userChoice is "Skip"
-			this._logStepProgress(
-				index + 1,
-				totalSteps,
-				`Step SKIPPED by user.`,
-				0,
-				0
+			console.log(
+				`Minovative Mind: [Command Step ${
+					index + 1
+				}/${totalSteps}] Step SKIPPED by user.`
 			);
 			return true;
 		}
