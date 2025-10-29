@@ -476,7 +476,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				composedMessage = `/plan My message: Please resolve the merge conflicts in ${displayFileName}. \n\nInstruction: Provide the implementation solution before code. Here's the full file content with conflicts:\n\n\`\`\`${languageId}\n${fullText}\n\`\`\`\n. Highlevel thinking first. No coding yet.`;
 			} else if (instruction === "chat") {
 				if (originalSelection.isEmpty) {
-					composedMessage = `My message: ${userProvidedMessage} \n\nInstruction: In this project, focus on the conversation within the context of file \`${displayFileName}\`. \n\nDo not code.`;
+					composedMessage = `My message: ${userProvidedMessage} \n\nInstruction: In this project, focus on the conversation within the context of file \`${displayFileName}\`. \n\nDo not code yet.`;
 				} else {
 					composedMessage =
 						`Message: ${userProvidedMessage}\n\n` +

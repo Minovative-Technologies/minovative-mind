@@ -93,11 +93,11 @@ export class RevertService {
 										console.error(
 											`[RevertService] CRITICAL SAFETY WARNING: ${error.message}`
 										);
-										showErrorNotification(
-											error,
-											`Revert blocked: Attempted to delete directory '${relativePath}'. Please clean up manually if necessary.`,
-											"Revert Safety Block: "
-										);
+										// showErrorNotification(
+										// 	error,
+										// 	`Revert blocked: Attempted to delete directory '${relativePath}'. Please clean up manually if necessary.`,
+										// 	"Revert Safety Block: "
+										// );
 										revertSummary = `Skipped revert: Attempted deletion of directory '${relativePath}'.`;
 										break; // Skip deletion if it's a directory
 									}

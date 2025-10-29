@@ -406,7 +406,8 @@
 		--vscode-editorWidget-background,
 		rgba(40, 40, 40, 0.3)
 	);
-	backdrop-filter: calc(20px);
+	backdrop-filter: blur(20px);
+	-webkit-backdrop-filter: blur(20px); /* For Safari */
 	border: 1px solid var(--vscode-editorGroupHeader-tabsBorder, #3a3a3a);
 	border-radius: var(--border-radius, 5px);
 	width: 90%;

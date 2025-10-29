@@ -1,4 +1,3 @@
-// src/sidebar/common/sidebarTypes.ts
 import * as vscode from "vscode";
 import { Content } from "@google/generative-ai";
 import { ActiveSymbolDetailedInfo } from "../../services/contextService";
@@ -118,7 +117,7 @@ export interface PlanTimelineInitializeMessage {
 export interface PlanTimelineProgressMessage {
 	type: "planTimelineProgress";
 	stepIndex: number;
-	status: "running" | "success" | "skipped" | "failed";
+	status: "running" | "success" | "skipped" | "failed" | "queued";
 	detail?: string;
 	diffContent?: string;
 }
