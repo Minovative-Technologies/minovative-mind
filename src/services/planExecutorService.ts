@@ -2,7 +2,11 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { SidebarProvider } from "../sidebar/SidebarProvider";
 import * as sidebarTypes from "../sidebar/common/sidebarTypes";
-import { ExtensionToWebviewMessages } from "../sidebar/common/sidebarTypes";
+import {
+	ExtensionToWebviewMessages,
+	PlanTimelineInitializeMessage,
+	PlanTimelineProgressMessage,
+} from "../sidebar/common/sidebarTypes";
 import { ERROR_OPERATION_CANCELLED } from "../ai/gemini";
 import {
 	ExecutionPlan,
@@ -57,8 +61,36 @@ export class PlanExecutorService {
 			value: true,
 		});
 
+		// 2.b. Prepare steps and send PlanTimelineInitializeMessage
+		const orderedSteps = this._prepareAndOrderSteps(plan.steps!);
+		const stepDescriptions = orderedSteps.map((step) => {
+			// Extract a simplified description for the timeline initialization.
+			// Prioritize the basename of the path for FS operations over generic descriptions.
+			let description: string;
+
+			if (isModifyFileStep(step)) {
+				description = `Modified file: ${path.basename(step.step.path)}`;
+			} else if (isCreateFileStep(step)) {
+				description = `Created file: ${path.basename(step.step.path)}`;
+			} else if (isCreateDirectoryStep(step)) {
+				description = `Created directory: ${path.basename(step.step.path)}`;
+			} else if (step.step.description && step.step.description.trim() !== "") {
+				// Use AI provided description for non-FS steps if available
+				description = step.step.description;
+			} else if (isRunCommandStep(step)) {
+				description = `Ran command: ${step.step.command}`;
+			} else {
+				description = `Executed action: ${(
+					step as PlanStep
+				).step.action.replace(/_/g, " ")}`;
+			}
+
+			return description;
+		});
+
 		this.postMessageToWebview({
-			type: "planExecutionStarted",
+			type: "planTimelineInitialize",
+			stepDescriptions: stepDescriptions,
 		});
 
 		try {
@@ -92,7 +124,7 @@ export class PlanExecutorService {
 								: planContext.editorContext!.instruction;
 
 						await this._executePlanSteps(
-							plan.steps!,
+							orderedSteps, // Pass ordered steps
 							rootUri,
 							planContext,
 							combinedToken,
@@ -236,7 +268,7 @@ export class PlanExecutorService {
 					action: PlanStepAction.ModifyFile,
 					path: filePath,
 					modification_prompt: consolidatedPrompt,
-					description: `Modifications for file: \`${filePath}\``,
+					description: `Modify: ${filePath}`,
 				},
 			});
 		}
@@ -250,7 +282,7 @@ export class PlanExecutorService {
 	}
 
 	private async _executePlanSteps(
-		steps: PlanStep[],
+		orderedSteps: PlanStep[], // Changed parameter to reflect it's now ordered
 		rootUri: vscode.Uri,
 		context: sidebarTypes.PlanGenerationContext,
 		combinedToken: vscode.CancellationToken,
@@ -260,7 +292,7 @@ export class PlanExecutorService {
 		const affectedFileUris = new Set<vscode.Uri>();
 		const { changeLogger } = this.provider;
 
-		const orderedSteps = this._prepareAndOrderSteps(steps);
+		// Removed: const orderedSteps = this._prepareAndOrderSteps(steps);
 		const totalOrderedSteps = orderedSteps.length;
 		const modifyStepsToBatch: ModifyFileStep[] = [];
 
@@ -424,13 +456,24 @@ export class PlanExecutorService {
 		currentTransientAttempt: number
 	): string {
 		let detailedStepDescription: string;
-		if (step.step.description && step.step.description.trim() !== "") {
+
+		// If a description exists, only use it if it's NOT a filesystem action,
+		// otherwise we force fall-through to the switch statement to use path.basename().
+		if (
+			step.step.description &&
+			step.step.description.trim() !== "" &&
+			!isModifyFileStep(step) &&
+			!isCreateFileStep(step) &&
+			!isCreateDirectoryStep(step)
+		) {
 			detailedStepDescription = step.step.description;
 		} else {
 			switch (step.step.action) {
 				case PlanStepAction.CreateDirectory:
 					if (isCreateDirectoryStep(step)) {
-						detailedStepDescription = `Creating directory: \`${step.step.path}\``;
+						detailedStepDescription = `Creating directory: \`${path.basename(
+							step.step.path
+						)}\``;
 					} else {
 						detailedStepDescription = `Creating directory`;
 					}
@@ -438,11 +481,17 @@ export class PlanExecutorService {
 				case PlanStepAction.CreateFile:
 					if (isCreateFileStep(step)) {
 						if (step.step.generate_prompt) {
-							detailedStepDescription = `Creating file: \`${step.step.path}\``;
+							detailedStepDescription = `Creating file: \`${path.basename(
+								step.step.path
+							)}\``;
 						} else if (step.step.content) {
-							detailedStepDescription = `Creating file: \`${step.step.path}\` (with predefined content)`;
+							detailedStepDescription = `Creating file: \`${path.basename(
+								step.step.path
+							)}\` (with predefined content)`;
 						} else {
-							detailedStepDescription = `Creating file: \`${step.step.path}\``;
+							detailedStepDescription = `Creating file: \`${path.basename(
+								step.step.path
+							)}\``;
 						}
 					} else {
 						detailedStepDescription = `Creating file`;
@@ -450,7 +499,9 @@ export class PlanExecutorService {
 					break;
 				case PlanStepAction.ModifyFile:
 					if (isModifyFileStep(step)) {
-						detailedStepDescription = `Modifying file: \`${step.step.path}\``;
+						detailedStepDescription = `Modifying file: ${path.basename(
+							step.step.path
+						)}`;
 					} else {
 						detailedStepDescription = `Modifying file`;
 					}
@@ -478,6 +529,7 @@ export class PlanExecutorService {
 		}/${totalSteps}: ${detailedStepDescription}${retrySuffix}`;
 	}
 
+	// 3. Modify _logStepProgress method
 	private _logStepProgress(
 		currentStepNumber: number,
 		totalSteps: number,
@@ -487,23 +539,45 @@ export class PlanExecutorService {
 		isError: boolean = false,
 		diffContent?: string
 	): void {
-		const appendMessage: sidebarTypes.AppendRealtimeModelMessage = {
-			type: "appendRealtimeModelMessage",
-			value: {
-				text: message,
-				isError: isError,
-			},
-			isPlanStepUpdate: true,
-			diffContent: diffContent,
-		};
-
-		this._postChatUpdateForPlanExecution(appendMessage);
-
+		// Log to console first
 		if (isError) {
 			console.error(`Minovative Mind: ${message}`);
 		} else {
 			console.log(`Minovative Mind: ${message}`);
 		}
+
+		// Ignore internal batch update logs (currentStepNumber=0)
+		if (currentStepNumber === 0) {
+			return;
+		}
+
+		let status: PlanTimelineProgressMessage["status"];
+
+		if (isError) {
+			status = "failed";
+		} else if (message.includes("SKIPPED")) {
+			status = "skipped";
+		} else if (
+			message.includes(`Step ${currentStepNumber}/${totalSteps}`) &&
+			!diffContent &&
+			!message.includes("already has the desired content") &&
+			!message.includes("Command completed successfully")
+		) {
+			// This covers the logging that occurs before execution starts (Line 348), providing the "Running..." message.
+			status = "running";
+		} else {
+			// Successful completion log (e.g., created file, modified file, command success, already desired content).
+			status = "success";
+		}
+
+		// 3.b. Replace original logic block with PlanTimelineProgressMessage
+		this.postMessageToWebview({
+			type: "planTimelineProgress",
+			stepIndex: currentStepNumber - 1, // 0-based index
+			status: status,
+			detail: message,
+			diffContent: diffContent,
+		});
 	}
 
 	private async _reportStepError(
@@ -709,13 +783,13 @@ export class PlanExecutorService {
 	private _postChatUpdateForPlanExecution(
 		message: sidebarTypes.AppendRealtimeModelMessage
 	): void {
+		// 4. Modify addHistoryEntry call to remove message.isPlanStepUpdate
 		this.provider.chatHistoryManager.addHistoryEntry(
 			"model",
 			message.value.text,
 			message.diffContent,
 			undefined,
-			undefined,
-			message.isPlanStepUpdate
+			undefined
 		);
 
 		this.provider.chatHistoryManager.restoreChatHistoryToWebview();
@@ -749,51 +823,6 @@ export class PlanExecutorService {
 		combinedToken: vscode.CancellationToken
 	): Promise<void> {
 		const fileUri = vscode.Uri.joinPath(rootUri, step.step.path);
-
-		if (step.step.content && !step.step.generate_prompt) {
-			try {
-				await vscode.workspace.fs.stat(fileUri);
-			} catch (error: any) {
-				if (
-					error instanceof vscode.FileSystemError &&
-					(error.code === "FileNotFound" || error.code === "EntryNotFound")
-				) {
-					const cleanedContent = cleanCodeOutput(step.step.content);
-					await vscode.workspace.fs.writeFile(
-						fileUri,
-						Buffer.from(cleanedContent)
-					);
-
-					const { formattedDiff, summary } = await generateFileChangeSummary(
-						"",
-						cleanedContent,
-						step.step.path
-					);
-					this._logStepProgress(
-						index + 1,
-						totalSteps,
-						`Created file \`${step.step.path}\``,
-						0,
-						0,
-						false,
-						formattedDiff
-					);
-
-					changeLogger.logChange({
-						filePath: step.step.path,
-						changeType: "created",
-						summary,
-						diffContent: formattedDiff,
-						timestamp: Date.now(),
-						originalContent: "",
-						newContent: cleanedContent,
-					});
-					affectedFileUris.add(fileUri);
-					return;
-				}
-				throw error;
-			}
-		}
 
 		let desiredContent: string | undefined = step.step.content;
 
@@ -854,6 +883,14 @@ export class PlanExecutorService {
 
 		const cleanedDesiredContent = cleanCodeOutput(desiredContent ?? "");
 
+		this._logStepProgress(
+			index + 1,
+			totalSteps,
+			`Creating file \`${path.basename(step.step.path)}\`...`,
+			0,
+			0
+		);
+
 		try {
 			await vscode.workspace.fs.stat(fileUri);
 			const existingContent = Buffer.from(
@@ -864,7 +901,9 @@ export class PlanExecutorService {
 				this._logStepProgress(
 					index + 1,
 					totalSteps,
-					`File \`${step.step.path}\` already has the desired content. Skipping.`,
+					`File \`${path.basename(
+						step.step.path
+					)}\` already has the desired content. Skipping.`,
 					0,
 					0
 				);
@@ -889,7 +928,7 @@ export class PlanExecutorService {
 				this._logStepProgress(
 					index + 1,
 					totalSteps,
-					`Modified file \`${step.step.path}\``,
+					`Modified file \`${path.basename(step.step.path)}\``,
 					0,
 					0,
 					false,
@@ -929,7 +968,7 @@ export class PlanExecutorService {
 				this._logStepProgress(
 					index + 1,
 					totalSteps,
-					`Created file \`${step.step.path}\``,
+					`Created file \`${path.basename(step.step.path)}\``,
 					0,
 					0,
 					false,
@@ -1073,7 +1112,7 @@ export class PlanExecutorService {
 				this._logStepProgress(
 					0,
 					0,
-					`Modified file \`${step.step.path}\``,
+					`Modified file \`${path.basename(step.step.path)}\``,
 					0,
 					0,
 					false,
@@ -1093,7 +1132,9 @@ export class PlanExecutorService {
 				this._logStepProgress(
 					0,
 					0,
-					`File \`${step.step.path}\` content is already as desired, no substantial modifications needed.`,
+					`File \`${path.basename(
+						step.step.path
+					)}\` content is already as desired, no substantial modifications needed.`,
 					0,
 					0
 				);

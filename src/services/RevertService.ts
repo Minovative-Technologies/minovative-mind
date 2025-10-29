@@ -84,13 +84,30 @@ export class RevertService {
 							case "created":
 								// Reverting a "created" file means deleting it.
 								try {
-									// Check if the file still exists before attempting to delete
-									await vscode.workspace.fs.stat(fileUri);
+									const fileStat = await vscode.workspace.fs.stat(fileUri);
+
+									if (fileStat.type === vscode.FileType.Directory) {
+										const error = new Error(
+											`Attempted to delete a directory entry during revert (created file log points to a directory). Aborting deletion of: ${relativePath}`
+										);
+										console.error(
+											`[RevertService] CRITICAL SAFETY WARNING: ${error.message}`
+										);
+										showErrorNotification(
+											error,
+											`Revert blocked: Attempted to delete directory '${relativePath}'. Please clean up manually if necessary.`,
+											"Revert Safety Block: "
+										);
+										revertSummary = `Skipped revert: Attempted deletion of directory '${relativePath}'.`;
+										break; // Skip deletion if it's a directory
+									}
+
+									// If it's a file, proceed with non-recursive deletion
 									await vscode.workspace.fs.delete(fileUri, {
 										useTrash: true,
-										recursive: true,
+										recursive: false, // Prevent accidental mass deletion
 									});
-									revertSummary = `Reverted creation: Deleted '${relativePath}' (moved to trash, recursively).`;
+									revertSummary = `Reverted creation: Deleted file '${relativePath}' (moved to trash).`;
 									// Log the revert action as a 'deleted' entry in the logger.
 									this.projectChangeLogger.logChange({
 										filePath: change.filePath,
